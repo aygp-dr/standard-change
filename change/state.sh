@@ -82,7 +82,14 @@ case "${1:-}" in
     st=$(read_state); sha=$(echo "$st" | jq -r .sha); cur=$(echo "$st" | jq -r .body)
     holder=$(echo "$cur" | jq -r '.holder.pr // empty')
     until=$(echo "$cur" | jq -r '.holder.until // empty')
-    if [ -n "$holder" ] && [ "$holder" != "$pr" ] && [ "$until" \> "$(now)" ]; then
+    # `\>` is UNDEFINED in POSIX sh (SC3012). It happens to work here and the
+    # specification does not promise it -- in the berth hold, which decides
+    # whether somebody else still owns the path to production. ISO-8601 UTC
+    # strings of equal length compare correctly with plain string equality plus
+    # sort, so ask sort rather than rely on undefined behaviour.
+    _later=$(printf '%s\n%s\n' "$until" "$(now)" | sort | tail -1)
+    if [ -n "$holder" ] && [ "$holder" != "$pr" ] && [ "$_later" = "$until" ] \
+       && [ "$until" != "$(now)" ]; then
       echo "held by PR #$holder until $until" >&2; exit 5
     fi
     new=$(echo "$cur" | jq --arg pr "$pr" --arg u "$(plus "$mins")" --arg t "$(now)" \

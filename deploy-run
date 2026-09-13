@@ -56,6 +56,8 @@ fi
 # Refuse to raise a request for a change that cannot become one. Not a guard --
 # the guards run in the pipeline, on fresher facts than these. This only avoids
 # minting a request that the very next step would reject.
+# shellcheck disable=SC2178,SC2128  # GROUPS is a string; the earlier `set --`
+# in this file makes shellcheck think otherwise
 GROUPS=$(./change/groups.sh "$PR")
 [ -n "$GROUPS" ] || { echo "refused: #$PR carries no app:* label — nothing to deploy" >&2; exit 2; }
 

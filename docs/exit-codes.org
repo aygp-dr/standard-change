@@ -1,0 +1,73 @@
+#+TITLE: Exit codes, and what a gate is allowed to mean
+#+DATE: 2026-09-13
+
+* The contract
+
+Every shell gate and change script uses these and only these. The numbers come
+from =spec.org= §Change schedule, which assigned 0/2/3/4 before any of this was
+written; the rest were filled in as refusals were discovered.
+
+| code | means                              | who returns it |
+|------+------------------------------------+----------------|
+|    0 | *proceed* — the check passed       | all            |
+|    1 | *refused* — the check failed       | all            |
+|    2 | *usage*, or a lock is held         | all            |
+|    3 | *freeze*, or the SHA does not exist | =preflight=, =deploy.sh= |
+|    4 | *I could not check*                | =preflight=, =oracle.sh= |
+|    5 | *the queue is busy* — someone holds the berth | =preflight=, =schedule.sh= |
+|    6 | *behind main* — guard 0            | =queue.sh=     |
+|    7 | *no window* — guard 3              | =activate.sh=  |
+|    8 | *main moved under you* — guard 4b at the merge | =release.sh= |
+|    9 | *CAS conflict* — state changed under us | =state.sh= |
+|   75 | *sink unreachable* (EX_TEMPFAIL)   | the marker script |
+
+* Why 4 is not 1, and why it blocks
+
+*=4= is the most important code here.* "I could not check" is not "it passed"
+and is not "it failed" either, and collapsing it into either is the defect this
+repository keeps finding:
+
+- =merge-on-healthy.yml= withdrew =production:healthy= when =health.sh= exited
+  non-zero, *including when that was because no socket could be opened*. It
+  recorded "I could not look" as "it is not there" and rewrote a measurement
+  somebody else took.
+- =preflight.sh= treated 19 skipped check runs as "the gates are not green",
+  when GitHub had simply stopped scheduling jobs (issue #34). That cost half an
+  hour chasing a CI/local divergence that did not exist.
+- A marker script reported a *rejection* when the host was unreachable, because
+  =|| echo 000= concatenated with curl's own =000= to make =000000=.
+
+*4 blocks.* It is not a soft warning. The spec says so for the calendar case —
+"4 BLOCKS, it does not proceed" — and the reasoning generalises: a guard whose
+subject could not be observed has not been satisfied, and proceeding is
+indistinguishable from proceeding on a guard that failed.
+
+*What 4 must never become:* a reason to substitute a different measurement. When
+=preflight= returns 4 because CI never ran, the gates passing *on this host* is
+not guard 2. Running them locally and calling it green is the forged-observation
+defect wearing a helpful face.
+
+* Why 75
+
+=EX_TEMPFAIL= from =sysexits.h=. The deployment-marker script uses it so a
+caller can distinguish "the telemetry sink is down" from every refusal above —
+a marker failing must not fail a deploy, but must not be swallowed either.
+=|| true= on a marker is how you get a timeline with holes nobody knows about.
+
+* shellcheck
+
+=gates/shellcheck.sh= runs =shellcheck -s sh -S warning= over every shell gate
+and change script. Two of its findings were real:
+
+- =change/state.sh= used =\>= for lexicographic comparison of ISO timestamps,
+  which is *undefined in POSIX sh* (SC3012). It works in practice on this host
+  and is undefined by specification — in the *berth hold* logic, which decides
+  whether somebody else still owns the path to production.
+- =change/ports.sh= referenced =$p= where it was never assigned (SC2154).
+
+The rest are =set -- $(...)= word-splitting warnings where the splitting is the
+point, and carry an explicit directive rather than being silenced globally.
+
+*The gate does not fail the build on style.* It fails on =-S warning= and above,
+because a gate with a warning tier is a gate that gets ignored — which is the
+repo's own rule: *zero findings or the gate failed*.

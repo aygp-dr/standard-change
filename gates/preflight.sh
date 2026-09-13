@@ -42,12 +42,68 @@ else
 fi
 
 # --- do the gates pass for this exact build? -----------------------------
+# LOCAL GATE REPORTS. gates/report.sh runs the suite on a host that can reach
+# the estate and posts the result as commit statuses under `local/`. Guard 2
+# counts them, because they are a real measurement of this SHA -- the gates
+# actually ran and every status was gated on an exit code.
+#
+# They are prefixed `local/` so a reader can always tell a host run from a CI
+# run, and when CI returns its contexts sit beside these rather than replacing
+# them. This is the same reachability answer as the observation labels: the
+# measurement happens where it can, and is carried to the forge in the forge's
+# own vocabulary.
+locals=$(gh api "repos/$R/commits/$head/status" \
+  --jq '[.statuses[]|select(.context|startswith("local/"))]' 2>/dev/null || echo '[]')
+lok=$(printf '%s' "$locals" | jq '[.[]|select(.state=="success")]|length' 2>/dev/null || echo 0)
+lbad=$(printf '%s' "$locals" | jq '[.[]|select(.state!="success")]|length' 2>/dev/null || echo 0)
+lself=$(printf '%s' "$locals" | jq '[.[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
+
 bad=$(gh api "repos/$R/commits/$head/check-runs" \
        --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length' 2>/dev/null || echo 99)
 self=$(gh api "repos/$R/commits/$head/check-runs" \
        --jq '[.check_runs[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length' 2>/dev/null || echo 0)
+
+# DID NOT RUN IS NOT RED. A check run reports conclusion=failure both when a
+# gate genuinely failed and when the job was never started -- and on
+# 2026-09-13 every workflow on this repo reported failure for over an hour
+# because GitHub stopped scheduling jobs (billing, issue #34). That looked
+# exactly like a real gate-selftest failure, and cost half an hour of chasing a
+# CI/local divergence that did not exist.
+#
+# The distinction is the same rule as docs/label-ownership.org rule 2 --
+# UNREACHABLE IS NOT FALSIFIED -- applied to the forge rather than the estate.
+# merge-on-healthy.yml was fixed so "I could not reach production" stops being
+# recorded as "production is unhealthy"; this is that collapse one level up.
+#
+# The only place the real cause appears is the check run's ANNOTATIONS. Nothing
+# in `gh run view` says it: the log is BlobNotFound and the job has zero steps.
+# A check run that never ran reports `skipped` or a null conclusion, and a
+# gate that genuinely failed reports `failure`. Counting both as "not green"
+# is what made an hour of dead CI look like a real gate-selftest failure on
+# 2026-09-13 (issue #34) -- the annotations say "the job was not started", but
+# nothing in `gh run view` does and the log is BlobNotFound.
+notrun=$(gh api "repos/$R/commits/$head/check-runs" \
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))
+        |select(.conclusion=="skipped" or .conclusion==null)]|length' 2>/dev/null || echo 0)
+failed=$(gh api "repos/$R/commits/$head/check-runs" \
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))
+        |select(.conclusion=="failure")]|length' 2>/dev/null || echo 0)
+
 if [ "$bad" = 99 ]; then
   no "I could not reach the forge to read the check runs." 4
+elif [ "$lbad" -eq 0 ] && [ "$lok" -ge 3 ] && [ "$lself" -ge 1 ]; then
+  yes "gates green on THIS head, $short — reported by gates/report.sh"
+  note "$lok local/ contexts, gate-selftest among them, none failing."
+  note "measured on a host, not by CI, and the contexts say so. The gates ran;"
+  note "each status was gated on the exit code of the command that produced it."
+elif [ "$bad" -gt 0 ] && [ "$failed" -eq 0 ] && [ "$notrun" -gt 0 ]; then
+  no "the gates DID NOT RUN ($notrun skipped, 0 failed). Not red -- absent." 4
+  note "a check run reports conclusion=failure both for a real failure and for"
+  note "a job that was never started. The annotation says the job was not"
+  note "started; nothing in \`gh run view\` does -- the log is BlobNotFound."
+  note "exit 4 blocks, because 'I could not check' is not 'it passed' and is"
+  note "not 'it failed' either. Verifying on this host instead and calling it"
+  note "guard 2 would be substituting a measurement nobody asked for."
 elif [ "$bad" -eq 0 ] && [ "$self" -ge 1 ]; then
   yes "lint and the tests pass — on THIS head, $short, not on an earlier one"
   note "gate-selftest passed too, so those results are worth something:"

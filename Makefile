@@ -54,8 +54,17 @@ test:  ## unit tests, every app plus the shared surface
 test: ; @node --test shared/tests/*.test.mjs >/dev/null 2>&1 || { node --test shared/tests/*.test.mjs; exit 1; }; \
 	  echo "  shared/oneui: ok"; \
 	  for a in $(APPS); do $(MAKE) -s -C apps/$$a test || exit 1; done
-lint:  ## lint every app plus the labeller oracle
-lint: ; @./router/generate.sh >/dev/null && \
+lint:  ## shellcheck the scripts, lint every app, check the labeller oracle
+# ONE lint, three surfaces. Before this, `gmake lint` covered the apps and the
+# labeller oracle and said nothing about 28 shell scripts -- the control plane,
+# which is the part of this repo that is actually the product. A linter that
+# skips the thing under test is the same defect as a gate whose oracle comes
+# from the wrong tree.
+#
+# shellcheck runs FIRST: a parse error in change/ or gates/ makes every app
+# result meaningless, because those scripts are what would have run them.
+lint: ; @./gates/shellcheck.sh && \
+	  ./router/generate.sh >/dev/null && \
 	  for a in $(APPS); do $(MAKE) -s -C apps/$$a lint || exit 1; done && \
 	  ./gates/labeller-test.py
 

@@ -64,7 +64,13 @@ case "${1:-}" in
     SHA=$(git -C "$WT" rev-parse --short HEAD)
     mkdir -p "$WT/.run"
     for a in $(jq -r '.[].app' "$ROOT/router/routes.json"); do
-      var="PORT_$(echo "$a" | tr 'a-z' 'A-Z')"; eval "p=\$$var"
+      # An explicit assignment rather than `eval "p=$var"`. The eval form sets p
+      # invisibly, so neither a reader nor shellcheck (SC2154) can see where it
+      # comes from. Two directives failed to silence it because the use is an
+      # assignment prefix inside a loop; making the dataflow visible was the
+      # better fix than arguing with the linter.
+      var="PORT_$(echo "$a" | tr 'a-z' 'A-Z')"
+      p=$(eval "printf '%s' \"\$$var\"")
       # apps/ is ours; external/ stands in for services we do not deploy
       d="$WT/apps/$a"; [ -d "$d" ] || d="$WT/external/$a"
       BUILD_SHA="$SHA" BLOCK="$BLOCK" PORT="$p" node "$d/src/server.js" \
