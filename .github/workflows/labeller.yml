@@ -23,15 +23,23 @@ jobs:
         if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         env: {GH_TOKEN: "${{ github.token }}"}
         run: |
+          # Derive from the DIFF, not from the labels actions/labeler just
+          # wrote. Reading them back in the same job races the API: the first
+          # version computed has_app from `gh pr view` and saw zero, so it
+          # applied nothing and exited 0 -- a silent no-op that looked like a
+          # policy decision.
           R=${{ github.repository }}
-          labels=$(gh pr view "${{ github.event.number }}" --repo "$R" --json labels -q '[.labels[].name]')
-          has_app=$(echo "$labels" | jq 'map(select(startswith("app:")))|length')
-          is_normal=$(echo "$labels" | jq 'index("change:normal")//empty')
-          if [ "$has_app" -gt 0 ] && [ -z "$is_normal" ]; then
-            gh pr edit "${{ github.event.number }}" --add-label change:standard \
-              --remove-label change:normal || true
-          elif [ -n "$is_normal" ]; then
-            gh pr edit "${{ github.event.number }}" --repo "$R" --remove-label change:standard || true
+          N=${{ github.event.number }}
+          files=$(gh pr diff "$N" --repo "$R" --name-only)
+          has_app=$(echo "$files" | grep -c '^apps/' || true)
+          is_normal=$(echo "$files" | grep -cE '^(router|gates|change|targets)/|^\.github/' || true)
+          echo "changed=$(echo "$files" | wc -l) apps=$has_app normal=$is_normal"
+          if [ "$is_normal" -gt 0 ]; then
+            gh pr edit "$N" --repo "$R" --add-label change:normal || true
+            gh pr edit "$N" --repo "$R" --remove-label change:standard || true
+          elif [ "$has_app" -gt 0 ]; then
+            gh pr edit "$N" --repo "$R" --add-label change:standard || true
+            gh pr edit "$N" --repo "$R" --remove-label change:normal || true
           fi
 
       - name: drop stale staging verdicts on a new push
