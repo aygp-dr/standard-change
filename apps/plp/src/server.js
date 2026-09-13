@@ -55,6 +55,110 @@ export function loadCatalogue(file = CATALOGUE_FILE) {
   return { ok: true, reason: null, categories: doc.categories };
 }
 
+// ---- the product data, which plp does not own -------------------------------
+//
+// WHOSE FILE IS THIS. apps/pdp/products.json is pdp's. plp reads it, and that
+// is the deliberate answer to issue #35's third question: a search for a
+// product NAME ("trail runner") cannot be answered from categories.json, which
+// holds slugs, titles and SKU strings and no product names at all.
+//
+// The three alternatives and why not:
+//
+//   ask pdp over HTTP -- plp's page would then be down whenever pdp is down,
+//     and plp's health path IS a search (routes.json: "/search?q=ping"), so
+//     guard 5 would report plp unhealthy because a SIBLING is unhealthy. One
+//     outage becomes two and convergence stops being measurable per app.
+//   keep a copy in plp -- two product lists that drift, which is the exact
+//     failure apps/pdp/tests/unit/estate.test.js was written to catch. Adding
+//     a second instance of the problem in order to avoid a file read is not a
+//     trade, it is the bug.
+//   search categories only -- honest and narrow, but it answers "shoes" and
+//     not "trail runner", and "type a word, see the products whose name
+//     contains it" is the whole of what was asked for.
+//
+// So: ONE product list in the estate, read from the file its owner writes.
+// The coupling is real and it is BUILD-TIME, not run-time: the apps ship from
+// one tree at one SHA (targets/node/deploy.sh checks out a single worktree and
+// starts all four out of it), so plp and pdp cannot be looking at different
+// products.json the way two HTTP peers could be on different builds. And it is
+// statically checkable, which a runtime dependency is not -- estate.test.js
+// now asserts plp reads the same path pdp serves from, in `gmake test`, before
+// anything is deployed.
+//
+// What it costs, stated rather than hidden: a change to pdp's data changes
+// plp's search, and an app:pdp-labelled PR can move plp's output without plp
+// appearing in the diff. That is the same class of coupling as OneUI (issue
+// #10, docs/cross-cutting-coupling.org) and it is named here for the same
+// reason.
+export const PRODUCTS_FILE = join(here, '..', '..', 'pdp', 'products.json');
+
+// Same shape as loadCatalogue: a RESULT, never a throw, and never a cached
+// copy of a file someone has since deleted. The reasons are distinct strings
+// (`products-missing`, `products-malformed`) so an operator greps the response
+// and learns WHICH file is gone -- "the catalogue is unavailable" over two
+// different files would have them checking the wrong app.
+export function loadProducts(file = PRODUCTS_FILE) {
+  let raw;
+  try { raw = readFileSync(file, 'utf8'); }
+  catch { return { ok: false, reason: 'products-missing', products: [] }; }
+  let doc;
+  try { doc = JSON.parse(raw); }
+  catch { return { ok: false, reason: 'products-malformed', products: [] }; }
+  // Only the two fields plp searches are required. plp must not validate
+  // price, currency or availability: those are pdp's business, pdp already
+  // checks them, and a second app with an opinion about a field it does not
+  // render is a way for a legal catalogue to be rejected by the wrong process.
+  const bad = !doc || typeof doc !== 'object' || !Array.isArray(doc.products) ||
+    doc.products.some((p) => !p || typeof p.sku !== 'string' || typeof p.name !== 'string');
+  if (bad) return { ok: false, reason: 'products-malformed', products: [] };
+  return { ok: true, reason: null, products: doc.products };
+}
+
+// ---- the query --------------------------------------------------------------
+//
+// The query a path asks for, or null when the path is not the search page.
+// '' is a real answer and is NOT null: `/search` with no q and `/search?q=`
+// are both "show me the search page", which is a different thing from "this
+// path is not a search at all".
+const SEARCH_PATHS = ['/search', '/search/'];
+
+export function queryOf(path) {
+  const p = String(path).split('?')[0];
+  if (!SEARCH_PATHS.includes(p)) return null;
+  // URL parsing rather than a hand-rolled split: it decodes %XX and the `+`
+  // that a GET form actually puts on the wire, and -- unlike
+  // decodeURIComponent, which categoryOf has to guard against -- it does not
+  // throw on a malformed escape (`?q=%` yields "%"). The base is a throwaway;
+  // only the search part is read.
+  try { return new URL(String(path), 'http://plp.invalid').searchParams.get('q') ?? ''; }
+  catch { return ''; }
+}
+
+// What a query matches. Substring, case-insensitive, no ranking and no fuzzy
+// matching -- issue #35 puts all three out of scope on purpose, because the
+// interesting part of this change is escaping, status codes and where the data
+// comes from, and a scorer would hide all three behind itself.
+//
+// Two kinds of result, kept apart in the payload rather than merged into one
+// ranked list: a category is a place to browse and a product is a thing to
+// buy, and a client that cannot tell them apart cannot link them correctly.
+export function searchResults(q, categories, products) {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return [];
+  const hit = (s) => typeof s === 'string' && s.toLowerCase().includes(needle);
+  const cats = categories
+    .filter((c) => hit(c.slug) || hit(c.title))
+    .map((c) => ({ kind: 'category', slug: c.slug,
+                   title: typeof c.title === 'string' ? c.title : c.slug,
+                   href: `/c/${encodeURIComponent(c.slug)}`,
+                   skus: c.skus }));
+  const prods = products
+    .filter((p) => hit(p.name) || hit(p.sku))
+    .map((p) => ({ kind: 'product', sku: p.sku, name: p.name,
+                   href: `/p/${encodeURIComponent(p.sku)}` }));
+  return [...cats, ...prods];
+}
+
 // The category a path names, or null when the path is not a category page.
 // '' is a real answer (/c/ and /c): an address under the route that names no
 // category, which is an unknown category, not a crash.
@@ -94,20 +198,93 @@ export function owns(path) {
 //        "unavailable" means. 503 is also the code monitoring pages on; a 404
 //        is deliberately not.
 //
+// SEARCH IS DIFFERENT, AND DELIBERATELY SO.
+//
+//   200  the search ran. Results, or no results, or no query yet -- all 200.
+//        A query that matched nothing is a SUCCESSFUL ANSWER to a reasonable
+//        question: /search?q=zzzz is a real address that a person may share,
+//        bookmark and reload, and the server did exactly what was asked. This
+//        is not the /p/NOSUCH case, where the addressed RESOURCE does not
+//        exist; here the resource is the search page and it is right there.
+//   503  the data needed to answer could not be read. Same rule as a category:
+//        "we cannot tell you" must never render as "there is nothing".
+//
+// There is no 404 on /search at all, and that is load-bearing rather than
+// cosmetic: apps/plp/routes.json declares `health: "/search?q=ping"` and guard
+// 5 fetches it expecting 200. "ping" matches nothing. A 404-on-no-results
+// search would therefore report a perfectly healthy plp as UNHEALTHY the day
+// search started working -- which is exactly what happened to pdp in #24 when
+// its health path became /p/PING against a catalogue that validates SKUs.
+//
+// This does mean plp and pdp now answer differently for a miss (200 here, 404
+// there). That is not an inconsistency to be tidied up later: the two are
+// answering different questions, and the difference is the reason this app can
+// carry a health path at all.
+//
 // One function, so the JSON and the HTML paths cannot drift apart. They did in
 // an earlier draft -- the HTML branch wrote its own 200 -- and a browser then
 // saw a "no results" page that every machine on the path called a success.
 export function status(d) {
   if (d.found) return 200;
-  if (d.catalogue === 'unavailable') return 503;
+  // Either data source being unreadable is an availability fault, not a
+  // not-found: the category or the product is very likely still there the
+  // moment the file is back.
+  if (d.catalogue === 'unavailable' || d.products === 'unavailable') return 503;
   return 404;
 }
 
-export function render(path, catalogue = loadCatalogue()) {
+// The search branch of render(). Four states, and they must stay four.
+//
+//   query + matches      found:true   count>0   reason:null         200
+//   query + no matches   found:true   count=0   reason:no-results   200
+//   no query             found:true   count=0   reason:empty-query  200
+//   data unreadable      found:false  count=0   reason:<which file> 503
+//
+// `found` on a search page means THE SEARCH RAN, not "something matched" --
+// the thing being addressed is the search, and it is right there. `count` and
+// `reason` are what say whether anything matched, and they are separate fields
+// so that a client cannot read one and infer the other.
+//
+// There is no partial answer. If the product file is unreadable, plp does NOT
+// fall back to searching categories alone and report "no results for trail
+// runner": that is a lie by omission, and it is the same lie -- "we cannot
+// tell you" wearing "there is nothing" -- that the category page's 503 exists
+// to refuse.
+function search(d, q, catalogue, products) {
+  d.query = q;
+  d.catalogue = catalogue.ok ? 'ok' : 'unavailable';
+  d.products = products.ok ? 'ok' : 'unavailable';
+  d.results = [];
+  d.count = 0;
+
+  if (!q.trim()) {
+    // No claim is made about results here, so it does not matter whether the
+    // data could be read: nothing was asked. The availability fields above are
+    // still reported honestly, because an operator watching the health path
+    // should be able to see a file go missing before a query does.
+    d.reason = 'empty-query';
+    return d;
+  }
+  if (!catalogue.ok || !products.ok) {
+    d.found = false;
+    d.reason = catalogue.ok ? products.reason : catalogue.reason;
+    return d;
+  }
+  d.results = searchResults(q, catalogue.categories, products.products);
+  d.count = d.results.length;
+  d.reason = d.count ? null : 'no-results';
+  return d;
+}
+
+export function render(path, catalogue = loadCatalogue(), products = loadProducts()) {
   const d = { app: meta.app, path, found: owns(path), block: BLOCK, sha: SHA,
               routes: meta.routes };
+
+  const q = queryOf(path);
+  if (q !== null) return search(d, q, catalogue, products);
+
   const slug = categoryOf(path);
-  if (slug === null) return d;   // /search, and anything else: unchanged
+  if (slug === null) return d;   // anything else: unchanged
 
   d.category = slug;
   // The field an operator greps for. `catalogue: "unavailable"` and
@@ -140,7 +317,66 @@ export const BACKGROUND = '#e6f7ee';
 // category exists and happens to be sold out. The two no-results cases say
 // different things because they are different promises: "we do not have that"
 // versus "we cannot tell you right now".
+// The search panel: the box a person types into, and what came back.
+//
+// THE FORM IS ALWAYS RENDERED, including on the 503. A page that says "we
+// cannot search right now" and then takes the box away gives a person nothing
+// to retry with, and the retry is the whole of what they can usefully do.
+//
+// GET, action="/search". Not POST: the result of a search has to be an ADDRESS
+// -- something a person can link to a colleague and something gates/smoke.sh
+// can keep walking (/search?q=shoes is step 2 of the journey) and guard 5 can
+// keep probing (/search?q=ping). A POST result is neither.
+//
+// ESCAPING. `q` is the first thing in this estate that is user-supplied and is
+// not a route the router already constrained, and it lands in TWO contexts:
+// text, and the input's value= ATTRIBUTE. esc() covers both -- it escapes the
+// quote characters, which is what makes `?q=" onfocus="alert(1)` inert here
+// and what d.path never needed. Issue #13 was a live reflected XSS in this
+// estate through exactly one unescaped interpolation, so every one below goes
+// through esc() including the ones that "come from config".
+export function searchPanel(d) {
+  const q = esc(d.query);
+  const form = `<form class=s action="/search" method="get" role="search" style="margin:18px 0 6px">
+<label for=q style="margin-right:6px">Search</label>
+<input id=q name=q type="search" value="${q}" placeholder="shoes, trail, SKU123"
+ autocomplete="off" style="font:inherit;padding:4px 8px;width:16rem">
+<button type="submit" style="font:inherit;padding:4px 10px;margin-left:6px">Search</button>
+</form>`;
+
+  if (d.reason === 'empty-query')
+    return `${form}
+<p>Type a word to search categories and products. Nothing has been searched
+yet, so this page is not claiming there is nothing.</p>`;
+
+  if (d.products === 'unavailable' || d.catalogue === 'unavailable')
+    return `${form}
+<h2>We cannot search right now</h2>
+<p>Your search for <code>${q}</code> was not run — the catalogue is
+unavailable. This is not a statement that there is nothing; try again
+shortly.</p>
+<p class=v>search: unavailable (${esc(d.reason)})</p>`;
+
+  if (!d.count)
+    return `${form}
+<h2>No results</h2>
+<p>Nothing matches <code>${q}</code>. The search ran and found nothing — try a
+category name, a product name or a SKU.</p>
+<p class=v>catalogue: ok — nothing matched</p>`;
+
+  const row = (r) => (r.kind === 'category'
+    ? `<div class=g><b>category</b> <a href="${esc(r.href)}">${esc(r.title)}</a> ` +
+      `<span class=v>${r.skus.length} item(s)</span></div>`
+    : `<div class=g><b>product</b> <a href="${esc(r.href)}">${esc(r.name)}</a> ` +
+      `<span class=v>${esc(r.sku)}</span></div>`);
+  return `${form}
+<h2>${d.count} result(s)</h2>
+<p>for <code>${q}</code></p>
+${d.results.map(row).join('')}`;
+}
+
 export function panel(d) {
+  if (d.query !== undefined) return searchPanel(d);
   if (d.results === undefined) return '';   // not a category page
   const name = esc(d.category || '(none)');
   if (d.catalogue === 'unavailable')
@@ -161,8 +397,9 @@ Nothing is wrong with this category; try again shortly.</p>
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
 // it, and a tier derived from something the deployer exported would be the
 // estate reporting what it was told (issue #15).
-export function renderHtml(path, catalogue = loadCatalogue(), port) {
-  const d = render(path, catalogue);
+export function renderHtml(path, catalogue = loadCatalogue(), port,
+                           products = loadProducts()) {
+  const d = render(path, catalogue, products);
   return page({ ...d, host: HOST, port }, ESTATE, BACKGROUND, panel(d));
 }
 
@@ -203,9 +440,14 @@ if (isMain) createServer((req, res) => {
   // One catalogue read per request, shared by both representations, so the
   // status line and the body cannot describe two different reads of the file.
   const catalogue = loadCatalogue();
-  const d = render(req.url, catalogue);
-  const body = wantsHtml ? renderHtml(req.url, catalogue, req.socket.localPort)
-                         : JSON.stringify(d, null, 2);
+  // Same rule for the product file: read once per request and hand the ONE
+  // result to both representations, so the status line and the body cannot
+  // describe two different reads of the file.
+  const products = loadProducts();
+  const d = render(req.url, catalogue, products);
+  const body = wantsHtml
+    ? renderHtml(req.url, catalogue, req.socket.localPort, products)
+    : JSON.stringify(d, null, 2);
   res.writeHead(status(d), {
     'content-type': wantsHtml ? 'text/html; charset=utf-8' : 'application/json',
     'x-build-sha': SHA,
