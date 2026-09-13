@@ -1,0 +1,1 @@
+{"app":"pdp","port_offset":3,"routes":["/p/:sku"],"health":"/p/PING","journeys":["pdp","add-to-cart"]}
