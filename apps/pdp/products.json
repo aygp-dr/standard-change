@@ -1,0 +1,10 @@
+{
+  "products": [
+    { "sku": "SKU123", "name": "Trail Runner",  "price": 89.00,  "currency": "USD", "availability": "in-stock" },
+    { "sku": "SKU124", "name": "Court Sneaker", "price": 74.50,  "currency": "USD", "availability": "in-stock" },
+    { "sku": "SKU125", "name": "Chelsea Boot",  "price": 139.00, "currency": "USD", "availability": "out-of-stock" },
+    { "sku": "SKU201", "name": "Oxford Shirt",  "price": 49.00,  "currency": "USD", "availability": "in-stock" },
+    { "sku": "SKU202", "name": "Linen Shirt",   "price": 59.00,  "currency": "USD", "availability": "low-stock" },
+    { "sku": "SKU301", "name": "Wool Beanie",   "price": 22.00,  "currency": "USD", "availability": "in-stock" }
+  ]
+}
