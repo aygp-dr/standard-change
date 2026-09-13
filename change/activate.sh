@@ -103,13 +103,39 @@ echo "   groups: ${GROUPS:-none}"
 [ -n "$GROUPS" ] || die "no app:* labels — nothing to deploy"
 
 step "guard 2 — gates green on THIS head sha"
-BAD=$(gh api "repos/$R/commits/$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid)/check-runs" \
+# ONE RULE, AND IT HAD TWO IMPLEMENTATIONS THAT DISAGREED.
+#
+# This read only the Checks API while gates/preflight.sh also counts the
+# `local/` commit statuses that gates/report.sh posts when CI cannot run. On
+# 2026-09-13, with GitHub not scheduling jobs (issue #34), preflight said
+# PROCEED on #42 and this refused the same head in the same minute -- two
+# answers to one question, from the same guard, thirty seconds apart.
+#
+# The local/ reading is the correct one and it lives in preflight, comments and
+# all: DID NOT RUN IS NOT RED, and a local status is admissible because the
+# gates actually ran and each status was gated on its command's exit code.
+# Duplicated here rather than refactored, and the duplication is the bug -- see
+# the issue. NO BYPASS is preserved: this still refuses unless something green
+# exists, it just accepts the other admissible kind of green.
+HEADSHA=$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid)
+LOCALS=$(gh api "repos/$R/commits/$HEADSHA/status" \
+  --jq '[.statuses[]|select(.context|startswith("local/"))]' 2>/dev/null || echo '[]')
+LOK=$(printf '%s' "$LOCALS"  | jq '[.[]|select(.state=="success")]|length' 2>/dev/null || echo 0)
+LBAD=$(printf '%s' "$LOCALS" | jq '[.[]|select(.state!="success")]|length' 2>/dev/null || echo 0)
+LSELF=$(printf '%s' "$LOCALS" | jq '[.[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
+BAD=$(gh api "repos/$R/commits/$HEADSHA/check-runs" \
         --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
-SELF=$(gh api "repos/$R/commits/$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid)/check-runs" \
+SELF=$(gh api "repos/$R/commits/$HEADSHA/check-runs" \
         --jq '[.check_runs[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length')
-[ "$BAD" -eq 0 ] || die "$BAD gate(s) not green on $SHA"
-[ "$SELF" -ge 1 ] || die "gate-selftest did not pass; gate results are void"
-ok "all four gates green, self-test passed"
+if [ "$LBAD" -eq 0 ] && [ "$LOK" -ge 3 ] && [ "$LSELF" -ge 1 ]; then
+  ok "gates green on $SHA — $LOK local/ contexts, gate-selftest among them"
+  ok "measured on a host, not by CI, and the contexts say so"
+elif [ "$BAD" -eq 0 ] && [ "$SELF" -ge 1 ]; then
+  ok "all four gates green, self-test passed"
+else
+  [ "$SELF" -ge 1 ] || die "gate-selftest did not pass and no local/ self-test either; gate results are void"
+  die "$BAD gate(s) not green on $SHA, and no complete local/ report either"
+fi
 
 step "guard 0 — up to date with main"
 STATE=$(gh pr view "$PR" --repo "$R" --json mergeStateStatus -q .mergeStateStatus)
