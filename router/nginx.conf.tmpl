@@ -1,0 +1,17 @@
+# rendered per worktree: BLOCK, and per app PORT_<APP> (falls back to block-0 port)
+worker_processes 1;
+events { worker_connections 64; }
+http {
+  server {
+    listen ${NGINX_PORT};
+    location = /            { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /login         { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /account       { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /cart          { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /search        { proxy_pass http://127.0.0.1:${PORT_PLP}; }
+    location /c/            { proxy_pass http://127.0.0.1:${PORT_PLP}; }
+    location /p/            { proxy_pass http://127.0.0.1:${PORT_PDP}; }
+    location /checkout      { proxy_pass http://127.0.0.1:${PORT_CHECKOUT}; }
+    location /api/          { proxy_pass http://127.0.0.1:${PORT_MOCK}; }
+  }
+}

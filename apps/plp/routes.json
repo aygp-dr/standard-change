@@ -1,0 +1,7 @@
+{
+  "app": "plp",
+  "port_offset": 2,
+  "routes": ["/search", "/c/:category"],
+  "health": "/search?q=ping",
+  "journeys": ["search"]
+}

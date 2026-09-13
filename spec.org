@@ -198,8 +198,8 @@ Ports 10006–10009 (and the same offsets in each block) are unallocated.
 =ports.tsv= is the CMDB for worktrees. =make port-alloc= appends a row for the current worktree path and writes =.env.ports= in the worktree. =make port-free= removes the row.
 
 #+begin_src text :tangle ports.tsv
-block    worktree    branch    allocated_at
-0    /home/jwalsh/ghq/github.com/aygp-dr/standard-change    main    2026-09-12T00:00:00Z
+block	worktree	branch	allocated_at
+0	/home/jwalsh/ghq/github.com/aygp-dr/standard-change	main	2026-09-12T00:00:00Z
 #+end_src
 
 ** nginx template
@@ -978,11 +978,8 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
 - *Playwright on FreeBSD*: confirm or refute the system-Chromium
   =executablePath= route. Trigger: first app that serves a page. If refuted,
   hydra's e2e cell is unsupported and the gate is CI-only.
-- *=ports.tsv= tangles with spaces, not tabs* [E, observed]. The tangled file
-  contains zero tab characters, so =cut -f=, =awk -F'\t'= and any TSV reader
-  parse it as a single column. Either the source block gets real tabs, or the
-  registry stops claiming to be TSV. Trigger: before =change/ports.sh= is
-  written against it.
+- *=ports.tsv= tangled with spaces, not tabs* [E, observed] — *fixed*. The
+  block now carries real tabs; regression check is =grep -cP '\t' ports.tsv=.
 - *=ports.tsv= is both a =:tangle= target and mutable state* [E, by
   inspection]. =make port-alloc= appends rows and =port-free= removes them, so
   re-tangling =spec.org= silently clobbers live worktree allocations — a
