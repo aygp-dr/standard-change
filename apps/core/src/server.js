@@ -9,7 +9,7 @@ const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
 // OneUI is the shared UI surface (issue #10). Every app pins it, so a change
 // there is a change to all of them -- the cost is named in
 // docs/cross-cutting-coupling.org, not hidden.
-import { page, loadEstate, VERSION as ONEUI } from '../../../shared/oneui.js';
+import { page, loadEstate, esc, VERSION as ONEUI } from '../../../shared/oneui.js';
 const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
@@ -71,7 +71,7 @@ export function render(path) {
 export const BACKGROUND = '#e8f0ff';
 
 export function renderHtml(path) {
-  return page(render(path), ESTATE, BACKGROUND);
+  return page(render(path), ESTATE, BACKGROUND, owns(path) ? '' : `<h2>We can't find that page</h2><p>Nothing is published at <code>${esc(path)}</code> — the link may be out of date, or the item may have sold out. Try the <a href="/">home page</a>, your <a href="/cart">cart</a>, or <a href="/contact">contact us</a> and we will help you find it.</p>`);
 }
 
 // Only listen when run directly. Importing this module (as the unit tests do)
