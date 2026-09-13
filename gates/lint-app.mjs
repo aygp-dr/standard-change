@@ -59,11 +59,30 @@ else {
       if (typeof r.health !== 'string') fail('health must be a string');
       else {
         const hp = r.health.split('?')[0];
-        const covered = r.routes.some((x) => {
+        // The rule is ROUTABILITY, not declaration. It asserted "health is one
+        // of the declared routes" because that used to be the only way the
+        // router could reach it -- and that made every app's health a BUSINESS
+        // route, which broke twice: pdp's /p/PING when pdp began validating
+        // SKUs (#24), and plp's /search?q=ping would break the moment search
+        // searches (#35).
+        //
+        // /__health/<app> is routed by router/server.js directly and is
+        // deliberately NOT declared: it is not part of the contract the estate
+        // offers. So it is routable and must pass, while anything else still
+        // has to be covered by a declared route.
+        const RESERVED = `/__health/${r.app}`;
+        const covered = hp === RESERVED || r.routes.some((x) => {
           const prefix = x.replace(/:[^/]*/g, '');
           return prefix === '/' ? hp === '/' : hp.startsWith(prefix);
         });
-        if (!covered) fail(`health "${r.health}" is not covered by any declared route`);
+        if (!covered)
+          fail(`health "${r.health}" is neither "${RESERVED}" nor covered by a declared route`);
+        // A business route as a health path is now a finding in its own right.
+        // It is how both previous breakages happened, and it is invisible until
+        // the feature it depends on gains an opinion.
+        if (hp !== RESERVED)
+          fail(`health "${r.health}" is a business route; use "${RESERVED}" so a `
+             + `product change cannot take guard 5 down with it`);
       }
     }
     if (!Array.isArray(r.journeys)) fail('journeys must be an array');
