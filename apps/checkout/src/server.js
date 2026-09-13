@@ -63,7 +63,8 @@ ${SHIP.map(field).join('\n')}
 }
 
 export const paymentPanel = (q) =>
-  `<h2>Payment</h2><p>You are about to pay <b>${DUE}</b>. Nothing is charged until you confirm.</p>`;
+  `<h2>Payment</h2><p>You are about to pay <b>${DUE}</b>. Nothing is charged until you confirm.</p>
+<p><a href="/checkout?${esc(q)}">&larr; Back to shipping address</a></p>`;
 
 export function renderHtml(path, port) {
   const q = new URL(path, 'http://x').searchParams;
