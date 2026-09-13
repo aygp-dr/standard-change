@@ -35,6 +35,12 @@ printf '== concurrent positive: berths=2, both guards ............... '
 if run Concurrent | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
+sed 's/LabellerOwns = TRUE/LabellerOwns = FALSE/' Concurrent.cfg > NoOwn.cfg
+sed 's/MODULE Concurrent/MODULE NoOwn/' Concurrent.tla > NoOwn.tla
+printf '== bypass negative: undeclared manifest must violate ...... '
+if run NoOwn | grep -q 'Invariant Safety is violated'; then echo 'FAIL as required'
+else echo 'BAD: a silently asserted manifest is not caught'; exit 1; fi
+
 printf '== concurrent positive: berths=1 (the atomic model case) .... '
 if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi

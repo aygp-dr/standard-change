@@ -12,3 +12,4 @@ router/routes.json
 .pytest_cache/
 __pycache__/
 targets/bastille/front/tmp/
+worktrees/
