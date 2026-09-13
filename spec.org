@@ -70,6 +70,92 @@ taken home the wrong artifact.
 path to production. Replacing that with per-team contracts would be a different
 repo, and a shorter one.
 
+* Domain model
+
+*The workflow is generic; the semantics are the product.* This section states
+the model without reference to GitHub, because a guard that can only be
+expressed in one vendor's vocabulary is a guard we have not understood. The
+label names elsewhere in this document are one /encoding/ of what follows, not
+the thing itself.
+
+** Entities
+
+| Entity                | Definition                                                                 | GitHub encoding                    |
+|-----------------------+----------------------------------------------------------------------------+------------------------------------|
+| *change*              | a unit of intent, with an author, a base, and a head                        | pull request                       |
+| *manifest*            | the set of deployable components a change touches; /derived/ from the diff  | =app:*= labels, labeller-owned     |
+| *gate*                | a function from a content hash to a verdict in {pass, fail}                 | a check run                        |
+| *suite*               | all gates; green iff every member is green /and/ the self-test is green     | the required-checks set            |
+| *berth*               | an exclusive, deadline-bearing lease on the path to production              | the =deploy:staging= label + lock  |
+| *path to production*  | the ordered environments a change traverses: staging → production           | environments                       |
+| *divergence*          | the classified relation between a change's base and the trunk tip           | computed by =divergence.sh=        |
+| *authorization*       | normal (earned by gates) or emergency (granted by a person)                 | =change:emergency=                 |
+| *deployment record*   | platform-attested statement that artifact X reached environment Y           | the Deployments API                |
+
+Two of these are load-bearing and routinely got wrong:
+
+- *manifest is derived, never asserted.* It is a function of the diff, owned by
+  automation, and a human edit to it must not survive. If it can be asserted,
+  it is not a manifest — it is a wish, and the build ships whatever someone
+  typed. (Scenario L10.)
+- *deployment record is attested, not self-reported.* The difference is who
+  says it happened: the platform, or the job that wanted it to. A job claiming
+  its own success is not evidence, and any platform lacking real deployment
+  records weakens guard 4 at exactly this point.
+
+** The guards as predicates
+
+Let =H(c)= be a change's head hash, =B(c)= its base, =T= the trunk tip,
+=merges(x,y)= the merges on trunk in =(x, y]=, and =class(m)= the divergence
+class of a merge.
+
+| Guard | Predicate                                                              | Evaluated                 |
+|-------+------------------------------------------------------------------------+---------------------------|
+| *0*   | =B(c) = T=                                                             | at berth claim            |
+| *1*   | =|{x : holds_berth(x)}| ≤ 1=                                           | continuously              |
+| *2*   | =∀g ∈ suite : g(H(c)) = pass=, and =selftest(H(c)) = pass=             | at promote *and* at deploy |
+| *4*   | =staged(H(c)) ∨ (emergency(c) ∧ approved(c))=                          | at deploy                 |
+| *4b*  | =∀m ∈ merges(B(c), T) : class(m) ∈ {inert, pipeline}=                  | *at reliance*, not request |
+| *5*   | =served_build(production) = H(c)=                                      | after deploy              |
+
+Guard 2 appears twice on purpose (§Emergency — the only bypass). Guard 4b's
+"at reliance" is the whole content of the rule: *a guard whose subject can
+change after it is checked must be re-checked at the moment it is relied on.*
+
+** Conformance — what a platform must provide
+
+The guards reduce to six capabilities. This is the checklist for any platform,
+and the thing to confirm early in a rollout:
+
+| # | Capability                                                        | Needed by     | Rarity                      |
+|---+-------------------------------------------------------------------+---------------+-----------------------------|
+| C1 | mutable, queryable state on a change, *owned by automation*      | manifest, all | common                      |
+| C2 | verdicts bound to a *content hash*, not a branch or a change id  | guard 2       | common, often misconfigured |
+| C3 | an *exclusive lease* with owner and deadline, readable by others  | guard 1       | uncommon                    |
+| C4 | an *event when the trunk moves*                                   | guard 4b      | *rare*                      |
+| C5 | verdicts that are *revocable after issue*                         | guard 4b      | *rare*                      |
+| C6 | a *platform-attested* deployment record                           | guard 4       | uncommon                    |
+
+C4 and C5 are the expensive ones, and they are both guard 4b's — which is
+consistent with §strict does not protect production, where no ruleset rule
+could express it either. *If a platform gives you only one thing, take C2;
+if it gives you two, take C2 and C5.* A verdict you cannot revoke is a
+verdict that outlives its own truth.
+
+C2's failure mode deserves naming because it is silent: bind a verdict to a
+branch or a change id instead of a hash and everything still appears to work,
+right up until the head moves and a stale pass authorizes a deploy. That is
+scenario D4's mechanism with a different cause.
+
+** What this buys
+
+Stating the model this way is what makes the rest portable. =spec.org='s
+labels, =scenarios.org='s cases, =tla/='s invariants and
+=gates/pbt-pipeline.py='s model all reduce to the predicates above; the
+GitHub-specific parts are the /encoding/ column of the first table and nothing
+else. A port is then a conformance exercise — check C1–C6, encode the six
+predicates — rather than a rewrite.
+
 * Vocabulary (ITIL 4)
 
 | Term                          | Meaning in this repo                                                                  |
@@ -1064,19 +1150,48 @@ Three controls need their own reads, and the audit does them:
   reviewer for =change:normal=, =wait_timer= 0, and a =deployment_branch_policy=
   restricting which branches may deploy.
 
-** Availability is itself a finding [E, 2026-09-13]
+** Availability on the development box [E, 2026-09-13]
 
 Against =aygp-dr/standard-change= the audit returns *eight unreadable
 controls*: both =repos/{r}/rulesets= and the classic
 =branches/main/protection= answer =403 Upgrade to GitHub Pro or make this
-repository public=. On a private repo on this plan *the entire ruleset table
-above is unenforceable*, not merely unconfigured.
+repository public=. Verified across 50 repos on this account: 35 public → 200,
+15 private → 403, no exceptions. The org route is closed too — =defrecord= and
+=walsh= are free orgs whose private repos 403 identically. Environment
+/protection rules/ carry the same gate, so =environment: production= is
+decorative here.
 
-That is the most important thing the audit has said so far, and it is why the
-unreadable/absent distinction is not pedantry. Options, none yet taken: make
-the repo public (contradicts the default-private rule), take a paid plan, or
-accept that enforcement is advisory here and the workflow-level guards are the
-only real controls. Recorded in §Open items.
+*This is a property of the development box, not of the model.* The target is an
+enterprise account, where every control in the table above is available. The
+finding is kept because it exercised something worth keeping — the audit's
+four-outcome design. An audit reporting "no findings" because it could not read
+anything would have laundered an unknown as a pass. That distinction is the
+point; the plan tier is incidental.
+
+** On an enterprise account
+
+What becomes available, and what it changes:
+
+| Capability                        | Effect on the model                                            |
+|-----------------------------------+----------------------------------------------------------------|
+| repo + *org-level* rulesets       | the guard table can be enforced once, across every repo, rather than configured per repo |
+| environment protection rules      | guard 4's approval becomes platform-attested instead of a =pulls/{n}/reviews= query in a job |
+| required reviewers as *teams*     | "a named change authority" stops being one person; §The balance's =prevent_self_review= deadlock dissolves |
+| CODEOWNERS enforcement            | =change:normal='s path-based authority becomes native rather than a labeller convention |
+| *custom deployment protection rules* | see below — this is the significant one |
+
+*Custom deployment protection rules are the native home for guard 4b.* An app
+can approve or reject a pending deployment /at deployment time/, which is
+precisely the "at reliance, not at request" semantics the guard requires
+(§Domain model, capabilities C4 and C5). On the free tier guard 4b has to be
+synthesised from a =push= trigger on trunk plus label withdrawal
+(=main-moved.yml=); on enterprise it can be a gate the platform itself asks
+before letting the deployment proceed — attested rather than self-reported,
+and revocable by construction.
+
+That is worth designing toward now, because it changes /where/ the guard lives
+without changing /what it says/. The predicate in §Domain model is unchanged;
+only the encoding moves. Which is the claim §Domain model exists to make.
 
 * The balance
 
