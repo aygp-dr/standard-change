@@ -92,8 +92,24 @@ SLOT
 case "${1:-}" in
   # block <pr> <groups> <minutes> -- reserve a window for this change.
   block)
-    pr="${2:?usage: schedule.sh block <pr> <groups> <minutes>}"
+    pr="${2:?usage: schedule.sh block <pr> <groups> <minutes> [--at <iso8601-utc>]}"
     groups="${3:-}"; mins="${4:-$QUANTUM}"
+    # A DESIGNATED BLOCK. Until now every booking was relative -- now, or behind
+    # whatever is already queued -- so "the Tuesday 19:00 release slot", which is
+    # how a change calendar is actually used, could not be expressed at all.
+    #
+    # --at names the start. It does NOT relax the clash check: a designated slot
+    # that collides with an existing reservation is still refused, because two
+    # changes holding one path to production is the thing the calendar exists to
+    # prevent, and wanting a particular hour does not change that.
+    AT=''
+    shift 4 2>/dev/null || shift $#
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --at) AT="${2:?--at needs an ISO 8601 UTC time, e.g. 2026-09-13T23:00:00Z}"; shift 2 ;;
+        *)    echo "refused: unknown argument '$1'" >&2; exit 2 ;;
+      esac
+    done
     [ -n "$groups" ] || { echo "refused: no groups — nothing to deploy" >&2; exit 2; }
 
     # Walk to the back of the queue. Ask for a slot after the latest END among
@@ -103,7 +119,21 @@ case "${1:-}" in
     # whatever is already booked.
     st0=$(read_sched); cur0=$(echo "$st0" | jq -r .body)
     after=''
-    if [ "${QUEUE:-1}" = 1 ]; then
+    if [ -n "$AT" ]; then
+      # Refuse a designated slot that has already passed. Booking into the past
+      # is never what was meant, and it would hand back a reservation the reaper
+      # closes on its next sweep -- success-shaped and immediately worthless.
+      _nown=$(now | tr -dc 0-9); _atn=$(echo "$AT" | tr -dc 0-9)
+      if [ "${#_atn}" -lt 14 ]; then
+        echo "refused: --at wants ISO 8601 UTC, e.g. 2026-09-13T23:00:00Z" >&2; exit 2
+      fi
+      if [ "$_atn" -lt "$_nown" ]; then
+        echo "refused: $AT is in the past (now $(now))." >&2
+        echo "  A booking behind the clock is closed by the next reap." >&2
+        exit 2
+      fi
+      after="$AT"
+    elif [ "${QUEUE:-1}" = 1 ]; then
       after=$(echo "$cur0" | jq -r --arg env "${CHANGE_ENV:-staging}" \
         '[.windows[]|select(.env==$env and .result==null)|.end]|max // empty')
     fi

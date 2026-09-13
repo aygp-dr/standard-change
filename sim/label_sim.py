@@ -42,6 +42,41 @@ BLOCKERS = ["none", "freeze", "berth-held", "emergency-in-flight"]
 # production, while its author's marker said do not.
 READY = ["draft", "ready"]
 
+# HOW THE WINDOW WAS OBTAINED. A fifth axis, added 2026-09-13 after the
+# release-coordinator workflow made the distinction load-bearing.
+#
+#   none        no reservation. The change may be perfect and still not deploy.
+#   queued      change/schedule.sh block with no --at: the booking walks to the
+#               back of the queue and takes the first free aligned slot.
+#   designated  block --at <iso>: a NAMED time, the way a release calendar is
+#               actually used ("the Tuesday 19:00 slot").
+#
+# The two booking modes differ ONLY in where they propose to start. Everything
+# after that is identical, and the clash check is the reason:
+#
+#   A DESIGNATED SLOT DOES NOT WIN A CLASH. Wanting a particular hour is not an
+#   argument about who holds the path to production. When 6PM ET collided with
+#   an auto-queued reservation the coordinator CANCELLED the queued one and
+#   re-booked it -- a human decision, recorded as a cancellation, visible in the
+#   schedule. Had --at simply displaced it, the queued change would have lost
+#   its slot with nothing in the record saying why.
+#
+#   DESIGNATED BOOKINGS LEAVE HOLES, and that is correct. A named hour is not a
+#   preference -- it is usually the developer saying "I will be at my desk then
+#   and I want to watch this go out". That is what makes automatic reslotting
+#   the wrong behaviour rather than merely a rude one: moving the change moves
+#   it away from the person who arranged to be present for it, and the whole
+#   value of the slot was the attention, not the minutes.
+#
+#   So the gaps are the point. A scheduler that packed them would be optimising
+#   utilisation of a resource that is not scarce (staging) at the cost of one
+#   that is (a person watching).
+#
+#   NEITHER MODE MAY BOOK INTO THE PAST. A reservation behind the clock is
+#   closed by the next reap, so handing one back is success-shaped and
+#   immediately worthless.
+BOOKING = ["none", "queued", "designated"]
+
 
 def declared():
     """Every label the declaration knows, plus its exclusion groups."""
@@ -65,8 +100,15 @@ def scope_of(cls, scope):
     return set()
 
 
-def may_proceed(cls, scope, state, blocker, ready="ready"):
+def may_proceed(cls, scope, state, blocker, ready="ready", booking="queued"):
     """The rules as they stand. Returns (ok, reason)."""
+    # NO WINDOW, NO DEPLOYMENT -- and no exemption, not even for an emergency.
+    # An emergency is exempt from the FREEZE and the QUEUE rules; it is not
+    # exempt from being on the calendar, because the calendar is what tells
+    # everyone else that the one path to production is occupied. An emergency
+    # that skipped it would collide with whatever was already deploying.
+    if booking == "none" and state.startswith("deploy:"):
+        return False, "no window: the change schedule has no reservation for this"
     # FIRST, AND WITH NO EXEMPTION. A draft is refused before the class is even
     # consulted, because the class cannot rescue it: itil:emergency is a
     # statement about the change's URGENCY, and draft is a statement about its
@@ -92,11 +134,27 @@ def main():
     print(f"  declaration: {len(labels)} labels, {len(groups)} exclusion groups\n")
 
     findings, rows = [], 0
-    for cls, scope, state, blocker, ready in itertools.product(
-            CLASSES, SCOPES, STATES, BLOCKERS, READY):
+    for cls, scope, state, blocker, ready, booking in itertools.product(
+            CLASSES, SCOPES, STATES, BLOCKERS, READY, BOOKING):
         rows += 1
         derived = scope_of(cls, scope) | {cls} | ({state} if state else set())
-        ok, why = may_proceed(cls, scope, state, blocker, ready)
+        ok, why = may_proceed(cls, scope, state, blocker, ready, booking)
+
+        # 6. A DEPLOYMENT WITHOUT A RESERVATION. The two booking modes must be
+        #    indistinguishable here: if `designated` could reach an environment
+        #    on a path `queued` could not, --at would be a bypass wearing a
+        #    calendar's clothes.
+        if booking == "none" and ok and state.startswith("deploy:"):
+            findings.append(
+                f"UNBOOKED DEPLOY: reached {state} with no window ({cls}/{scope})")
+        if ok and state.startswith("deploy:"):
+            other = "queued" if booking == "designated" else "designated"
+            ok2, _ = may_proceed(cls, scope, state, blocker, ready, other)
+            if not ok2:
+                findings.append(
+                    f"BOOKING MODE IS A BYPASS: {booking} reaches {state} where "
+                    f"{other} does not ({cls}/{scope}) -- naming an hour is not "
+                    f"an argument about who holds the path to production")
 
         # 5. A DRAFT MUST NOT REACH AN ENVIRONMENT. The states that mean "it is
         #    out there" are the deploy:* pair; reaching either while the author
