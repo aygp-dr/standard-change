@@ -62,7 +62,12 @@ oracle_resolve() {
   _base="$1"
   _root="$ORACLE_ROOT"
   _tree="$_root/router/routes.json"
-  ORACLE=$(mktemp -t oracle) || return 4
+  # mktemp -t takes a PREFIX on FreeBSD and requires trailing X's on GNU
+  # coreutils, where it dies with "too few X's in template". This gate runs on
+  # hydra AND on ubuntu-latest, and on ubuntu the failure landed before the
+  # REFUSED diagnostic could print -- so the gate exited 4 having run ZERO
+  # checks while looking like a clean refusal. Found in review, not by CI.
+  ORACLE=$(mktemp "${TMPDIR:-/tmp}/oracle.XXXXXX") || return 4
   ORACLE_FROM=''; ORACLE_SHA='-'; ORACLE_WHY=''
   _dep=$(curl -sI --max-time 5 "$_base/" 2>/dev/null | tr -d '\r' \
            | awk 'tolower($1)=="x-build-sha:"{print $2}' | head -1)

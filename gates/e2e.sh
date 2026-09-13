@@ -228,10 +228,27 @@ if [ -n "$PR" ]; then
       *)       ENV_=unknown ;;
     esac
   fi
-  if [ "$rc" = 0 ]; then add="$ENV_:e2e"; rm_="$ENV_:e2e-failed"
-  else                   add="$ENV_:e2e-failed"; rm_="$ENV_:e2e"; fi
+  if [ "$rc" = 0 ]; then add="$ENV_:e2e"; rm_="$ENV_:e2e-failed"; verdict=pass
+  else                   add="$ENV_:e2e-failed"; rm_="$ENV_:e2e"; verdict=fail; fi
+
+  # THE RECORD, and it names the build. A label cannot: `staging:e2e` says e2e
+  # passed and cannot say on what, which is why it has to be withdrawn on every
+  # push and why, on #11, a pass taken on 9d85a33 was still authorizing baed821
+  # (issue #16). This comment is what guard 4 reads. It does not go stale --
+  # it stays true about the SHA it names and simply stops matching the head.
+  #
+  # Not swallowed. A measurement nobody could record is not a measurement, so
+  # failing to write it fails the gate rather than passing quietly.
+  ./change/evidence.sh record "$PR" "$ENV_" e2e "$verdict" "${sha:-unknown}" "$base" \
+    || { echo "  FAIL could not record the $ENV_:e2e observation for #$PR"; rc=1; }
+
+  # The label, which is now the CURRENT-RUN signal and not the authorization:
+  # it says where this change is in the process right now. Removing one that
+  # was never there is not a failure; being unable to write the result is, and
+  # it is said out loud instead of `|| true`.
   gh pr edit "$PR" --repo "$repo" --add-label "$add" --remove-label "$rm_" >/dev/null 2>&1 \
-    || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 || true
+    || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 \
+    || echo "  WARNING could not set $add on #$PR -- the record above still stands"
   # Name the ORACLE in the record. staging:e2e named the environment and the
   # build and left out the one variable that decided the verdict (#14).
   echo "  #$PR <- $add  (observed on $base at build ${sha:-unknown}, oracle: $ORACLE_FROM@${ORACLE_SHA})"

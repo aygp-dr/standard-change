@@ -1,0 +1,25 @@
+{
+  "labels": [
+    {
+      "name": "app:plp"
+    },
+    {
+      "name": "change:standard"
+    },
+    {
+      "name": "deploy:staging"
+    },
+    {
+      "name": "staging:e2e"
+    },
+    {
+      "name": "staging:smoke"
+    },
+    {
+      "name": "staging:uat"
+    }
+  ],
+  "headRefOid": "baed8210000000000000000000000000000000ab",
+  "reviewDecision": "APPROVED",
+  "state": "OPEN"
+}

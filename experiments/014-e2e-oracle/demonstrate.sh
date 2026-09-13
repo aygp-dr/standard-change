@@ -24,7 +24,7 @@ set -eu
 base="${1:-${ROUTER_URL:-http://127.0.0.1:9010}}"
 root=$(cd "$(dirname "$0")/../.." && pwd)
 stub_port="${STUB_PORT:-9016}"     # block 1, offsets 6-9 are unallocated
-work=$(mktemp -d -t e2eoracle)
+work=$(mktemp -d "${TMPDIR:-/tmp}/e2eoracle.XXXXXX")
 # Kill the stub BEFORE removing the directory that holds its pid file. The
 # other order leaves a listener on $stub_port and the next run dies EADDRINUSE.
 cleanup() {

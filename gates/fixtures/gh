@@ -1,0 +1,35 @@
+#!/bin/sh
+# A `gh` that answers from recorded JSON. Put first on PATH by
+# gates/observation-test.sh so the guard under test runs unmodified and offline.
+#
+# It deliberately does NOT stub out jq: the fixture is handed to the real `-q` /
+# `--jq` filter the guard wrote. Those filters are where this kind of bug
+# actually lives, so a stub that answered them itself would be testing the
+# stub.
+set -eu
+FIX="${FIXTURE:?gh stub: FIXTURE is not set}"
+
+# gh spells the same thing -q for `pr view` and --jq for `api`.
+filter='.'
+prev=''
+for a in "$@"; do
+  case "$prev" in -q|--jq) filter="$a" ;; esac
+  prev="$a"
+done
+
+case "${1:-}" in
+  pr)
+    case "${2:-}" in
+      view)    jq -r "$filter" "$FIX/pr.json" ;;
+      edit|comment|merge)
+               printf '%s\n' "$*" >> "${GUARD4_WRITES:-/dev/null}" ;;
+      *)       echo "gh stub: unhandled 'pr $2'" >&2; exit 1 ;;
+    esac ;;
+  api)
+    case "${2:-}" in
+      *check-runs*) jq -r "$filter" "$FIX/check-runs.json" ;;
+      *comments*)   jq -r "$filter" "$FIX/comments.json" ;;
+      *)            echo "gh stub: unhandled api path '$2'" >&2; exit 1 ;;
+    esac ;;
+  *) echo "gh stub: unhandled '$1'" >&2; exit 1 ;;
+esac

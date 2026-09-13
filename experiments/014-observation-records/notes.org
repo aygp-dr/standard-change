@@ -1,0 +1,156 @@
+#+TITLE: 014 — an observation that names its build cannot authorize another one
+#+DATE: 2026-09-13
+
+* Hypothesis
+
+Issue #16, reframed by the repo owner: =staging:e2e= and =staging:smoke= are
+owned by the process of deployment and are markers at points in time. The
+defect is not that the withdrawal step failed to fire. It is that these are
+durable labels at all, which manufactures the staleness the withdrawal then has
+to clean up.
+
+Stated so it can be refuted:
+
+#+begin_quote
+A measurement recorded as a LABEL can authorize a build it was not taken on,
+and no test in this repository detects that. A measurement recorded as a
+point-in-time RECORD that names its SHA cannot, and the difference is
+demonstrable on identical inputs.
+#+end_quote
+
+Refuted if either half fails: if the pre-#16 guard refuses the stale fixture
+(then the fixture does not reproduce the bug, and the fix fixes nothing
+demonstrable), or if the current guard authorizes it.
+
+* Success criterion
+
+One recorded PR state — head =baed821=, labels =staging:e2e staging:smoke
+staging:uat= present, every observation taken on =9d85a33= — run through the
+guard as it was before #16 and the guard as it is now. The first must
+authorize. The second must refuse. Same fixture, same stub, no network.
+
+* Exact run command
+
+#+begin_src sh :eval no
+cd worktrees/fix-markers
+gmake -s gate-selftest          # includes observation-selftest, both directions
+./gates/observation-test.sh     # the 9 cases
+./gates/observation-test.sh --selftest
+#+end_src
+
+And the demonstration by hand, which is what the sections below record:
+
+#+begin_src sh :eval no
+FX=$PWD/gates/fixtures/observations
+FIXTURE=$FX/guard4/stale-marker PATH=$PWD/gates/fixtures:$PATH GH_REPO=o/r \
+  $FX/guard4-before-16.sh 42
+FIXTURE=$FX/guard4/stale-marker PATH=$PWD/gates/fixtures:$PATH GH_REPO=o/r \
+  ./change/guard4.sh 42
+#+end_src
+
+* Result — guard 4, the same fixture through both guards
+
+Before. The frozen pre-#16 guard, 2026-09-13:
+
+: guard 4 — the authorization stack for #42 @ baed821
+:   ok    review           APPROVED
+:   ok    check runs       green on baed821
+:   ok    staging:e2e      present
+:   ok    staging:smoke    present
+:   ok    staging:uat      present
+:
+:   authorized: every required observation is present on baed821
+: exit=0
+
+Read the last line next to the fixture. Every observation in that fixture was
+taken on =9d85a33=. The guard says =on baed821= because the head is =baed821=
+and the labels are present; it has no way to ask what they were about, so it
+describes them as being about whatever it is currently looking at. *That
+sentence is the bug, written out in full by the guard itself.*
+
+After. =change/guard4.sh=, same fixture, same stub:
+
+: guard 4 — the authorization stack for #42 @ baed821
+:   ok    review           APPROVED
+:   ok    check runs       green on baed821
+:   FAIL  staging:e2e      observed 9d85a33, head is baed821 -- that measurement is about a different build
+:   FAIL  staging:smoke    observed 9d85a33, head is baed821 -- that measurement is about a different build
+:   FAIL  staging:uat      observed 9d85a33, head is baed821 -- that measurement is about a different build
+:   ok    staging:uat      label present (a person has not withdrawn it)
+:
+:   NOT authorized
+: exit=1
+
+The =staging:uat= line is the shape of the repair in one place: the label is
+still consulted, because acceptance is not repeatable and a person may withdraw
+it, but it no longer establishes that a person looked at *this* build. Only the
+record does that.
+
+* Result — the merge guard inherits the same hole
+
+=gates/production-first.sh= reads =production:healthy= and justified it in a
+comment: "labeller.yml withdraws it on every push, so it cannot outlive its
+build." Two things were wrong with that. The withdrawal can fail to fire, which
+is #16; and =production:healthy= was never in the withdrawal list at all.
+
+Before, on =observations/production-first/stale-marker= (head =baed821=,
+=production:healthy= present, health.sh's record naming =9d85a33=):
+
+: this change deploys: plp
+:   ok    production:healthy is present on the current head
+:         (written by gates/health.sh; withdrawn by the labeller on every push,
+:          so it cannot describe a build other than this one)
+: exit=0
+
+After:
+
+: this change deploys: plp
+:   FAIL  production:healthy is on this PR, but the observation behind it names
+:         `9d85a33` and the head is `baed821`. That measurement is about a
+:         different build. This is the #16 shape: the label survived a push the
+:         measurement did not.
+: exit=1
+
+* What the suite could not have caught before
+
+=gates/labeller-test.py= asserted the withdrawal existed like this:
+
+: if "staging:passed" not in WORKFLOW.read_text():
+
+That is satisfied by the string appearing anywhere in the file — in any step,
+under any condition, with every removal swallowed by =|| true=. It was green
+throughout #16. It is now six scoped checks (W1–W6) over the withdrawal step
+alone, and each was negative-tested by reintroducing the defect it names.
+
+* Incidental finding: why the withdrawal may never have worked
+
+The withdrawal step ran =gh pr edit "$N" --remove-label "$l"= with *no
+=--repo=*, in a job that does no =actions/checkout=. Outside a git working
+tree =gh= has no repository to resolve and the call fails. With =|| true= on
+every removal, that failure was indistinguishable from success.
+
+This is consistent with hypothesis 3 in the issue and does not rule out
+hypothesis 1 (no =synchronize= delivered). Unverified against a live run — *[H]*
+— because reproducing it needs a push to a PR on the forge, which this work did
+not do. Both are now moot for soundness: the guards no longer depend on the
+withdrawal, and the step fails loudly if a removal fails.
+
+* Not fixed, and why
+
+- *Nobody checks who wrote a record.* A person can type an observation marker
+  into a PR comment exactly as they can add the label by hand. =evidence.sh
+  latest= carries the author through and guard 4 prints it; nothing enforces
+  it. Enforcing means pinning an expected actor, which differs between
+  =github-actions[bot]= and a PAT-driven local run, and that belongs with the
+  ownership audit rather than here.
+- *=change/settle.sh= still requires the =staging:*= labels.* It runs where the
+  estate is visible and re-derives the part that matters — what production is
+  serving, asked just now — so it is not authorizing on a stale marker in the
+  #16 sense.
+- *=deploy-staging.yml= still writes =staging:passed= and =staging:failed=*,
+  both declared RETIRED, and =promote.yml= triggers on =staging:passed=. That
+  is a live finding in =gates/label-audit.py= and predates this change.
+- *=gates/label-audit.py= cannot see a label written from a loop variable.*
+  =--remove-label "$l"= is skipped as dynamic, which is why the labeller's
+  withdrawal of =staging:*= — labels it does not own — has never appeared as a
+  finding. The 29 findings it reports are a floor, not a total.

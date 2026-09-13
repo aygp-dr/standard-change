@@ -1,0 +1,13 @@
+{
+  "labels": [
+    {
+      "name": "app:plp"
+    },
+    {
+      "name": "change:standard"
+    }
+  ],
+  "headRefOid": "baed8210000000000000000000000000000000ab",
+  "reviewDecision": "APPROVED",
+  "state": "OPEN"
+}

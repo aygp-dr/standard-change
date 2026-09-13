@@ -63,6 +63,31 @@ app:checkout:
 app:mock:
   - changed-files:
       - any-glob-to-any-file: external/mock/**
+# THE VERIFICATION CONTROL PLANE. Narrower than change:normal on purpose.
+#
+# change:normal globs router/, gates/, change/, targets/ and .github/ -- but
+# those are two different things:
+#
+#   router/, targets/   HOW A THING SHIPS. A deploy script change is verified
+#                       the ordinary way: deploy it, observe the estate.
+#   gates/, change/,    HOW EVERY CHANGE IS VERIFIED. These cannot be verified
+#   .github/            by the pipeline, because they ARE the pipeline. A green
+#                       run of a changed gate proves the gate can run. It does
+#                       not prove it still catches what it caught before.
+#
+# The label exists to say WHY this change is handled differently, on the PR,
+# where a reviewer sees it -- rather than leaving change:normal to imply it.
+# It is the trigger for the soak practice in docs/changing-the-pipeline.org:
+# a pipeline change is proven by USE, across N subsequent deployments, not by
+# its own merge. It is also why such a change must not auto-merge: it is not
+# proven until later changes have shipped through it.
+control-plane:
+  - changed-files:
+      - any-glob-to-any-file:
+          - gates/**
+          - change/**
+          - .github/**
+
 change:normal:
   - changed-files:
       - any-glob-to-any-file:
