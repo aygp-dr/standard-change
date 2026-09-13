@@ -164,6 +164,26 @@ if [ "$is_emg" -gt 0 ] && [ $((_std + _nrm)) -gt 0 ]; then
   note "derivation."
 fi
 
+# A DRAFT IS A STATEMENT THAT IT IS NOT READY. Nothing here read it, so a draft
+# could book a window, take the berth, deploy to staging and collect the
+# observations that authorize production -- while the author's own marker said
+# do not. Every other refusal in this file is the pipeline forming a judgement;
+# this one is the pipeline BELIEVING THE AUTHOR, which is cheaper and more
+# reliable than any of them.
+#
+# It is checked before the calendar, because a draft should not hold a
+# reservation either. Undraft with `gh pr ready <n>`.
+draft=$(gh pr view "$pr" --repo "$R" --json isDraft -q '.isDraft' 2>/dev/null || echo "?")
+if [ "$draft" = "?" ]; then
+  no "I could not check whether this is a draft." 4
+elif [ "$draft" = true ]; then
+  no "this pull request is a DRAFT" 6
+  note "the author has marked it not ready. Nothing downstream re-asks, so a"
+  note "draft that reaches staging collects the observations that authorize"
+  note "production."
+  note "recovery: gh pr ready $pr -- the author's call, never the pipeline's."
+fi
+
 # THE HOLDER IS AN ISSUE (#1), NOT A PULL REQUEST.
 #
 # This read `gh pr list --label freeze`, so declaring a freeze meant hanging the

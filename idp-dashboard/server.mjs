@@ -87,7 +87,13 @@ async function schedule() {
     // Printing the end time alone makes the operator do that subtraction, and
     // #38 is what happens when nobody does.
     const left = Math.round((Date.parse(end) - Date.now()) / 1000);
-    return { id: f[0], env: f[1], start: f[2], end, pr: f[5],
+    // A COUNTDOWN ON A WINDOW THAT HAS NOT STARTED IS A LIE. Eight stacked
+    // reservations all showed "Nm left" when only one of them was running; the
+    // other seven were counting down to the end of a window they had not
+    // entered. Time remaining is a fact about the CURRENT deployment and about
+    // nothing else -- a future booking has a start time, not a remainder.
+    const started = Date.now() >= Date.parse(f[2]);
+    return { id: f[0], env: f[1], start: f[2], end, pr: f[5], started,
              groups: f.slice(6, -1).join(' '), sha: f.at(-1),
              closes_in_s: left, soak_fits: left > SOAK_S, expired: left <= 0 };
   });
@@ -289,6 +295,9 @@ font-weight:700;letter-spacing:.05em}
 .sw-green{background:#11301c;color:#86efac;border:1px solid #16a34a}
 .sw-none{color:#6b7280}
 .team{color:#a78bfa;font-size:11px}.live{background:#16201380}
+tr.active{background:#1b2740}
+tr.active td{border-bottom-color:#2f4468}
+tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa}
 .bar{display:flex;gap:10px;align-items:center;margin:0 0 16px;flex-wrap:wrap}
 .st{padding:5px 13px;border-radius:3px;font-weight:700;font-size:12px;letter-spacing:.05em}
 .ok{background:#14301c;color:#4ade80;border:1px solid #1f5130}
@@ -333,7 +342,7 @@ letter-spacing:.04em;max-width:74rem}
 <div class=bar id=flags></div>
 
 <h2>booked windows</h2>
-<table><thead><tr><th>change</th><th>groups</th><th>build</th><th>closes</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
+<table><thead><tr><th>change</th><th>groups</th><th>build</th><th>window</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
 
 <h2>environments</h2>
 <table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>promotes</th></tr></thead><tbody id=e></tbody></table>
@@ -363,12 +372,14 @@ function flagbox(d){
 function hms(s){const m=Math.floor(Math.abs(s)/60),r=Math.abs(s)%60;
   return (s<0?'-':'')+(m?m+'m ':'')+r+'s';}
 function remain(x){
-  if(x.expired)return '<span class=rem-bad>EXPIRED '+esc(hms(x.closes_in_s))+' ago</span>';
-  // Short, because the colour already carries the warning. The long sentence
-  // explaining why was documentation sitting in a data cell.
-  if(!x.soak_fits)return '<span class=rem-warn title="shorter than one soak + walk">'+
-    esc(hms(x.closes_in_s))+' left</span>';
-  return '<span class=rem-ok>'+esc(hms(x.closes_in_s))+' left</span>';
+  if(x.expired)return '<span class=rem-bad>EXPIRED</span>';
+  // Not started: it has a start time, not a remainder.
+  if(!x.started)return '<span class=dim>'+esc(x.start)+'</span>';
+  // Running: the remainder is the only number that matters, and the colour is
+  // about whether this deployment can still finish, not about the clock.
+  const s=x.closes_in_s;
+  const c=s<60?'rem-bad':s<150?'rem-warn':'rem-ok';
+  return '<span class='+c+'>'+esc(hms(s))+' left</span>';
 }
 // A BANNER ONLY WHEN THERE IS SOMETHING TO SAY. The previous version printed a
 // banner, a chip and a button for the same fact, and the banner's "Declared on
@@ -414,11 +425,14 @@ function render(d){
   document.getElementById('alarm').innerHTML=banner(d);
   document.getElementById('flags').innerHTML=estate(d);
   document.getElementById('w').innerHTML=d.windows.length?d.windows.map(x=>
-    '<tr><td><b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
+    // THE ONE THAT IS RUNNING LOOKS DIFFERENT. Eight stacked reservations read
+    // as eight equal rows; exactly one of them holds the berth right now, and
+    // that is the only row anybody is acting on.
+    '<tr class="'+(x.started&&!x.expired?'active':'')+'"><td><b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
     (x.title?'<div class=ti>'+esc(x.title)+'</div>':'')+'</td>'+
     '<td class=dim>'+esc(x.groups||'—')+'</td>'+
     '<td class=sha>'+esc(x.sha)+'</td>'+
-    '<td>'+remain(x)+'<div class=dim style="font-size:11px">'+esc(x.end)+'</div></td>'+
+    '<td>'+remain(x)+'</td>'+
     '<td class=n-'+esc(x.env)+'>'+esc(x.env)+'</td>'+
     '<td class=dim>'+esc(x.id)+'</td></tr>').join('')
     // "no open window" and "the berth is free" are not the same claim. This
