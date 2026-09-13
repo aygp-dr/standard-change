@@ -1,0 +1,60 @@
+#+TITLE: 001 — does an emergency merge strand a staging pass?
+#+DATE: 2026-09-12
+#+OPTIONS: toc:nil num:nil
+
+* Hypothesis
+
+Falsifiable, one sentence:
+
+#+begin_quote
+Under =spec.org= 0.2, a change that has already passed staging can reach
+production carrying a tree that predates a change already merged to =main=,
+thereby reverting it, with every gate green.
+#+end_quote
+
+* Why it was suspected
+
+Guard 0 (up to date with =main=) is evaluated inside =change/queue.sh claim=,
+i.e. once, at staging-request time. The SHA binding on =staging:passed= fires on
+/pushes to the PR/. Neither watches =main=. The emergency path exists precisely
+to merge to =main= out of band, so the two mechanisms have a gap between them
+exactly where break-glass operates.
+
+* Success criterion
+
+The observation that confirms it: a model-checker trace in which a
+non-emergency change merges while =base < mainV=, with =gated = TRUE=
+throughout. The observation that refutes it: exhaustive state-space search
+finds no such trace.
+
+* What could go wrong
+
+- The model is a caricature that admits behaviours the real pipeline forbids —
+  a false positive. Mitigated by keeping actions in one-to-one correspondence
+  with workflow steps and guards.
+- The model is written so the property cannot fail — a vacuous pass. Mitigated
+  by the =Guard4b= constant: the negative run is mandatory and =check.sh= fails
+  if the model does /not/ break with the guard off.
+- TLC state space too small to reach the interleaving. Mitigated by checking
+  the reported depth and distinct-state count, and by =MaxMerges = 2= being the
+  smallest bound that can express "main moved twice".
+
+* Running
+
+: ./tla/check.sh
+
+Runs both directions. =tla2tools.jar= via =$TLA2TOOLS=, default
+=~/ghq/github.com/aygp-dr/tla-plus-tutorial/tla2tools.jar=.
+
+* Promotion checklist
+
+- [X] Hypothesis stated before the run
+- [X] Negative run reproduces the defect (=regressed = TRUE=)
+- [X] Positive run passes with the guard installed
+- [X] =check.sh= fails if either outcome inverts
+- [X] Spec amended in the direction of the observation (§Guard 4b, 0.2 → 0.3)
+- [X] Scenario written into =scenarios.org= (D4) so it survives the experiment
+- [ ] Re-checked against the implemented workflows once they exist
+
+The last box is the point of leaving this directory in place: the model asserts
+something about =main-moved.yml= that only the real workflow can confirm.

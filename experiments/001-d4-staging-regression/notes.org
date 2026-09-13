@@ -1,0 +1,65 @@
+#+TITLE: 001 — observations
+#+OPTIONS: toc:nil num:nil
+
+* 2026-09-12 — scenario written, before any model
+
+Writing scenario D4 in =scenarios.org= by hand was what surfaced this; the
+model came after, to decide whether the hand-argument was right. Worth
+recording: the /catalogue/ found the defect, not the formalism. The formalism
+proved it and, more usefully, proved the fix.
+
+* 2026-09-12 — first TLC run: tooling, not findings
+
+Two failures that were mine, not the spec's:
+
+1. =NoPR == CHOOSE x : x \notin PRs= — TLC: "attempted to evaluate an unbounded
+   CHOOSE". Fixed by making =NoPR= a CONSTANT and a model value, with
+   =ASSUME NoPR \notin PRs=.
+2. =Error: Deadlock reached= on the positive run. Not a violation: the terminal
+   state where every PR has merged has no successor. Added
+   =CHECK_DEADLOCK FALSE=, since termination is the expected end of a pipeline.
+
+Recording these because both /looked/ like the model finding something. A
+tooling error that resembles a result is the most expensive kind, and next time
+the reflex should be to read the error class before the trace.
+
+* 2026-09-12 — negative run: hypothesis confirmed
+
+With =Guard4b = FALSE=:
+
+: Error: Invariant Safety is violated.
+: /\ regressed = TRUE
+: 2783 states generated, 611 distinct states found, 77 states left on queue.
+
+Trace, 11 states: p1 gets =gated=, =emergency=, =approved=, =Promote=. p2
+=GatesPass=, =ClaimStaging= (legal — =base[p2] = mainV = 0=). =DeployAndMerge(p1)=
+takes =mainV= to 1. p2 then =StagingPassed=, =Promote=, =DeployAndMerge= — with
+=base[p2] = 0 < mainV = 1=. p2 lands on a main it does not contain.
+
+Note what is *not* in the trace: no push, no rebase, no red gate, no second
+staging claim. Every guard as specified in 0.2 was satisfied. That is the whole
+finding — the pipeline was not circumvented, it was followed.
+
+* 2026-09-12 — positive run: fix confirmed
+
+With =Guard4b = TRUE= (=MainMoved= enabled, and =DeployAndMerge= requiring
+=emergency \/ base = mainV=):
+
+: Model checking completed. No error has been found.
+: 3781 states generated, 830 distinct states found, 0 states left on queue.
+: The depth of the complete state graph search is 16.
+
+Queue empty, so the search was exhaustive at this bound rather than truncated.
+
+* Lesson
+
+Generalised into =spec.org= §Guard 4b, because it is worth more than the
+instance: *a guard whose subject can change after it is checked must be
+re-checked at the moment it is relied on.* Guard 0 at claim time is a
+convenience that gives fast feedback. Guard 4b is the one that is load-bearing.
+
+Corollary for the rest of the pipeline: audit every other guard for the same
+shape. Guard 2 (gates green) is re-checked at promote time against the head SHA
+— fine. Guard 3 (lock/freeze) is checked at deploy time — fine. Guard 1
+(singleton) is checked only at claim; a second holder cannot appear without
+claiming, so it is safe, but that is an argument and not yet a checked property.
