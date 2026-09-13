@@ -103,10 +103,12 @@ case "${1:-}" in
     # changes holding one path to production is the thing the calendar exists to
     # prevent, and wanting a particular hour does not change that.
     AT=''
+    FORCE=''
     shift 4 2>/dev/null || shift $#
     while [ $# -gt 0 ]; do
       case "$1" in
         --at) AT="${2:?--at needs an ISO 8601 UTC time, e.g. 2026-09-13T23:00:00Z}"; shift 2 ;;
+        --short) FORCE=1; shift ;;
         *)    echo "refused: unknown argument '$1'" >&2; exit 2 ;;
       esac
     done
@@ -117,6 +119,41 @@ case "${1:-}" in
     # somebody is still entitled to, whether or not its clock has run out.
     # Without `--now` this never refuses for a clash; it places itself behind
     # whatever is already booked.
+    # A WINDOW MUST BE ABLE TO HOLD THE WORK, AND THE WORK IS NOT ALWAYS 5m.
+    #
+    # Five minutes was fine for a one-line copy change and wrong for everything
+    # else, and nothing said so: a 5m slot cannot hold a 5m soak, so a whole
+    # afternoon of bookings lapsed at exactly the point the hold ended. Worse,
+    # when the 6PM designated block for #28 clashed, it was trimmed from 30m to
+    # 15m TO FIT -- the duration chosen from the calendar rather than from the
+    # change.
+    #
+    # The floor is the work: deploy and settle (~2m) + the soak + the e2e and
+    # smoke walk (~1m), plus a minute per extra app because the walk grows with
+    # the estate, plus ten for a control-plane change, which is re-verifying the
+    # thing that verifies everything else and has never been done in a hurry
+    # well.
+    #
+    # It is a FLOOR, not a value: ask for longer whenever the change deserves
+    # it. --short overrides, deliberately loudly, because there are real reasons
+    # to want a stub booking and none of them should be silent.
+    _soak_m=$(( (${SOAK_SECONDS:-300} + 59) / 60 ))
+    _ngroups=$(printf '%s' "$groups" | wc -w | tr -d ' ')
+    [ "$_ngroups" -lt 1 ] && _ngroups=1
+    _floor=$(( 3 + _soak_m + _ngroups - 1 ))
+    case " $groups " in *" control-plane "*) _floor=$(( _floor + 10 )) ;; esac
+    if [ "$mins" -lt "$_floor" ] && [ -z "$FORCE" ]; then
+      echo "refused: ${mins}m cannot hold this change; it needs at least ${_floor}m." >&2
+      echo "  deploy+settle 3m + soak ${_soak_m}m + 1m per extra app ($_ngroups group(s))" >&2
+      case " $groups " in *" control-plane "*)
+        echo "  + 10m: a control-plane change re-verifies what verifies everything else" >&2 ;;
+      esac
+      echo "  A window that cannot hold the work is not a reservation, it is a" >&2
+      echo "  reservation-shaped object that expires mid-deploy." >&2
+      echo "  Book ${_floor}m or more, or --short if you mean a stub." >&2
+      exit 6
+    fi
+
     st0=$(read_sched); cur0=$(echo "$st0" | jq -r .body)
     after=''
     if [ -n "$AT" ]; then
