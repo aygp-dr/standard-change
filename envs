@@ -50,7 +50,13 @@ done
 
 h "production cutover"
 ./targets/bastille/front/switch.sh status 2>/dev/null | sed 's/^/  /' || echo "  front router down"
-printf '  staging   http://192.168.86.29:9201\n  production http://192.168.86.29:9200\n'
+# Corrected 2026-09-13 with spec.org: the protected tier uses the same ten-port
+# blocks as every other tier. 9201 never existed and blue/green had no
+# addresses, so the two production replicas could not be named.
+printf '  staging          http://192.168.86.29:9200\n'
+printf '  production       http://192.168.86.29:9230   (front -> live colour)\n'
+printf '  production blue  http://192.168.86.29:9210\n'
+printf '  production green http://192.168.86.29:9220\n'
 
 h "local worktree blocks — development, never a deployment target"
 if [ -f ports.tsv ]; then

@@ -372,8 +372,8 @@ flowchart TB
             W1["9010-9019  block 1"]
             WN["9090-9099  block 9  (the ceiling)"]
             TE["9100-9199  team envs — cannot promote"]
-            FP["9200  front router -> production"]
-            FS["9201  front router -> staging"]
+            FP["9230  production front -> live colour"]
+            FS["9200  staging"]
         end
         OTHER["8080 dump1090 · 8081 · 8083 · 7500 · 7510 · 7680 · 7681 · 7747 · 9630<br/>OTHER SERVICES — not ours"]
     end
@@ -401,11 +401,26 @@ can promote, the same way a label's name encodes its kind
 |--------------+---------------+-------------------------------------+---------------------+--------------|
 | *9000–9099*  | *dev*         | worktree blocks, =9000 + 10n=, n ≤ 9 | =ports.sh=, =ports.tsv= | *yes* — shared namespace |
 | *9100–9199*  | *team*        | =env/<team>-<app>= — *cannot promote* | IDP checkout        | *yes*        |
-| *9200*       | *protected*   | front router → production            | by hand, here       | *yes*        |
-| *9201*       | *protected*   | front router → staging               | by hand, here       | *yes*        |
-| 9202–9299    | protected     | reserved                             | —                   | yes          |
+| *9200*       | *protected*   | *staging*                            | =targets/node/deploy.sh= | *yes*   |
+| *9210*       | *protected*   | *production — blue replica*          | =targets/node/deploy.sh= | *yes*   |
+| *9220*       | *protected*   | *production — green replica*         | =targets/node/deploy.sh= | *yes*   |
+| *9230*       | *protected*   | *production front* — proxies to the live colour | =targets/node/front.js= | *yes* |
+| 9240–9299    | protected     | reserved                             | —                   | yes          |
 | 7000–8999    | *not ours*    | dump1090 and friends                 | —                   | *avoid*      |
 | =:80=, =8001–8005= | —       | inside every jail                    | fixed, identical everywhere | *no* |
+
+*Amended 2026-09-13, in the direction of the observation.* This table read
+=9200 front router → production= / =9201 front router → staging=, which the
+estate contradicted: nothing ever bound 9201, and blue/green had no addresses
+at all, so the two production replicas could not be spoken about. The protected
+tier now uses the same ten-port blocks as every other tier — block 20 staging,
+21 blue, 22 green, 23 the front — which is what =targets/node/deploy.sh= and
+the gates actually implement.
+
+Recorded rather than quietly corrected because *=spec.org= governs*: the code
+was right and the governing document was wrong for several hours, and both
+=CLAUDE.md= and =envs= were corrected before this file was. A spec that lags
+its implementation is the bug the verification contract exists to catch.
 
 The middle tier is the one worth having a range for. =README.org= §Environments
 already says *team environments are for developing a change; staging is the
