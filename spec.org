@@ -987,6 +987,81 @@ the variable changes who presses the button and nothing about what was checked.
 
 * Workflows
 
+** gate.yml — the change authority
+
+The four check runs guard 2 looks for. Job names matter: =promote.yml= and
+=deploy-production.yml= query =commits/{sha}/check-runs= and match
+=^(gate-selftest|lint|test|e2e)=, so a rename here silently disarms guard 2.
+
+#+begin_src yaml :tangle .github/workflows/gate.yml
+name: gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+permissions: {contents: read}
+
+jobs:
+  # Runs FIRST and gates the rest: a suite whose self-test did not pass
+  # produces no usable verdict (spec.org, Verification contract).
+  gate-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: pip install --quiet hypothesis
+      - run: ./gates/docs-lint.py
+      - run: ./gates/docs-lint.py --selftest
+      - run: ./gates/labeller-test.py
+      - run: $(command -v gmake make | head -1) -s audit-selftest
+      - run: ./gates/simulate-gates.py --check
+      - run: ./gates/pbt-pipeline.py --exhaustive
+      - name: the model must still be able to fail
+        run: |
+          if GUARD_4B=0 ./gates/pbt-pipeline.py --exhaustive >/dev/null; then
+            echo "::error::the model cannot reach scenario D4; it verifies nothing"; exit 1
+          fi
+
+  lint:
+    needs: gate-selftest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: ./router/generate.sh
+      - run: for a in apps/*/; do node --check "$a/src/server.js"; jq -e . "$a/routes.json" >/dev/null; done
+      - name: routes.json must be the source of the router
+        run: git diff --exit-code router/routes.json || { echo "::error::router/routes.json is stale; regenerate it"; exit 1; }
+
+  test:
+    needs: gate-selftest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: for a in apps/*/; do (cd "$a" && node --test); done
+
+  e2e:
+    needs: gate-selftest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: bring up a block in the runner
+        run: |
+          ./router/generate.sh
+          ./change/ports.sh alloc
+          ./change/ports.sh run-apps
+          sleep 4
+      - name: journeys through the router
+        run: ROUTER_URL=http://127.0.0.1:10000 ./gates/e2e.sh
+      - if: always()
+        run: ./change/ports.sh stop || true
+#+end_src
+
 ** deploy-staging.yml skeleton
 
 #+begin_src yaml :tangle .github/workflows/deploy-staging.yml
