@@ -126,6 +126,18 @@ $DEVIATION
 }Rollback: \`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" >/dev/null
 ok "PIR posted -- the evidence now survives the labels"
 
+# REDLINE THE WINDOW. settle.sh checked for one and never closed it, so #11
+# merged and settled while its window stayed open until 17:00Z. An unredlined
+# window is a defect for two reasons: the schedule keeps claiming a change is
+# in flight, and schedule.sh refuses an OVERLAPPING window on the same
+# environment -- so a settled change's ghost blocks the next booking.
+# Caught when #19 tried to book and preflight said "not on the calendar".
+if [ -n "${win:-}" ]; then
+  ./change/schedule.sh close "$win" passed >/dev/null 2>&1 \
+    && ok "window $win redlined: passed" \
+    || echo "   warn could not close window $win -- check the schedule by hand"
+fi
+
 # 5. Clear. Two different reasons, and the second is the load-bearing one.
 #
 #    ANNOTATIONS THAT RECORD -- staging:e2e, staging:uat, production:healthy.

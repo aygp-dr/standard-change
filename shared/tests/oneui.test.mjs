@@ -53,6 +53,40 @@ test('a valid document is still produced', () => {
   assert.ok(html.includes('#e8f0ff'), 'background not applied');
 });
 
+// ---- the estate nav ---------------------------------------------------------
+//
+// The nav is rendered on every page of every app, so a link it invents is a
+// broken link in four apps at once -- and gates/smoke.sh is the only gate that
+// follows links, so it is the only thing that can see it. It did: /p/SKU1,
+// substituted for /p/:sku, 404ed as soon as pdp started checking the SKU
+// against a catalogue (#17).
+
+test('the nav links the instance the app declares, not one it invented', () => {
+  const estate = [{ app: 'pdp', port_offset: 3, routes: ['/p/:sku'],
+                    probes: { '/p/:sku': '/p/SKU123' } }];
+  const html = page(d({ app: 'pdp' }), estate, '#fff');
+  assert.ok(html.includes('href="/p/SKU123"'), 'the declared probe is not linked');
+  assert.ok(!html.includes('/p/SKU1"'), 'the invented instance is still linked');
+});
+
+test('a route with no declared probe still gets a link', () => {
+  // Substitution stays the fallback -- gates/e2e.sh does the same -- so an app
+  // that declares nothing is no worse off than before.
+  const estate = [{ app: 'plp', port_offset: 2, routes: ['/c/:category'] }];
+  const html = page(d({ app: 'plp' }), estate, '#fff');
+  assert.ok(html.includes('href="/c/shoes"'));
+});
+
+test('a probe out of routes.json cannot inject markup', () => {
+  // routes.json is config: in a deployed environment it is whatever is on
+  // disk, which makes it exactly as trusted as the request line was in 1.0.1.
+  const estate = [{ app: '<b>x</b>', port_offset: 1, routes: ['/p/:sku'],
+                    probes: { '/p/:sku': '/p/"><script>alert(1)</script>' } }];
+  const html = page(d(), estate, '#fff');
+  assert.ok(!html.includes('<script>alert(1)'), 'probe escaped the attribute');
+  assert.ok(!html.includes('<b>x</b>'), 'app name was interpolated raw');
+});
+
 // The version must describe the SURFACE, not the intent of whoever bumped it.
 // The first version of this test hardcoded "1.0.x and arity 3" and failed the
 // moment a legitimate minor arrived -- it was pinning a fact, not a rule. The

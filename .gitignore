@@ -28,3 +28,10 @@ deployments/
 targets/bastille/front/tmp/*.pid
 targets/node/.*.log
 targets/node/live
+
+# The port registry is per-HOST runtime state, not repo content. Every host has
+# different allocations, and targets/node/deploy.sh writes a row on every deploy,
+# so a tracked copy is stale the moment it is committed and blocks a rebase every
+# time anything deploys. Fourth instance of this defect today after front.pid,
+# targets/node/live and this file earlier. A CMDB does not live in the app repo.
+ports.tsv

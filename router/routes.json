@@ -40,7 +40,10 @@
     "routes": [
       "/p/:sku"
     ],
-    "health": "/p/PING",
+    "probes": {
+      "/p/:sku": "/p/SKU123"
+    },
+    "health": "/p/SKU123",
     "journeys": [
       "pdp",
       "add-to-cart"
