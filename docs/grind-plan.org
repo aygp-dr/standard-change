@@ -71,3 +71,82 @@ Every row is a state nobody has produced. The ones I expect to hurt:
 Not whether the guards refuse — they do, and round one shows it. *Whether the
 estate can be put back.* A pipeline that stops safely and cannot resume is a
 pipeline that turns every interruption into an incident.
+
+** The round-two rows as named checks
+
+Audited 2026-09-13 against =sim/label_sim.py= on =origin/feat/label-simulator=
+(PR #48). The freeze and emergency *moves* are all in the successor relation --
+=human/freeze= / =human/thaw=, =human/itil:emergency= / =human/withdraw=, and
+under the =estate-emergency= repair the bare =emergency= toggle -- so every row
+below is a state the sweep can construct. What is missing is not reachability.
+It is that five rows have nothing that *checks* them, and three cannot be asked
+at all because the move that would answer them does not exist.
+
+These are the identifiers to regrind against. R-numbers are the round-two rows;
+they are NOT the F-numbers from PR #48, which are findings, not checks, and
+exist only in that PR's body.
+
+| id  | row                          | reachable | checked by                     |
+|-----+------------------------------+-----------+--------------------------------|
+| R1  | freeze before booking        | yes       | -- (preflight returns 4 first; the freeze is never the reason) |
+| R2  | freeze after booking         | yes       | =inv_ordinary_change_waits= (refusal only) |
+| R3  | estate emergency pre-staging | yes       | =inv_ordinary_change_waits=    |
+| R4  | freeze mid-staging           | state yes | *nothing* -- see below         |
+| R5  | emergency after staging green| yes       | =inv_ordinary_change_waits=    |
+| R6  | freeze before cutover        | yes       | =inv_ordinary_change_waits=    |
+| R7  | emergency after cutover      | *no move* | --                             |
+| R8  | freeze at settlement         | yes       | *nothing*                      |
+| R9  | =itil:emergency= during freeze | yes     | =inv_emergency_never_waits=    |
+| R10 | two emergencies at once      | yes       | *excluded by comment*          |
+
+*** R4 -- the central law is honoured at one site and nowhere else
+
+=successors= re-checks =preflight= at the production move:
+
+: if rules.guard4(st, i)[0] == 0 and rules.preflight(st, i)[0] == 0:
+
+That is the law ("a guard whose subject can change after it is checked must be
+re-checked at the moment it is relied on") and it is why R5 and R6 come for
+free. But once =berth=True=, the three instruments -- =gates/e2e.sh=,
+=smoke.sh=, =human/observe.sh uat= -- fire with no guard between them. A freeze
+arriving mid-staging changes nothing in the model, and nothing in the model
+says it should. Same shape as guard 4b, one rung lower.
+
+*** R7 -- there is no verb for "it is already out there"
+
+=inprod= is set True by the production move and cleared only by
+=author/push=. No rollback, no abort. The state "production is serving the
+change and the estate has just closed" is reachable; the question the row asks
+cannot be phrased.
+
+*** R8 -- and the berth is stuck behind it
+
+=may_merge= never consults =preflight=, so a freeze landing between
+=change:complete= and the merge does not stop the merge. If it did, the berth is
+released only *by* the merge, so the change would sit holding staging with
+nothing to release it -- and =sweep= is safety-only. There is no liveness
+property anywhere in the file: nothing asks whether a good terminal state is
+still reachable from a state the search has found. That is exactly what round
+two is for, and the simulator cannot currently ask it.
+
+*** R10 -- the checker declines the case
+
+From =inv_emergency_never_waits=:
+
+: if "E" in pr_get(st.prs[h], "cls"):
+:     continue                      # two emergencies is a different case
+
+The one row flagged as "nothing orders them" is the one row the checker skips.
+
+*** What round two needs added to the simulator
+
+Three moves and one property class, none of which are prerequisites for running
+round two by hand -- they are what makes it repeatable afterwards:
+
+- =targets/switch.sh rollback= : clears =inprod=, so R7 has an answer
+- =change/settle.sh --abort= : releases the berth without merging, so R8 has one
+- window *expiry* : today =change:scheduled= never lapses, so R1's re-book and
+  "we blew past our window" are the same state
+- a liveness sweep : from every reachable state, is a merged-or-abandoned
+  terminal state still reachable? This is the *whole* question -- not whether
+  the guards refuse, but whether the estate can be put back.
