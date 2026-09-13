@@ -10,6 +10,12 @@
 import { readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 
+// 1.3.0 -- a `.b` badge class in the shared stylesheet. One line, and the
+// smallest possible change that still redeploys every app: nothing in the
+// surface changed, no function signature moved, and every app's output is
+// byte-identical unless it uses the class. A MINOR rather than a patch because
+// the stylesheet IS part of the surface -- an app may now rely on `.b` existing.
+//
 // 1.2.0 -- the page now states WHERE it is served from: host, port tier and
 // environment (issue #15). A MINOR: `environment` and `HOST` are added to the
 // surface and page() reads two new optional fields off `d`. Nothing was
@@ -27,7 +33,7 @@ import { hostname } from 'node:os';
 // security patch, not a replacement for it: 1.0.1 escaped what page()
 // interpolates and that escaping is inherited here unchanged. This release adds
 // to the surface, which is why it is not a patch.
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 
 // d.path is whatever the client put in the request line, and it went straight
 // into the document: GET /<script>alert(1)</script> came back as live markup
@@ -177,7 +183,8 @@ h2{margin:22px 0 2px;font-size:17px}
 .e{margin:-12px 0 0;font-size:13px;color:#555}
 .e .t{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .e.dev .t{color:#6b7280}.e.team .t{color:#b45309}.e.protected .t{color:#b91c1c}
-.v{color:#999;font-size:11px;margin-top:22px}</style>
+.v{color:#999;font-size:11px;margin-top:22px}
+.b{background:#0e8a16;color:#fff;font-size:11px;padding:2px 6px;border-radius:3px;vertical-align:middle;margin-right:6px}</style>
 <main><h1>${esc(d.app)}</h1>
 <p>served by <b>${esc(d.app)}</b> · path <code>${esc(d.path)}</code> · build <code>${esc(d.sha)}</code></p>
 ${whereLine(d)}

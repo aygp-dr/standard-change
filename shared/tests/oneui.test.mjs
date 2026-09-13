@@ -240,3 +240,12 @@ test('the host is read from the machine, not from the environment', () => {
   assert.equal(typeof HOST, 'string');
   assert.ok(HOST.length > 0);
 });
+
+// The shared stylesheet is part of the surface. An app may rely on `.b`
+// existing, so removing it is a breaking change to every app at once -- which
+// is the whole point of this change being here rather than in one app.
+test('the shared stylesheet carries the badge class', () => {
+  const html = page({ app: 'x', path: '/', sha: 'abc1234', block: '0' },
+                    [{ app: 'x', port_offset: 1, routes: ['/'] }], '#fff');
+  assert.match(html, /\.b\{background:/, '.b missing from the shared stylesheet');
+});
