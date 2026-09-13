@@ -78,8 +78,24 @@ sequenceDiagram
     GH-->>Dev: shipped
 #+end_src
 
-Three things this picture is making claims about, each checked elsewhere:
-*reserving is not deploying* (the guards are re-evaluated when the slot
+** One label starts a change
+
+A person adds *=change:requested=* and that is the whole of their part.
+Everything after is the system acting or observing, and the *name shape* says
+which:
+
+| shape                | kind        | example               | added by hand? |
+|----------------------+-------------+-----------------------+----------------|
+| =change:requested=   | request     | someone asked         | *yes*          |
+| =deploy:<env>=       | action      | work is in flight     | no             |
+| =<subject>:<state>=  | observation | *a check came back*   | no             |
+
+=production:healthy= reads as a check result because that is what it is.
+=deploy:staging= is not a way to ask for a deployment — it marks that the
+workflow is deploying, right now.
+
+Three things this picture claims, each checked elsewhere:
+*reserving is not deploying* (guards are re-evaluated when the window
 arrives), *production promotes the digest staging tested* rather than
 rebuilding, and *converged is not alive* — guard 5 samples until one build
 answers, or refuses.
@@ -114,7 +130,7 @@ flowchart TB
     W2 --> E2
     E1 -.->|"cannot promote"| X(("✗"))
     E2 -.->|"cannot promote"| X
-    W1 -->|"deploy:staging<br/>guards 0 and 1"| S
+    W1 -->|"change:requested<br/>guards 0 and 1"| S
     S -->|"authorizing e2e passes<br/>guards 2, 4, 4b"| P
     P -->|"health check passes"| M["merge to main<br/>labels released"]
     M -.->|"everyone else is now<br/>BEHIND main"| W2
@@ -169,7 +185,21 @@ compose*, and it happens before staging rather than after production.
 
 The *updated check* is guard 0 plus guard 4b: a change may only reach the path
 to production while it contains the current tip of =main=, and that must be
-true at the moment it is relied on, not merely when it was requested.
+true *at the moment it is relied on*, not merely when it was requested.
+
+Neither treats every merge alike. =change/divergence.sh= classifies what landed:
+
+| class      | what moved on main                        | effect                       |
+|------------+-------------------------------------------+------------------------------|
+| =inert=    | docs, notes, the model                     | nothing — you are not stale  |
+| =pipeline= | =targets/=, =gates/=, =.github/=           | re-verify; how you ship changed |
+| *=artifact=* | *=apps/=*, =router/=                     | *blocked* — you would revert it |
+| *=hotfix=* | any merge carrying =Change-Type: emergency= | *blocked* — you would revert a fix |
+
+*=apps/**= is the deployable entity*, so any change to it blocks — not just a
+change to the same app. That coarseness is a property of the monorepo, and
+=docs/adr/0001-scheduled-deployment-windows.org= is where the options that
+remove it live.
 
 Containers are what make this checkable rather than hopeful. One image per app,
 built once, tagged by the *commit SHA*, promoted by digest:
