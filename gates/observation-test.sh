@@ -42,6 +42,7 @@ guard4:uat-withdrawn:refused
 production-first:current:authorized
 production-first:stale-marker:refused
 production-first:no-record:refused
+production-first:not-deployed:refused
 production-first:nothing-deploys:authorized"
 
 script_for() {

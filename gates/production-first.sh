@@ -78,6 +78,18 @@ groups="$deployable"
 echo "  this change deploys: $groups"
 
 head=$(gh pr view "$pr" --repo "$repo" --json headRefOid -q .headRefOid | cut -c1-7)
+
+# TWO DIFFERENT REDS, AND THEY MUST NOT READ ALIKE.
+#
+#   NOT YET   nothing has been deployed. The expected state for most of a PR's
+#             life, and not a finding about anything.
+#   FAIL      something claims to have been observed and the claim does not
+#             hold up -- the label is here and the measurement behind it is
+#             missing, failed, or about a different build. That IS a finding.
+#
+# Collapsing them was half of #16: the label's presence was the whole signal,
+# so "observed on an older build" and "observed on this one" looked identical.
+lede='FAIL'
 why=''
 case " $labels " in
   *" production:healthy "*)
@@ -90,20 +102,32 @@ case " $labels " in
         why="the last production:healthy observation is a FAILURE on \`$evsha\`."
       else
         why="production:healthy is on this PR, but the observation behind it names
-        \`$evsha\` and the head is \`$head\`. That measurement is about a
-        different build. This is the #16 shape: the label survived a push the
-        measurement did not."
+           \`$evsha\` and the head is \`$head\`. That measurement is about a
+           different build. This is the #16 shape: the label survived a push the
+           measurement did not."
       fi
     else
       why="production:healthy is on this PR, but no observation record stands
-        behind it. gates/health.sh records the SHA it sampled; a label with no
-        record is a claim nobody can date."
+           behind it. gates/health.sh records the SHA it sampled; a label with
+           no record is a claim nobody can date."
     fi ;;
-  *) why="production:healthy is absent." ;;
+  *) lede='NOT YET'
+     why="production:healthy is absent. This is the expected state for a
+           change that has not been deployed yet -- it is not a broken test." ;;
 esac
 
+# RED HERE IS NORMAL, AND SAYING SO MATTERS.
+#
+# This check is red for most of a PR's life, by design -- it goes green only
+# after production converges. A red X that is indistinguishable from a broken
+# test trains people to ignore red, which is the failure mode a required check
+# is supposed to prevent.
+#
+# It cannot report `neutral` instead: GitHub counts neutral as passing for
+# required checks, so it would stop blocking and the gate would be decoration.
+# Failure is the only conclusion that blocks, so the fix is the message.
 cat <<MSG
-  FAIL  $why
+  $lede  $why
 
         This change redeploys [$groups] and has not been observed running in
         production ON THIS HEAD. Merging now would put main ahead of the
@@ -116,6 +140,10 @@ cat <<MSG
           ./targets/node/deploy.sh production-<idle colour> <sha>
           ./gates/health.sh --pr $pr <front-url> <sha>
           ./targets/node/switch.sh <colour>
+
+        This check re-runs on every label change, so it turns green by itself
+        the moment gates/health.sh records production:healthy. Nothing to
+        re-push.
 
         To merge anyway you must remove the app:* labels, which is a claim that
         this change deploys nothing -- visible, and false if it is false.

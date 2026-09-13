@@ -554,6 +554,131 @@ caller supplies, which is guard 5's problem in a second place.
 
 Covered below as an open question rather than a decision.
 
+* The human is the serialization point
+
+Added 2026-09-13, when four subagents were dispatched at once to "grind through
+the list and validate fast deployments" and the repo owner observed: *your
+human is single threaded.*
+
+That is not an aside. It is the constraint the rest of this ADR has been
+circling without naming.
+
+** Why parallelism stops mattering where it does
+
+Every guard in this pipeline is machine-checkable except one. =staging:uat= is
+recorded by =change/observe.sh=, and the declaration in
+=change/label-owners.tsv= gives its owner as *human* — the only observation
+label a person may write, because *for user acceptance the person is the
+instrument*.
+
+A repeatable measurement can be re-run by anything, anywhere, any number of
+times. =staging:e2e= is a marker at a point in time and a machine can take it
+again. *Acceptance is not repeatable.* A person looked at a page and formed a
+judgement, and no amount of capacity re-creates that.
+
+So the pipeline has two distinct scarce resources and only one of them was
+modelled:
+
+| resource         | scarcity                      | modelled as    |
+|------------------+-------------------------------+----------------|
+| path to production | one at a time               | the berth, guard 1 |
+| *human attention*  | *one at a time*             | *nothing*      |
+
+Four agents can produce four green PRs in parallel. They cannot produce four
+acceptances, and the fourth PR waits on a person exactly as long as if the
+other three had been built serially.
+
+** What this does to the measured numbers
+
+The finding above — ten to twenty validation runs per shipped change — is about
+*machine* work, and adding berths parallelizes it. This is the other half, and
+it does not parallelize at all.
+
+It also sharpens why release trains win by so much (0.58 validations per ship
+against 13.63, =docs/release-strategies.org=). A train does not merely amortize
+gate runs. *It amortizes the human*: one acceptance covers the batch, and
+acceptance is the resource that has no second copy.
+
+** The failure mode this creates
+
+Queueing work faster than it can be accepted does not make it ship faster. It
+makes the acceptance perfunctory, which is worse than slow, because
+=staging:uat= then asserts a judgement nobody really formed — the same defect
+as forging any other observation, arrived at through workload rather than
+dishonesty.
+
+A reviewer who accepts the fourth of four PRs in five minutes has not done four
+acceptances. The label says they did.
+
+** What follows
+
+1. *Do not dispatch parallel work whose bottleneck is acceptance.* Work that
+   needs no UAT — pipeline changes, gate fixes, anything with no =app:*= label
+   and therefore exempt from =gates/production-first.sh= — parallelizes freely.
+   Work that redeploys an app does not.
+2. *The berth should arguably be a lease on the person, not on staging.* Guard
+   1 asks whether staging is free. The scarcer question is whether the reviewer
+   is.
+3. *This is the strongest argument for a train* on this repo, stronger than the
+   validation-count argument, because it is about a resource that cannot be
+   bought.
+
+** The review slot is a berth, and it was invented by accident
+
+Within the hour, the repo owner settled on *one* address to review everything
+at — =http://192.168.86.29:9000= — rather than chasing whichever dev block a
+change happened to land on.
+
+That is a second berth. Not the path to production: the path to *acceptance*.
+
+| berth            | leases            | claimed by        | guard |
+|------------------+-------------------+-------------------+-------|
+| staging          | the path to production | =deploy:staging= | 1     |
+| *the review slot* | *the reviewer*   | *nothing yet*     | *none* |
+
+It has every property guard 1 exists to protect. It is singleton — a second
+change deployed to =:9000= silently replaces the first, and the reviewer may
+not notice they are now looking at something else. It is held for the duration
+of a human judgement rather than a machine run, so it is held for *minutes to
+hours*, not seconds. And there is no observation that records who holds it, so
+two agents can both deploy there and the loser's acceptance is recorded against
+a build that was already gone.
+
+That last one is not hypothetical: it is the two-estate defect (S4) with the
+estates being *the same address at different times*, which is harder to notice
+than two different ports. =change/observe.sh= guards against the SHA mismatch —
+it refuses to accept a build that is not the PR's head — and that check is
+currently the only thing standing between this and a forged acceptance.
+
+*What it argues.* Dev blocks are cheap and disposable by design, and that
+design assumed the scarce thing was ports. It is not; ports are free. The
+scarce thing is the reviewer, and pinning review to one address makes the
+scarcity visible: *you cannot look at two builds at once, so there is exactly
+one slot, so it needs a lease.*
+
+*Scoped correctly, on the same day.* The singleton is *per reviewer*, not
+global. A real organisation has many people with many PRs in flight, and how
+they divide that among themselves is theirs to decide — the pipeline is
+simulating a workflow, not optimising one person's afternoon. So the claim
+above is narrower than it first reads:
+
+- *wrong*: "parallel work is pointless because acceptance serializes"
+- *right*: "acceptance serializes *per reviewer*, and a reviewer holding a
+  review slot is holding a resource nothing currently records"
+
+What generalises is the *lease*, not the count. Ten reviewers means ten slots,
+and every one of them still has the property that deploying over somebody's
+build while they are looking at it is invisible to both parties. That is worth
+a lease at any scale; it just stops being a throughput argument and becomes a
+correctness one.
+
+Not built. The cheap version is =change/state.sh= with a second key, and the
+refusal message writes itself: "#N holds the review slot until 16:40Z; deploying
+yours would replace a build someone is currently looking at."
+
+Recorded as an observation rather than a decision. The decision it points at —
+batch acceptance — is Option A3, already on the table.
+
 * Open — what happens when a change lands outside its window
 
 Left open deliberately on 2026-09-13, after PR #9 shipped to production outside

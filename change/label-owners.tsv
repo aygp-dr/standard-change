@@ -15,34 +15,40 @@
 # human_rm     may a person remove it by hand?
 # notes        why
 #
-# label	owner	human_add	human_rm	notes
-app:*	labeller	no	no	derived from the diff: the app's own glob, OR any change to shared/ (which every app pins). Recomputed every push. To touch shared/ without redeploying all, use labeler:skip and set them by hand
-change:standard	labeller	no	no	derived; same
-change:normal	labeller	no	no	derived; same
-labeler:skip	human	yes	yes	the opt-out that transfers ownership of the derived labels
-change:requested	human	yes	no	the human's part of starting a change; the pipeline clears it
-change:scheduled	scheduler	no	no	set when a window is booked
-change:complete	change/settle.sh	no	no	TERMINAL, and the record. Never cleared
-release	human	yes	no	INTENT. A person adds it; the scheduler consumes it. A trigger that stays on re-fires
-hold:staging	human	yes	yes	the only human stop. A hold a machine can lift is not a hold
-deploy:staging	workflow	no	no	ACTION in flight, and the berth claim guard 1 reads
-deploy:production	workflow	no	no	action in flight
-staging:e2e	gates/e2e.sh --pr	no	no	observation; the gate is the instrument
-staging:e2e-failed	gates/e2e.sh --pr	no	no	observation
-staging:smoke	gates/smoke.sh --pr	no	no	observation
-staging:smoke-failed	gates/smoke.sh --pr	no	no	observation
-staging:uat	human	yes	no	THE EXCEPTION: for acceptance the person IS the instrument. Via change/observe.sh, which checks the build matches
-production:e2e	gates/e2e.sh --pr	no	no	observation
-production:smoke	gates/smoke.sh --pr	no	no	observation
-production:healthy	gates/health.sh --pr	no	no	observation. Typed by hand on #9 because health.sh had no --pr; that was the ownership defect
-staging:passed	RETIRED	no	no	named no measurement and no environment; replaced by the staging:* stack
-staging:failed	RETIRED	no	no	same
-deployed:production	RETIRED	no	no	replaced by change:complete plus the deployment record
-blocked:queue	change/queue.sh	no	no	set and cleared by the queue
-blocked:lock	change/lock.sh	no	no	set and cleared by the lock
-blocked:diverged	workflow	no	yes	a human may clear it after rebasing
-blocked:freeze	gates/preflight.sh	no	no	set and cleared by preflight
-change:emergency	human	yes	yes	bypasses the queue; a person must own declaring an emergency
-staging:in-progress	workflow	no	no	action in flight
-production:e2e-failed	gates/e2e.sh --pr	no	no	observation
-production:smoke-failed	gates/smoke.sh --pr	no	no	observation
+# persistent   does it survive settlement? PERSISTENT labels describe what the
+#              change IS and stay true after it ships. TRANSIENT labels mark where
+#              a change sat in the deployment process; once it is merged back to
+#              main that position adds no value, so settle.sh clears them. The PR
+#              timeline keeps the history either way.
+#
+# label	owner	persistent	human_add	human_rm	notes
+app:*	labeller	yes	no	no	derived from the diff: the app's own glob, OR any change to shared/ (which every app pins). Recomputed every push. To touch shared/ without redeploying all, use labeler:skip and set them by hand
+change:standard	labeller	yes	no	no	derived; same
+change:normal	labeller	yes	no	no	derived; same
+labeler:skip	human	yes	yes	yes	the opt-out that transfers ownership of the derived labels
+change:requested	human	no	yes	no	the human's part of starting a change; the pipeline clears it
+change:scheduled	scheduler	no	no	no	set when a window is booked
+change:complete	change/settle.sh	yes	no	no	TERMINAL, and the record. Never cleared
+release	human	no	yes	no	INTENT. A person adds it; the scheduler consumes it. A trigger that stays on re-fires
+hold:staging	human	no	yes	yes	the only human stop. A hold a machine can lift is not a hold
+deploy:staging	workflow	no	no	no	ACTION in flight, and the berth claim guard 1 reads
+deploy:production	workflow	no	no	no	action in flight
+staging:e2e	gates/e2e.sh --pr	no	no	no	observation; the gate is the instrument
+staging:e2e-failed	gates/e2e.sh --pr	no	no	no	observation
+staging:smoke	gates/smoke.sh --pr	no	no	no	observation
+staging:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
+staging:uat	human	no	yes	no	THE EXCEPTION: for acceptance the person IS the instrument. Via change/observe.sh, which checks the build matches
+production:e2e	gates/e2e.sh --pr	no	no	no	observation
+production:smoke	gates/smoke.sh --pr	no	no	no	observation
+production:healthy	gates/health.sh --pr	no	no	no	observation. Typed by hand on #9 because health.sh had no --pr; that was the ownership defect
+staging:passed	RETIRED	no	no	no	named no measurement and no environment; replaced by the staging:* stack
+staging:failed	RETIRED	no	no	no	same
+deployed:production	RETIRED	no	no	no	replaced by change:complete plus the deployment record
+blocked:queue	change/queue.sh	no	no	no	set and cleared by the queue
+blocked:lock	change/lock.sh	no	no	no	set and cleared by the lock
+blocked:diverged	workflow	no	no	yes	a human may clear it after rebasing
+blocked:freeze	gates/preflight.sh	no	no	no	set and cleared by preflight
+change:emergency	human	yes	yes	yes	bypasses the queue; a person must own declaring an emergency
+staging:in-progress	workflow	no	no	no	action in flight
+production:e2e-failed	gates/e2e.sh --pr	no	no	no	observation
+production:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
