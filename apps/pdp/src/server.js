@@ -6,15 +6,11 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
-// The nav is built from router/routes.json at startup, not baked in: a route
-// added to any app must appear without editing five source files.
-let ALL_ROUTES = [];
-try {
-  ALL_ROUTES = JSON.parse(readFileSync(join(here, '..', '..', '..', 'router', 'routes.json'), 'utf8'))
-    .sort((a, b) => a.port_offset - b.port_offset);
-} catch { ALL_ROUTES = [meta]; }
-const SHARED = ["/about", "/contact", "/jobs"];
-const probe = (r) => r.replace(':sku', 'SKU1').replace(':category', 'shoes');
+// OneUI is the shared UI surface (issue #10). Every app pins it, so a change
+// there is a change to all of them -- the cost is named in
+// docs/cross-cutting-coupling.org, not hidden.
+import { page, loadEstate, VERSION as ONEUI } from '../../../shared/oneui.js';
+const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
 const BLOCK = process.env.BLOCK || '?';
@@ -30,21 +26,7 @@ export function render(path) {
 export const BACKGROUND = '#fff4e0';
 
 export function renderHtml(path) {
-  const d = render(path);
-  return `<!doctype html><meta charset=utf-8><title>${d.app}</title>
-<style>body{background:#fff4e0;font:14px/1.6 system-ui;margin:0;padding:40px}
-main{max-width:40rem}code{background:#fff;padding:2px 6px;border-radius:3px}
-a{margin-right:10px;display:inline-block}h1{margin:0 0 4px}
-.g{margin:2px 0;font-size:13px}.g b{display:inline-block;width:5.5rem;color:#555}</style>
-<main><h1>${d.app}</h1>
-<p>served by <b>${d.app}</b> · path <code>${d.path}</code> · build <code>${d.sha}</code> · block <code>${d.block}</code></p>
-<p class=g style="color:#666;margin:14px 0 6px">every route, by the app that owns it — a link that changes the name above crossed to a sibling app:</p>
-${ALL_ROUTES.map((a) => `<div class=g><b>${a.app === d.app ? "▸ " : ""}${a.app}</b> ` +
-  a.routes.filter((r) => !SHARED.includes(r))
-          .map((r) => `<a href="${probe(r)}">${probe(r)}</a>`).join(" ") + `</div>`).join("")}
-<p class=g style="color:#666;margin:18px 0 4px">shared surface — every app links back to core:</p>
-<div class=g><b>core</b> ${SHARED.map((r) => `<a href="${r}">${r}</a>`).join(" ")}</div>
-</main>`;
+  return page(render(path), ESTATE, BACKGROUND);
 }
 
 // Only listen when run directly. Importing this module (as the unit tests do)

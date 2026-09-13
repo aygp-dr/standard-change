@@ -38,8 +38,15 @@ if git log --format='%B' "$base".."$head" | grep -q '^Change-Type: emergency'; t
 else
   for p in $paths; do
     case "$p" in
-      # the deployable entity, and the config deployed alongside it
-      apps/*|router/*)                        class=artifact ;;
+      # the deployable entity, the config deployed alongside it, and the
+      # shared library every deployable links against.
+      #
+      # shared/ is the one that would have been missed: it lives outside apps/
+      # because it is a library and not a deployable, and the first version of
+      # this classifier called it INERT -- waving through the change with the
+      # largest blast radius in the repo. external/ is a stand-in for a service
+      # we do not own; changing the stub changes what the estate serves.
+      apps/*|router/*|shared/*|external/*)    class=artifact ;;
       # how it is verified or shipped -- re-verify, but nothing is reverted
       targets/*|gates/*|change/*|.github/*|Makefile)
         [ "$class" = artifact ] || class=pipeline ;;

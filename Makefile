@@ -1,7 +1,9 @@
 # Bare metal by choice: this is a CI/CD pipeline simulator and FreeBSD is a
 # poor host for docker/podman. Apps are node processes on a port block.
 # On hydra use gmake; system make is BSD make.
-APPS := $(notdir $(wildcard apps/*))
+APPS     := $(notdir $(wildcard apps/*))
+# external/ is NOT ours: stand-ins for services we do not deploy.
+EXTERNAL := $(notdir $(wildcard external/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
         audit audit-selftest docs pbt pbt-random simulate simulate-gates \
