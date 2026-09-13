@@ -106,6 +106,10 @@ export function status(d) {
 export function render(path, catalogue = loadCatalogue()) {
   const d = { app: meta.app, path, found: owns(path), block: BLOCK, sha: SHA,
               routes: meta.routes };
+  // The term the shopper typed. '' is a real answer: /search with no q is a
+  // search page nobody has searched from yet, not "this is not a search".
+  const [p, qs] = path.split('?');
+  if (p === '/search') d.query = new URLSearchParams(qs || '').get('q') ?? '';
   const slug = categoryOf(path);
   if (slug === null) return d;   // /search, and anything else: unchanged
 
