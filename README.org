@@ -27,6 +27,69 @@ convention.
 =spec.org= wins. =scenarios.org= is the test plan, =tla/= the formal model of
 the promotion guards.
 
+* The whole thing on one screen
+
+[[file:screenshots/idp-release-dashboard.png]]
+
+The IDP release dashboard (=idp-dashboard/server.mjs=, port 9999) is the fastest
+way to read the model, because every concept in this repo is a column on it.
+
+*** The estate is a thing you can close
+
+Top left. =freeze= and =emergency= are properties of *the world*, not of any
+change, so they live on an **issue** — not a pull request. PR #48 found why: a
+pull request carrying =itil:emergency= is a change, and the same write that
+closes the estate to everyone else exempts *its own carrier*. The carrier
+becomes the remedy by construction, whatever it contains. An issue cannot be
+deployed, so there is no exemption it could be handed.
+
+The two buttons are the break-glass. Freeze is blue — a planned, reversible
+gate, nothing on fire. Emergency is red — something is wrong now. Lifting is
+white, because the control that *removes* a freeze must not look like the one
+that *imposes* it. =gates/preflight.sh= reads the same issue: toggle here and
+the next change is refused with exit 3.
+
+Note what is NOT here: =itil:emergency=. That is a *classification on a change*
+— this one is an emergency, here is its exemption — and it passes both a freeze
+and an estate emergency. Two namespaces, two subjects. Folding them into one
+flag makes the flag meaning "stop everything" look identical to routine hotfix
+traffic.
+
+*** Booked windows: the reservation, not the deployment
+
+Reserving is not deploying. A window is an entitlement to the one path to
+production, and the guards checked when it was booked are stale by the time it
+opens — which is why activation re-runs them.
+
+=CLOSES= shows *seconds remaining*, not just a wall-clock time, and turns amber
+when less than one soak-plus-walk is left. A five-minute hold against a window
+with four minutes on it is a change that will fail at the very end, after the
+deploy and the entire hold. Printing only the end time made the operator do
+that subtraction; #38 is what happens when nobody does.
+
+=GROUPS= is the blast radius — one app or five.
+
+*** Environments: the number tells you what it is
+
+Sorted by port descending, so reading order matches blast radius.
+
+- =front= 9230, red, the only address a customer reaches. It is never deployed
+  to; it reads the live colour *per request*, which is why =BLUE LIVE= here is
+  the one non-lying report of what the next request will get.
+- =production-blue= 9210 / =production-green= 9220 — the two replicas.
+- =staging= 9200, orange, the one protected environment that is *not*
+  production. This repo once shipped a port map calling 9200 production; the
+  colour exists so that mistake is visible.
+- =9100-9199= team tier. =staging-{app}-1= are *reservations*: declared in
+  =environments.tsv=, ports held so nothing else takes them, =activated=no=.
+  They read =declared=, not =dark=, because a reservation is not expected to
+  answer. They also *cannot promote* — nothing downstream reads a team verdict.
+- =9000-9099= dev blocks, grey, disposable.
+
+Every row is an HTTP request to that port. Nothing is read from a manifest or a
+deployment record — a dashboard fed by the thing it reports on is the same
+defect as a gate whose oracle comes from the runner's tree.
+
 * The flow, for a standard change
 
 The ordinary path, end to end. Emergencies, forfeited windows and what happens

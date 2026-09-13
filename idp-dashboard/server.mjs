@@ -327,7 +327,7 @@ letter-spacing:.04em;max-width:74rem}
 .unkn{background:#2a2520;color:#fbbf24;border:2px dashed #7c5f1f}
 </style>
 <h1>IDP release dashboard</h1>
-<p class=s><span id=ws>connecting…</span> · <a href="/api/status" style="color:#60a5fa">/api/status</a></p>
+
 
 <div id=alarm></div>
 <div class=bar id=flags></div>
@@ -364,8 +364,10 @@ function hms(s){const m=Math.floor(Math.abs(s)/60),r=Math.abs(s)%60;
   return (s<0?'-':'')+(m?m+'m ':'')+r+'s';}
 function remain(x){
   if(x.expired)return '<span class=rem-bad>EXPIRED '+esc(hms(x.closes_in_s))+' ago</span>';
-  if(!x.soak_fits)return '<span class=rem-warn>'+esc(hms(x.closes_in_s))+
-    ' left — under one soak + walk, this leg cannot finish</span>';
+  // Short, because the colour already carries the warning. The long sentence
+  // explaining why was documentation sitting in a data cell.
+  if(!x.soak_fits)return '<span class=rem-warn title="shorter than one soak + walk">'+
+    esc(hms(x.closes_in_s))+' left</span>';
   return '<span class=rem-ok>'+esc(hms(x.closes_in_s))+' left</span>';
 }
 // A BANNER ONLY WHEN THERE IS SOMETHING TO SAY. The previous version printed a
@@ -419,7 +421,12 @@ function render(d){
     '<td>'+remain(x)+'<div class=dim style="font-size:11px">'+esc(x.end)+'</div></td>'+
     '<td class=n-'+esc(x.env)+'>'+esc(x.env)+'</td>'+
     '<td class=dim>'+esc(x.id)+'</td></tr>').join('')
-    :'<tr><td colspan=6 class=dim>no open window — the berth is free</td></tr>';
+    // "no open window" and "the berth is free" are not the same claim. This
+    // lists UNRESOLVED reservations -- a window whose end has passed but which
+    // nobody closed is still listed, and an empty list means nobody holds a
+    // reservation, not that a deploy could start right now (a freeze, an
+    // emergency or a held berth all still refuse). Say the narrow true thing.
+    :'<tr><td colspan=6 class=dim>no reservation — nobody has booked staging</td></tr>';
   document.getElementById('e').innerHTML=d.envs.map(x=>{
     const state=x.declared?'<td class=decl>declared</td>'
       :'<td class='+(x.up?'up':'down')+'>'+(x.up?'up '+esc(x.status):'dark')+'</td>';
@@ -440,8 +447,8 @@ function render(d){
     col+'<td class=dim>'+esc(x.promotes)+'</td></tr>';}).join('');
 }
 const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/');
-ws.onopen =()=>document.getElementById('ws').textContent='live (websocket)';
-ws.onclose=()=>{document.getElementById('ws').textContent='disconnected — polling every 10s';
+ws.onopen =()=>{};
+ws.onclose=()=>{
   if(!window.__poll)window.__poll=setInterval(()=>fetch('/api/status').then(r=>r.json()).then(render),10000);};
 ws.onmessage=e=>render(JSON.parse(e.data));
 document.addEventListener('click',e=>{
