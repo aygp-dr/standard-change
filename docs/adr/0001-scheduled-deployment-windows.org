@@ -75,26 +75,42 @@ becomes the thing the scheduler does.
   berth reinstates D4* unless the merge is itself guarded. Activation is not the
   last point of reliance; the merge is.
 
-** The finding that decides this ADR
+** The finding that decides this ADR — corrected 2026-09-13
 
-Twenty changes, all touching the same deployable surface:
+*An earlier revision of this ADR claimed that adding berths changes nothing:
+1/20 completions at one berth and 1/20 at eight. That was wrong, and the error
+was in the harness, not the model.* It reserved each change once and never let
+a forfeited change rebase and re-book, so every forfeit was permanent. With
+re-booking, berths do buy throughput:
 
-| mix                            | berths | completed | forfeits |
-|--------------------------------+--------+-----------+----------|
-| all artifact                   |      1 |      1/20 |       19 |
-| all artifact                   |      4 |      1/20 |       16 |
-| all artifact                   |      8 |      1/20 |       12 |
-| half artifact / half inert     |      4 |      1/20 |       16 |
-| all inert (docs only)          |      1 |     20/20 |        0 |
+| berths | one-shot (wrong) | re-booking (correct) | validations per ship |
+|--------+------------------+----------------------+----------------------|
+|      1 |             1/20 |                 3/20 |                 21.7 |
+|      2 |             1/20 |                 6/20 |                 18.3 |
+|      4 |             1/20 |                14/20 |                 13.9 |
+|      8 |             1/20 |                20/20 |                 10.5 |
+|     16 |             1/20 |                20/20 |                 10.5 |
 
-*Adding berths moves completions from 1 to 1.* Every merge to a shared artifact
-surface invalidates every other scheduled change against it, so the pipeline
-serializes to roughly one change per revalidation cycle no matter how much
-capacity is added. The contention is not the berth. *It is the shared artifact
-surface.*
+What survives the correction — and is the sharper finding — is the last column.
+*Every shipped change costs ten to twenty validation runs.* Adding berths
+parallelizes that work; it does not reduce it. The shared artifact surface
+means each merge invalidates the other scheduled changes, and they must
+revalidate whether or not there is a berth free to revalidate in.
 
-This is the scheduler's own simulator reporting that the scheduler is not the
-lever.
+So the argument for Option A changes shape but not direction. It is *not* that
+capacity cannot help — it can. It is that *the pipeline does an order of
+magnitude more validation work than it ships changes*, and no amount of
+capacity touches that ratio. Splitting the surface is what removes the
+invalidation, and with it the ratio.
+
+A release train attacks the same ratio from the other side by validating a
+batch once — measured at *0.58 validations per ship against 13.63*, a 23×
+reduction, at the cost of mean latency (2.6 h vs 12.5 h). See
+=docs/release-strategies.org=; that note also finds the throughput-optimal
+train is red more often than green, and that the analytic optimum sits at a
+92–99% predicted emergency share on this repo's own balance curve — i.e.
+unreachable. A short (≈1 h) train captures ~98% of the available amortization
+and stays on the reachable part of the curve.
 
 * Options considered
 
@@ -124,10 +140,14 @@ understand.
 
 ** Option C — keep immediate deployment, add berths
 
-The intuitive scaling move, and the measured answer is that it does not work:
-1/20 at one berth, 1/20 at eight. It also silently reinstates D4 unless the
-merge is separately guarded, which the current design did not do until
-Hypothesis found it. *Rejected — it buys nothing and costs a safety property.*
+Berths *do* raise throughput once forfeited changes re-book (3/20 → 20/20 from
+one berth to eight), so the earlier flat rejection was wrong. What they do not
+do is reduce validation work per shipped change, which stays at 10–20×. And
+adding berths silently reinstates D4 unless the merge is separately guarded —
+Hypothesis found that at =berths=2=, and it is now fixed in =release.sh=.
+*Accepted as a partial measure*: reach for it when latency is the complaint,
+but it buys capacity at an unchanged unit cost, and it is not a substitute for
+A or for a train.
 
 ** Option D — shorten the calendar quantum
 
