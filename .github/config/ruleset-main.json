@@ -5,7 +5,9 @@
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
-      "include": ["~DEFAULT_BRANCH"],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ],
       "exclude": []
     }
   },
@@ -26,21 +28,40 @@
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "gate-selftest" },
-          { "context": "lint" },
-          { "context": "test" },
-          { "context": "e2e" }
+          {
+            "context": "gate-selftest"
+          },
+          {
+            "context": "lint"
+          },
+          {
+            "context": "test"
+          },
+          {
+            "context": "e2e"
+          },
+          {
+            "context": "production-first"
+          }
         ]
       }
     },
     {
       "type": "required_deployments",
       "parameters": {
-        "required_deployment_environments": ["staging"]
+        "required_deployment_environments": [
+          "staging"
+        ]
       }
     },
-    { "type": "required_linear_history" },
-    { "type": "non_fast_forward" },
-    { "type": "deletion" }
+    {
+      "type": "required_linear_history"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "deletion"
+    }
   ]
 }

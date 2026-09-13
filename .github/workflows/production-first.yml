@@ -1,0 +1,23 @@
+name: production-first
+# A change that deploys must reach PRODUCTION before it reaches main.
+#
+# Runs as a CHECK so it is visible on the PR and can be made a required status
+# check by a ruleset. Until now the ordering was a convention: merge-on-healthy
+# TRIGGERS on production:healthy, and a trigger is not a gate -- `gh pr merge`
+# walks past it. #12, a security fix, merged on staging alone and left main
+# claiming an XSS was fixed while every production replica served the
+# vulnerable build.
+#
+# It re-runs on `labeled` and `unlabeled` so the check goes green the moment
+# gates/health.sh records production:healthy, without needing a push.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+permissions: {contents: read, pull-requests: read}
+jobs:
+  production-first:
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./gates/production-first.sh "$PR"
