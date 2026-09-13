@@ -14,7 +14,7 @@
 // error in the dashboard.
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 
 const PORT = Number(process.env.PORT || 9999);
 const HOST = process.env.BIND || '0.0.0.0';
@@ -111,6 +111,24 @@ async function schedule() {
 // that gets somebody hurt, so every payload carries how old the answer is and
 // the page prints it. A dashboard that cannot say when it last looked is
 // asserting a fact about now from a measurement about then.
+// THE DASHBOARD REPORTS ITS OWN BUILD. It prints a SHA for every environment
+// in the estate and had none for itself, which is the one row a reader cannot
+// check any other way -- "is this page telling me about today's rules?" The
+// SHA is the commit that last touched THIS FILE, not HEAD: the dashboard's
+// build is what changed the dashboard, and pinning it to HEAD would make it
+// appear to change every time anything in the repo did.
+//
+// Read once at startup, deliberately. A running process is serving the code it
+// started with; re-reading per request would report the file on disk, which is
+// the estate reporting what it was told rather than what it is.
+const VERSION = '1.0.0';
+let BUILD = 'unknown';
+try {
+  BUILD = execFileSync('git',
+    ['log', '-1', '--format=%h', '--', 'idp-dashboard/server.mjs'],
+    { cwd: new URL('..', import.meta.url).pathname, encoding: 'utf8' }).trim() || 'unknown';
+} catch { /* not a git checkout: 'unknown' is the true answer */ }
+
 const HOLDER = Number(process.env.ESTATE_ISSUE || 1);
 // One soak plus the e2e+smoke walk that follows it. A window shorter than this
 // cannot hold a complete staging leg.
@@ -184,6 +202,7 @@ async function snapshot() {
   const front = envs.find((e) => e.name === 'front');
   return {
     at: new Date().toISOString(),
+    dashboard: { version: VERSION, build: BUILD },
     flags,
     live_colour: front?.colour ?? null,
     live_sha: front?.sha ?? null,
@@ -304,6 +323,7 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa;padding-left:12px}
 .no{background:#3b1414;color:#fca5a5;border:1px solid #6b1f1f}
 .unk{background:#312a14;color:#fbbf24;border:1px solid #5c4a1f}
 .age{color:#6b7280;font-size:11px}
+.ver{color:#6b7280;font-size:11px;font-weight:400;margin-left:8px}
 .br{color:#60a5fa;font-size:11px;margin-left:6px}
 .ti{color:#8b93a7;font-size:11px;margin-top:2px}
 .rem-ok{color:#4ade80;font-size:11px;margin-left:8px}
@@ -335,7 +355,7 @@ letter-spacing:.04em;max-width:74rem}
 .frz{background:#3a2a08;color:#fde68a;border:2px solid #b45309}
 .unkn{background:#2a2520;color:#fbbf24;border:2px dashed #7c5f1f}
 </style>
-<h1>IDP release dashboard</h1>
+<h1>IDP release dashboard <span id=ver class=ver></span></h1>
 
 
 <div id=alarm></div>
@@ -432,6 +452,9 @@ function estate(d){
       '</span><span class=age>on PRs, not counted — clean up</span>':'');
 }
 function render(d){
+  const v=d.dashboard||{};
+  document.getElementById('ver').textContent=
+    (v.version?'v'+v.version:'')+(v.build?' · '+v.build:'');
   document.getElementById('alarm').innerHTML=banner(d);
   document.getElementById('flags').innerHTML=estate(d);
   document.getElementById('w').innerHTML=d.windows.length?d.windows.map(x=>
