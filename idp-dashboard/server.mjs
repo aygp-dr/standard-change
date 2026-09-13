@@ -58,12 +58,38 @@ const sh = (cmd, args) => new Promise((res) =>
   execFile(cmd, args, { cwd: new URL('..', import.meta.url).pathname, timeout: 5000 },
     (e, out) => res(e ? '' : out)));
 
+// WHAT the window is for, not just which number. A row reading `#42` makes the
+// reader open GitHub to find out whether staging is held by a one-line copy
+// tweak or a five-app release. The branch answers it in place.
+const prMeta = new Map();
+async function resolvePr(n) {
+  if (prMeta.has(n)) return prMeta.get(n);
+  const out = await sh('gh', ['pr', 'view', String(n), '--json', 'headRefName,title']);
+  let v = { branch: null, title: null };
+  if (out) { try { const j = JSON.parse(out); v = { branch: j.headRefName, title: j.title }; } catch {} }
+  prMeta.set(n, v);
+  return v;
+}
+
 async function schedule() {
   const out = await sh('./change/schedule.sh', ['list', '--open']);
-  return out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+  const rows = out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
     const f = l.split(/\s+/);
-    return { id: f[0], env: f[1], start: f[2], end: f[4], pr: f[5], sha: f.at(-1) };
+    const end = f[4];
+    // SECONDS REMAINING, not just a wall-clock time. A soak is 300s and the
+    // window is re-checked AFTER the walk (change/uat.sh), so a window with
+    // less than a soak left is one the change cannot finish inside -- and the
+    // failure lands at the very end, after the deploy and the full hold.
+    // Printing the end time alone makes the operator do that subtraction, and
+    // #38 is what happens when nobody does.
+    const left = Math.round((Date.parse(end) - Date.now()) / 1000);
+    return { id: f[0], env: f[1], start: f[2], end, pr: f[5],
+             groups: f.slice(6, -1).join(' '), sha: f.at(-1),
+             closes_in_s: left, soak_fits: left > SOAK_S, expired: left <= 0 };
   });
+  return Promise.all(rows.map(async (r) => ({
+    ...r, ...(await resolvePr(Number(String(r.pr).replace('#', '')))),
+  })));
 }
 
 // ESTATE FLAGS, CACHED. `freeze` and `emergency` are properties of the WORLD,
@@ -75,33 +101,65 @@ async function schedule() {
 // that gets somebody hurt, so every payload carries how old the answer is and
 // the page prints it. A dashboard that cannot say when it last looked is
 // asserting a fact about now from a measurement about then.
+const HOLDER = Number(process.env.ESTATE_ISSUE || 1);
+// One soak plus the e2e+smoke walk that follows it. A window shorter than this
+// cannot hold a complete staging leg.
+const SOAK_S = Number(process.env.SOAK_SECONDS || 300) + 60;
 const FLAG_TTL_MS = 5 * 60 * 1000;
 let flagCache = { at: 0, value: null };
 
 async function estateFlags() {
   const age = Date.now() - flagCache.at;
   if (flagCache.value && age < FLAG_TTL_MS) {
-    return { ...flagCache.value, cached: true, age_s: Math.round(age / 1000) };
+    // read_at, NOT age_s. An age is a CLOCK, and a clock inside the payload
+    // makes the payload differ every tick -- which defeated "push only on
+    // change" completely: from the first cache hit onward a full snapshot went
+    // to every client every second, the exact behaviour the comment below says
+    // teaches readers to ignore the feed. `at` was already excluded from the
+    // diff for this reason; age_s was the same mistake nested one level down.
+    // The client computes the age.
+    return { ...flagCache.value, cached: true };
   }
-  const out = await sh('gh', ['pr', 'list', '--state', 'open', '--limit', '100',
+  // THE HOLDER IS AN ISSUE, NOT A PULL REQUEST (issue #1).
+  //
+  // A PR carrying `emergency` is a change that the same write both blocks
+  // everyone else for and exempts -- the carrier becomes the remedy by
+  // construction (PR #48). An issue cannot be deployed, so there is no
+  // exemption it could be handed and the bypass has nowhere to land.
+  //
+  // Open PRs are still read, because labels may linger on them from before the
+  // holder existed and a freeze nobody can see is worse than a duplicated one.
+  // They are reported SEPARATELY so the holder stays the authority.
+  const out = await sh('gh', ['issue', 'view', String(HOLDER), '--json', 'labels']);
+  const strays = await sh('gh', ['pr', 'list', '--state', 'open', '--limit', '100',
     '--json', 'number,labels']);
   let value;
   if (!out) {
     // COULD NOT ASK IS NOT `NO FREEZE`. Same rule as preflight's exit 4: an
     // unreachable oracle is unknown, never negative.
     value = { freeze: null, emergency: null, freeze_prs: [], emergency_prs: [],
-              unknown: true };
+              unknown: true, holder: HOLDER, read_at: new Date().toISOString() };
   } else {
-    const prs = JSON.parse(out);
+    const held = JSON.parse(out).labels.map((x) => x.name);
     const carries = (p, l) => p.labels.some((x) => x.name === l);
+    let prs = [];
+    try { prs = JSON.parse(strays || '[]'); } catch { prs = []; }
     const fz = prs.filter((p) => carries(p, 'freeze')).map((p) => p.number);
-    const em = prs.filter((p) => carries(p, 'emergency') || carries(p, 'itil:emergency'))
-                  .map((p) => p.number);
-    value = { freeze: fz.length > 0, emergency: em.length > 0,
-              freeze_prs: fz, emergency_prs: em, unknown: false, open_prs: prs.length };
+    const em = prs.filter((p) => carries(p, 'emergency')).map((p) => p.number);
+    value = {
+      holder: HOLDER,
+      freeze: held.includes('freeze'),
+      emergency: held.includes('emergency'),
+      // Strays are NOT folded into the verdict. A label left on a PR is a
+      // cleanup problem; letting it silently close the estate would restore the
+      // exact ambiguity the holder exists to remove.
+      freeze_prs: fz, emergency_prs: em,
+      unknown: false, open_prs: prs.length,
+      read_at: new Date().toISOString(),
+    };
   }
   flagCache = { at: Date.now(), value };
-  return { ...value, cached: false, age_s: 0 };
+  return { ...value, cached: false };
 }
 
 async function snapshot() {
@@ -142,6 +200,24 @@ const server = createServer(async (req, res) => {
     res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
     res.end(body);
   };
+  // TOGGLE. A write, so it is POST only and it says what it did. The cache is
+  // invalidated immediately rather than left to expire: a five-minute-stale
+  // "no freeze" straight after somebody declared one is the exact reading that
+  // gets a change deployed into a closed estate.
+  if (req.method === 'POST' && req.url?.startsWith('/api/estate/')) {
+    const [, , , label, action] = req.url.split('/');
+    if (!['freeze', 'emergency'].includes(label) || !['on', 'off'].includes(action))
+      return send(400, 'application/json', JSON.stringify({ error: 'bad toggle' }));
+    const flag = action === 'on' ? '--add-label' : '--remove-label';
+    const r = await sh('gh', ['issue', 'edit', String(HOLDER), flag, label]);
+    await sh('gh', ['issue', 'comment', String(HOLDER), '--body',
+      `\`${label}\` turned **${action}** from the IDP dashboard at ${new Date().toISOString()}.`]);
+    flagCache = { at: 0, value: null };
+    const s2 = await snapshot();
+    for (const c of clients) { try { c.write(frame(JSON.stringify(s2))); } catch { clients.delete(c); } }
+    return send(r === '' && action === 'on' ? 500 : 200, 'application/json',
+      JSON.stringify({ ok: true, label, action, flags: s2.flags }, null, 2));
+  }
   if (req.url === '/api/status') return send(200, 'application/json', JSON.stringify(await snapshot(), null, 2));
   if (req.url === '/healthz') return send(200, 'application/json', JSON.stringify({ ok: true }));
   if (req.url !== '/') return send(404, 'text/plain', 'not found');
@@ -167,7 +243,9 @@ server.on('upgrade', (req, socket) => {
 let last = '';
 setInterval(async () => {
   const s = JSON.stringify(await snapshot());
-  const cmp = JSON.stringify({ ...JSON.parse(s), at: null });
+  // Both clocks nulled: the snapshot's own `at`, and the flags' read_at.
+  const p = JSON.parse(s);
+  const cmp = JSON.stringify({ ...p, at: null, flags: { ...p.flags, read_at: null } });
   if (cmp === last) return;
   last = cmp;
   for (const c of clients) { try { c.write(frame(s)); } catch { clients.delete(c); } }
@@ -213,6 +291,16 @@ font-weight:700;letter-spacing:.05em}
 .no{background:#3b1414;color:#fca5a5;border:1px solid #6b1f1f}
 .unk{background:#312a14;color:#fbbf24;border:1px solid #5c4a1f}
 .age{color:#6b7280;font-size:11px}
+.br{color:#60a5fa;font-size:11px;margin-left:6px}
+.ti{color:#8b93a7;font-size:11px;margin-top:2px}
+.rem-ok{color:#4ade80;font-size:11px;margin-left:8px}
+.rem-warn{color:#fbbf24;font-size:11px;margin-left:8px}
+.rem-bad{color:#f87171;font-size:11px;font-weight:700;margin-left:8px}
+button{font:inherit;font-size:12px;padding:5px 12px;border-radius:3px;cursor:pointer;
+background:#1a1d26;color:#c9d1d9;border:1px solid #30363d}
+button:hover{background:#232733}
+button.arm{border-color:#b91c1c;color:#fca5a5}
+button.dis{border-color:#b45309;color:#fde68a}
 /* An emergency or a freeze is a property of the WORLD. It does not sit in a
    row of chips beside "no emergency" -- when it is true it is the first and
    largest thing on the page, because every other number here is conditional
@@ -230,10 +318,11 @@ letter-spacing:.04em;max-width:74rem}
 
 <div id=alarm></div>
 <div class=bar id=flags></div>
+<div class=bar id=toggles></div>
 
 <h2>booked windows</h2>
 <p class=s>the change schedule — this and the estate below are what an audit compares</p>
-<table><thead><tr><th>id</th><th>env</th><th>opens</th><th>closes</th><th>pr</th><th>build</th></tr></thead><tbody id=w></tbody></table>
+<table><thead><tr><th>change</th><th>groups</th><th>build</th><th>closes</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
 
 <h2>environments</h2>
 <p class=s>declared in <code>environments.tsv</code>; state is probed live</p>
@@ -252,9 +341,22 @@ function flagbox(d){
     h+=f.emergency?cell('EMERGENCY IN FLIGHT','no','on #'+f.emergency_prs.join(', #'))
                   :cell('no emergency','ok');
   }
-  h+='<span class=age>flags '+(f.cached?'cached '+esc(f.age_s)+'s ago':'just read')+
-     ' · ttl 300s</span>';
+  const age=f.read_at?Math.round((Date.now()-Date.parse(f.read_at))/1000):0;
+  h+='<span class=age>flags '+(f.cached?'cached '+esc(age)+'s ago':'just read')+
+     ' · ttl 300s · holder #'+esc(f.holder)+'</span>';
+  const stray=[...(f.freeze_prs||[]),...(f.emergency_prs||[])];
+  if(stray.length)h+='<span class="f unk">STRAY LABELS on #'+esc(stray.join(', #'))+
+    '</span><span class=age>estate labels left on pull requests. They do NOT count '+
+    'toward the verdict — the holder is the authority — but they should be cleaned up.</span>';
   return h;
+}
+function hms(s){const m=Math.floor(Math.abs(s)/60),r=Math.abs(s)%60;
+  return (s<0?'-':'')+(m?m+'m ':'')+r+'s';}
+function remain(x){
+  if(x.expired)return '<span class=rem-bad>EXPIRED '+esc(hms(x.closes_in_s))+' ago</span>';
+  if(!x.soak_fits)return '<span class=rem-warn>'+esc(hms(x.closes_in_s))+
+    ' left — shorter than one soak + walk ('+esc(hms(360))+'), this leg cannot finish</span>';
+  return '<span class=rem-ok>'+esc(hms(x.closes_in_s))+' left</span>';
 }
 function alarms(d){
   const f=d.flags||{};const out=[];
@@ -272,12 +374,40 @@ function alarms(d){
     'estate as closed until this clears.</div></div>');
   return out.join('');
 }
+async function toggle(label,action){
+  // Closing the estate stops every change in flight, so it asks first. Opening
+  // it does not: an estate wrongly left closed is visible and annoying, an
+  // estate wrongly opened is a change deployed into a freeze.
+  if(action==='on'&&!confirm('Declare '+label.toUpperCase()+
+    '?\n\nThis closes the estate to every standard and normal change, '+
+    'including any that is mid-flight right now.'))return;
+  const r=await fetch('/api/estate/'+label+'/'+action,{method:'POST'});
+  render(await (await fetch('/api/status')).json());
+  if(!r.ok)alert('toggle failed — check the dashboard log');
+}
+function togglebar(d){
+  const f=d.flags||{};
+  if(f.unknown)return '<span class=age>cannot toggle — the forge is unreachable</span>';
+  const b=(label,on)=>'<button class="'+(on?'dis':'arm')+'" '+
+    'onclick="toggle(\''+label+'\',\''+(on?'off':'on')+'\')">'+
+    (on?'lift ':'declare ')+label+'</button>';
+  return b('freeze',f.freeze)+b('emergency',f.emergency)+
+    '<span class=age>writes to issue #'+esc(f.holder)+', the estate state holder — '+
+    'an issue, not a PR, because an issue cannot be deployed and so cannot be '+
+    'handed the exemption it declares</span>';
+}
 function render(d){
   document.getElementById('alarm').innerHTML=alarms(d);
+  document.getElementById('toggles').innerHTML=togglebar(d);
   document.getElementById('flags').innerHTML=flagbox(d);
   document.getElementById('w').innerHTML=d.windows.length?d.windows.map(x=>
-    '<tr><td>'+esc(x.id)+'</td><td>'+esc(x.env)+'</td><td class=dim>'+esc(x.start)+'</td>'+
-    '<td>'+esc(x.end)+'</td><td>'+esc(x.pr)+'</td><td class=sha>'+esc(x.sha)+'</td></tr>').join('')
+    '<tr><td><b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
+    (x.title?'<div class=ti>'+esc(x.title)+'</div>':'')+'</td>'+
+    '<td class=dim>'+esc(x.groups||'—')+'</td>'+
+    '<td class=sha>'+esc(x.sha)+'</td>'+
+    '<td>'+remain(x)+'<div class=dim style="font-size:11px">'+esc(x.end)+'</div></td>'+
+    '<td class=n-'+esc(x.env)+'>'+esc(x.env)+'</td>'+
+    '<td class=dim>'+esc(x.id)+'</td></tr>').join('')
     :'<tr><td colspan=6 class=dim>no open window — the berth is free</td></tr>';
   document.getElementById('e').innerHTML=d.envs.map(x=>{
     const state=x.declared?'<td class=decl>declared</td>'

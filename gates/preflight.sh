@@ -164,8 +164,32 @@ if [ "$is_emg" -gt 0 ] && [ $((_std + _nrm)) -gt 0 ]; then
   note "derivation."
 fi
 
-frozen=$(gh pr list --repo "$R" --state open --label freeze \
+# THE HOLDER IS AN ISSUE (#1), NOT A PULL REQUEST.
+#
+# This read `gh pr list --label freeze`, so declaring a freeze meant hanging the
+# label on some open PR -- and PR #48 showed what that costs for `emergency`:
+# the write that closes the estate to everyone is the write that exempts its own
+# carrier. `freeze` escaped the worst of it only because nothing reads it as a
+# classification. It still had the smaller problems: the state vanished when its
+# carrier merged, and an estate with no open PRs could not be frozen at all.
+#
+# An issue cannot be deployed, so there is no exemption it could be handed.
+#
+# Open PRs are STILL read, because labels linger from before the holder existed
+# and a freeze nobody can see is worse than a duplicated one. Either source
+# closes the estate; the holder is named first so a reader knows which spoke.
+ESTATE_ISSUE="${ESTATE_ISSUE:-1}"
+_held=$(gh issue view "$ESTATE_ISSUE" --repo "$R" --json labels \
+          -q '[.labels[].name]|join(" ")' 2>/dev/null || echo "?")
+_stray=$(gh pr list --repo "$R" --state open --label freeze \
           --json number,title -q '[.[]|"#\(.number) \(.title)"]|join("; ")' 2>/dev/null || echo "?")
+if [ "$_held" = "?" ] || [ "$_stray" = "?" ]; then
+  frozen="?"
+elif echo "$_held" | tr ' ' '\n' | grep -qx freeze; then
+  frozen="declared on the estate holder, issue #$ESTATE_ISSUE${_stray:+; also on $_stray}"
+else
+  frozen="$_stray"
+fi
 # THE ESTATE'S EMERGENCY IS A DIFFERENT FACT FROM THIS CHANGE'S CLASS.
 #
 # This read used to be itil:emergency on other PRs -- the same label line 147
