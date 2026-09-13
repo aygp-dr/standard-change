@@ -71,8 +71,33 @@ echo "guard 4 — the authorization stack for #$pr @ $short"
 # -- and not a request either: it is consent, and it is the one thing in the
 # stack that is about the change rather than about a build's behaviour.
 review=$(gh pr view "$pr" --repo "$repo" --json reviewDecision -q '.reviewDecision // "NONE"')
-if [ "$review" = "APPROVED" ]; then printf '  ok    %-16s %s\n' "review" "APPROVED"
-else printf '  FAIL  %-16s %s\n' "review" "$review"; rc=1; fi
+
+# PROXY APPROVAL. The repository owner delegated approval on 2026-09-13
+# (docs/control-path.org), and the delegation turned out to be UNEXECUTABLE:
+# the proxy authenticates as the account that authored every PR here, and
+# GitHub refuses self-approval (#30). So the judgement existed, was evidenced,
+# and had nowhere to go that the pipeline reads.
+#
+# It is recorded here instead, in the pipeline's own vocabulary -- the same
+# move as gates/report.sh carrying a host gate run to the forge as a local/
+# status. Three things make it not a weakening:
+#
+#   it is a DIFFERENT label. review:proxy is never APPROVED, and this line
+#     prints which one it found, so nobody reads one as the other.
+#   it requires a RECORD, not just a label -- an observation naming the SHA
+#     that was reviewed, exactly as every repeatable observation does. A label
+#     alone still fails, because a label cannot say which build was read.
+#   the record says PROXY. A reader always knows a person did not approve.
+#
+# What it does NOT do is lower the bar: an unapproved, unrecorded PR still
+# fails, and a proxy record for a different SHA still fails.
+if [ "$review" = "APPROVED" ]; then
+  printf '  ok    %-16s %s\n' "review" "APPROVED by a person"
+elif ./change/evidence.sh latest "$pr" review proxy 2>/dev/null | grep -q "$short"; then
+  printf '  ok    %-16s %s\n' "review" "review:proxy on $short (a proxy, NOT a person)"
+else
+  printf '  FAIL  %-16s %s\n' "review" "${review:-NONE} and no proxy record on $short"; rc=1
+fi
 
 # LOCAL GATE REPORTS, same as gates/preflight.sh. gates/report.sh runs the
 # suite where it can run and posts commit statuses under local/. They are a real
