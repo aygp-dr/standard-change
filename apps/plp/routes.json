@@ -2,6 +2,7 @@
   "app": "plp",
   "port_offset": 2,
   "routes": ["/search", "/c/:category"],
+  "probes": { "/c/:category": "/c/shoes" },
   "health": "/search?q=ping",
   "journeys": ["search"]
 }

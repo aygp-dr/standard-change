@@ -34,6 +34,26 @@ else {
         if (typeof route !== 'string' || !route.startsWith('/'))
           fail(`route ${JSON.stringify(route)} must be a string starting with /`);
       }
+      // `probes` hands gates/e2e.sh a concrete, valid instance of a
+      // parameterised route, because the gate can no longer synthesize one
+      // (an app may check the parameter -- plp checks the category). It is a
+      // claim the gate TRUSTS, so it must name a declared route and land
+      // inside it: a probe of /login for /c/:category would satisfy the
+      // ownership check by testing a different route entirely.
+      if (r.probes !== undefined) {
+        if (typeof r.probes !== 'object' || r.probes === null || Array.isArray(r.probes))
+          fail('probes must be an object mapping route -> concrete path');
+        else for (const [route, probe] of Object.entries(r.probes)) {
+          if (!r.routes.includes(route))
+            fail(`probes names "${route}", which is not a declared route`);
+          else if (typeof probe !== 'string')
+            fail(`probe for "${route}" must be a string`);
+          else if (!probe.startsWith(route.replace(/:[^/]*$/, '')))
+            fail(`probe "${probe}" does not lie inside route "${route}"`);
+          else if (probe.includes(':'))
+            fail(`probe "${probe}" still contains a parameter; it must be concrete`);
+        }
+      }
       // the health path must be reachable through a declared route, or guard 5
       // probes something the router will 404
       if (typeof r.health !== 'string') fail('health must be a string');

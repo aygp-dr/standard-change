@@ -16,7 +16,7 @@
 # notes        why
 #
 # label	owner	human_add	human_rm	notes
-app:*	labeller	no	no	derived from the diff; recomputed every push. Take it over with labeler:skip, never by editing
+app:*	labeller	no	no	derived from the diff: the app's own glob, OR any change to shared/ (which every app pins). Recomputed every push. To touch shared/ without redeploying all, use labeler:skip and set them by hand
 change:standard	labeller	no	no	derived; same
 change:normal	labeller	no	no	derived; same
 labeler:skip	human	yes	yes	the opt-out that transfers ownership of the derived labels

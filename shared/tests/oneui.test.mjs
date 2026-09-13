@@ -53,7 +53,25 @@ test('a valid document is still produced', () => {
   assert.ok(html.includes('#e8f0ff'), 'background not applied');
 });
 
-test('this is a patch release: the surface did not change', () => {
-  assert.equal(page.length, 3, 'page() arity changed -- that is not a patch');
-  assert.match(VERSION, /^1\.0\.\d+$/);
+// The version must describe the SURFACE, not the intent of whoever bumped it.
+// The first version of this test hardcoded "1.0.x and arity 3" and failed the
+// moment a legitimate minor arrived -- it was pinning a fact, not a rule. The
+// rule is semver: growing the surface is a minor, and shipping that as a patch
+// is what makes a pinned dependency lie about what it needs.
+test('the version matches the surface it exposes', () => {
+  const [maj, min, patch] = VERSION.split('.').map(Number);
+  assert.ok([maj, min, patch].every(Number.isInteger), `not semver: ${VERSION}`);
+
+  // page(d, estate, background) is the 1.0 surface. Optional parameters do not
+  // count toward Function.length, so arity 3 means nothing was ADDED.
+  const REQUIRED = 3;
+  assert.equal(page.length, REQUIRED, 'page() required arity changed');
+
+  // Optional params are additive, so they are a minor, not a patch.
+  const optional = page.toString().includes('extra =');
+  if (optional) {
+    assert.ok(min >= 1, `page() takes an optional slot, so this is at least a minor, not ${VERSION}`);
+  } else {
+    assert.equal(min, 0, `nothing was added to the surface, so ${VERSION} overstates the change`);
+  }
 });

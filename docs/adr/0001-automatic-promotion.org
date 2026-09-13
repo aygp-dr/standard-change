@@ -473,6 +473,87 @@ Do not choose B expecting throughput. B buys *predictability, legibility and a
 correct place for the guards*. It does not buy capacity, and this ADR would
 rather say so than be quoted later as a promise it never made.
 
+* Scenarios walked, and what each one decided
+
+Kept as changes go through, because every row below was found by moving a real
+change rather than by reasoning about one. Dated 2026-09-13 unless noted.
+
+** S1 — a change with nothing to deploy (#7)
+
+=groups.sh= returned empty, and =schedule.sh block= refused at reservation
+(exit 2) before a berth was claimed. *Correct refusal, surprising reason*: the
+PR edits =apps/mock/src/server.js= and =apps/mock/= no longer exists — the mock
+moved to =external/=. The empty manifest was accurate. Two defects met: a
+branch stale against a directory move, and an =app:mock= glob still pointing at
+the old path, which would have labelled it happily.
+
+*Decides*: refusal messages must name what was measured, not just the verdict.
+"No groups" and "your change targets a path that is gone" are different facts.
+
+** S2 — the pipeline cannot label the change that fixes the labeller (#12)
+
+=actions/labeler= reads its config from the BASE branch. The PR that teaches
+the labeller about =shared/= arrived with no =app:*= label, so =groups.sh=
+returned empty and the queue would have refused it for having nothing to
+deploy. Resolved with =labeler:skip= plus the four labels by hand — the
+declared escape hatch used for its declared purpose.
+
+*Decides*: *a change to the pipeline cannot be validated by the pipeline it
+changes.* This is the general case, not a quirk of =labeler=. Every
+pipeline-affecting change needs an explicit, visible ownership transfer rather
+than a workaround, and =labeler:skip= is the shape of it.
+
+** S3 — merged without reaching production (#12)
+
+A security fix merged on =staging:healthy= alone. =main= then asserted the XSS
+was fixed while every production replica served the vulnerable build. Nothing
+blocked it: =merge-on-healthy.yml= *triggers* on =production:healthy=, and a
+trigger is not a gate.
+
+*Decides*: the ordering needed a control, not a convention.
+=gates/production-first.sh= now refuses a merge when a PR carries =app:*= and
+lacks =production:healthy=, runs as a check, and is in the required list. The
+TLA+ spec could not express the defect at all — it modelled deploy and merge as
+one atomic step — so =NoMergeBeforeProduction= was added with =ProdFirst= as a
+switchable constant.
+
+** S4 — an observation that names no measurement (#9)
+
+=staging:passed= was moved from failed to passed using a run against a
+*different estate*, which then satisfied guard 4 and authorized a production
+deploy. Reverted; the estate was torn down.
+
+*Decides*: an observation label must name what was observed. Replaced by a
+stack — =staging:e2e=, =staging:smoke=, =staging:uat=, =<env>:healthy= — each
+naming instrument and environment, ANDed at guard 4, with a recorded failure
+outranking its pass.
+
+** S5 — two writers, no owner (#9)
+
+=production:healthy= was added and withdrawn five times in twenty minutes
+between a person and =github-actions=. Neither was wrong about the world.
+
+*Decides*: =change/label-owners.tsv=, one declared writer per label. Two
+sub-rules fell out: a gate with no way to record its own verdict *forces*
+someone else to record it, so a missing =--pr= flag is an ownership defect; and
+*unreachable is not falsified* — a workflow that cannot reach production must
+abstain, not withdraw.
+
+** S6 — the gate's oracle came from the wrong tree (#11)
+
+Identical gate, identical estate, opposite verdict depending on which working
+directory it ran from. =e2e.sh= reads =router/routes.json= from its own tree
+while =ROUTER_URL= points at a deployed build. Issue #14.
+
+*Decides*: not yet. Wrong in the safe direction this time, which is luck — the
+same mechanism passes green when the local tree knows about *fewer* routes than
+the deployed build. Prefer a fact the estate reports about itself over one the
+caller supplies, which is guard 5's problem in a second place.
+
+** S7 — deployed outside the window (#9)
+
+Covered below as an open question rather than a decision.
+
 * Open — what happens when a change lands outside its window
 
 Left open deliberately on 2026-09-13, after PR #9 shipped to production outside
