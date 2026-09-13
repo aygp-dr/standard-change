@@ -27,13 +27,42 @@ repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
 labels=$(gh pr view "$pr" --repo "$repo" --json labels -q '[.labels[].name]|join(" ")')
 groups=$(./change/groups.sh "$pr" 2>/dev/null || true)
 
+# NOT EVERY app:* LABEL IS A THING WE DEPLOY.
+#
+# external/ holds stand-ins for services we do not own. mock runs in every
+# environment because the estate needs something at /api/, but it is test
+# infrastructure, not a deployable of ours -- there is no production release of
+# somebody else's service for us to wait on. It needs to RUN; it does not need
+# a production deployment.
+#
+# The distinction is the directory, which is why the mock was moved out of
+# apps/ in the first place: apps/ means deployable unit. app:mock lives in the
+# app:* namespace for routing and labelling, and that namespace turned out to
+# conflate two things.
+EXTERNAL="mock"
+deployable=""
+for g in $groups; do
+  skip=0
+  for e in $EXTERNAL; do [ "$g" = "$e" ] && skip=1; done
+  [ "$skip" = 0 ] && deployable="$deployable $g"
+done
+deployable=$(printf '%s' "$deployable" | sed 's/^ //')
+
 # A change with no deployable surface cannot be "in production" and must not be
-# held hostage to a deployment it does not need. Docs, notes, and pipeline-only
-# changes merge on their gates alone.
+# held hostage to a deployment it does not need. Docs, notes, pipeline-only
+# changes and external stubs merge on their gates alone.
 if [ -z "$groups" ]; then
   echo "  ok    no app:* labels -- nothing deploys, so nothing to wait for"
   exit 0
 fi
+if [ -z "$deployable" ]; then
+  echo "  ok    touches only external stand-ins [$groups] -- not ours to deploy"
+  echo "        external/ is a service we do not own. It must RUN, which the"
+  echo "        gates already assert; there is no production release of it to"
+  echo "        wait on. It still has to pass lint, test and e2e."
+  exit 0
+fi
+groups="$deployable"
 
 echo "  this change deploys: $groups"
 case " $labels " in
