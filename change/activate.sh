@@ -81,7 +81,7 @@ HEAD=$(gh pr view "$PR" --repo "$R" --json headRefName -q '.headRefName')
 SHA=$(gh pr view "$PR" --repo "$R" --json headRefOid -q '.headRefOid' | cut -c1-7)
 LABELS=$(gh pr view "$PR" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')
 GROUPS=$(echo "$LABELS" | tr ' ' '\n' | sed -n 's/^app://p' | tr '\n' ' ')
-EMERG=$(echo "$LABELS" | grep -c 'change:emergency' || true)
+EMERG=$(echo "$LABELS" | grep -c 'itil:emergency' || true)
 step "change under test"
 echo "   PR #$PR  sha=$SHA"
 echo "   labels: $LABELS"
@@ -100,7 +100,7 @@ ok "all four gates green, self-test passed"
 step "guard 0 — up to date with main"
 STATE=$(gh pr view "$PR" --repo "$R" --json mergeStateStatus -q .mergeStateStatus)
 case "$STATE" in
-  BEHIND|DIRTY) [ "$EMERG" -gt 0 ] && ok "behind main, but change:emergency" \
+  BEHIND|DIRTY) [ "$EMERG" -gt 0 ] && ok "behind main, but itil:emergency" \
                                    || die "branch is $STATE relative to main — rebase first" ;;
   *) ok "mergeStateStatus=$STATE" ;;
 esac

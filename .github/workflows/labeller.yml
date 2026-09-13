@@ -13,7 +13,7 @@ jobs:
         if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         with:
           sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
-      # change:standard is the COMPLEMENT of change:normal, which actions/labeler
+      # itil:standard is the COMPLEMENT of itil:normal, which actions/labeler
       # cannot express -- it matches globs, it cannot say "matched no other rule".
       # The offline oracle modelled this as derived and the config never
       # implemented it, so PRs got app:* and no change:* at all. Third time the
@@ -41,11 +41,11 @@ jobs:
           is_normal=$(echo "$files" | grep -cE '^(router|gates|change|targets)/|^\.github/' || true)
           echo "changed=$(echo "$files" | wc -l) apps=$has_app normal=$is_normal"
           if [ "$is_normal" -gt 0 ]; then
-            gh pr edit "$N" --repo "$R" --add-label change:normal || true
-            gh pr edit "$N" --repo "$R" --remove-label change:standard || true
+            gh pr edit "$N" --repo "$R" --add-label itil:normal || true
+            gh pr edit "$N" --repo "$R" --remove-label itil:standard || true
           elif [ "$has_app" -gt 0 ]; then
-            gh pr edit "$N" --repo "$R" --add-label change:standard || true
-            gh pr edit "$N" --repo "$R" --remove-label change:normal || true
+            gh pr edit "$N" --repo "$R" --add-label itil:standard || true
+            gh pr edit "$N" --repo "$R" --remove-label itil:normal || true
           fi
 
       # Every observation is about a BUILD. The labels do not carry the SHA they

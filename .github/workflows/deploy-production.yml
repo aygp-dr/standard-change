@@ -8,7 +8,7 @@ jobs:
     if: github.event.label.name == 'deploy:production'
     runs-on: ubuntu-latest
     concurrency: {group: production, cancel-in-progress: false}
-    environment: production          # require reviewers here for change:normal
+    environment: production          # require reviewers here for itil:normal
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
       - uses: actions/checkout@v4
@@ -32,11 +32,11 @@ jobs:
         run: |
           labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]')
           echo "$labels" | jq -e 'index("staging:passed")' >/dev/null && exit 0
-          echo "$labels" | jq -e 'index("change:emergency")' >/dev/null || {
-            echo "::error::no staging:passed on head SHA and not change:emergency"; exit 1; }
+          echo "$labels" | jq -e 'index("itil:emergency")' >/dev/null || {
+            echo "::error::no staging:passed on head SHA and not itil:emergency"; exit 1; }
           gh api "repos/${{ github.repository }}/pulls/$PR/reviews" \
             --jq '[.[]|select(.state=="APPROVED")]|length' | grep -qv '^0$' || {
-            echo "::error::change:emergency requires an approving review"; exit 1; }
+            echo "::error::itil:emergency requires an approving review"; exit 1; }
       - run: ./gates/preflight.sh production
       - run: ./change/lock.sh acquire "$PR" production
       - run: ./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh production "$(./change/groups.sh "$PR")"

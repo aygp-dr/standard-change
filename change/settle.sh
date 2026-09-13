@@ -150,7 +150,7 @@ fi
 #    are a lease on an environment, and leaving one set means the NEXT change
 #    can never start. Clearing them is the release, not the tidying.
 #
-#    NOT cleared: change:complete is the record. app:* and change:standard
+#    NOT cleared: change:complete is the record. app:* and itil:standard
 #    describe what the change was, and remain true after it shipped.
 for l in change:requested deploy:staging deploy:production \
          staging:e2e staging:smoke staging:uat staging:passed staging:failed \

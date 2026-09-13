@@ -28,7 +28,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Set to 1 to forbid the deployment's own author from approving it. Left 0
 # because this repo has a single maintainer, and 1 would deadlock every
 # production deploy -- which, per spec.org "The balance", routes traffic to
-# change:emergency instead of making anything safer. Flip it the moment a
+# itil:emergency instead of making anything safer. Flip it the moment a
 # second change authority exists.
 PREVENT_SELF_REVIEW=0
 

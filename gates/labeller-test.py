@@ -45,15 +45,15 @@ def matches(glob, path):
 def label_for(rules, paths):
     got = {l for l, globs in rules.items()
            if any(matches(g, p) for g in globs for p in paths)}
-    # change:standard is the complement of change:normal -- actions/labeler
+    # itil:standard is the complement of itil:normal -- actions/labeler
     # cannot express "matched no other rule", so a workflow STEP must apply it.
     # Assert the step exists rather than assuming the behaviour: modelling it
     # here while the config lacked it is exactly how PRs #2 and #3 ended up
     # with app:* and no change:* at all.
     if (any(p.startswith(("apps/", "shared/", "external/")) for p in paths)
-            and "change:normal" not in got):
+            and "itil:normal" not in got):
         if "classify standard vs normal" in WORKFLOW.read_text():
-            got.add("change:standard")
+            got.add("itil:standard")
     return got
 
 
@@ -62,51 +62,51 @@ def sync_labels_enabled():
 
 
 SCENARIOS = [
-    ("L1",  ["apps/core/src/pages/index.js"], {"app:core", "change:standard"}),
+    ("L1",  ["apps/core/src/pages/index.js"], {"app:core", "itil:standard"}),
     ("L2",  ["apps/pdp/src/a.js", "apps/checkout/src/b.js"],
-             {"app:pdp", "app:checkout", "change:standard"}),
+             {"app:pdp", "app:checkout", "itil:standard"}),
     ("L3",  ["apps/core/a", "apps/plp/a", "apps/pdp/a", "apps/checkout/a"],
-             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
-    ("L4",  ["router/nginx.conf.tmpl"], {"change:normal"}),
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "itil:standard"}),
+    ("L4",  ["router/nginx.conf.tmpl"], {"itil:normal"}),
     # An app change that also touches the control plane is BOTH: it deploys,
     # and it alters how future changes are verified. Neither fact excuses the
     # other, and the soak applies to the control-plane half.
     ("L5",  ["apps/plp/x.js", ".github/workflows/gate.yml"],
-             {"app:plp", "change:normal", "control-plane"}),
+             {"app:plp", "itil:normal", "control-plane"}),
     ("L6",  ["README.org"], set()),
-    ("L7",  ["apps/pdp/fixtures/catalog.json"], {"app:pdp", "change:standard"}),
-    ("L8",  ["gates/e2e.sh"], {"change:normal", "control-plane"}),
-    # control-plane is NARROWER than change:normal. targets/ and router/ change
+    ("L7",  ["apps/pdp/fixtures/catalog.json"], {"app:pdp", "itil:standard"}),
+    ("L8",  ["gates/e2e.sh"], {"itil:normal", "control-plane"}),
+    # control-plane is NARROWER than itil:normal. targets/ and router/ change
     # how a thing ships and are verified the ordinary way -- deploy, observe.
-    # They are change:normal and NOT control-plane.
-    ("L16", ["targets/node/deploy.sh"], {"change:normal"}),
-    ("L17", ["router/server.js"], {"change:normal"}),
-    ("L18", ["change/guard4.sh"], {"change:normal", "control-plane"}),
-    ("L19", [".github/workflows/gate.yml"], {"change:normal", "control-plane"}),
+    # They are itil:normal and NOT control-plane.
+    ("L16", ["targets/node/deploy.sh"], {"itil:normal"}),
+    ("L17", ["router/server.js"], {"itil:normal"}),
+    ("L18", ["change/guard4.sh"], {"itil:normal", "control-plane"}),
+    ("L19", [".github/workflows/gate.yml"], {"itil:normal", "control-plane"}),
     # shared/ is imported by every app we deploy, so a change there is a change
     # to all of them and the manifest must say so. Before this rule existed,
     # editing shared/oneui.js produced NO app:* label -- the highest-blast-radius
     # change in the repo declaring it touched nothing deployable, and groups.sh
     # then returned empty so the queue refused it for entirely the wrong reason.
     ("L12", ["shared/oneui.js"],
-             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "itil:standard"}),
     # ...and mock does NOT come along. It is an external service stub under
     # external/, not something we deploy, so it does not pin our shared surface.
     ("L13", ["shared/oneui.js", "apps/core/x.js"],
-             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "itil:standard"}),
     # A shared/ change and an all-four-apps change carry the SAME labels, on
     # purpose. The label says what CI will do, not why it decided to.
     ("L15", ["apps/core/a", "apps/plp/a", "apps/pdp/a", "apps/checkout/a"],
-             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "itil:standard"}),
     # external/ is somebody else's service. Touching the stub is not a change to
     # any app of ours.
-    ("L14", ["external/mock/src/server.js"], {"app:mock", "change:standard"}),
+    ("L14", ["external/mock/src/server.js"], {"app:mock", "itil:standard"}),
 ]
 
 # Removal scenarios: (before, after, label that must DISAPPEAR)
 REMOVALS = [
     ("L9",  ["apps/pdp/a", "apps/checkout/b"], ["apps/pdp/a"], "app:checkout"),
-    ("L11", ["apps/plp/x", ".github/w.yml"],   ["apps/plp/x"],  "change:normal"),
+    ("L11", ["apps/plp/x", ".github/w.yml"],   ["apps/plp/x"],  "itil:normal"),
 ]
 
 
