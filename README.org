@@ -31,7 +31,7 @@ the promotion guards.
 
 The ordinary path, end to end. Emergencies, forfeited windows and what happens
 when =main= moves underneath you are all real and all deliberately absent here
-— see =docs/adr/0001-scheduled-deployment-windows.org= and =scenarios.org=.
+— see =docs/adr/0001-automatic-promotion.org= and =scenarios.org=.
 
 #+begin_src mermaid :eval never-export
 stateDiagram-v2
@@ -198,7 +198,7 @@ Neither treats every merge alike. =change/divergence.sh= classifies what landed:
 
 *=apps/**= is the deployable entity*, so any change to it blocks — not just a
 change to the same app. That coarseness is a property of the monorepo, and
-=docs/adr/0001-scheduled-deployment-windows.org= is where the options that
+=docs/adr/0001-automatic-promotion.org= is where the options that
 remove it live.
 
 Containers are what make this checkable rather than hopeful. One image per app,

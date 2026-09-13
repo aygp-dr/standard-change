@@ -4,9 +4,16 @@
 
 * Status
 
-Accepted. Scope is the *environment model and what is worth watching*. The
-team tier is specified and *deliberately not exercised* — see §What we are not
-building yet.
+*Superseded by ADR 0001* (2026-09-13), which was retitled to
+/automatic promotion to production, gated by evidence/.
+
+This was filed as a separate decision about environments and dashboards. It is
+not one. If promotion is automatic, *which environments can be promoted into*
+is a safety property of that decision, and what is worth watching follows from
+it. Splitting them into two ADRs implied two choices where there was one.
+
+Kept for the reasoning and the MonoWatch evaluation; the decision itself now
+lives in ADR 0001 §Consequence — the environment tiers.
 
 * Context
 

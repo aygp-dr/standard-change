@@ -1,13 +1,22 @@
-#+TITLE: ADR 0001 — scheduled deployment windows with separate activation
+#+TITLE: ADR 0001 — automatic promotion to production, gated by evidence
 #+DATE: 2026-09-13
 #+OPTIONS: toc:2 num:nil
 
 * Status
 
-Proposed, and *B is the fallback* — four cheaper options beat it on the number
-that matters (§Decision rule). Recorded that way on purpose: an ADR that
-presents its own decision as the answer, when the measurement says otherwise,
-is advocacy rather than a record. Scope is the *workflow* — change enablement and the scheduling of
+Accepted. *Supersedes ADR 0002*, which described the environment tiers as a
+separate decision; they are a consequence of this one.
+
+*Retitled 2026-09-13.* This was filed as "scheduled deployment windows with
+separate activation", which named a mechanism and not a decision. The windows,
+the berth, the tiers and the dashboard are all things this decision *needs*;
+none of them is the thing being decided. An ADR titled after its mechanism
+invites the next reader to argue about the mechanism.
+
+Note also that *B is the fallback* — four cheaper options beat it on the number
+that matters (§Decision rule). Recorded that way on purpose: an ADR presenting
+its own decision as the answer, when the measurement says otherwise, is
+advocacy rather than a record. Scope is the *workflow* — change enablement and the scheduling of
 deployment windows. It is deliberately *not* about the activated deployment
 itself: what a deployment does once it starts is deployment management's
 concern and belongs in a separate decision.
@@ -33,7 +42,35 @@ schedule does not have.
 
 * Decision
 
-Split the single act into two:
+#+begin_quote
+*A change that passes its gates moves to production without a person moving
+it.* People raise a change and, for a normal change, approve it. Nobody
+performs the promotion.
+#+end_quote
+
+So there is no "push to staging" step and no "now push to production" step. A
+change is promoted by *evidence arriving*: the authorizing run passes and
+=staging:passed= appears; guard 2 is satisfied and =deploy:production= follows;
+convergence is measured and =production:healthy= follows; the merge is
+triggered by that. Each transition is caused by an observation, not a command
+(§Labels as state transitions in =spec.org=).
+
+*What a person still does*, and it is deliberately small:
+
+| act                  | who    | why it cannot be automated              |
+|----------------------+--------+-----------------------------------------|
+| raise the change     | human  | it is the intent                        |
+| approve =change:normal= | human | the gates cannot judge a control-plane change |
+| break glass          | human  | =change:emergency= is an authorization, not a measurement |
+
+Everything else is the system. *The approval gate sits before production, not
+between staging and production* — a change that has earned staging has earned
+production, because the same evidence governs both.
+
+** The mechanism this requires
+
+Automatic promotion is only safe if nothing can promote on stale evidence, and
+that is what the rest of this ADR is about:
 
 - *Reservation* (change enablement) — a change with green gates and an
   up-to-date base reserves a window on the change schedule. Reserving is not
@@ -131,6 +168,40 @@ only *sooner*.
 
 *Take this option if you can. The rest of this document is what to do when you
 cannot.*
+
+*** Consequence — the environment tiers (was ADR 0002)
+
+If promotion is automatic, then *which environments can be promoted into* is a
+safety property, not a naming convention. Hence three tiers, with the port
+number carrying the meaning:
+
+| tier        | ports     | promotes? | watched?             |
+|-------------+-----------+-----------+----------------------|
+| *dev*       | 9000–9099 | no        | no — disposable      |
+| *team*      | 9100–9199 | *no*      | listed, not monitored |
+| *protected* | 9200–9299 | *yes*     | yes — this is the estate |
+
+A tier is a property of the *address* rather than a rule someone remembers:
+anything at 9100–9199 is a dead end by construction, and =ports.sh= refuses a
+dev block that would cross into it. The team tier is *specified and not
+provisioned* — its purpose is to make "cannot promote" structural, and the port
+range plus the IDP's refusal to lease =staging= already achieve that. Trigger
+to build it: the first team environment that outlives a worktree.
+
+*** Consequence — what is worth watching
+
+=./dashboard= shows the queue first, then protected, then team, then the open
+changes. Dev is absent on purpose, and so are DORA metrics: every DORA metric
+takes a deployment that *reached production* as its unit, so a forfeited window
+and a revalidation are invisible to it — and under automatic promotion those
+are the dominant cost. A row reading =Deploy Freq: 0/day= beside a pipeline
+burning 10–20 validations per shipped change is worse than no row.
+
+Evaluating MonoWatch is what made this concrete: 17 services × 3 environments,
+every cell the same build, because a monorepo ships =apps/**= as one unit. *It
+is a dashboard for the architecture options A and A2 would move us to.* If we
+take one, this consequence expires and something MonoWatch-shaped becomes
+correct.
 
 ** Option A2 — split the deployment out of the monorepo
 
