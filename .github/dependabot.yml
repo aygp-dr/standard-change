@@ -1,0 +1,32 @@
+# Only github-actions. Deliberately not npm or pip:
+#
+#   npm  -- all five apps declare zero dependencies and there are no lockfiles.
+#           They are stdlib-only node by design (spec.org, Purpose: the apps are
+#           fixtures). Dependabot would have nothing to update. Add the ecosystem
+#           when a dependency is added, not before.
+#   pip  -- hypothesis is installed ad hoc inside gate.yml; there is no
+#           requirements.txt or pyproject.toml for Dependabot to read. Declaring
+#           one just to be scanned would be adding a manifest for the scanner's
+#           benefit rather than the project's.
+#
+# Actions are different: 14 pins across 4 actions, and they DO go stale. A live
+# run already warned that actions/labeler@v5 targets the deprecated Node 20.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"          # not Monday: every default lands then
+      time: "09:23"
+    open-pull-requests-limit: 3
+    # One PR for the lot. Four separate PRs would each claim the berth in turn,
+    # and the queue is a singleton (guard 1) -- dependency bumps should not
+    # spend four windows to do one thing.
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(actions)"
+    labels:
+      - "change:normal"

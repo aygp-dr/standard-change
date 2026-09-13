@@ -1425,6 +1425,32 @@ and the known obstacles, and is the thing the first gate run promotes.
 - *The second e2e run authorizes production*, not the first. The in-runner run
   proves the build; the staging-slot run proves the deployment.
 
+* Dependency updates
+
+Only =github-actions=, and the reasoning is the same one §Extensions uses: do
+not add machinery for a thing that does not exist.
+
+| ecosystem       | present? | why not tracked                                    |
+|-----------------+----------+----------------------------------------------------|
+| =github-actions=| *14 pins across 4 actions* | tracked — they do go stale       |
+| =npm=           | 5 manifests, *zero dependencies*, no lockfiles | nothing to update; the apps are stdlib-only by design |
+| =pip=           | no manifest | =hypothesis= is installed ad hoc in =gate.yml=; declaring a =requirements.txt= purely to be scanned would be adding a manifest for the scanner's benefit |
+
+A live run already justified the one we keep: =actions/labeler@v5= warned that
+it targets the deprecated Node 20.
+
+** A dependency bump is a normal change, and that is correct
+
+A Dependabot PR touches =.github/=, so the labeller gives it =change:normal=,
+which requires an approving review from a change authority (§Labels). *A bump
+to the control plane is exactly the change that should not be automatic* — the
+actions being updated are the ones that run the gates.
+
+The config groups all actions into one PR on purpose. Four separate PRs would
+each have to take the berth in turn, and the berth is a singleton (guard 1);
+dependency bumps should not spend four windows doing one thing. That is
+§The balance applied to robots rather than people.
+
 * Controls audit
 
 Every control the spec claims is auditable as JSON, without a UI visit.
