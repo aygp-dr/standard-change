@@ -301,6 +301,64 @@ down so nobody rediscovers it and treats it as one.
 
 Nothing was deployed. The berth was not taken; the estate was untouched.
 
+** D10 — pre-authorised auto-scheduling. SPECIFIED, NOT BUILT.
+
+*Read this before assuming any of it exists.* Nothing in this repo
+auto-schedules anything. Every window on the calendar today was booked by a
+person typing =./change/schedule.sh block=, and the one attempt to write an
+=autoschedule.sh= was deleted rather than shipped, because a half-built
+scheduler that looks present is worse than an absent one.
+
+This section is a *requirement for the 001 rebuild*, written so a later agent
+does not read the surrounding repo as more capable than it is.
+
+*** Why it is defensible at all
+
+=docs/adr/0003= says scheduling is owned by a person and there is no
+auto-scheduler. That is over-broad rather than wrong, and ITIL supplies the
+correction: *a standard change is PRE-AUTHORISED BY DEFINITION.* Booking one is
+not a scheduler exercising judgement — it is honouring an authorisation granted
+once, when the change model was accepted. The judgement is in the model, not in
+the booking.
+
+So the scope is narrow and must stay narrow: *book pre-authorised, demonstrably
+low-risk changes; never deploy, never merge, never choose an hour a person
+asked for.*
+
+*** Eligibility — every condition must hold
+
+Each is here because its absence broke something during the grind:
+
+| condition | why |
+|-----------+-----|
+| exactly one =itil:= label, and it is =itil:standard= | two classes leaves the class undefined and every rule branches on it; none satisfies every such rule by default. Five of eight booked changes were unclassified at once |
+| =APPROVED= | booking an unapproved change reserves the path to production for something that cannot use it |
+| not a draft | the author's own statement, and the one input the pipeline does not second-guess |
+| exactly one =app:*= group | blast radius of one. =shared/**= fans out to four and is not low risk whatever its diff looks like |
+| touches no =gates/ change/ targets/ router/ shared/ sim/ tla/ .github/= | control-plane changes alter how every FUTURE change is verified; proven by use across later deployments, never by a booking |
+| holds no open window | a change with two reservations double-books the berth against itself — observed twice on 2026-09-13 |
+| the estate is open | pre-authorisation is *not* an exemption from a freeze. Only =itil:emergency= is |
+
+Anything failing any condition is *reported and left alone*, never forced.
+
+*** What it must not do
+
+- *Not deploy.* Booking is an entitlement to the path; something still has to
+  drive the change through it.
+- *Not choose an hour.* A designated slot is usually a developer saying they
+  will be present. Auto-booking takes next-available only.
+- *Not clear a refusal.* A guard refusing is the system working.
+
+*** The measurement this is really about
+
+The reason to specify it is *the manual cost it would remove*, and that cost is
+the thing being ground out here. Every booking today cost: read the calendar,
+pick a duration that clears the floor, check for a clash, book, watch it not be
+driven, reap it, re-book. See =docs/time-spent.org=.
+
+*An implementation is only worth it if that cost is measured first.* 001 should
+build the harness before the scheduler.
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
