@@ -196,6 +196,26 @@ case "${1:-}" in
   # Called at ACTIVATION, not at booking. A freeze declared after you booked is
   # exactly the case this exists for: the subject of the check can change after
   # the check, so it is re-run at the moment it is relied on.
+  # windows <pr> [env] -- every OPEN window this change holds.
+  #
+  # `current` answers "does a window cover NOW", which is what the guards ask
+  # and is deliberately narrow. It cannot see a FUTURE booking, so rescheduling
+  # had no way to find the reservation it was replacing: #42 and #44 each ended
+  # up holding two open windows, double-booking the berth against themselves.
+  # The clash check did not catch it and should not have -- the windows did not
+  # overlap. One change holding two slots is a different mistake, and nothing
+  # could see it because nothing could ask this question.
+  windows)
+    _pr="${2:?usage: schedule.sh windows <pr> [env]}"
+    _env="${3:-}"
+    _st=$(read_sched); _cur=$(echo "$_st" | jq -r .body)
+    echo "$_cur" | jq -r --argjson pr "$_pr" --arg env "$_env" \
+      '.windows[] | select(.pr==$pr and .result==null)
+                  | select($env=="" or .env==$env)
+                  | "  \(.id)  \(.env)  \(.start) .. \(.end)  \(.sha)"'
+    ;;
+
+
   check)
     arg="${2:?usage: schedule.sh check <event-id|START/END>}"
     cur=$(read_sched | jq -r .body)
