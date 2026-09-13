@@ -166,15 +166,40 @@ fi
 
 frozen=$(gh pr list --repo "$R" --state open --label freeze \
           --json number,title -q '[.[]|"#\(.number) \(.title)"]|join("; ")' 2>/dev/null || echo "?")
-emg=$(gh pr list --repo "$R" --state open --label itil:emergency \
-       --json number -q "[.[].number]|map(select(. != $pr))|join(\", #\")" 2>/dev/null || echo "?")
+# THE ESTATE'S EMERGENCY IS A DIFFERENT FACT FROM THIS CHANGE'S CLASS.
+#
+# This read used to be itil:emergency on other PRs -- the same label line 147
+# reads on THIS PR to grant an exemption. One label, two subjects, and the
+# collision is not cosmetic:
+#
+#   an emergency handled OUTSIDE the pipeline has no PR to classify. To make
+#   the estate show it, you hang itil:emergency on some open PR -- and that
+#   hands THAT PR a bypass of every blocker. The one change that must not
+#   proceed becomes the only one that may.
+#
+# So the estate-level fact is its own bare label, symmetric with `freeze`:
+# both are properties of the world, neither is a property of any change, and
+# neither grants anything to whatever PR happens to carry it.
+#
+# itil:emergency still grants the exemption, because that is a claim about the
+# CHANGE -- this one outranks the others. `emergency` never does.
+#
+# Found by sim/ and confirmed by TLC as NoSplitEmergency (PR #48).
+# NO SELF-EXCLUSION. That was right for itil:emergency -- a change does not
+# block itself -- and is wrong here. `emergency` is a property of the WORLD,
+# so it blocks everyone, including whichever PR happens to be carrying the
+# flag. Excluding self would mean the PR you hung the estate flag on is the
+# one change the estate does not stop, which is the exact defect the split
+# was made to remove, surviving one level down.
+emg=$(gh pr list --repo "$R" --state open --label emergency \
+       --json number -q "[.[].number]|join(\", #\")" 2>/dev/null || echo "?")
 
 if [ "$frozen" = "?" ] || [ "$emg" = "?" ]; then
   no "I could not check whether the estate is open." 4
 elif [ "$is_emg" -gt 0 ]; then
   yes "this is itil:emergency -- the freeze and queue rules do not apply to it"
   [ -n "$frozen" ] && note "freeze in force ($frozen); an emergency is what a freeze is FOR."
-  [ -n "$emg" ]    && note "other emergencies in flight: #$emg"
+  [ -n "$emg" ]    && note "an emergency is in flight on the estate (#$emg)"
   note "this will be in the PIR, and guard 2 and guard 5 still have no bypass."
 elif [ -n "$frozen" ]; then
   no "a DEPLOYMENT FREEZE is in force" 3
@@ -183,7 +208,7 @@ elif [ -n "$frozen" ]; then
   note "recovery: wait for the label to come off, or have a person declare"
   note "this itil:emergency -- their call, never yours."
 elif [ -n "$emg" ]; then
-  no "an EMERGENCY is in flight: #$emg" 2
+  no "an EMERGENCY is in flight on the estate (#$emg)" 2
   note "standard and normal changes do not progress while one is running."
   note "it will land under you and invalidate your staging pass (guard 4b),"
   note "so stopping now costs you a wait; proceeding costs you the berth,"
