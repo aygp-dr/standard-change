@@ -114,6 +114,25 @@ existed. =--short= overrides, loudly.
   deploying* — if =designated= could reach an environment where =queued= could
   not, =--at= would be a bypass wearing a calendar's clothes.
 
+* What the local calendar is for
+
+=refs/idp/schedule= is a *stand-in*, kept here for two reasons only:
+
+- *testing* — the semantics (windows, clashes, closure codes, expiry, the
+  berth) need something executable to be exercised against, and every finding
+  in =scenarios.org= came from driving a real one.
+- *visibility* — the dashboard can show a queue, which is how the expired
+  window, the stale reservation and the five unclassified changes became
+  obvious rather than theoretical.
+
+*It is not a proposal for where a real organisation keeps its change schedule.*
+A real one lives where the team already works, and the CAS-on-a-git-ref
+implementation is here because it was the cheapest thing that could be wrong in
+interesting ways — not because a git ref is a good calendar.
+
+Read everything below with that in mind: the *contract* is the artefact, the
+store is a fixture.
+
 * Explicit non-requirement: the forge does not know about the calendar
 
 *GitHub has no concept of a deploy window, and we are not going to give it one.*
