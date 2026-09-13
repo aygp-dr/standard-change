@@ -14,7 +14,18 @@
 #      which no single app's tests can cover.
 #   3. ONE ESTATE -- every app behind this router reports the same x-build-sha.
 #      A block serving a mixed fleet is not a coherent thing to test.
+#
+# --pr <n> records the result as an OBSERVATION label, staging:e2e or
+# staging:e2e-failed. The gate labels its own result because the gate is the
+# instrument (change/observe.sh, guard4.sh).
 set -eu
+PR=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --pr) PR="${2:?--pr needs a number}"; shift 2 ;;
+    *)    break ;;
+  esac
+done
 base="${ROUTER_URL:-http://127.0.0.1:10000}"
 cd "$(dirname "$0")/.."
 rc=0; pass=0
@@ -113,4 +124,17 @@ shas=$(for app in $(jq -r '.[].app' router/routes.json); do
                   || fail "router fronts $shas distinct builds; the block is not coherent"
 
 echo "  $pass checks passed"
+
+# Record it. Named for WHAT was measured -- contracts on this estate at this
+# build -- because `staging:passed` could not say, and that ambiguity was used
+# once to satisfy guard 4 with a measurement from a different estate.
+if [ -n "$PR" ]; then
+  repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
+  sha=$(curl -sI --max-time 5 "$base/" | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}')
+  if [ "$rc" = 0 ]; then add=staging:e2e; rm_=staging:e2e-failed
+  else                   add=staging:e2e-failed; rm_=staging:e2e; fi
+  gh pr edit "$PR" --repo "$repo" --add-label "$add" --remove-label "$rm_" >/dev/null 2>&1 \
+    || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 || true
+  echo "  #$PR <- $add  (observed on $base at build ${sha:-unknown})"
+fi
 exit $rc

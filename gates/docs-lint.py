@@ -25,7 +25,11 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # fixtures are DELIBERATELY malformed -- they are the gate's negative test, so
 # scanning them would make the gate permanently red.
-SKIP = {".git", "node_modules", "worktrees", ".hypothesis", "__pycache__", "fixtures"}
+# deployments/ holds git worktrees pinned to deployed SHAs, so every org file
+# in the repo appears once per environment -- linting them lints frozen copies
+# of the same documents against builds nobody can edit.
+SKIP = {".git", "node_modules", "worktrees", ".hypothesis", "__pycache__",
+        "fixtures", "deployments"}
 
 
 def org_files():
