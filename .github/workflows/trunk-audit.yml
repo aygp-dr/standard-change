@@ -1,0 +1,25 @@
+name: trunk-audit
+on:
+  push:
+    branches: [main]
+permissions: {contents: read, issues: write}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}"}
+    steps:
+      - name: a force push overwrote history
+        if: github.event.forced
+        run: |
+          gh issue comment 1 --body "FORCE PUSH to main at $(date -u +%FT%TZ) by ${{ github.actor }}: before=${{ github.event.before }} after=${{ github.event.after }}. A ruleset would have blocked this; on this plan it can only be recorded, and the overwritten objects may already be unreachable."
+          echo "::error::force push to main detected"
+      - name: a commit arrived without a pull request
+        if: "!github.event.forced"
+        run: |
+          for sha in $(echo '${{ toJson(github.event.commits.*.id) }}' | jq -r '.[]?'); do
+            n=$(gh api "repos/${{ github.repository }}/commits/$sha/pulls" \
+                  -H "Accept: application/vnd.github.groot-preview+json" --jq 'length' 2>/dev/null || echo 0)
+            [ "$n" -gt 0 ] || {
+              gh issue comment 1 --body "DIRECT PUSH to main: \`$sha\` by ${{ github.actor }} has no associated pull request. Every change is supposed to be a PR (spec.org, Vocabulary)."
+              echo "::warning::$sha reached main without a PR"; }
+          done
