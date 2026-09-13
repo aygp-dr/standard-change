@@ -169,7 +169,7 @@ export function render(path, catalogue = loadCatalogue()) {
 
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
-export const BACKGROUND = '#fff4e0';
+export const BACKGROUND = '#ece2ff';
 
 // An error page should not look like a page that worked. pdp renders the same
 // chrome whether it found the product or not, so a 404 and a 200 were
