@@ -7,7 +7,7 @@
       "/checkout/payment",
       "/checkout/confirm"
     ],
-    "health": "/checkout",
+    "health": "/__health/checkout",
     "journeys": [
       "checkout"
     ]
@@ -26,7 +26,7 @@
       "/statics/"
     ],
     "fallthrough": true,
-    "health": "/",
+    "health": "/__health/core",
     "journeys": [
       "home",
       "login",
@@ -43,7 +43,7 @@
     "probes": {
       "/p/:sku": "/p/SKU123"
     },
-    "health": "/p/SKU123",
+    "health": "/__health/pdp",
     "journeys": [
       "pdp",
       "add-to-cart"
@@ -59,7 +59,7 @@
     "probes": {
       "/c/:category": "/c/shoes"
     },
-    "health": "/search?q=ping",
+    "health": "/__health/plp",
     "journeys": [
       "search"
     ]
@@ -71,7 +71,7 @@
       "/api/catalog",
       "/api/cart"
     ],
-    "health": "/api/catalog",
+    "health": "/__health/mock",
     "journeys": [],
     "role": "external-service",
     "description": "Stands in for an EXTERNAL service the storefront depends on (catalog and cart APIs). Not a test double: no call assertions, no verification. It is a stub backend so the four apps have something real to talk to."
