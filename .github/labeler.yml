@@ -1,25 +1,17 @@
-# THE LABELLER OWNS TWO KINDS OF LABEL, and app:* is TRANSITIVE.
+# app:* IS THE DECLARATION. A change to shared/ marks every app, because
+# shared/ is pinned by every app and CI/CD will redeploy all of them.
 #
-#   shared   a direct fact: this change touches the shared surface
-#   app:*    derived, from EITHER of two sources:
-#              (a) the app's own file glob          -- direct
-#              (b) the presence of `shared`         -- transitive
+# Considered and rejected: a separate `shared` label with app:* derived
+# transitively from it. It carried strictly more information -- you could tell
+# a four-app change from a shared-surface change implying four apps -- and it
+# was worse, because `shared` means nothing to someone reading their first PR
+# here. `app:core app:plp app:pdp app:checkout` needs no glossary: it says CI
+# is going to push all four. Declarative beats derivable.
 #
-# Both are owned by the labeller and neither may be hand-edited; labeler:skip
-# hands both back to a human at once (change/label-owners.tsv).
-#
-# `shared` exists as its own label so the transitivity is VISIBLE. Inlining
-# shared/** into each app's glob produces the same four app:* labels and gives
-# a reader no way to tell a four-app change from a shared-surface change that
-# implies four apps -- and those need different review. The label says which.
-#
-# This is the fix for a manifest that used to lie: editing shared/oneui.js
-# produced a PR with NO app:* label at all, the highest-blast-radius change in
-# the repo declaring it touched nothing deployable.
-shared:
-  - changed-files:
-      - any-glob-to-any-file: shared/**
-
+# To touch shared/ WITHOUT redeploying everything, add labeler:skip and set the
+# app:* labels by hand -- one, or none. That is the same escape hatch as every
+# other derived label, and it is visible on the PR rather than implied by an
+# absent marker.
 app:core:
   - changed-files:
       - any-glob-to-any-file:

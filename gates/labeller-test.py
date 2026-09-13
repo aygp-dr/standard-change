@@ -79,16 +79,13 @@ SCENARIOS = [
     # change in the repo declaring it touched nothing deployable, and groups.sh
     # then returned empty so the queue refused it for entirely the wrong reason.
     ("L12", ["shared/oneui.js"],
-             {"shared", "app:core", "app:plp", "app:pdp", "app:checkout",
-              "change:standard"}),
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
     # ...and mock does NOT come along. It is an external service stub under
     # external/, not something we deploy, so it does not pin our shared surface.
     ("L13", ["shared/oneui.js", "apps/core/x.js"],
-             {"shared", "app:core", "app:plp", "app:pdp", "app:checkout",
-              "change:standard"}),
-    # `shared` is a DIRECT fact and must not appear without a shared/ file --
-    # otherwise the transitive rule has no visible cause and a reader cannot
-    # tell why four apps are labelled.
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
+    # A shared/ change and an all-four-apps change carry the SAME labels, on
+    # purpose. The label says what CI will do, not why it decided to.
     ("L15", ["apps/core/a", "apps/plp/a", "apps/pdp/a", "apps/checkout/a"],
              {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
     # external/ is somebody else's service. Touching the stub is not a change to
