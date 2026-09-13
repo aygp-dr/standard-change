@@ -171,27 +171,26 @@ case "${1:-}" in
       fi
       after="$AT"
     elif [ "${QUEUE:-1}" = 1 ]; then
-      # FIRST FIT, NOT LAST. This took the MAX end among open windows, so one
-      # far-future designated booking dragged every later queued change behind
-      # it: booking #40 for Saturday 2am pushed two ten-minute changes from
-      # tonight into next weekend. ADR 0003 says first-fit and this was not.
+      # FIRST FIT, AND DELIBERATELY NOTHING CLEVERER (ADR 0003).
       #
-      # Now: walk the open windows in time order and take the first gap from now
-      # that is wide enough. The gaps designated bookings leave are usable --
-      # that is the point of leaving them.
+      # After the latest end among open windows, or now, whichever is later.
+      # One rule, no modes, no gap-filling, no priority. It is predictable,
+      # which is worth more here than it is optimal: a person owns scheduling
+      # and `--at` is how they say otherwise.
+      #
+      # Two smarter versions were tried and both were worse. Filling the first
+      # wide-enough gap let a cancellation open a hole that the next booking
+      # jumped into, ahead of changes already queued. Distinguishing queued from
+      # designated placement needed a field every existing window lacked, so
+      # they all defaulted to one mode and the bug came back wearing a flag.
+      #
+      # The known cost, accepted: a far-future designated slot pushes later
+      # auto-bookings past it. The fix for that is `--at`, which is a person
+      # deciding -- which is the arrangement we want anyway.
       after=$(echo "$cur0" | jq -r --arg env "${CHANGE_ENV:-staging}" \
-        --argjson mins "$mins" --arg now "$(now)" '
-        def mins2sec: . * 60;
-        [ .windows[] | select(.env==$env and .result==null) | {start,end} ]
-        | sort_by(.start)
-        | reduce .[] as $w ($now;
-            if $w.end <= . then .
-            elif ($w.start | . ) > . and (($w.start|fromdate) - (.|fromdate)) >= ($mins|mins2sec)
-              then .
-            else $w.end end)
-        ' 2>/dev/null || echo '')
-      [ "$after" = "null" ] && after=''
+        '[.windows[]|select(.env==$env and .result==null)|.end]|max // empty')
     fi
+
     # shellcheck disable=SC2046  # the split IS the point: slot() prints two fields
     set -- $(slot "$mins" "$after"); start="$1"; end="$2"
     env="${CHANGE_ENV:-staging}"
@@ -223,8 +222,9 @@ case "${1:-}" in
     new=$(echo "$cur" | jq --arg id "$id" --argjson pr "$pr" --arg g "$groups" \
       --arg env "$env" --arg s "$start" --arg e "$end" --arg sha "$sha" \
       --arg url "$url" --arg t "$(now)" \
+      --arg mode "$([ -n "$AT" ] && echo designated || echo queued)" \
       '.windows += [{id:$id, pr:$pr, groups:$g, env:$env, start:$s, end:$e,
-                     sha:$sha, url:$url, booked_at:$t, result:null}]')
+                     sha:$sha, url:$url, booked_at:$t, mode:$mode, result:null}]')
     write_sched "$old" "$new"
     printf '%s' "$id" > .change-event-id
 

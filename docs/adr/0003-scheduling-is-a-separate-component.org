@@ -63,6 +63,42 @@ nobody was using; a five-minute slot could not hold a five-minute soak plus the
 walk. None of those are placement problems, and a better placement algorithm
 would not have found any of them.
 
+* The API is three verbs, and that is the whole point
+
+: block   <change> <groups> <minutes> [--at <instant>] [--short]
+: windows <change> [env]
+: reap
+
+Everything else — =current=, =check=, =close=, =list=, =freeze= — already
+existed for the guards to read. Placement is *one rule*: after the latest end
+among open windows, or now, whichever is later. No modes, no gap-filling, no
+priority.
+
+Two cleverer versions were tried on 2026-09-13 and both were worse:
+
+- *First wide-enough gap from now.* A cancellation opens a hole and the next
+  booking drops into it, ahead of changes that queued first. Queue-jumping, and
+  invisible — both bookings look correct in isolation.
+- *Distinguish queued from designated placement.* Needs a field every existing
+  window lacks, so they all default to one mode and the bug returns wearing a
+  flag.
+
+The known cost is accepted: *a far-future designated slot pushes later
+auto-bookings past it*. Booking a release for Saturday moved two ten-minute
+changes from tonight into next weekend. The fix is =--at=, which is a person
+deciding — which is the arrangement we wanted.
+
+*Predictable beats optimal here.* A person owns scheduling; the scheduler's job
+is to not surprise them.
+
+** Duration is the one thing that is not a person's guess
+
+=block= refuses a window that cannot hold the work: deploy and settle 3m + the
+soak + 1m per extra app + 10m for control-plane, derived from =SOAK_SECONDS= so
+changing the hold moves the floor. A 5m slot cannot hold a 5m soak, and an
+afternoon of bookings lapsed at exactly the point the hold ended before this
+existed. =--short= overrides, loudly.
+
 * Consequences
 
 - The queue is FIFO with holes. Anyone who wants a particular hour asks for it.
