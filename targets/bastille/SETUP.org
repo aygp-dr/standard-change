@@ -97,7 +97,7 @@ sequenceDiagram
     F-->>Op: production -> green (atomic)
     Op->>F: gates/health.sh through :9100
     Note over Op,F: no convergence window: one estate, one build
-#+end_example
+#+end_src
 
 ** The commands
 

@@ -1,0 +1,18 @@
+#+TITLE: deliberately malformed
+* One
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    A->>B: released; waiting PRs told to rebase
+    A->>B: see PR #101
+#+end_example
+* Two
+#+begin_src mermaid
+flowchart LR
+    A --> B
+#+end_src
+* Three
+#+begin_src org
+* nope
+#+end_src
+* Four
+See [[./nonexistent.org][this]]

@@ -1,0 +1,6 @@
+#+TITLE: well-formed but missing never-export
+* One
+#+begin_src mermaid
+flowchart LR
+    A --> B
+#+end_src

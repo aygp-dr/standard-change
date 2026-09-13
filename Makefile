@@ -4,7 +4,7 @@
 APPS := $(notdir $(wildcard apps/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
-        audit audit-selftest pbt pbt-random simulate simulate-gates \
+        audit audit-selftest docs pbt pbt-random simulate simulate-gates \
         port-alloc port-free ports clean
 
 help:
@@ -62,6 +62,7 @@ audit-selftest:
 	  && { echo "pbt: model cannot find scenario D4; it verifies nothing"; exit 1; } || true
 	@echo "pbt-pipeline: both directions confirmed"
 audit:           ; @./gates/audit-controls.py
+docs:            ; @./gates/docs-lint.py
 pbt:             ; @./gates/pbt-pipeline.py --exhaustive
 pbt-random:      ; @./gates/pbt-pipeline.py
 simulate-gates:  ; @./gates/simulate-gates.py
