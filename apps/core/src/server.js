@@ -9,6 +9,8 @@ const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
 const BLOCK = process.env.BLOCK || '?';
+// Loopback by default; set BIND=0.0.0.0 to reach a block from another host.
+const BIND = process.env.BIND || '127.0.0.1';
 
 export function render(path) {
   return { app: meta.app, path, block: BLOCK, sha: SHA, routes: meta.routes };
@@ -28,6 +30,6 @@ if (isMain) createServer((req, res) => {
     'x-block': BLOCK,
   });
   res.end(body);
-}).listen(PORT, '127.0.0.1', () => {
+}).listen(PORT, BIND, () => {
   console.log(`core listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });

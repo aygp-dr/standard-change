@@ -338,6 +338,25 @@ Each git worktree owns a contiguous block of ten ports. The router (nginx) liste
 
 Ports 10006–10009 (and the same offsets in each block) are unallocated.
 
+** Reaching a block from another host
+
+Ports bind to =127.0.0.1= by default; =BIND=0.0.0.0= opts a block into the LAN.
+That is necessary but *not sufficient* on hydra, where =pf= is enabled and
+passes =192.168.86.0/24= only to ssh, 2812, 3000, =7000:7699= and =8000:9999=
+[E, 2026-09-13]. *The default base of 10000 falls outside every open range*, so
+a correctly-bound block is still refused — and the refusal is immediate, which
+reads exactly like nothing listening.
+
+=PORT_BASE= therefore selects the base: =PORT_BASE=9000= puts block =n= at
+=9000 + 10n=, inside the range =pf= already allows, with no firewall change.
+The blocks are otherwise identical.
+
+: PORT_BASE=9000 ./change/ports.sh alloc
+: BIND=0.0.0.0  ./change/ports.sh run-apps      # -> router on 9000 + 10n
+
+Observed: blocks 1 and 2 serving on =:9010= and =:9020=, each reporting its own
+build sha, =gates/e2e.sh= green against both over the LAN address.
+
 ** Registry
 
 =ports.tsv= is the CMDB for worktrees. =make port-alloc= appends a row for the current worktree path and writes =.env.ports= in the worktree. =make port-free= removes the row.

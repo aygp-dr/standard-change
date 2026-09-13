@@ -6,6 +6,10 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # The registry is the CMDB for the whole clone, so it lives in the MAIN
 # worktree, not in each one. git worktree list prints the main checkout first.
 MAIN=$(git -C "$ROOT" worktree list --porcelain | awk '/^worktree /{print $2; exit}')
+# Block base. 10000 is loopback-only on hydra: pf passes 192.168.86.0/24 to
+# 8000:9999 and 7000:7699 but not 10000+. Set PORT_BASE=9000 for a block that
+# is reachable from another host without touching the firewall.
+BASE0="${PORT_BASE:-10000}"
 REG="${PORTS_REGISTRY:-$MAIN/ports.tsv}"
 WT=$(git -C "$ROOT" rev-parse --show-toplevel)
 BR=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)
@@ -27,7 +31,7 @@ case "${1:-}" in
       printf '%s\t%s\t%s\t%s\n' "$b" "$WT" "$BR" "$(date -u +%FT%TZ)" >> "$REG"
       echo "allocated block $b"
     fi
-    base=$((10000 + 10 * b))
+    base=$((BASE0 + 10 * b))
     { echo "BLOCK=$b"; echo "BASE_PORT=$base"
       for a in $(jq -r '.[].app' "$ROOT/router/routes.json"); do
         off=$(jq -r --arg a "$a" '.[]|select(.app==$a)|.port_offset' "$ROOT/router/routes.json")

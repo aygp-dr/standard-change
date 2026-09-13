@@ -10,6 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const apps = JSON.parse(readFileSync(join(here, 'routes.json'), 'utf8'));
 const BASE = Number(process.env.BASE_PORT);
 const BLOCK = process.env.BLOCK || '?';
+const BIND = process.env.BIND || '127.0.0.1';
 if (!BASE) throw new Error('BASE_PORT required');
 
 // longest-prefix wins, so /checkout/payment beats /checkout and / is last
@@ -38,6 +39,6 @@ createServer((req, res) => {
     res.end(JSON.stringify({ error: 'upstream down', app: hit.app, port: hit.port, detail: e.code }));
   });
   req.pipe(up);
-}).listen(BASE, '127.0.0.1', () => {
+}).listen(BASE, BIND, () => {
   console.log(`router block ${BLOCK} on ${BASE} -> ${table.map((t) => `${t.prefix}=${t.port}`).join(' ')}`);
 });
