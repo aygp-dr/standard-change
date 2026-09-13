@@ -1,0 +1,73 @@
+#+TITLE: Two rounds of ten, and what each is for
+#+DATE: 2026-09-13
+
+* Round one — the positive path, ten times
+
+Ten small real changes, one at a time, through the whole flow: book, preflight,
+staging, observe, guard 4, idle colour, cutover, guard 5, settle.
+
+*Measured*: one complete cycle is *71 seconds* — 27s to staging-green, 44s
+through production and settle. Eight more is about ten minutes of machine time.
+
+*What it is for*: the happy path is the only path that has ever run. Ten
+repetitions say whether it is stable or whether run 1 was luck.
+
+*What it already found*, in the first two runs alone:
+- =observe.sh= wrote the label but not the record, so guard 4 printed "label
+  present" and "no observation recorded" two lines apart
+- the record it did write used an instrument name matching nothing
+- =release:start= survived settlement
+- every branch would have *reverted* two control-plane files, including an
+  emergency-bypass fix committed twenty minutes earlier
+- a repurposed branch carried a stray hunk in an app its title never mentioned,
+  which would have deployed that app on the authority of a change about another
+
+*Expected yield from runs 3–10*: low, and that is the point. If they all pass
+identically the happy path is stable. A finding late in the run is worth more
+than the same finding early, because it means the defect is intermittent.
+
+* Round two — freezes and emergencies, ten times
+
+The same ten changes, interrupted. *This is the untested half* — every cleanup
+in this pipeline runs only on the success path (=docs/adr/0001=, "we have only
+ever walked the positive case", issue #37).
+
+** The sequence to practise
+
+For each run, interrupt at a different point and then recover:
+
+| # | interrupt at        | with                        | then                       |
+|---+---------------------+-----------------------------+----------------------------|
+| 1 | before booking      | =freeze=                    | clear, re-book             |
+| 2 | after booking       | =freeze=                    | clear, resume              |
+| 3 | before staging      | =emergency= on the estate   | clear, restart             |
+| 4 | mid-staging         | =freeze=                    | clear, re-run the gates    |
+| 5 | after staging green | =emergency=                 | clear, revalidate          |
+| 6 | before cutover      | =freeze=                    | clear, re-verify the idle colour |
+| 7 | after cutover       | =emergency=                 | settle or abort?           |
+| 8 | at settlement       | =freeze=                    | does settle complete?      |
+| 9 | an =itil:emergency= change *during* a freeze | — | it should proceed |
+| 10 | two emergencies at once | —                       | what orders them?          |
+
+** The questions each one answers
+
+Every row is a state nobody has produced. The ones I expect to hurt:
+
+- *#7* — production is already serving the change when the estate closes. There
+  is no verb for "stop, but it is already out there". =switch.sh= can roll back
+  and nothing decides whether it should.
+- *#8* — =settle.sh= is not reentrant and has no abort. It died mid-run once
+  today on an undefined variable and left a change merged with labels
+  uncleared; a freeze arriving at the same point is the same shape with a
+  cause.
+- *#10* — nothing orders two emergencies. =itil:emergency= grants an exemption
+  from the estate's blockers, so two of them exempt each other and the berth
+  decides, arbitrarily.
+- *F5 from PR #48* — an emergency waiting on a berth held by a change that is
+  waiting on the emergency. A deadlock with nothing to release it.
+
+** What round two is really testing
+
+Not whether the guards refuse — they do, and round one shows it. *Whether the
+estate can be put back.* A pipeline that stops safely and cannot resume is a
+pipeline that turns every interruption into an incident.
