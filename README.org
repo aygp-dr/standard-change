@@ -31,6 +31,12 @@ the promotion guards.
 
 [[file:screenshots/idp-release-dashboard.png]]
 
+/v1.0.0 · =bc61b6b=. The page reports its own build in the header, for the same
+reason it reports everyone else's: it is the one row a reader cannot check any
+other way — "is this telling me about today's rules?" The SHA is the commit
+that last touched the dashboard's own source, not =HEAD=, and it is read once
+at startup, because a running process is serving the code it started with./
+
 The IDP release dashboard (=idp-dashboard/server.mjs=, port 9999) is the fastest
 way to read the model, because every concept in this repo is a column on it.
 
