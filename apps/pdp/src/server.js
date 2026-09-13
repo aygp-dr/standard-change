@@ -220,7 +220,55 @@ This product has not gone away; try again shortly.</p>
   const p = d.product;
   return `<h2>${esc(p.name)}</h2>
 <p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability)}</p>
-<p>SKU <code>${sku}</code></p>`;
+<p>SKU <code>${sku}</code></p>
+<p>${addToCart(p.sku)}</p>`;
+}
+
+// ---- add to cart ------------------------------------------------------------
+//
+// A LINK, not a form and not a script. GET for the same reason /search is a
+// GET: the result is shareable, cacheable by nothing in particular, and
+// probeable by a gate with curl -- gates/e2e.sh walks the add-to-cart journey
+// with `get`, and a journey whose first hop needs a form submission is a
+// journey no gate can walk. It also means the control works on a page with no
+// JavaScript, which is every page this estate serves.
+//
+// pdp does NOT implement the cart. /cart is core's route (apps/core/routes.json
+// declares it) and this link is the whole of pdp's part in the journey: naming
+// the product and handing it across the boundary in the URL. What core does
+// with `add` is core's contract, and pdp asserting anything about it here would
+// be this app testing someone else's app.
+//
+// Only rendered from the found branch above. A page that has just said "we have
+// no product SKU999" or "we cannot tell you right now" must not then offer to
+// put it in a basket -- the two no-product branches return before reaching this.
+//
+// TWO ENCODINGS, TWO CONTEXTS, and they are not interchangeable:
+//   encodeURIComponent -- the SKU is a query PARAMETER VALUE. A SKU containing
+//     & or # or a space would otherwise end the parameter early and core would
+//     receive a different SKU than the one on the page.
+//   esc -- the result is then an HTML ATTRIBUTE VALUE, and this layer is not
+//     decoration. encodeURIComponent is entitled to leave ' ! ~ * ( ) raw
+//     because they are legal in a URI component, so an apostrophe in a SKU
+//     reaches the attribute unencoded and esc() is the only thing that turns it
+//     into &#39;. cart.test.js pins that case specifically, because every other
+//     payload in that file is made inert by percent-encoding alone and a suite
+//     without it would pass with esc() deleted.
+//   Neither encoding subsumes the other: drop esc() and ' goes through raw;
+//     drop encodeURIComponent and & ends the parameter, so core is handed a
+//     different SKU than the page is showing. Issue #13 was a live reflected
+//     XSS in this repo; an href gets no exception from the rule that the
+//     renderer escapes at the point of interpolation.
+//
+// `p.sku` is the catalogue's own copy of the SKU rather than `d.sku` off the
+// path. Those two are equal by construction today (render() only sets found
+// when p.sku === sku exactly, so no test can tell them apart, and none claims
+// to), and the catalogue's copy is the right one to write down the moment that
+// stops being true -- a case-insensitive or normalising lookup would make
+// /p/sku123 a hit whose cart link must still say SKU123.
+export function addToCart(sku) {
+  const href = `/cart?add=${esc(encodeURIComponent(sku))}`;
+  return `<a class=cart href="${href}">Add to cart</a>`;
 }
 
 // `port` is the port this process is ACTUALLY answering on -- the caller takes
