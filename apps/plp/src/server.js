@@ -142,7 +142,7 @@ export const BACKGROUND = '#e6f7ee';
 // versus "we cannot tell you right now".
 export function panel(d) {
   if (d.results === undefined) return '';   // not a category page
-  const name = esc(d.category || '(none)');
+  const name = esc(d.category || '(no category)');
   if (d.catalogue === 'unavailable')
     return `<h2>No results</h2>
 <p>We cannot show <code>${name}</code> right now — the catalogue is unavailable.
