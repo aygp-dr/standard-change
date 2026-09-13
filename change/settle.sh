@@ -47,9 +47,20 @@ colour=$(curl -sI --max-time 5 "$FRONT/" | tr -d '\r' | awk 'tolower($1)=="x-col
 if [ "$served" = "$short" ]; then ok "production is serving $short ($colour), asked just now"
 else bad "production serves '${served:-nothing}', not $short -- this change is not live"; fi
 
-# 2. Every required observation must be present. A change cannot complete on
-#    the strength of observations that were withdrawn.
-for o in staging:e2e staging:smoke staging:uat production:healthy; do
+# 2. Require only the observations this script CANNOT take for itself.
+#
+#    production:healthy is deliberately NOT in this list. Step 1 above asks
+#    production what it is serving, right now, from a host that can see it --
+#    that IS guard 5, re-derived, and it is strictly better evidence than a
+#    label. Requiring the label as well let merge-on-healthy.yml, which cannot
+#    reach production at all, veto a settlement by withdrawing a measurement it
+#    could not take. That happened three times on #9.
+#
+#    The rule this follows: prefer the observation you can make now over the
+#    record of one somebody else made. Require the label only where the
+#    measurement is NOT repeatable -- staging:uat above all, because a person
+#    used the site and no script can re-run that.
+for o in staging:e2e staging:smoke staging:uat; do
   case " $labels " in
     *" $o "*) ok "$o" ;;
     *)        bad "$o missing -- cannot complete a change whose evidence is gone" ;;
@@ -57,6 +68,24 @@ for o in staging:e2e staging:smoke staging:uat production:healthy; do
 done
 
 [ "$rc" = 0 ] || { echo; echo "  NOT settled"; exit 1; }
+
+# 2b. Was this change deployed inside a window? Recorded, not enforced, and the
+#     distinction is deliberate: guard 3 enforces at ACTIVATION, which is the
+#     moment where refusing is still cheap. By settlement the estate is already
+#     serving the change, so refusing here would leave production ahead of
+#     trunk -- a worse state than the one being objected to.
+#
+#     So this reports. CLAUDE.md: "Record deviations in the commit message and
+#     the review ledger issue while the spec is at 0.x." A deviation that only
+#     the person who committed it knows about is not recorded.
+DEVIATION=''
+if win=$(./change/schedule.sh current "$pr" staging 2>/dev/null); then
+  ok "deployed inside window $win"
+else
+  last=$(./change/schedule.sh list 2>/dev/null | grep -c "#$pr " || echo 0)
+  DEVIATION="**Deployed outside any change window.** \`schedule.sh current\` finds no open window covering this settlement, and none was open at cutover. $last window(s) were booked for this change and all are closed. Guard 3 exists in \`change/activate.sh\` and was never reached, because the deployment was hand-driven step by step rather than run through activation — the guard was present and bypassed by not being invoked. No production window was ever booked at all: \`CHANGE_ENV\` defaults to staging."
+  printf '  DEVIATION  deployed outside any window -- recorded in the PIR\n'
+fi
 
 # 3. Merge. Production is already serving this, so trunk trailing it is the
 #    divergence merge-on-healthy exists to prevent -- re-checked here because
@@ -90,7 +119,11 @@ gh pr comment "$pr" --repo "$R" --body "## Post-implementation review
 
 Worth recording, because it was found by walking this change: guard 5 in manifest mode passed on \`deadbee\`, a SHA that does not exist in this repository — the deployer wrote the manifest the guard read back. This change was verified in header mode against \`targets/node\`, which refuses a SHA that does not resolve. The manifest-mode defect is unfixed.
 
-Rollback: \`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" >/dev/null
+${DEVIATION:+## Deviation
+
+$DEVIATION
+
+}Rollback: \`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" >/dev/null
 ok "PIR posted -- the evidence now survives the labels"
 
 # 5. Clear. Two different reasons, and the second is the load-bearing one.
