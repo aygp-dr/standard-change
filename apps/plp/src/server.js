@@ -166,12 +166,39 @@ export function renderHtml(path, catalogue = loadCatalogue(), port) {
   return page({ ...d, host: HOST, port }, ESTATE, BACKGROUND, panel(d));
 }
 
+// A DEDICATED HEALTH ROUTE, not a business route.
+//
+// Guard 5 fetches whatever routes.json calls `health` and requires 200. Every
+// app used a real page for that, and it broke twice: pdp's /p/PING when pdp
+// started validating SKUs (#24), and plp's /search?q=ping would break the
+// moment search actually searches (#35). A health check pinned to a product
+// feature fails whenever that feature gains an opinion.
+//
+// Under /__, which the router reserves for the estate's own endpoints, so it
+// can never collide with a route an app declares. Deliberately NOT in
+// routes.json's `routes` array: it is not part of the contract the estate
+// offers, it does not appear in the nav, and no journey crosses it.
+//
+// It reports what this process knows about itself and nothing else. It does
+// not check downstream apps -- an app that reports unhealthy because a SIBLING
+// is down turns one outage into five, and makes convergence unmeasurable.
+function healthDoc() {
+  return { app: meta.app, status: 'ok', sha: SHA, block: BLOCK,
+           pid: process.pid, uptime_s: Math.round(process.uptime()) };
+}
+
 // Only listen when run directly. Importing this module (as the unit tests do)
 // must not bind a port, or the test process never exits.
 const isMain = process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMain) createServer((req, res) => {
+  if (req.url.split('?')[0] === `/__health/${meta.app}`) {
+    res.writeHead(200, { 'content-type': 'application/json',
+                         'cache-control': 'no-store', 'x-build-sha': SHA,
+                         'x-app': meta.app, 'x-block': BLOCK });
+    return res.end(JSON.stringify(healthDoc(), null, 2));
+  }
   const wantsHtml = /text\/html/.test(req.headers.accept || '');
   // One catalogue read per request, shared by both representations, so the
   // status line and the body cannot describe two different reads of the file.

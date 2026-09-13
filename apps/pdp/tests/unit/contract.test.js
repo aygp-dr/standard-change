@@ -67,18 +67,32 @@ test('every declared probe names a declared route and really exists', () => {
 // naming a product the catalogue does not carry reads as "pdp is down".
 // `health` was /p/PING while every SKU was a 200; it is a real product now
 // because pdp answers 404 for one it does not have.
-test('the health path is a product pdp actually serves', () => {
-  assert.equal(render(meta.health.split('?')[0]).found, true,
-    `guard 5 fetches ${meta.health} and expects 200`);
+test('the health path is not a product at all, and that is the point', () => {
+  // Was: "the health path is a product pdp actually serves" -- added in #19
+  // when pdp's health had to move from /p/PING to /p/SKU123, because pdp had
+  // just learned to 404 unknown SKUs and guard 5 went red on a healthy estate
+  // (#24). That fix tied guard 5 to a specific PRODUCT existing in the
+  // catalogue: delete SKU123 and the estate reports unhealthy.
+  //
+  // The health path is now /__health/pdp, which depends on nothing in the
+  // catalogue. A product change can no longer take guard 5 down with it.
+  assert.equal(meta.health, '/__health/pdp');
+  assert.ok(!meta.health.startsWith('/p/'),
+    'the health path must not be a product URL -- deleting that SKU would take guard 5 down');
 });
 
-test('the health path is one of the declared routes', () => {
-  const hp = meta.health.split('?')[0];
-  const covered = meta.routes.some((x) => {
-    const prefix = x.replace(/:[^/]*/g, '');
-    return prefix === '/' ? hp === '/' : hp.startsWith(prefix);
-  });
-  assert.ok(covered, `health ${meta.health} is not covered by ${meta.routes}`);
+test('the health path is the reserved health route, not a business route', () => {
+  // Was: "the health path is one of the declared routes". That assertion was
+  // right about ROUTABILITY and wrong about how to get it -- it forced every
+  // app's health onto a business route, which broke pdp when it started
+  // validating SKUs (#24) and would break plp the moment search searches (#35).
+  //
+  // /__health/<app> is routed by the router directly and is deliberately not
+  // declared: it is not part of the contract the estate offers, so no product
+  // change can take guard 5 down with it.
+  assert.equal(meta.health, `/__health/${meta.app}`);
+  assert.ok(!meta.routes.includes(meta.health),
+    'the health route must NOT be a declared route -- it is not part of the contract');
 });
 
 test('port_offset fits inside a ten-port block', () => {

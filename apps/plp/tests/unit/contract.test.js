@@ -62,13 +62,18 @@ test('every declared probe names a declared route and really exists', () => {
   }
 });
 
-test('the health path is one of the declared routes', () => {
-  const hp = meta.health.split('?')[0];
-  const covered = meta.routes.some((x) => {
-    const prefix = x.replace(/:[^/]*/g, '');
-    return prefix === '/' ? hp === '/' : hp.startsWith(prefix);
-  });
-  assert.ok(covered, `health ${meta.health} is not covered by ${meta.routes}`);
+test('the health path is the reserved health route, not a business route', () => {
+  // Was: "the health path is one of the declared routes". That assertion was
+  // right about ROUTABILITY and wrong about how to get it -- it forced every
+  // app's health onto a business route, which broke pdp when it started
+  // validating SKUs (#24) and would break plp the moment search searches (#35).
+  //
+  // /__health/<app> is routed by the router directly and is deliberately not
+  // declared: it is not part of the contract the estate offers, so no product
+  // change can take guard 5 down with it.
+  assert.equal(meta.health, `/__health/${meta.app}`);
+  assert.ok(!meta.routes.includes(meta.health),
+    'the health route must NOT be a declared route -- it is not part of the contract');
 });
 
 test('port_offset fits inside a ten-port block', () => {

@@ -12,7 +12,7 @@
     "/statics/"
   ],
   "fallthrough": true,
-  "health": "/",
+  "health": "/__health/core",
   "journeys": [
     "home",
     "login",

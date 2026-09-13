@@ -1,8 +1,15 @@
 {
   "app": "pdp",
   "port_offset": 3,
-  "routes": ["/p/:sku"],
-  "probes": { "/p/:sku": "/p/SKU123" },
-  "health": "/p/SKU123",
-  "journeys": ["pdp", "add-to-cart"]
+  "routes": [
+    "/p/:sku"
+  ],
+  "probes": {
+    "/p/:sku": "/p/SKU123"
+  },
+  "health": "/__health/pdp",
+  "journeys": [
+    "pdp",
+    "add-to-cart"
+  ]
 }
