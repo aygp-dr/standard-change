@@ -1,0 +1,20 @@
+app:core:
+  - changed-files:
+      - any-glob-to-any-file: apps/core/**
+app:plp:
+  - changed-files:
+      - any-glob-to-any-file: apps/plp/**
+app:pdp:
+  - changed-files:
+      - any-glob-to-any-file: apps/pdp/**
+app:checkout:
+  - changed-files:
+      - any-glob-to-any-file: apps/checkout/**
+change:normal:
+  - changed-files:
+      - any-glob-to-any-file:
+          - router/**
+          - gates/**
+          - change/**
+          - targets/**
+          - .github/**

@@ -1,0 +1,39 @@
+name: deploy-production
+on:
+  pull_request:
+    types: [labeled]
+permissions: {contents: write, pull-requests: write, deployments: write}
+jobs:
+  deploy:
+    if: github.event.label.name == 'deploy:production'
+    runs-on: ubuntu-latest
+    concurrency: {group: production, cancel-in-progress: false}
+    environment: production          # require reviewers here for change:normal
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      # Guard 4: no production without a staging pass on THIS SHA, unless emergency.
+      - name: require staging pass or emergency
+        run: |
+          labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]')
+          echo "$labels" | jq -e 'index("staging:passed")' >/dev/null && exit 0
+          echo "$labels" | jq -e 'index("change:emergency")' >/dev/null || {
+            echo "::error::no staging:passed on head SHA and not change:emergency"; exit 1; }
+          gh api "repos/${{ github.repository }}/pulls/$PR/reviews" \
+            --jq '[.[]|select(.state=="APPROVED")]|length' | grep -qv '^0$' || {
+            echo "::error::change:emergency requires an approving review"; exit 1; }
+      - run: ./gates/preflight.sh production
+      - run: ./change/lock.sh acquire "$PR" production
+      - run: ./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh production "$(./change/groups.sh "$PR")"
+      - name: health check
+        run: ./gates/health.sh "${{ vars.PRODUCTION_URL }}" "${{ github.event.pull_request.head.sha }}"
+      - if: failure()
+        run: ./targets/${{ vars.DEPLOY_TARGET }}/rollback.sh production
+      - if: always()
+        run: ./change/pir.sh "$PR" "${{ job.status }}"
+      - if: success()
+        run: |
+          gh pr edit "$PR" --add-label production:healthy --add-label deployed:production
+          ./change/release.sh "$PR"
+      - if: always()
+        run: ./change/lock.sh release

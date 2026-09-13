@@ -1,0 +1,24 @@
+name: main-moved
+on:
+  push:
+    branches: [main]
+permissions: {contents: read, pull-requests: write}
+jobs:
+  invalidate:
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}"}
+    steps:
+      - uses: actions/checkout@v4
+      - name: expire staging verdicts that main has outrun
+        run: |
+          for pr in $(gh pr list --state open --label staging:passed --json number -q '.[].number'); do
+            state=$(gh pr view "$pr" --json mergeStateStatus -q .mergeStateStatus)
+            case "$state" in
+              BEHIND|BLOCKED|DIRTY)
+                gh pr edit "$pr" --remove-label staging:passed \
+                                 --remove-label deploy:production \
+                                 --remove-label deploy:staging
+                gh pr comment "$pr" --body "\`main\` moved (${{ github.sha }}). Your staging pass described a tree that no longer composes with main, so it has been withdrawn along with the staging claim. Rebase onto \`main\` and re-add \`deploy:staging\`."
+                ;;
+            esac
+          done

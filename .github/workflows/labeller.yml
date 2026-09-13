@@ -1,0 +1,16 @@
+name: labeller
+on: [pull_request_target]
+permissions: {contents: read, pull-requests: write}
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
+      - name: drop stale staging verdicts on a new push
+        if: github.event.action == 'synchronize'
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          gh pr edit "${{ github.event.number }}" \
+            --remove-label staging:passed --remove-label staging:failed || true

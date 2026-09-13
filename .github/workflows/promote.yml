@@ -1,0 +1,27 @@
+name: promote
+on:
+  pull_request:
+    types: [labeled]
+permissions: {contents: read, pull-requests: write, checks: read}
+jobs:
+  promote:
+    if: github.event.label.name == 'staging:passed'
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      # Guard 2: every gate green on THIS head SHA. No bypass, emergency included.
+      - name: require gates green on head SHA
+        run: |
+          sha="${{ github.event.pull_request.head.sha }}"
+          bad=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
+                 --jq '[.check_runs[] | select(.name|test("^(gate-selftest|lint|test|e2e)")) 
+                        | select(.conclusion != "success")] | length')
+          total=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
+                 --jq '[.check_runs[] | select(.name|test("^gate-selftest$"))] | length')
+          [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha"; exit 1; }
+          [ "$total" -ge 1 ] || { echo "::error::gate-selftest never ran on $sha; gate results are void"; exit 1; }
+      - name: promote
+        run: |
+          gh pr edit "$PR" --add-label deploy:production
+          gh pr comment "$PR" --body "Staging authorizing run passed on \`${{ github.event.pull_request.head.sha }}\`. Promoting to production."
