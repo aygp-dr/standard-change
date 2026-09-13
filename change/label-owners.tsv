@@ -50,6 +50,8 @@ blocked:queue	change/queue.sh	no	no	no	set and cleared by the queue
 blocked:lock	change/lock.sh	no	no	no	set and cleared by the lock
 blocked:diverged	workflow	no	no	yes	a human may clear it after rebasing
 blocked:freeze	gates/preflight.sh	no	no	no	set and cleared by preflight
+freeze	human	no	yes	yes	ESTATE STATE: ordinary change is suspended. A property of the world, not of any change. Read by gates/preflight.sh and written by nobody in-tree, which is why gates/label-audit.py cannot see it -- it audits WRITES, and this label is only ever read
+emergency	human	no	yes	yes	ESTATE STATE: an emergency is in flight. Blocks standard and normal changes and grants NO exemption to whatever PR carries it. Separate from itil:emergency because an emergency handled outside the pipeline has no PR to classify, and hanging the CLASS on a PR to represent it would hand that PR a bypass of every blocker
 itil:emergency	human	yes	yes	yes	bypasses the queue; a person must own declaring an emergency
 staging:in-progress	workflow	no	no	no	action in flight
 production:e2e-failed	gates/e2e.sh --pr	no	no	no	observation
