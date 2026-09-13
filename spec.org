@@ -100,8 +100,16 @@ Two of these are load-bearing and routinely got wrong:
   typed. (Scenario L10.)
 - *deployment record is attested, not self-reported.* The difference is who
   says it happened: the platform, or the job that wanted it to. A job claiming
-  its own success is not evidence, and any platform lacking real deployment
-  records weakens guard 4 at exactly this point.
+  its own success is not evidence.
+
+  *And GitHub's Deployments API does not meet this bar* [E, 2026-09-13]. A
+  deployment is created by a caller (=creator= is a user or app) and its status
+  is POSTed to =statuses_url= by that same caller; with Actions environments
+  the state mirrors *the job's* status. GitHub never contacts the target. So
+  the row above records intent, exactly like a Release does — it is a
+  self-report with good provenance about *who claimed it*, not evidence about
+  *what is running*. Capability C6 is therefore *unmet on GitHub*, not merely
+  awkward, and guard 4 rests on guard 5's sampling instead.
 
 ** The guards as predicates
 
@@ -760,16 +768,32 @@ governs a change.
 # still only evidence, not proof -- see spec.org, What completes a deployment.
 set -eu
 base="$1"; want="$2"; samples="${3:-${HEALTH_SAMPLES:-5}}"; rc=0
+MODE="${HEALTH_MODE:-header}"   # header | manifest (static targets)
 
 for app in $(jq -r '.[].app' router/routes.json); do
   path=$(jq -r --arg a "$app" '.[] | select(.app==$a) | .health' router/routes.json)
   seen=""; bad=0
   n=1
   while [ "$n" -le "$samples" ]; do
-    # one request, both facts
-    resp=$(curl -sS -o /dev/null --max-time 10 \
-             -w '%{http_code} %header{x-build-sha}' "$base$path" 2>/dev/null || echo "000 -")
-    code=${resp%% *}; sha=${resp##* }
+    # Cache-bust. A CDN with max-age=600 serves the OLD build for ten
+    # minutes after deploy, and a convergence check that trusts it is
+    # measuring the CDN, not the estate (spec.org, Targets).
+    bust="$(date +%s)-$n"
+    if [ "$MODE" = "manifest" ]; then
+      # Static targets (GitHub Pages) cannot set response headers, so the
+      # served build is published as a generated file instead.
+      body=$(curl -sS --max-time 10 -H "Cache-Control: no-cache" \
+               "$base/version.json?_cb=$bust" 2>/dev/null || echo "{}")
+      code=$(curl -sS -o /dev/null --max-time 10 -H "Cache-Control: no-cache" \
+               -w "%{http_code}" "$base/version.json?_cb=$bust" 2>/dev/null || echo 000)
+      sha=$(printf '%s' "$body" | jq -r '.sha // "-"' 2>/dev/null || echo "-")
+    else
+      # one request, both facts
+      resp=$(curl -sS -o /dev/null --max-time 10 -H "Cache-Control: no-cache" \
+               -w '%{http_code} %header{x-build-sha}' "$base$path?_cb=$bust" \
+               2>/dev/null || echo "000 -")
+      code=${resp%% *}; sha=${resp##* }
+    fi
     case "$seen" in *" $sha "*) : ;; *) seen="$seen $sha " ;; esac
     if [ "$code" != "200" ] || [ "$sha" != "$want" ]; then bad=$((bad+1)); fi
     n=$((n+1))
@@ -965,8 +989,22 @@ jobs:
 | github     | Environment =staging=; Pages branch        | Environment =production=; Pages  | =routes.json= + base-path rewrite |
 | cloudflare | Worker per app named =<group>-staging=     | Worker per app, production route | Router Worker, service bindings |
 
-Both targets must emit =x-build-sha= on every response, or guard 5 cannot
-distinguish a fresh deploy from a stale one.
+Each target must expose the served build. *A response header is not always
+available*: GitHub Pages serves static files through a fixed CDN header set and
+*cannot set custom response headers* [E, verified 2026-09-13 against
+=pages.github.com=], so =x-build-sha= is unimplementable there. Two modes:
+
+| target                | how the served build is exposed          | guard 5 mode |
+|-----------------------+------------------------------------------+--------------|
+| cloudflare (Worker)   | =x-build-sha= response header            | =header=     |
+| github (Pages)        | a generated =/version.json= =({"sha":…})= | =manifest=   |
+
+Pages also sends =cache-control: max-age=600= [E, observed =age: 284= on a
+live response], so *"deployed" and "served" can be ten minutes apart*. Guard 5
+must bust the cache or wait out the TTL; a convergence check that trusts a CDN
+is measuring the CDN. This is the clearest case of §Domain model's C2 warning
+arriving in a new place: the artifact you verify must be the artifact being
+served, and a cache is another way for those to differ.
 
 * Checklists
 

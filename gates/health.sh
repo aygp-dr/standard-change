@@ -15,16 +15,32 @@
 # still only evidence, not proof -- see spec.org, What completes a deployment.
 set -eu
 base="$1"; want="$2"; samples="${3:-${HEALTH_SAMPLES:-5}}"; rc=0
+MODE="${HEALTH_MODE:-header}"   # header | manifest (static targets)
 
 for app in $(jq -r '.[].app' router/routes.json); do
   path=$(jq -r --arg a "$app" '.[] | select(.app==$a) | .health' router/routes.json)
   seen=""; bad=0
   n=1
   while [ "$n" -le "$samples" ]; do
-    # one request, both facts
-    resp=$(curl -sS -o /dev/null --max-time 10 \
-             -w '%{http_code} %header{x-build-sha}' "$base$path" 2>/dev/null || echo "000 -")
-    code=${resp%% *}; sha=${resp##* }
+    # Cache-bust. A CDN with max-age=600 serves the OLD build for ten
+    # minutes after deploy, and a convergence check that trusts it is
+    # measuring the CDN, not the estate (spec.org, Targets).
+    bust="$(date +%s)-$n"
+    if [ "$MODE" = "manifest" ]; then
+      # Static targets (GitHub Pages) cannot set response headers, so the
+      # served build is published as a generated file instead.
+      body=$(curl -sS --max-time 10 -H "Cache-Control: no-cache" \
+               "$base/version.json?_cb=$bust" 2>/dev/null || echo "{}")
+      code=$(curl -sS -o /dev/null --max-time 10 -H "Cache-Control: no-cache" \
+               -w "%{http_code}" "$base/version.json?_cb=$bust" 2>/dev/null || echo 000)
+      sha=$(printf '%s' "$body" | jq -r '.sha // "-"' 2>/dev/null || echo "-")
+    else
+      # one request, both facts
+      resp=$(curl -sS -o /dev/null --max-time 10 -H "Cache-Control: no-cache" \
+               -w '%{http_code} %header{x-build-sha}' "$base$path?_cb=$bust" \
+               2>/dev/null || echo "000 -")
+      code=${resp%% *}; sha=${resp##* }
+    fi
     case "$seen" in *" $sha "*) : ;; *) seen="$seen $sha " ;; esac
     if [ "$code" != "200" ] || [ "$sha" != "$want" ]; then bad=$((bad+1)); fi
     n=$((n+1))
