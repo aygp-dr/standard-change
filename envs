@@ -50,7 +50,7 @@ done
 
 h "production cutover"
 ./targets/bastille/front/switch.sh status 2>/dev/null | sed 's/^/  /' || echo "  front router down"
-printf '  staging   http://192.168.86.29:9101\n  production http://192.168.86.29:9100\n'
+printf '  staging   http://192.168.86.29:9201\n  production http://192.168.86.29:9200\n'
 
 h "local worktree blocks — development, never a deployment target"
 if [ -f ports.tsv ]; then

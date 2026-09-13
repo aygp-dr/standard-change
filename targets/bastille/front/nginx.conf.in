@@ -24,6 +24,6 @@ http {
   upstream production { server @PRODUCTION@; }   # rendered by switch.sh
   upstream staging    { server 10.0.0.60; }
 
-  server { listen 9100; location / { proxy_pass http://production; } }
-  server { listen 9101; location / { proxy_pass http://staging;    } }
+  server { listen 9200; location / { proxy_pass http://production; } }
+  server { listen 9201; location / { proxy_pass http://staging;    } }
 }

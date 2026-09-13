@@ -6,7 +6,7 @@
 
 #+begin_src mermaid :eval never-export
 flowchart TB
-    LAP["laptop<br/>192.168.86.0/24"] --> F["front nginx on hydra<br/>:9100 production  :9101 staging"]
+    LAP["laptop<br/>192.168.86.0/24"] --> F["front nginx on hydra<br/>:9200 production  :9201 staging"]
     F -->|"the switch"| B["sc-prod-1  10.0.0.61<br/>BLUE"]
     F -.->|"idle"| G["sc-prod-2  10.0.0.62<br/>GREEN"]
     F --> S["sc-staging  10.0.0.60"]
@@ -22,9 +22,9 @@ flowchart TB
 
 | role            | jail         | jail IP     | reached at                  |
 |-----------------+--------------+-------------+-----------------------------|
-| staging         | =sc-staging= | 10.0.0.60   | =192.168.86.29:9101=        |
-| production blue | =sc-prod-1=  | 10.0.0.61   | =192.168.86.29:9100= (when live) |
-| production green| =sc-prod-2=  | 10.0.0.62   | =192.168.86.29:9100= (when live) |
+| staging         | =sc-staging= | 10.0.0.60   | =192.168.86.29:9201=        |
+| production blue | =sc-prod-1=  | 10.0.0.61   | =192.168.86.29:9200= (when live) |
+| production green| =sc-prod-2=  | 10.0.0.62   | =192.168.86.29:9200= (when live) |
 | dev (worktrees) | —            | —           | =192.168.86.29:9010=, =:9020= |
 
 *Every jail listens on port 80.* Each has its own IP, so ports cannot collide,
@@ -95,7 +95,7 @@ sequenceDiagram
     Op->>G: verify the idle estate directly, before any traffic
     Op->>F: switch.sh green
     F-->>Op: production -> green (atomic)
-    Op->>F: gates/health.sh through :9100
+    Op->>F: gates/health.sh through :9200
     Note over Op,F: no convergence window: one estate, one build
 #+end_src
 
@@ -103,12 +103,12 @@ sequenceDiagram
 
 #+begin_example
 ./targets/bastille/deploy.sh staging [sha]
-ROUTER_URL=http://192.168.86.29:9101 ./gates/e2e.sh
-HEALTH_MODE=manifest ./gates/health.sh http://192.168.86.29:9101 <sha>
+ROUTER_URL=http://192.168.86.29:9201 ./gates/e2e.sh
+HEALTH_MODE=manifest ./gates/health.sh http://192.168.86.29:9201 <sha>
 
 ./targets/bastille/deploy.sh production [sha]
 ./targets/bastille/front/switch.sh {blue|green|status}
-ROUTER_URL=http://192.168.86.29:9100 ./gates/e2e.sh
+ROUTER_URL=http://192.168.86.29:9200 ./gates/e2e.sh
 #+end_example
 
 * What this target does and does not give

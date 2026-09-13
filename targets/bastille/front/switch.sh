@@ -28,7 +28,7 @@ case "${1:-status}" in
     [ -f nginx.conf ] || sed "s/@PRODUCTION@/$BLUE/" nginx.conf.in > nginx.conf
     want=$(grep -o 'upstream production { server [0-9.]*' nginx.conf | grep -o '[0-9.]*$')
     want_col=blue; [ "$want" = "$GREEN" ] && want_col=green
-    live_json=$(curl -s --max-time 3 http://127.0.0.1:9100/version.json 2>/dev/null || echo '{}')
+    live_json=$(curl -s --max-time 3 http://127.0.0.1:9200/version.json 2>/dev/null || echo '{}')
     live_rep=$(printf '%s' "$live_json" | jq -r '.replica // "?"' 2>/dev/null || echo '?')
     live_col=unknown
     [ "$live_rep" = "1" ] && live_col=blue

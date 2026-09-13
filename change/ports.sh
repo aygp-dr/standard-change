@@ -31,11 +31,15 @@ case "${1:-}" in
       b=$(next_block)
       # Refuse BEFORE writing. The first version appended the row and then
       # refused, leaving a stale allocation for a block nobody could use.
-      # Ten blocks only: block 10 starts at 9100, which is the production front
-      # router, and that collision would present as the router having died.
+      #
+      # Ten blocks only. Block 10 starts at 9100, which is the TEAM tier --
+      # environments that exist but cannot promote. A dev block there would be
+      # squatting an address whose number claims something else, and the tiers
+      # only mean anything if the boundary holds (spec.org, The port map).
       if [ "$b" -gt 9 ]; then
         echo "refused: block $b would start at $((BASE0 + 10 * b))," >&2
-        echo "  which is outside 9000-9099. 9100+ is the front routers." >&2
+        echo "  which is the team tier. dev is 9000-9099, team 9100-9199," >&2
+        echo "  protected 9200+. A dev block must not cross the boundary." >&2
         echo "  Free a block first:  ./change/ports.sh free   (list: ports.sh list)" >&2
         exit 4
       fi

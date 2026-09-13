@@ -8,8 +8,8 @@
 set -eu
 PR="${1:?usage: deploy-run <pr>}"
 R=aygp-dr/standard-change
-FRONT_PROD=http://127.0.0.1:9100
-FRONT_STG=http://127.0.0.1:9101
+FRONT_PROD=http://127.0.0.1:9200
+FRONT_STG=http://127.0.0.1:9201
 cd "$(dirname "$0")"
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
