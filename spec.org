@@ -1,0 +1,887 @@
+#+TITLE: standard-change — governing spec
+#+SUBTITLE: Label-driven, gate-checked deployment pipeline with a mock storefront monorepo
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-12
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:2 num:t
+
+* Status
+
+- Version: 0.3 (establishing; deviations go to the review ledger issue, not to this file)
+- Working repo name: =standard-change= (ITIL 4: a pre-authorized, low-risk change verified by fixed gates). Alternatives considered: =change-schedule=, =change-window=, =slipway=, =gatehouse=.
+- This file is the single canonical document. =CLAUDE.md= and =README.org= are derived and restate only what an agent or reader needs to act.
+
+** Epistemic labels
+
+Claims that are not self-evident carry a label. A claim with no label is
+structural (a definition or a decision), not an observation.
+
+| label | meaning                                                       |
+|-------+---------------------------------------------------------------|
+| [E]   | established — observed on a named cell, with the run recorded  |
+| [P]   | provisional — working assumption, expected to be revisited     |
+| [H]   | hypothesis — believed, not yet observed; never a bare claim    |
+| [I]   | inferred — derived from other claims, not directly observed    |
+
+* Purpose
+
+The repo demonstrates change enablement and deployment management on a mock ecommerce monorepo. The apps are fixtures. The product is the gate sequence, the labels that drive it, the change-schedule integration, and the checklists.
+
+Two pre-conditions gate every production deployment:
+1. No other deployment is in progress (deployment lock).
+2. No emergency change or change freeze is active on the change schedule.
+
+* Vocabulary (ITIL 4)
+
+| Term                          | Meaning in this repo                                                                  |
+|-------------------------------+---------------------------------------------------------------------------------------|
+| Change                        | One pull request with at least one =app:*= label                                       |
+| Standard change               | A PR whose diff touches only pre-authorized paths and passes all gates; no CAB review  |
+| Normal change                 | A PR touching =router/=, =gates/=, =change/=, or =.github/=; requires one human approval |
+| Emergency change              | A calendar event titled =EMERGENCY: ...= or repo variable =EMERGENCY_CHANGE=1=          |
+| Change freeze                 | A calendar event titled =FREEZE: ...= covering the requested window                   |
+| Change schedule               | The Google Calendar used for change windows, freezes, and emergencies                 |
+| Change window                 | A calendar event =CHANGE: <repo>#<pr> <group>= created before staging deployment       |
+| Change authority              | The gate workflow for standard changes; a named reviewer for normal changes           |
+| Deployment                    | One run of =deploy-staging.yml= or =deploy-production.yml=                              |
+| Release                       | A production deployment whose PIR comment is posted                                   |
+| Service validation and testing| The three gates: lint, unit test, Playwright                                          |
+| Post-implementation review    | Auto-generated PR comment after production deployment with gate results and timings   |
+| CMDB                          | =ports.tsv= (worktree ports) and =environments.tsv= (staging slots)                    |
+
+* Repository layout
+
+#+begin_example
+standard-change/
+├── spec.org                     this file
+├── CLAUDE.md                    derived
+├── Makefile                     dev, gate, simulate, port targets
+├── ports.tsv                    worktree → port block registry
+├── environments.tsv             staging slot registry
+├── apps/
+│   ├── core/                    /, /login, /account, /cart
+│   ├── plp/                     /search, /c/:category
+│   ├── pdp/                     /p/:sku
+│   └── checkout/                /checkout, /checkout/payment, /checkout/confirm
+├── router/
+│   ├── routes.json              generated: union of apps/*/routes.json
+│   ├── nginx.conf.tmpl          worktree and staging router
+│   └── worker.js                Cloudflare router Worker (same routes.json)
+├── tests/
+│   └── e2e/                     cross-app journeys (add-to-cart → cart → checkout)
+├── gates/
+│   ├── lint.sh
+│   ├── test.sh
+│   ├── e2e.sh
+│   └── preflight.sh             lock + freeze + emergency checks
+├── change/
+│   ├── schedule.sh              calendar block / query
+│   ├── lock.sh                  deployment lock acquire / release
+│   └── pir.sh                   post-implementation review comment
+├── targets/
+│   ├── github/                  Environments + Deployments API + Pages
+│   └── cloudflare/              Workers per app + router Worker
+└── .github/workflows/
+    ├── labeller.yml
+    ├── gate.yml
+    ├── deploy-staging.yml
+    └── deploy-production.yml
+#+end_example
+
+* Apps
+
+** Deploy groups
+
+A deploy group is one app directory. =core= is the default group; aliases =main= and =default= resolve to =core=.
+
+| Group    | Directory       | Routes                                        | Playwright journeys              |
+|----------+-----------------+-----------------------------------------------+----------------------------------|
+| core     | =apps/core=     | =/=, =/login=, =/account=, =/cart=            | home, login, account, cart       |
+| plp      | =apps/plp=      | =/search=, =/c/:category=                     | search                           |
+| pdp      | =apps/pdp=      | =/p/:sku=                                     | pdp, add-to-cart                 |
+| checkout | =apps/checkout= | =/checkout=, =/checkout/payment=, =/checkout/confirm= | checkout                 |
+
+=add-to-cart= starts on a pdp page and asserts on =/cart=, so it is owned by =pdp= and also runs in =tests/e2e/= as a cross-app journey.
+
+** Per-app structure
+
+Every app has the same shape. The gate scripts and the labeller depend on this shape.
+
+#+begin_example
+apps/<app>/
+├── routes.json            route ownership; input to router/ and to labeller
+├── package.json           scripts: dev, build, lint, test, e2e
+├── src/
+│   ├── server.js          node http server; reads PORT
+│   └── pages/             one file per route
+├── tests/
+│   ├── unit/              node:test
+│   └── e2e/               Playwright specs for this app's journeys
+├── fixtures/              catalog.json, cart.json, users.json
+└── playwright.config.ts   baseURL from ROUTER_URL; projects = this app's journeys
+#+end_example
+
+** routes.json contract
+
+#+begin_src json :tangle apps/plp/routes.json
+{
+  "app": "plp",
+  "port_offset": 2,
+  "routes": ["/search", "/c/:category"],
+  "health": "/search?q=ping",
+  "journeys": ["search"]
+}
+#+end_src
+
+=port_offset= is fixed per app: core 1, plp 2, pdp 3, checkout 4. Offset 5 is reserved for a mock backend (catalog/cart API) shared by all apps.
+
+** Simulated changes
+
+=make simulate app=<group>= appends a line to =apps/<group>/src/CHANGELOG.txt= and bumps =version= in =package.json=. The diff is enough for the labeller to attach =app:<group>=. No behavior changes; the point is exercising the pipeline.
+
+* Router and ports
+
+** Port block model
+
+Each git worktree owns a contiguous block of ten ports. The router (nginx) listens on the block base; apps listen on base + offset.
+
+| Worktree              | Block | nginx | core  | plp   | pdp   | checkout | mock backend |
+|-----------------------+-------+-------+-------+-------+-------+----------+--------------|
+| main (stable)         |     0 | 10000 | 10001 | 10002 | 10003 |    10004 |        10005 |
+| first branch worktree |     1 | 10010 | 10011 | 10012 | 10013 |    10014 |        10015 |
+| second                |     2 | 10020 | 10021 | 10022 | 10023 |    10024 |        10025 |
+| n-th                  |     n | 10000+10n | +1 | +2   | +3    | +4       | +5           |
+
+Ports 10006–10009 (and the same offsets in each block) are unallocated.
+
+** Registry
+
+=ports.tsv= is the CMDB for worktrees. =make port-alloc= appends a row for the current worktree path and writes =.env.ports= in the worktree. =make port-free= removes the row.
+
+#+begin_src text :tangle ports.tsv
+block    worktree    branch    allocated_at
+0    /home/jwalsh/ghq/github.com/aygp-dr/standard-change    main    2026-09-12T00:00:00Z
+#+end_src
+
+** nginx template
+
+The template is rendered once per worktree from =router/routes.json= and =.env.ports=. Each route prefix proxies to the owning app's port. A worktree that has not built an app falls back to the stable app on block 0, which is the local equivalent of a staging slot that deploys only the changed group.
+
+#+begin_src nginx :tangle router/nginx.conf.tmpl
+# rendered per worktree: BLOCK, and per app PORT_<APP> (falls back to block-0 port)
+worker_processes 1;
+events { worker_connections 64; }
+http {
+  server {
+    listen ${NGINX_PORT};
+    location = /            { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /login         { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /account       { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /cart          { proxy_pass http://127.0.0.1:${PORT_CORE}; }
+    location /search        { proxy_pass http://127.0.0.1:${PORT_PLP}; }
+    location /c/            { proxy_pass http://127.0.0.1:${PORT_PLP}; }
+    location /p/            { proxy_pass http://127.0.0.1:${PORT_PDP}; }
+    location /checkout      { proxy_pass http://127.0.0.1:${PORT_CHECKOUT}; }
+    location /api/          { proxy_pass http://127.0.0.1:${PORT_MOCK}; }
+  }
+}
+#+end_src
+
+The =location= lines are generated from =routes.json=; the block above is the expected output, not the source. A gate (=gates/lint.sh=) fails when the rendered file and =routes.json= disagree.
+
+** Cloud mirror
+
+A staging slot =staging-<group>-<n>= is the same topology: one router in front of four app upstreams. The changed group points at the PR build; the other three point at the current production build. The Cloudflare target implements the router as a Worker with a service binding per app; the GitHub target implements it as a GitHub Environment per slot whose deployment payload records the four upstream SHAs (Pages serves the static builds; the router is simulated by =routes.json= plus per-app base paths).
+
+* Labels
+
+Supersedes the per-group staging-slot model sketched in §Router and ports
+§Cloud mirror: *staging is a single environment, held by one PR at a time*, not
+=n= slots per group. Which apps deploy is decided by the =app:*= labels on the
+PR that holds it. Slots may return later as an optimization; they are not in
+0.2. [P]
+
+| Label                  | Set by      | Removed by        | Meaning                                                      |
+|------------------------+-------------+-------------------+--------------------------------------------------------------|
+| =app:<group>=          | labeller    | labeller          | The diff touches =apps/<group>/=. *Owned* by the labeller     |
+| =change:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
+| =change:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
+| =change:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
+| =deploy:staging=       | human       | promote / release | Requests the staging lock. At most one open PR may carry it   |
+| =staging:in-progress=  | workflow    | workflow          | Staging deploy or its e2e run is live                        |
+| =staging:passed=       | workflow    | push to PR        | Authorizing e2e passed *on the current head SHA*              |
+| =staging:failed=       | workflow    | push to PR        | Staging deploy or e2e failed; fix and re-request              |
+| =deploy:production=    | *promote*   | release           | Added by automation on =staging:passed=; by a human only with =change:emergency= |
+| =production:healthy=   | workflow    | release           | Post-deploy health check passed; merge is unblocked           |
+| =deployed:production=  | workflow    | —                 | Set after the PIR comment is posted                          |
+| =blocked:queue=        | queue guard | queue guard       | Another open PR holds =deploy:staging=                        |
+| =blocked:lock=         | preflight   | preflight         | Another deployment holds the deployment lock                 |
+| =blocked:freeze=       | preflight   | preflight         | A freeze or emergency event covers the requested window      |
+
+*Ownership matters.* The labeller runs with =sync-labels: true=, so it both adds
+and removes =app:*= — a PR that stops touching =apps/pdp/= loses =app:pdp= and
+stops deploying it. A human hand-adding =app:*= is overwritten on the next
+push; this is intended, and it is why the =app:*= set can be trusted as the
+build manifest.
+
+*=staging:passed= is bound to a SHA.* Any push to the PR removes it (and
+=staging:failed=). A pass observed on an earlier commit authorizes nothing.
+
+** Labeller
+
+#+begin_src yaml :tangle .github/labeler.yml
+app:core:
+  - changed-files:
+      - any-glob-to-any-file: apps/core/**
+app:plp:
+  - changed-files:
+      - any-glob-to-any-file: apps/plp/**
+app:pdp:
+  - changed-files:
+      - any-glob-to-any-file: apps/pdp/**
+app:checkout:
+  - changed-files:
+      - any-glob-to-any-file: apps/checkout/**
+change:normal:
+  - changed-files:
+      - any-glob-to-any-file:
+          - router/**
+          - gates/**
+          - change/**
+          - targets/**
+          - .github/**
+#+end_src
+
+#+begin_src yaml :tangle .github/workflows/labeller.yml
+name: labeller
+on: [pull_request_target]
+permissions: {contents: read, pull-requests: write}
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
+      - name: drop stale staging verdicts on a new push
+        if: github.event.action == 'synchronize'
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          gh pr edit "${{ github.event.number }}" \
+            --remove-label staging:passed --remove-label staging:failed || true
+#+end_src
+
+The second step is the SHA binding: a new push invalidates any staging verdict,
+so =deploy:production='s guard can never see a pass from an older commit.
+
+* Gates
+
+Three gates run on every PR for every =app:*= group. Each gate exits non-zero on any finding; there is no warning tier.
+
+| Gate | Script           | Scope                                                                         |
+|------+------------------+-------------------------------------------------------------------------------|
+| lint | =gates/lint.sh=  | eslint per app; =routes.json= schema; rendered nginx matches =routes.json=      |
+| test | =gates/test.sh=  | =node --test= per app                                                         |
+| e2e  | =gates/e2e.sh=   | Playwright: the group's journeys plus every =tests/e2e/= journey that touches it |
+
+The e2e gate runs against a worktree-style router inside the runner (block 0 ports, all four apps built from the PR SHA). The same gate reruns against the staging slot URL after =deploy-staging=; the second run is the one that authorizes production.
+
+** Negative tests for the gates
+
+Each gate script has a fixture under =gates/fixtures/<gate>/fail/= that the gate must reject and =gates/fixtures/<gate>/pass/= it must accept. =make gate-selftest= runs both and fails if either outcome is wrong. This is a separate workflow job, required before the gates' own results count.
+
+* Change enablement
+
+** Preflight (=gates/preflight.sh=)
+
+Runs before any staging or production deployment.
+
+1. Lock: read the =deployment-lock= GitHub Discussion (or issue #1) body. If it names a PR other than this one and the run is under 60 minutes old, exit 2 and set =blocked:lock=. A lock older than 60 minutes is stale; preflight clears it and records the clearance in the PIR of the stale run.
+2. Freeze: query the change schedule for events in the next 30 minutes with title prefix =FREEZE:= or =EMERGENCY:=. Any match: exit 3, set =blocked:freeze=. Repo variable =EMERGENCY_CHANGE=1= has the same effect and is the fallback when the calendar is unreachable.
+3. Concurrency: production workflows use =concurrency: production= with =cancel-in-progress: false=; staging workflows use =concurrency: staging-<group>-<n>=.
+
+Exit codes: 0 proceed, 2 lock, 3 freeze, 4 calendar unreachable and no repo variable set (treated as blocked).
+
+** Change schedule (=change/schedule.sh=)
+
+- =schedule.sh block <pr> <group> <minutes>= creates a calendar event =CHANGE: standard-change#<pr> <group>= on the agentic account's calendar with the owner as attendee and notifications on. The event description holds the PR URL, the SHA, and the staging slot.
+- =schedule.sh check <window>= returns the freeze/emergency events overlapping the window.
+- =schedule.sh close <event-id> <result>= appends the result (pass/fail/cancelled) to the event description at the end of the run.
+
+The skill wraps these three commands. Deployment workflows call =block= before deploying and =close= in an =always()= step.
+
+** Deployment lock (=change/lock.sh=)
+
+=acquire <pr> <target>= writes =pr, target, run-id, started_at= to the lock body; =release= empties it. Release runs in an =always()= step. The 60-minute stale rule in preflight covers a runner that dies without reaching =release=.
+
+* Promotion pipeline
+
+One PR at a time owns staging; passing there promotes it automatically; a
+healthy production deploy merges it and releases the queue.
+
+** State machine
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    [*] --> Open: PR opened
+    Open --> Gated: labeller sets app:*, gate.yml green on head SHA
+    Gated --> Queued: human adds deploy:staging
+    Queued --> Open: G0..G3 fail -> label removed, blocked:* set
+    Queued --> Staging: guards pass, staging lock acquired
+    Staging --> Gated: e2e fails -> staging:failed, lock released
+    Staging --> Promoted: authorizing e2e passes -> staging:passed@SHA
+    Promoted --> Production: promote.yml adds deploy:production
+    Gated --> Production: change:emergency + approval (bypasses staging)
+    Production --> Unhealthy: health check fails -> rollback + PIR
+    Unhealthy --> Gated: labels released
+    Production --> Healthy: health check passes -> production:healthy
+    Healthy --> Merged: auto-merge, or a human merges
+    Merged --> [*]: release -> all deploy:* labels removed, queue freed
+#+end_src
+
+** The guards
+
+Each is a hard precondition. None is skippable except where stated, and the
+only thing that can state it is =change:emergency=.
+
+| # | Guard                    | Checked by             | On failure                          | Emergency bypass |
+|---+--------------------------+------------------------+-------------------------------------+------------------|
+| 0 | Up to date with =main=   | =change/queue.sh=      | remove =deploy:staging=, comment    | yes              |
+| 1 | Staging held by no other PR | =change/queue.sh=   | =blocked:queue=, label removed      | n/a (skips staging) |
+| 2 | Gates green on head SHA  | =promote.yml=          | refuse to promote                   | *no*             |
+| 3 | No lock, no freeze       | =gates/preflight.sh=   | =blocked:lock= / =blocked:freeze=   | freeze only      |
+| 4 | =staging:passed@head SHA= | =deploy-production.yml= | refuse to deploy                   | yes, with approval |
+| 4b | Head still contains main's tip | =main-moved.yml=, =deploy-production.yml= | withdraw pass, free queue | yes |
+| 5 | Production health check  | =gates/health.sh=      | roll back, PIR, release             | *no*             |
+
+*Guard 2 and guard 5 have no bypass at all.* An emergency may skip the staging
+/environment/; it may not ship code whose unit and lint gates are red, and it
+may not leave an unhealthy production deploy standing.
+
+** Guard 0 — up to date with main
+
+A standard or normal change must contain the current tip of =main= before it
+may take staging. This is not tidiness: staging and production deploy the PR
+head, so a PR that is /behind/ main would deploy a tree missing whatever merged
+since — silently reverting the previous deployment. The guard is the thing that
+makes "we don't lose the previous deployment" true rather than hoped-for.
+
+It also drives the queue. When the holder merges and releases the labels, every
+other open PR is now behind =main= by exactly that merge, so the next claimant
+must rebase first. The rebase is not busywork — it is the re-verification that
+the two changes compose, and it happens before staging rather than after
+production.
+
+: gh pr view <pr> --json mergeStateStatus -q .mergeStateStatus
+
+=BEHIND= fails the guard. =BLOCKED= and =DIRTY= (conflicts) also fail. =CLEAN=
+and =UNSTABLE= pass — =UNSTABLE= means checks are still running, which guard 2
+catches properly at promote time with SHA binding.
+
+** Guard 1 — staging is a singleton
+
+#+begin_src bash :tangle change/queue.sh :shebang "#!/bin/sh"
+# queue.sh claim <pr>   -- guards 0 and 1. Exit 0 claim, 5 queue busy, 6 behind main.
+set -eu
+pr="$2"
+repo="${GH_REPO:-$GITHUB_REPOSITORY}"
+
+emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
+  -q '[.labels[].name] | index("change:emergency") // empty')
+
+# Guard 0: up to date with main (standard and normal changes only)
+if [ -z "$emergency" ]; then
+  state=$(gh pr view "$pr" --repo "$repo" --json mergeStateStatus -q .mergeStateStatus)
+  case "$state" in
+    BEHIND|BLOCKED|DIRTY)
+      gh pr edit "$pr" --repo "$repo" --remove-label deploy:staging
+      gh pr comment "$pr" --repo "$repo" --body \
+        "Staging refused: branch is \`$state\` relative to \`main\`. Rebase onto \`main\` and re-add \`deploy:staging\` — deploying a tree behind main would revert the previous deployment."
+      exit 6 ;;
+  esac
+fi
+
+# Guard 1: no other open PR holds staging
+holder=$(gh pr list --repo "$repo" --state open --label deploy:staging \
+  --json number -q "[.[].number] | map(select(. != $pr)) | first // empty")
+if [ -n "$holder" ]; then
+  gh pr edit "$pr" --repo "$repo" --add-label blocked:queue --remove-label deploy:staging
+  gh pr comment "$pr" --repo "$repo" --body \
+    "Staging is held by #$holder. Re-add \`deploy:staging\` once it merges; you will need to rebase onto \`main\` first."
+  exit 5
+fi
+
+gh pr edit "$pr" --repo "$repo" --remove-label blocked:queue || true
+echo "claimed"
+#+end_src
+
+The label query is the authority, not the workflow concurrency group:
+=concurrency= serializes /runs/, but a PR that deployed and is sitting in
+production verification still /holds/ staging with no run in flight. The label
+is the lock; =concurrency: staging= is only the anti-collision on top of it.
+
+** Guard 4b — main moved under a staging pass
+
+*Amendment, 0.2 → 0.3. Scenario D4 in =scenarios.org= refuted 0.2 and forced
+this; the spec tracks observed reality.*
+
+Guard 0 is evaluated once, when staging is claimed. =staging:passed= is
+invalidated when the /PR/ moves. Neither covers =main= moving underneath a PR
+that has already passed staging and is holding =deploy:production=. That PR
+would deploy a tree predating whatever just merged — silently reverting it,
+with every gate green, because the gates were green on a SHA that no longer
+composes with main.
+
+The emergency path makes this the normal case rather than a rare race: an
+emergency /is/ a merge to main that jumps the queue.
+
+#+begin_src yaml :tangle .github/workflows/main-moved.yml
+name: main-moved
+on:
+  push:
+    branches: [main]
+permissions: {contents: read, pull-requests: write}
+jobs:
+  invalidate:
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}"}
+    steps:
+      - uses: actions/checkout@v4
+      - name: expire staging verdicts that main has outrun
+        run: |
+          for pr in $(gh pr list --state open --label staging:passed --json number -q '.[].number'); do
+            state=$(gh pr view "$pr" --json mergeStateStatus -q .mergeStateStatus)
+            case "$state" in
+              BEHIND|BLOCKED|DIRTY)
+                gh pr edit "$pr" --remove-label staging:passed \
+                                 --remove-label deploy:production \
+                                 --remove-label deploy:staging
+                gh pr comment "$pr" --body "\`main\` moved (${{ github.sha }}). Your staging pass described a tree that no longer composes with main, so it has been withdrawn along with the staging claim. Rebase onto \`main\` and re-add \`deploy:staging\`."
+                ;;
+            esac
+          done
+#+end_src
+
+Guard 4 additionally re-checks =mergeStateStatus= at production time, because a
+guard evaluated at request time expires:
+
+: gh pr view "$PR" --json mergeStateStatus -q .mergeStateStatus   # must not be BEHIND
+
+*The general rule, worth more than the instance:* any guard whose subject can
+change after it is checked must be re-checked at the moment it is relied on.
+Guard 0 at claim time is a convenience that gives fast feedback; guard 4b is
+the one that is load-bearing. Note the amendment also drops =deploy:staging=,
+which frees the queue — an expired claimant must not keep holding it.
+
+** Promotion — staging pass to production
+
+#+begin_src yaml :tangle .github/workflows/promote.yml
+name: promote
+on:
+  pull_request:
+    types: [labeled]
+permissions: {contents: read, pull-requests: write, checks: read}
+jobs:
+  promote:
+    if: github.event.label.name == 'staging:passed'
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      # Guard 2: every gate green on THIS head SHA. No bypass, emergency included.
+      - name: require gates green on head SHA
+        run: |
+          sha="${{ github.event.pull_request.head.sha }}"
+          bad=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
+                 --jq '[.check_runs[] | select(.name|test("^(gate-selftest|lint|test|e2e)")) 
+                        | select(.conclusion != "success")] | length')
+          total=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
+                 --jq '[.check_runs[] | select(.name|test("^gate-selftest$"))] | length')
+          [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha"; exit 1; }
+          [ "$total" -ge 1 ] || { echo "::error::gate-selftest never ran on $sha; gate results are void"; exit 1; }
+      - name: promote
+        run: |
+          gh pr edit "$PR" --add-label deploy:production
+          gh pr comment "$PR" --body "Staging authorizing run passed on \`${{ github.event.pull_request.head.sha }}\`. Promoting to production."
+#+end_src
+
+Guard 2 checks =gate-selftest= ran /and/ is green before trusting the other
+three — a gate suite whose self-test never ran produces no verdict, so its
+green is void rather than merely unverified (§Verification contract).
+
+** Emergency — the only bypass
+
+=change:emergency= is a human label and the sole authorization to reach
+production without =staging:passed=. It does not bypass guard 2 or guard 5.
+
+#+begin_example
+change:emergency + deploy:production
+  → require: one approving review from a change authority
+  → require: gates green on head SHA        (guard 2, no bypass)
+  → preflight: lock only; a FREEZE event does not block an emergency
+  → deploy production
+  → health check                            (guard 5, no bypass)
+  → PIR records: bypassed staging, why, who approved, and the merge-base
+    divergence from main at deploy time
+#+end_example
+
+An emergency PR is exempt from guard 0, so it may be behind =main=. The PIR
+therefore records the divergence explicitly: shipping a tree behind main is a
+known, accepted regression risk, and naming it is the difference between an
+emergency change and an accident.
+
+Note the asymmetry with §Change enablement: an =EMERGENCY:= event on the change
+schedule /blocks everyone else/, while the =change:emergency= label /exempts one
+PR/. Same word, opposite direction; the calendar governs the estate, the label
+governs a change.
+
+** Health check and release
+
+#+begin_src bash :tangle gates/health.sh :shebang "#!/bin/sh"
+# health.sh <base-url> <expected-sha> -- guard 5. Exit 0 healthy, 7 unhealthy.
+set -eu
+base="$1"; want="$2"; rc=0
+for app in $(jq -r '.[].app' router/routes.json); do
+  path=$(jq -r --arg a "$app" '.[] | select(.app==$a) | .health' router/routes.json)
+  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$base$path" || echo 000)
+  sha=$(curl -sSI --max-time 10 "$base$path" | tr -d '\r' \
+        | awk -F': ' 'tolower($1)=="x-build-sha"{print $2}')
+  if [ "$code" != "200" ]; then echo "UNHEALTHY $app $path -> HTTP $code"; rc=7
+  elif [ "$sha" != "$want" ]; then echo "UNHEALTHY $app serving $sha, expected $want"; rc=7
+  else echo "ok $app $path"; fi
+done
+exit $rc
+#+end_src
+
+The SHA assertion is the load-bearing half. A 200 only proves /something/ is
+serving; =x-build-sha= proves the thing we just deployed is serving. A health
+check that cannot distinguish the new deploy from the old one passes happily
+through a failed deploy, which is the silent failure this gate exists to catch.
+
+On =rc=7=: roll back to the previous production SHA from the deployment record,
+post the PIR with the failure, remove =deploy:production= and =deploy:staging=,
+and release the lock. The queue frees even on failure — a broken deployment
+must not also wedge the pipeline.
+
+On success: =production:healthy=, PIR comment, =deployed:production=, then
+
+#+begin_src bash :tangle change/release.sh :shebang "#!/bin/sh"
+# release.sh <pr> -- merge (if auto-merge enabled) and free the queue.
+set -eu
+pr="$1"; repo="${GH_REPO:-$GITHUB_REPOSITORY}"
+if [ "${AUTO_MERGE:-1}" = "1" ]; then
+  gh pr merge "$pr" --repo "$repo" --squash --delete-branch
+else
+  gh pr comment "$pr" --repo "$repo" --body "Production healthy. Ready to merge; the staging queue frees on merge."
+fi
+gh pr edit "$pr" --repo "$repo" \
+  --remove-label deploy:staging --remove-label deploy:production \
+  --remove-label staging:passed --remove-label production:healthy
+./change/lock.sh release
+# Tell everyone waiting that they are now behind main and must rebase.
+for w in $(gh pr list --repo "$repo" --state open --label blocked:queue --json number -q '.[].number'); do
+  gh pr comment "$w" --repo "$repo" --body "Staging freed by #$pr. Rebase onto \`main\`, then add \`deploy:staging\`."
+done
+#+end_src
+
+Repo variable =AUTO_MERGE=0= turns the last hop manual: production is deployed
+and verified, and a human merges. Everything before the merge is identical, so
+the variable changes who presses the button and nothing about what was checked.
+
+* Workflows
+
+** deploy-staging.yml skeleton
+
+#+begin_src yaml :tangle .github/workflows/deploy-staging.yml
+name: deploy-staging
+on:
+  pull_request:
+    types: [labeled]
+jobs:
+  deploy:
+    if: github.event.label.name == 'deploy:staging'
+    runs-on: ubuntu-latest
+    concurrency: {group: staging, cancel-in-progress: false}
+    environment: staging
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./change/queue.sh claim "$PR"          # guards 0 and 1
+      - run: ./gates/preflight.sh staging           # guard 3
+      - run: ./change/lock.sh acquire "$PR" staging
+      - run: gh pr edit "$PR" --add-label staging:in-progress
+      - run: ./change/schedule.sh block "$PR" "$(./change/groups.sh "$PR")" 30
+      - run: ./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh staging "$(./change/groups.sh "$PR")"
+      - name: authorizing e2e run
+        run: ROUTER_URL="$(cat .slot-url)" ./gates/e2e.sh $(./change/groups.sh "$PR")
+      - if: success()
+        run: gh pr edit "$PR" --add-label staging:passed --remove-label staging:in-progress
+      - if: failure()
+        run: gh pr edit "$PR" --add-label staging:failed --remove-label staging:in-progress
+      - if: always()
+        run: ./change/schedule.sh close "$(cat .change-event-id)" "${{ job.status }}"
+      - if: always()
+        run: ./change/lock.sh release
+#+end_src
+
+=change/groups.sh <pr>= reads the PR's =app:*= labels and prints the deploy
+groups — the labeller-owned set is the build manifest (§Labels).
+
+Note what is /not/ released on the staging path: =deploy:staging= stays on the
+PR through production. Staging is held until the change lands or fails out, so
+the queue reflects "this PR owns the pipeline", not "a deploy job is running".
+
+** deploy-production.yml skeleton
+
+#+begin_src yaml :tangle .github/workflows/deploy-production.yml
+name: deploy-production
+on:
+  pull_request:
+    types: [labeled]
+permissions: {contents: write, pull-requests: write, deployments: write}
+jobs:
+  deploy:
+    if: github.event.label.name == 'deploy:production'
+    runs-on: ubuntu-latest
+    concurrency: {group: production, cancel-in-progress: false}
+    environment: production          # require reviewers here for change:normal
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      # Guard 4: no production without a staging pass on THIS SHA, unless emergency.
+      - name: require staging pass or emergency
+        run: |
+          labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]')
+          echo "$labels" | jq -e 'index("staging:passed")' >/dev/null && exit 0
+          echo "$labels" | jq -e 'index("change:emergency")' >/dev/null || {
+            echo "::error::no staging:passed on head SHA and not change:emergency"; exit 1; }
+          gh api "repos/${{ github.repository }}/pulls/$PR/reviews" \
+            --jq '[.[]|select(.state=="APPROVED")]|length' | grep -qv '^0$' || {
+            echo "::error::change:emergency requires an approving review"; exit 1; }
+      - run: ./gates/preflight.sh production
+      - run: ./change/lock.sh acquire "$PR" production
+      - run: ./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh production "$(./change/groups.sh "$PR")"
+      - name: health check
+        run: ./gates/health.sh "${{ vars.PRODUCTION_URL }}" "${{ github.event.pull_request.head.sha }}"
+      - if: failure()
+        run: ./targets/${{ vars.DEPLOY_TARGET }}/rollback.sh production
+      - if: always()
+        run: ./change/pir.sh "$PR" "${{ job.status }}"
+      - if: success()
+        run: |
+          gh pr edit "$PR" --add-label production:healthy --add-label deployed:production
+          ./change/release.sh "$PR"
+      - if: always()
+        run: ./change/lock.sh release
+#+end_src
+
+** Targets
+
+=vars.DEPLOY_TARGET= selects =github= or =cloudflare=. Both expose =deploy.sh <env> <groups...>=, =rollback.sh <env>=, and write =.slot-url=.
+
+| Target     | Staging                                    | Production                       | Router                          |
+|------------+--------------------------------------------+----------------------------------+---------------------------------|
+| github     | Environment =staging=; Pages branch        | Environment =production=; Pages  | =routes.json= + base-path rewrite |
+| cloudflare | Worker per app named =<group>-staging=     | Worker per app, production route | Router Worker, service bindings |
+
+Both targets must emit =x-build-sha= on every response, or guard 5 cannot
+distinguish a fresh deploy from a stale one.
+
+* Checklists
+
+Each checklist is a =.github/PULL_REQUEST_TEMPLATE= section and a =pir.sh= field. Unchecked required items block the corresponding label from taking effect (=gates/preflight.sh= reads the PR body).
+
+** Standard change (before =deploy:<group>=)
+
+- [ ] =app:*= labels match the intended groups
+- [ ] Gate self-test green
+- [ ] lint, test, e2e green on head SHA
+- [ ] Change window length stated (default 30 minutes)
+
+** Production (before =deploy:production=)
+
+- [ ] =deployed:staging-<group>-<n>= present for every =app:*= group
+- [ ] Staging e2e run is on the head SHA (not a prior push)
+- [ ] No =blocked:*= label
+- [ ] For =change:normal=: one approving review from a listed change authority
+- [ ] Rollback SHA recorded in PR body (=pir.sh= fills this from the production deployment record)
+
+** Post-implementation review (generated)
+
+- Gate durations per app
+- Staging slot and window event ids
+- Production deployment record id and previous SHA
+- Any stale-lock clearance or freeze wait encountered
+- Journeys run against production and their results
+
+* Local development
+
+#+begin_src makefile :tangle Makefile
+.PHONY: port-alloc port-free dev router gate gate-selftest simulate
+port-alloc:      ; ./change/ports.sh alloc
+port-free:       ; ./change/ports.sh free
+router:          ; ./router/render.sh && nginx -c "$$PWD/.nginx.conf" -p "$$PWD"
+dev: router      ; ./change/ports.sh run-apps        # starts apps present in this worktree; others resolve to block 0
+gate:            ; ./gates/lint.sh && ./gates/test.sh && ./gates/e2e.sh $(app)
+gate-selftest:   ; ./gates/selftest.sh
+simulate:        ; ./change/simulate.sh $(app)
+#+end_src
+
+A worktree is a sibling of the main checkout. =make port-alloc= is the first command in a new worktree; =make port-free= is the last.
+
+* Governance tuple and support matrix
+
+** The tuple
+
+Every claim in this repo lives at a coordinate:
+
+: (runtime, platform, router, browser)
+
+- *runtime* — the Node that runs the apps and =node --test=.
+- *platform* — the OS the gate ran on.
+- *router* — how the four apps are fronted: =nginx= locally, a Worker or
+  base-path rewrite in the cloud.
+- *browser* — what Playwright drives.
+
+A cell is *supported* only when a gate was /watched/ to pass on it, with
+versions recorded in §Host survey of record. Anything else is [H].
+
+** Matrix
+
+| Cell                              | lint | test | e2e | Status                                             |
+|-----------------------------------+------+------+-----+----------------------------------------------------|
+| ubuntu-latest / CI                | [H]  | [H]  | [H] | Intended primary cell; nothing observed yet        |
+| FreeBSD 14.4 amd64 / hydra        | [H]  | [H]  | [H] | Node 24.14.1 present; see blockers below           |
+| macOS-arm64 / mini                | [H]  | [H]  | [H] | Not surveyed                                       |
+
+The claim in one line: *no cell is supported today.* The repo has no code; the matrix records intent
+and the known obstacles, and is the thing the first gate run promotes.
+
+** Known blockers on hydra (FreeBSD), from the survey
+
+- *nginx is not installed* [E]. =make router= and =make dev= therefore cannot
+  run on hydra as specified. =pkg= additionally reports its repo catalogue
+  needs =pkg update= (root) before nginx could be fetched. Until then the local
+  router is unavailable and the worktree port-block model is unexercised.
+- *Playwright ships no FreeBSD browser build* [E, from its distribution]. A
+  system Chromium 148.0.7778.215 is installed as =/usr/local/bin/chrome= [E],
+  so the intended route is =PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1= plus an
+  explicit =executablePath= in =playwright.config.ts= [H — not yet run].
+- *eslint is not installed* [E]; it is a project-local dev dependency, so this
+  resolves on first =npm install= rather than needing a system package.
+- *=make= is BSD make* [E]; GNU Make 4.4.1 is available as =gmake= [E]. The
+  =Makefile= above is GNU-flavoured, so on hydra the target is =gmake=, not
+  =make=. CI on ubuntu-latest uses =make=.
+- *wrangler is not installed* [E]; the Cloudflare target is unexercised.
+
+* Verification contract
+
+- *Two gates, different things.* The code gate is =gates/{lint,test,e2e}.sh=.
+  The documents gate is this spec and its derived files: every =:tangle= target
+  resolves, every internal reference names a section that exists, and =CLAUDE.md=
+  asserts nothing absent here. Neither substitutes for the other.
+- *Ordering is load-bearing.* =gate-selftest= runs /before/ the gates' own
+  results count. A gate whose negative fixture it fails to reject produces no
+  usable verdict that run — its PASS is void, not merely suspect.
+- *Pass criterion.* A gate passes when it exits 0 with zero findings. There is
+  no warning tier.
+- *Promotion.* A matrix cell moves from [H] to [E] only when a human watched
+  all three gates pass on it and the exact versions were pasted into §Host
+  survey of record. A green run on convenient infrastructure grants a claim
+  nothing that was not observed on a real target cell.
+- *The second e2e run authorizes production*, not the first. The in-runner run
+  proves the build; the staging-slot run proves the deployment.
+
+* Refutation conditions
+
+Concretely, what observation falsifies this repo's central claim — /that the
+gate sequence prevents an unauthorized or unsafe production deployment/:
+
+1. A production deployment completes while =blocked:lock= or =blocked:freeze=
+   is set, or while another production run holds the lock.
+2. =gates/preflight.sh= exits 0 when the change schedule is unreachable and no
+   =EMERGENCY_CHANGE= variable is set (it must exit 4 and block).
+3. Any gate passes on a =gates/fixtures/<gate>/fail/= input, or fails on the
+   matching =pass/= input. Either direction voids the gate.
+4. =deploy-production.yml= deploys a group that has no
+   =deployed:staging-<group>-<n>= label on the head SHA.
+5. A =change:normal= PR reaches production with no approving review.
+6. The rendered nginx config and =router/routes.json= disagree while
+   =gates/lint.sh= exits 0.
+7. A stale lock older than 60 minutes is cleared without the clearance
+   appearing in a PIR.
+
+Each is a test to be written, not merely a worry. Until they exist as
+executable checks, the central claim is [H].
+
+* Host survey of record
+
+PHASE 0, run 2026-09-12 on hydra. Nothing below is recalled; each line was
+observed.
+
+| Tool      | Version / path                                  |
+|-----------+-------------------------------------------------|
+| OS        | FreeBSD 14.4-RELEASE-p6 GENERIC amd64 (hydra)   |
+| node      | v24.14.1 =/usr/local/bin/node=                  |
+| npm       | 11.11.0                                         |
+| deno      | 2.6.6 (x86_64-unknown-freebsd)                  |
+| gmake     | GNU Make 4.4.1                                  |
+| make      | BSD make (reports no =--version=)               |
+| jq        | 1.8.1                                           |
+| gh        | 2.83.2, authenticated as =aygp-dr=              |
+| git       | 2.53.0                                          |
+| sqlite3   | 3.50.4                                          |
+| python3   | 3.11.15                                         |
+| emacs     | GNU Emacs 30.2 (tangles this file; 6 blocks [E]) |
+| chromium  | 148.0.7778.215 as =/usr/local/bin/chrome=       |
+| nginx     | *not installed*                                 |
+| eslint    | *not installed* (project-local dep)             |
+| wrangler  | *not installed*                                 |
+| playwright| *not installed*; =@playwright/test= 1.63.0 resolves from the registry |
+
+Repo state at survey: zero tracked files, no commits, no GitHub remote.
+Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
+
+** What was not verified, and why
+
+- No gate was run — none exists yet. Every matrix cell is therefore [H].
+- Tangling /was/ run [E]: =emacs --batch -l org --eval '(org-babel-tangle-file
+  "spec.org")'= emits all 6 blocks and creates nested directories, confirming
+  the file-level =:mkdirp t=. It surfaced two defects, below.
+- Playwright against system Chromium on FreeBSD was not attempted (no app to
+  drive). This is the single largest open portability risk.
+- The Google Calendar used as the change schedule was not contacted; the
+  account, calendar id, and credential path are unstated (see Open items).
+- nginx was not installed; =pkg= catalogue is stale and updating it needs root,
+  which was not taken.
+- The GitHub and Cloudflare targets were not exercised.
+
+* Open items (tracked as issues, not here)
+
+- Slot count per group (initial: 2 per group; trigger to raise: two consecutive =blocked:lock= on staging for the same group).
+- Whether =change:normal= also requires a CAB-style label from a second reviewer (trigger: first incident caused by a router change).
+- Calendar as the freeze source vs repo variable only (trigger: first preflight exit 4 in a real run).
+- *Directory name vs spec name*: this spec names the repo =standard-change=; it
+  currently lives in a directory named =slipway=. Declared deviation, review
+  ledger. Trigger to resolve: before the first commit that creates a GitHub
+  remote.
+- *Change-schedule identity*: which Google account owns the calendar, its
+  calendar id, and how =change/schedule.sh= authenticates in a runner. Blocks
+  any real =preflight= exit-3 path. Trigger: first implementation of
+  =change/schedule.sh=.
+- *Playwright on FreeBSD*: confirm or refute the system-Chromium
+  =executablePath= route. Trigger: first app that serves a page. If refuted,
+  hydra's e2e cell is unsupported and the gate is CI-only.
+- *=ports.tsv= tangles with spaces, not tabs* [E, observed]. The tangled file
+  contains zero tab characters, so =cut -f=, =awk -F'\t'= and any TSV reader
+  parse it as a single column. Either the source block gets real tabs, or the
+  registry stops claiming to be TSV. Trigger: before =change/ports.sh= is
+  written against it.
+- *=ports.tsv= is both a =:tangle= target and mutable state* [E, by
+  inspection]. =make port-alloc= appends rows and =port-free= removes them, so
+  re-tangling =spec.org= silently clobbers live worktree allocations — a
+  derived artifact masquerading as a source of truth, which is the failure the
+  artifacts table in =.meta/vocabulary.org= exists to name. Options: tangle a
+  =ports.tsv.example= and have =port-alloc= create the real file on first use,
+  or drop the =:tangle= and let the spec show it as an example block. Trigger:
+  the first second worktree.
