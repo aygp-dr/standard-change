@@ -33,7 +33,7 @@ change:complete	change/settle.sh	yes	no	no	TERMINAL, and the record. Never clear
 release:start	the pipeline	no	no	no	ACTION: the release has BEGUN for the booked change request. Written when preflight returns 0 and the first deploy starts; it names which change is in flight. Never written by hand -- adding it claims a deployment is running, which is not something a person can truthfully assert. Cleared by settle.sh or by abort (issue #37, unbuilt)
 release	human	no	yes	no	INTENT. A person adds it; the scheduler consumes it. A trigger that stays on re-fires
 hold:staging	REJECTED	no	no	no	REJECTED SEMANTICS 2026-09-13. Its job is covered by `freeze` (the estate stops, for everyone) and `itil:emergency` (precedence). A per-change hold looked necessary because it was the only human stop modelled; the real human stops turned out to be earlier -- a person owns `change:requested` and the approval, so a change nobody wants promoted simply is not requested or approved. Keeping a third mechanism meant three ways to stop a deploy with three different scopes and no rule for which applied
-deploy:staging	workflow	no	no	no	ACTION in flight, and the berth claim guard 1 reads
+deploy:staging	workflow	no	no	no	ACTION in flight, and the berth claim guard 1 reads. CLEARED by change/settle.sh on the success path and by change/reap.sh when a window lapses still holding it -- settle is unreachable for a change nobody drove, and a berth held by a dead window blocks everyone via guard 1 with no declared cause
 deploy:production	workflow	no	no	no	action in flight
 staging:e2e	gates/e2e.sh --pr	no	no	no	observation; the gate is the instrument
 staging:e2e-failed	gates/e2e.sh --pr	no	no	no	observation

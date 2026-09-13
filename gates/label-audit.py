@@ -81,6 +81,23 @@ def main():
                 fails.append(f"{rel}: writes '{label}', which is NOT DECLARED in "
                              f"change/label-owners.tsv. Declare it or stop writing it.")
                 continue
+            # ADDING AND REMOVING ARE DIFFERENT ACTS (docs/label-ownership.org).
+            # The declaration already models this -- human_add and human_rm are
+            # separate columns -- and this check ignored the verb it had just
+            # parsed, so every legitimate CLEAR read as an illegal write.
+            #
+            # Asserting a label is a claim; clearing one withdraws a claim, and
+            # the pipeline is allowed to withdraw claims it did not make. That is
+            # the stated rule for `release`: a person adds it, automation removes
+            # it. change/schedule.sh answering a change:requested by booking it,
+            # and change/reap.sh releasing a berth held by a dead window, are the
+            # same shape.
+            #
+            # A remove must still name a DECLARED label -- that check is above and
+            # applies to both verbs, because clearing something with no owner is
+            # how a label nobody governs gets quietly cleaned up.
+            if verb == "remove":
+                continue
             allowed = owner_of(rel)
             if decl[key]["owner"] in ("human", "RETIRED"):
                 fails.append(f"{rel}: writes '{label}', declared owner "

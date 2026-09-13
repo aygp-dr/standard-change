@@ -413,10 +413,20 @@ function flagbox(d){
 }
 function hms(s){const m=Math.floor(Math.abs(s)/60),r=Math.abs(s)%60;
   return (s<0?'-':'')+(m?m+'m ':'')+r+'s';}
+// Today gets a clock time; anything else keeps its date. A full ISO stamp for
+// a window forty minutes away makes the reader parse a timestamp to answer
+// "soon or not", and every window on this board is usually today.
+function when(iso){
+  const d=new Date(iso), n=new Date();
+  const same=d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate();
+  const t=d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  return same?t:d.toLocaleString([], {month:'short', day:'numeric',
+                                      hour:'numeric', minute:'2-digit'});
+}
 function cls(s){return s<=0?'rem-bad':s<60?'rem-bad':s<150?'rem-warn':'rem-ok';}
 function remain(x){
   // Not started: it has a start time, not a remainder.
-  if(!x.started)return '<span class=dim>'+esc(x.start)+'</span>';
+  if(!x.started)return '<span class=dim>'+esc(when(x.start))+'</span>';
   // THE CLOCK TICKS LOCALLY. The payload carries the window's END, not a
   // countdown, so the server pushes only when something actually changes --
   // a per-second value in the payload would differ every tick and defeat that,

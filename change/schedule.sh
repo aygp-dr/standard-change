@@ -172,6 +172,22 @@ case "${1:-}" in
                      sha:$sha, url:$url, booked_at:$t, result:null}]')
     write_sched "$old" "$new"
     printf '%s' "$id" > .change-event-id
+
+    # THE CHANGE RECORD MOVES TO SCHEDULED. label-owners.tsv has declared
+    # `change:scheduled` with owner `scheduler` and the note "set when a window
+    # is booked" since the beginning, and nothing wrote it: nine booked changes
+    # carried no lifecycle label at all, so "is this scheduled?" could only be
+    # answered by reading the calendar. A declared label nobody writes is a
+    # documented intention, not a state.
+    #
+    # ITIL 4: assessed and authorized -> SCHEDULED is the transition a booking
+    # makes. The lifecycle group is <=1 active, so change:requested comes off --
+    # the ask has been answered. CLEARING a human-owned label is allowed where
+    # asserting it is not (docs/label-ownership.org: adding and removing are
+    # different acts); the scheduler may answer an ask, it may not invent one.
+    gh pr edit "$pr" --repo "$repo" \
+      --add-label change:scheduled --remove-label change:requested >/dev/null 2>&1 || true
+
     echo "$id  $env  $start .. $end  pr=#$pr groups=$groups sha=$sha"
     ;;
 
