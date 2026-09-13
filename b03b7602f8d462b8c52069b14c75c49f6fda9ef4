@@ -1,0 +1,20 @@
+Timeline
+- PHASE 0 survey on hydra before writing: node 24.14.1, gmake 4.4.1, jq,
+  gh 2.83.2, chromium 148 at /usr/local/bin/chrome.
+- Found missing: nginx (pkg catalogue also stale, needs root), eslint,
+  wrangler, playwright. Recorded as named blockers rather than discovered
+  mid-pipeline later.
+- Playwright ships no FreeBSD browser build. System-Chromium executablePath
+  is the intended route and is marked [H]: believed, not run.
+- Tangle verified rather than assumed. First attempt via sed -i failed
+  (BSD sed needs an extension arg); switched to perl -pi.
+- Tangling surfaced two defects in the pasted source, both recorded in
+  Open items rather than silently fixed: ports.tsv emits zero tab
+  characters despite the name, and it is both a :tangle target and mutable
+  state that port-alloc/port-free write to.
+
+Reproduction
+  emacs --batch -l org --eval '(org-babel-tangle-file "spec.org")'
+  -> Tangled 13 code blocks; nested dirs created (file-level :mkdirp t)
+  python3 -c "print(open('ports.tsv','rb').read().count(b'\t'))"  -> 0
+Cell: FreeBSD 14.4-RELEASE-p6 amd64 (hydra), GNU Emacs 30.2
