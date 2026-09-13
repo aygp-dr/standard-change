@@ -53,6 +53,7 @@ export function shippingForm(q) {
     `value="${esc(q.get(n) || '')}" style="width:22rem;padding:4px"></label></p>`;
   const filled = SHIP.every(([n]) => (q.get(n) || '').trim() !== '');
   return `<h2>Shipping address</h2>
+<p>Where should we send this order?</p>
 <form method="get" action="/checkout">
 ${SHIP.map(field).join('\n')}
 <p><button type="submit">Continue</button></p>
