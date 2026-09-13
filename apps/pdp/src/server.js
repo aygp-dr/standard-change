@@ -219,7 +219,7 @@ This product has not gone away; try again shortly.</p>
 <p class=v>catalogue: ok — this product is not in it</p>`;
   const p = d.product;
   return `<h2>${esc(p.name)}</h2>
-<p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability)}</p>
+<p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability || 'Availability unknown')}</p>
 <p>SKU <code>${sku}</code></p>`;
 }
 
