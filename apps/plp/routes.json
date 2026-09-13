@@ -1,7 +1,13 @@
 {
   "app": "plp",
   "port_offset": 2,
-  "routes": ["/search", "/c/:category"],
+  "routes": [
+    "/search",
+    "/c/:category",
+    "/brands/:brand"
+  ],
   "health": "/search?q=ping",
-  "journeys": ["search"]
+  "journeys": [
+    "search"
+  ]
 }
