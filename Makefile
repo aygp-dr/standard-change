@@ -7,8 +7,8 @@ EXTERNAL := $(notdir $(wildcard external/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
-        simulate-gates smoke \
-        port-alloc port-free ports clean
+        simulate-gates smoke labels labels-selftest labels-cross \
+        labels-emergency port-alloc port-free ports clean
 
 help:  ## show this list
 	@grep -hE '^[a-zA-Z0-9_.-]+:.*##' $(MAKEFILE_LIST) | sort \
@@ -73,7 +73,7 @@ smoke:  ## walk the estate as a browser would   url=<base>
 smoke: ; @./gates/smoke.sh $(url)
 gate-selftest: docs-selftest  ## prove every gate can fail, then that it passes  ## prove every gate can fail, then that it passes
 	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s observation-selftest \
-	  && $(MAKE) -s audit-selftest
+	  && $(MAKE) -s audit-selftest && $(MAKE) -s labels-selftest
 
 # The two guards that authorize on observations, run against recorded PR state,
 # offline. Both directions: they must refuse a measurement taken on a different
@@ -114,6 +114,20 @@ forge-pull:  ## refresh the forge database
 forge-pull: ; @emacs --batch -l standard-change.el -f standard-change-forge-pull
 forge:           forge-pull forge-list  ## pull then list PRs through emacs
 forge-check:     ; @emacs --batch -l standard-change.el -f standard-change-forge-check
+
+# THE LABEL NAMESPACE. What the labels as declared actually permit, rather than
+# what the documents say they mean. `labels` reports the findings and is green
+# only when they are exactly the KNOWN set; `labels-selftest` is the negative
+# test in both directions and is what makes a green `labels` mean anything;
+# `labels-cross` requires sim/ and tla/Labels.tla to give the same answer.
+labels:  ## what the label semantics actually permit
+labels: ; @./sim/label_sim.py
+labels-selftest:  ## every label rule must be breakable, or fixable
+labels-selftest: ; @./sim/label_sim.py --selftest
+labels-cross:  ## the simulator and the TLA+ module must agree
+labels-cross: ; @./sim/cross_check.py
+labels-emergency:  ## the bare-`emergency` decision, with the state that decides it
+labels-emergency: ; @./sim/label_sim.py --question emergency
 
 pbt:  ## exhaustive model of the promotion guards
 pbt: ; @./gates/pbt-pipeline.py --exhaustive
