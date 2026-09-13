@@ -359,6 +359,73 @@ driven, reap it, re-book. See =docs/time-spent.org=.
 *An implementation is only worth it if that cost is measured first.* 001 should
 build the harness before the scheduler.
 
+** D11 — a branch old enough cannot be verified at all
+
+Hit live on *#2 =feat/pdp-price== at 23:18Z, seven minutes into its window.
+
+=gates/preflight.sh 2= → *exit 1*: twelve check runs not passing on =47518d6=,
+because CI has not scheduled a job since issue #34. The documented fallback is a
+host-measured =local/= status from =gates/report.sh= — and *that script does not
+exist in the branch's tree*. It was added in =06fc71f=; #2 is *81 commits
+behind* its merge base.
+
+*Guard 2 needs evidence about this build, and the instrument that produces that
+evidence is not in this build.*
+
+*** Why neither workaround is available
+
+- Running =main='s =report.sh= against the old tree is refused by design: it
+  resolves its own repo root and will not report unless the working tree IS the
+  PR head. That refusal was added the same afternoon, after it gated =main=
+  while printing a line that read as though it had gated #42.
+- Rebasing is the real fix, but it moves the head, voiding the approval and any
+  status it might earn — and 81 commits does not fit inside a ten-minute window.
+
+*** What this is a case of
+
+=change/divergence.sh= asks /did main change how you are verified?/ and classes
+that =pipeline=. This is the same question one step further: *main changed
+WHETHER you can be verified.* The control plane moved forward and took the
+instrument with it.
+
+It gets worse monotonically with branch age, and every long-lived branch in this
+repo has it. It is invisible until the window opens, because nothing checks
+"can this change even be measured" until guard 2 asks for the measurement.
+
+*** What 001 should do about it
+
+Not obvious, and worth stating rather than inventing:
+
+1. =report.sh= could run from =main= against a named worktree, with the head
+   check comparing the WORKTREE's head to the PR's rather than its own. That
+   makes the reporter portable across branch ages, at the cost of it no longer
+   being obvious which tree produced a result — the field that says so becomes
+   load-bearing.
+2. Or guard 0 could refuse earlier and louder: "you are N commits behind and
+   cannot be verified until you rebase" is a better message at booking time
+   than exit 1 at activation time.
+3. Or accept it: a branch this old is a rebase away from everything, and the
+   forfeit is the system telling the truth.
+
+*Nothing is implemented.* #2 forfeited its window, the estate was untouched, and
+the finding is recorded rather than worked around.
+
+** D12 — a scheduler that books faster than anything drives
+
+Self-inflicted on 2026-09-13 and worth keeping.
+
+A five-minute loop was given: /if no window covers now, book the next approved
+unscheduled PR/. It fired every tick, booked one, and drove none — and each
+booking took next-available, which chained forward. *Twenty-five windows on
+2026-09-19*, with #6, #28 and #42 repeating every thirty minutes.
+
+The bug is not the rate. *Booking and driving have to be the same loop.* A loop
+that can do one without the other will fill the calendar indefinitely, and every
+individual booking looks correct.
+
+The tell was visible on the dashboard immediately — a wall of identical future
+rows — which is the second time the board surfaced something no script noticed.
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
