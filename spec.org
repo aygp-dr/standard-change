@@ -1588,12 +1588,29 @@ versions recorded in §Host survey of record. Anything else is [H].
 
 | Cell                              | lint | test | e2e | Status                                             |
 |-----------------------------------+------+------+-----+----------------------------------------------------|
-| ubuntu-latest / CI                | [H]  | [H]  | [H] | Intended primary cell; nothing observed yet        |
-| FreeBSD 14.4 amd64 / hydra        | [H]  | [H]  | [H] | Node 24.14.1 present; see blockers below           |
+| ubuntu-latest / CI                | [H]  | [H]  | [H] | GitHub stopped scheduling jobs 2026-09-13 (#34); every run reports failure with 0 steps |
+| FreeBSD 14.4 amd64 / hydra        | [E]  | [E]  | [E] | *router = node, not nginx. browser NOT exercised.* |
 | macOS-arm64 / mini                | [H]  | [H]  | [H] | Not surveyed                                       |
 
-The claim in one line: *no cell is supported today.* The repo has no code; the matrix records intent
-and the known obstacles, and is the thing the first gate run promotes.
+The claim in one line, revised 2026-09-13: *one cell is supported, and only on
+part of its tuple.* On hydra, =gmake lint=, =gmake test= and =gates/e2e.sh=
+against staging were each watched to pass — 27 e2e checks against build
+=2567015= at 22:25Z, Node v24.14.1, GNU Make 4.4.1, FreeBSD 14.4-RELEASE-p6.
+
+*What that does NOT promote.* The tuple is (runtime, platform, router, browser),
+and this cell is observed on two of the four:
+
+- *router* — the router under test was =router/server.js=, the node router the
+  port-block model uses. nginx is installed but =gmake router= has not been
+  watched. A gate passing behind one router says nothing about the other.
+- *browser* — =gates/e2e.sh= is curl-based. Playwright ships no FreeBSD browser
+  build, so no cell has a browser observation at all, and =e2e= here means the
+  journey assertions, not a rendered page.
+
+The earlier text — "no cell is supported today; the repo has no code" — was
+true when written and stopped being true without anyone editing it. That is the
+failure mode this matrix exists to catch, so it is recorded rather than
+quietly corrected.
 
 ** Known blockers on hydra (FreeBSD), from the survey
 

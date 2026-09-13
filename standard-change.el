@@ -155,6 +155,102 @@ worse view rather than to no view."
                                    "\n\n{{end}}")))))
 
 
+;;;; The label vocabulary ----------------------------------------------------
+;;
+;; READ FROM THE DECLARATION, NEVER RETYPED HERE.
+;;
+;; `change/label-owners.tsv' is the single declaration of every label, its
+;; owner, and which of add/remove a human may do. Copying that list into elisp
+;; would make this file a second source of truth for the same fact, which is
+;; the drift defect this repo keeps finding -- the dashboard did it with the
+;; environment list, spec.org did it with the support matrix, and both went
+;; stale without anyone editing them.
+;;
+;; So: parse the tsv. If a label is added to the declaration it appears here
+;; with no change to this file, and if the declaration is unreadable that is
+;; reported as unknown rather than as an empty vocabulary.
+
+(defconst standard-change-label-namespaces
+  '(("itil:"       . "classification -- what KIND of change. Exactly one.")
+    ("change:"     . "lifecycle -- how far it has got. At most one active.")
+    ("app:"        . "blast radius -- which groups the diff touches. Labeller-owned.")
+    ("staging:"    . "observation on staging, by the instrument that measured it.")
+    ("production:" . "observation on production, same rule.")
+    ("deploy:"     . "ACTION in flight. deploy:staging IS the berth.")
+    ("blocked:"    . "why a guard refused.")
+    ("review:"     . "who accepted it, and whether they were a person.")
+    ("release"     . "human INTENT to ship. A person adds it; automation clears it."))
+  "What each prefix MEANS. Deliberately not a list of labels -- the labels
+live in the declaration and are read from it. This is the part a reader
+needs that a tsv column cannot carry.")
+
+(defconst standard-change-estate-labels '("freeze" "emergency")
+  "Bare labels that are properties of the WORLD, not of any change.
+
+They live on the estate issue, NOT on a pull request. PR #48 found why: a PR
+carrying `itil:emergency' is a change, and the same write that closes the
+estate to everyone else exempts its own carrier. An issue cannot be deployed,
+so there is no exemption it could be handed.
+
+Note `emergency' (the estate is shut) is a different fact from
+`itil:emergency' (this change is the remedy, and passes both a freeze and an
+estate emergency). Two namespaces, two subjects.")
+
+(defun standard-change--declaration ()
+  "Parse `change/label-owners.tsv' into (LABEL OWNER PERSISTENT HUMAN-ADD HUMAN-RM NOTE).
+Returns nil if the file cannot be read -- callers must treat that as
+unknown, not as \"there are no labels\"."
+  (let ((f (expand-file-name "change/label-owners.tsv" standard-change-root)))
+    (when (file-readable-p f)
+      (with-temp-buffer
+        (insert-file-contents f)
+        (let (rows)
+          (dolist (line (split-string (buffer-string) "\n" t))
+            (unless (string-prefix-p "#" line)
+              (let ((f (split-string line "\t")))
+                (when (and (>= (length f) 6) (not (equal (nth 0 f) "exclusive")))
+                  (push f rows)))))
+          (nreverse rows))))))
+
+;;;###autoload
+(defun standard-change-labels ()
+  "Show the label declaration: every label, its owner, and who may write it.
+
+Read live from `change/label-owners.tsv'. If that file is unreadable this
+says so rather than showing an empty list, because an empty vocabulary and an
+unreadable one are different facts."
+  (interactive)
+  (let ((rows (standard-change--declaration))
+        (buf (get-buffer-create "*change: labels*")))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (if (null rows)
+            (insert "change/label-owners.tsv is unreadable.\n\n"
+                    "This is NOT \"there are no labels\" -- it is \"I could not "
+                    "check\".\nFix the path or the file before trusting any "
+                    "view that depends on it.\n")
+          (insert "THE PREFIXES\n\n")
+          (dolist (ns standard-change-label-namespaces)
+            (insert (format "  %-13s %s\n" (car ns) (cdr ns))))
+          (insert "\nESTATE LABELS -- on the estate issue, never on a PR\n\n")
+          (dolist (l standard-change-estate-labels)
+            (insert (format "  %-13s %s\n" l
+                            "a property of the world; blocks everyone including its declarer")))
+          (insert (format "\nTHE DECLARATION -- %d labels, read from change/label-owners.tsv\n\n"
+                          (length rows)))
+          (insert (format "  %-26s %-24s %-4s %-4s %s\n"
+                          "LABEL" "OWNER" "PERS" "HUM" "NOTE"))
+          (dolist (r rows)
+            (insert (format "  %-26s %-24s %-4s %-4s %s\n"
+                            (nth 0 r) (nth 1 r) (nth 2 r)
+                            (concat (if (equal (nth 3 r) "yes") "+" "-")
+                                    (if (equal (nth 4 r) "yes") "-" " "))
+                            (truncate-string-to-width (or (nth 5 r) "") 70)))))
+        (goto-char (point-min))
+        (special-mode)))
+    (pop-to-buffer buf)))
+
 ;;;; Batch entry points -------------------------------------------------------
 ;; So `gmake forge` works whether or not an interactive Emacs is running.
 ;; forge-list-pullreqs is a tabulated-list command and needs a live frame, so
