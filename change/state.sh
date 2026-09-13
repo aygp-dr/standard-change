@@ -40,7 +40,7 @@ write_state() {
   expected="$1"; body="$2"
   case "$BACKEND" in
     contents)
-      set -- --method PUT -f message="idp: $(date -u +%FT%TZ)" \
+      set -- --method PUT -f message="idp: $(date -u +%FT%TZ) [skip ci]" \
              -f branch="$BRANCH" -f content="$(printf '%s' "$body" | base64 | tr -d '\n')"
       [ -n "$expected" ] && set -- "$@" -f sha="$expected"
       gh api "repos/$GITHUB_REPOSITORY/contents/$PATH_IN_REPO" "$@" >/dev/null 2>&1 \

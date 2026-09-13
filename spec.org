@@ -31,6 +31,45 @@ Two pre-conditions gate every production deployment:
 1. No other deployment is in progress (deployment lock).
 2. No emergency change or change freeze is active on the change schedule.
 
+* What this model gets wrong, on purpose
+
+*The architecture being simulated here is a bad one, and the pipeline is the
+cost of it.* Stating that plainly is load-bearing: everything downstream —
+the singleton berth, the queue, guards 0, 1 and 4b, the rebase loop, the
+preemption rules — is machinery for surviving a missing contract, not a
+pattern to copy.
+
+The defect: four apps share one reverse proxy and one mock backend with *no
+enforced interface between them*, and there is a single path to production. So
+any change to any app might break any other, and the only available remedy is
+to serialize: one change at a time, tested against current production, promoted
+whole. The queue is not a design, it is what you are left with when nothing
+else can tell you whether two changes compose.
+
+What the right shape would be [I]:
+
+- *Hard contracts at the router.* Route ownership declared and enforced, with
+  versioned, consumer-driven contracts between apps rather than an implicit
+  agreement that the storefront hangs together. Contract tests then answer
+  "do these compose?" statically, per app, in seconds.
+- *A path to production per team.* Each team owns its own production
+  deployment for its own app, gated by its own contract tests. No shared berth,
+  so no queue, so no guard 0, no guard 1, no guard 4b, no preemption rules, no
+  rebase loop. Scenario D4 becomes unstateable rather than defended against.
+- *Staging stops being scarce*, because it stops being the only place where
+  cross-app truth is discovered.
+
+So read the guard sequence as a /faithful model of a common failure/, not as a
+recommendation. Organizations really do run this way, the coordination costs
+really do land where this spec puts them, and the reason to build it carefully
+is that the machinery is load-bearing exactly as long as the contracts are
+missing. A reader who takes the pipeline home without noticing the note has
+taken home the wrong artifact.
+
+*Non-goal:* fixing it. This repo demonstrates change enablement under a shared
+path to production. Replacing that with per-team contracts would be a different
+repo, and a shorter one.
+
 * Vocabulary (ITIL 4)
 
 | Term                          | Meaning in this repo                                                                  |
@@ -420,7 +459,7 @@ The label query is the authority, not the workflow concurrency group:
 production verification still /holds/ staging with no run in flight. The label
 is the lock; =concurrency: staging= is only the anti-collision on top of it.
 
-** Guard 4b — main moved under a staging pass
+** Guard 4b — why a request-time guard expires
 
 *Amendment, 0.2 → 0.3. Scenario D4 in =scenarios.org= refuted 0.2 and forced
 this; the spec tracks observed reality.*
@@ -472,6 +511,73 @@ change after it is checked must be re-checked at the moment it is relied on.
 Guard 0 at claim time is a convenience that gives fast feedback; guard 4b is
 the one that is load-bearing. Note the amendment also drops =deploy:staging=,
 which frees the queue — an expired claimant must not keep holding it.
+
+** The berth, and four ways to lose it
+
+A change occupies one of four positions. Only the last two are at risk from
+=main= moving, and they are at risk /differently/.
+
+| # | Position    | Means                                       | Labels                             |
+|---+-------------+---------------------------------------------+------------------------------------|
+| 1 | =scheduled= | window booked, no claim on the path         | =CHANGE:= event; no =deploy:*=     |
+| 2 | =berthed=   | holds the path to production, deploying     | =deploy:staging=, =staging:in-progress= |
+| 3 | =verified=  | authorizing e2e passed on this head         | + =staging:passed=                 |
+| 4 | =cleared=   | promoted, about to ship                     | + =deploy:production=              |
+
+=scheduled= is a record and nothing blocks on it. =berthed= is the scarce
+resource. *Being verified is not being safe*: positions 3 and 4 are precisely
+where a change looks finished and can still be wrong, because everything about
+them was established against a =main= that has since moved.
+
+** Guard 4b — classify the divergence, do not collapse it
+
+=change/divergence.sh= classifies what landed under a berthed change. The
+distinction is the whole guard: /"you are behind main"/ and /"you are about to
+ship an image missing a hotfix"/ are different facts, and treating them alike
+fails in both directions — a README merge forcing a full re-verify teaches
+people the guard is noise, and a hotfix merge not forcing one is scenario D4.
+
+| Class      | What landed                                | Berth | Staging pass | Message                                    |
+|------------+--------------------------------------------+-------+--------------+--------------------------------------------|
+| =inert=    | docs, =.meta=, =scenarios=, =experiments=, =tla= | kept  | *kept*       | informational only                         |
+| =pipeline= | =gates/=, =change/=, =.github/=, =Makefile= | kept  | kept, re-run gates | "how you are verified changed"        |
+| =artifact= | =apps/=, =router/=, =targets/=             | kept + extended | *withdrawn* | "rebase and re-run staging"       |
+| =hotfix=   | any merge carrying =Change-Type: emergency= | kept + extended | *withdrawn* | "you would ship without the fix"    |
+
+*The berth is never taken away by someone else's merge.* This is the correction
+scenario D4's first fix got wrong: withdrawing =deploy:staging= freed the queue,
+which is right when a claimant goes stale on its own, and wrong when it was
+invalidated by someone jumping ahead of it. A change that was preempted keeps
+its position and gets an extension (=change/state.sh extend=) to rebase and
+revalidate. Losing your berth because someone else had an emergency is a
+punishment for being in the queue at the wrong moment.
+
+Staleness and preemption are therefore separated:
+
+- *self-inflicted* — you pushed, or your lease simply expired → release the
+  berth, rejoin the queue.
+- *preemption* — =artifact= or =hotfix= landed under you → keep the berth,
+  =.revalidate = true=, deadline extended, and the pass must be re-earned.
+
+The two messages a =verified= change can receive, verbatim, because the
+difference is what the reader needs:
+
+#+begin_example
+[artifact] main moved and it touched what you ship.
+  merged: apps/pdp/src/price.js
+  Your staging pass described an image that is no longer what you would
+  deploy. Berth held until 14:20Z. Rebase onto main and re-add deploy:staging.
+
+[hotfix] an emergency landed under you.
+  CHG-20260912-0007 (#312) shipped apps/checkout/src/session.js
+  Deploying your current image would REVERT it. This is not a staleness
+  warning. Berth held until 14:35Z; the pass is withdrawn until staging
+  re-runs on a tree containing the fix.
+#+end_example
+
+An =inert= divergence prints nothing beyond a note on the PR. A change that is
+behind =main= only on documentation is behind in a way that cannot affect the
+artifact, and guard 0 at the /next/ claim will make it rebase anyway.
 
 ** Promotion — staging pass to production
 
