@@ -9,7 +9,7 @@ const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
 // OneUI is the shared UI surface (issue #10). Every app pins it, so a change
 // there is a change to all of them -- the cost is named in
 // docs/cross-cutting-coupling.org, not hidden.
-import { page, loadEstate, VERSION as ONEUI } from '../../../shared/oneui.js';
+import { page, loadEstate, HOST, VERSION as ONEUI } from '../../../shared/oneui.js';
 const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
@@ -25,8 +25,12 @@ export function render(path) {
 // the gates assert on; HTML is only served when the client asks for it.
 export const BACKGROUND = '#fff4e0';
 
-export function renderHtml(path) {
-  return page(render(path), ESTATE, BACKGROUND);
+// `port` is the port this process is ACTUALLY answering on: the caller takes it
+// off the accepted socket, not from PORT. shared/oneui.js derives the tier from
+// it, and a tier derived from something the deployer exported would be the
+// estate reporting what it was told (issue #15).
+export function renderHtml(path, port) {
+  return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND);
 }
 
 // Only listen when run directly. Importing this module (as the unit tests do)
@@ -36,7 +40,7 @@ const isMain = process.argv[1] &&
 
 if (isMain) createServer((req, res) => {
   const wantsHtml = /text\/html/.test(req.headers.accept || '');
-  const body = wantsHtml ? renderHtml(req.url)
+  const body = wantsHtml ? renderHtml(req.url, req.socket.localPort)
                          : JSON.stringify(render(req.url), null, 2);
   res.writeHead(200, {
     'content-type': wantsHtml ? 'text/html; charset=utf-8' : 'application/json',
