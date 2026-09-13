@@ -1,0 +1,36 @@
+# In-jail router. Identical in every environment -- only the jail's IP differs.
+# Apps listen on jail loopback, so nginx is the only reachable service.
+worker_processes 1;
+error_log /var/log/nginx-error.log warn;
+pid /var/run/nginx.pid;
+events { worker_connections 256; }
+http {
+  access_log /var/log/nginx-access.log;
+  upstream core     { server 127.0.0.1:8001; }
+  upstream plp      { server 127.0.0.1:8002; }
+  upstream pdp      { server 127.0.0.1:8003; }
+  upstream checkout { server 127.0.0.1:8004; }
+  upstream mock     { server 127.0.0.1:8005; }
+
+  server {
+    listen 80;
+
+    # guard 5, manifest mode: the build this estate is serving.
+    location = /version.json {
+      default_type application/json;
+      alias /var/run/version.json;
+      add_header Cache-Control "no-store";
+    }
+
+    location = /            { proxy_pass http://core; }
+    location /login         { proxy_pass http://core; }
+    location /account       { proxy_pass http://core; }
+    location /cart          { proxy_pass http://core; }
+    location /search        { proxy_pass http://plp; }
+    location /c/            { proxy_pass http://plp; }
+    location /p/            { proxy_pass http://pdp; }
+    location /checkout      { proxy_pass http://checkout; }
+    location /api/          { proxy_pass http://mock; }
+    location / { return 404 '{"error":"no route"}'; }
+  }
+}

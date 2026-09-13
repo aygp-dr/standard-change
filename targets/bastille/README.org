@@ -1,0 +1,53 @@
+#+TITLE: bastille target — staging and production
+#+OPTIONS: toc:nil num:nil
+
+* The shape
+
+Each environment is *one jail with its own IP*, and inside it nginx fronts the
+apps on jail-local loopback. Nothing but nginx is reachable from outside.
+
+#+begin_src mermaid :eval never-export
+flowchart LR
+    LAN["192.168.86.0/24"] --> S["sc-staging 10.0.0.60:80<br/>nginx"]
+    LAN --> P1["sc-prod-1 10.0.0.61:80<br/>nginx"]
+    LAN --> P2["sc-prod-2 10.0.0.62:80<br/>nginx"]
+    S --> SA["127.0.0.1:8001-8005<br/>core plp pdp checkout mock"]
+    P1 --> PA["127.0.0.1:8001-8005"]
+    P2 --> PB["127.0.0.1:8001-8005"]
+
+    style S fill:#fde68a,stroke:#a16207,color:#000
+    style P1 fill:#bbf7d0,stroke:#15803d,color:#000
+    style P2 fill:#bbf7d0,stroke:#15803d,color:#000
+#+end_src
+
+* Why this kills the port-block scheme, for deployed environments
+
+The =10000 + 10n= port blocks exist because worktrees share one host's network
+namespace and must not collide. *A jail has its own namespace, so the collision
+cannot happen* — and every environment can therefore use the *same* port
+layout.
+
+That is not a convenience. It means the deployed artifact and its config are
+*byte-identical across staging and production*, so promotion cannot introduce a
+configuration difference. Under the port-block model, staging and production
+necessarily differed in at least their port numbers, and any config that
+differs between the environment you tested and the one you shipped is a place
+for them to diverge.
+
+Port blocks remain correct for *local worktrees* (=:9010=, =:9020=), which are
+development instances sharing hydra's namespace. Two different problems.
+
+* Route ownership becomes a network fact
+
+=gates/e2e.sh= asserts that each path is served by the app that declares it.
+Locally that is a convention the router honours. Here the apps bind to
+*jail loopback*, so there is no address at which a client could reach =plp=
+directly even by mistake. *Only the router is routable* — the assertion is
+enforced by the network rather than checked after the fact.
+
+* What attests
+
+=jls= and =bastille list= are the host's own statement about which jails are
+running (=spec.org= §C6). Each jail additionally writes =/var/run/build-sha= at
+start, and nginx serves it at =/version.json=, so guard 5 has both a
+self-report and an independent record to compare — and can say which it is.

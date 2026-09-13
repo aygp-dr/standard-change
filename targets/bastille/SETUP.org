@@ -1,0 +1,132 @@
+#+TITLE: bastille target — setup and validation flow
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:t
+
+* The estate
+
+#+begin_src mermaid :eval never-export
+flowchart TB
+    LAP["laptop<br/>192.168.86.0/24"] --> F["front nginx on hydra<br/>:9100 production  :9101 staging"]
+    F -->|"the switch"| B["sc-prod-1  10.0.0.61<br/>BLUE"]
+    F -.->|"idle"| G["sc-prod-2  10.0.0.62<br/>GREEN"]
+    F --> S["sc-staging  10.0.0.60"]
+    B --> BA["nginx :80 -> 127.0.0.1:8001-8005"]
+    G --> GA["nginx :80 -> 127.0.0.1:8001-8005"]
+    S --> SA["nginx :80 -> 127.0.0.1:8001-8005"]
+    DEV["dev worktrees<br/>:9010 :9020 on hydra"] -.->|"not a deployment target"| X(( ))
+
+    style B fill:#bbf7d0,stroke:#15803d,color:#000
+    style G fill:#e5e7eb,stroke:#6b7280,color:#000
+    style S fill:#fde68a,stroke:#a16207,color:#000
+#+end_src
+
+| role            | jail         | jail IP     | reached at                  |
+|-----------------+--------------+-------------+-----------------------------|
+| staging         | =sc-staging= | 10.0.0.60   | =192.168.86.29:9101=        |
+| production blue | =sc-prod-1=  | 10.0.0.61   | =192.168.86.29:9100= (when live) |
+| production green| =sc-prod-2=  | 10.0.0.62   | =192.168.86.29:9100= (when live) |
+| dev (worktrees) | —            | —           | =192.168.86.29:9010=, =:9020= |
+
+*Every jail listens on port 80.* Each has its own IP, so ports cannot collide,
+and the deployed config is byte-identical across environments — there is no
+port number for staging and production to differ in. The =10000 + 10n= blocks
+remain correct for dev worktrees, which share hydra's namespace. Two different
+problems, two different answers.
+
+* Why the front router exists
+
+Two jobs, and it would be needed for either alone:
+
+1. *Bridge.* Jails are on =10.0.0.0/24=; laptops are on =192.168.86.0/24= and
+   =pf= passes only =8000:9999= inbound. The front router is the only thing on
+   both.
+2. *The blue/green switch.* =upstream production= names exactly one estate, so
+   at any instant production is one build — never two.
+
+* Why blue/green makes guard 5 easy
+
+This is the payoff, and it is the inverse of the gradual-rollout case:
+
+| strategy            | is a mixed fleet possible? | what guard 5 must do                 |
+|---------------------+----------------------------+--------------------------------------|
+| blue/green          | *no* — atomic cutover      | sample once; there is nothing to converge |
+| rolling replicas    | yes, transiently           | sample until one build answers       |
+| gradual / canary    | *yes, by design*           | *cannot be answered by sampling* — needs the platform's declared split (§C6) |
+
+An atomic cutover has *no convergence window*, so =UNCONVERGED= is
+unreachable rather than merely unlikely. Rollback is the same command with the
+other colour, which makes the previous build a *reachable rollback target* —
+the property =spec.org= says =non_fast_forward= protects and GitHub Pages
+cannot offer.
+
+* Setup, as performed
+
+#+begin_example
+bastille create -T sc-staging 14.3-RELEASE 10.0.0.60      # and .61, .62
+# ABI: jails are 14.3 userland, pkg serves 14.4 builds (host is 14.4-p6)
+echo 'IGNORE_OSVERSION=yes' >> <jail>/usr/local/etc/pkg.conf
+echo 'FreeBSD-kmods: { enabled: no }' > <jail>/usr/local/etc/pkg/repos/kmods.conf
+jexec <jail> pkg install -y python311 nginx                # 465M per jail
+#+end_example
+
+Python, not node: the apps are fixtures and the pipeline is the product, so the
+deployed app is stdlib-only =targets/bastille/app.py= serving the same JSON
+contract. =gates/e2e.sh= therefore asserts identically against a jail and a dev
+worktree.
+
+* The validation flow
+
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    autonumber
+    participant Op as operator
+    participant D as deploy.sh
+    participant S as sc-staging
+    participant G as green (idle)
+    participant F as front router
+
+    Op->>D: deploy.sh staging <sha>
+    D->>S: install app, restart, write /var/run/version.json
+    Op->>S: gates/e2e.sh (15 checks)
+    Op->>S: gates/health.sh manifest mode
+    Note over Op,S: staging pass is earned HERE
+    Op->>D: deploy.sh production <sha>
+    D->>G: install into the IDLE colour only
+    Op->>G: verify the idle estate directly, before any traffic
+    Op->>F: switch.sh green
+    F-->>Op: production -> green (atomic)
+    Op->>F: gates/health.sh through :9100
+    Note over Op,F: no convergence window: one estate, one build
+#+end_example
+
+** The commands
+
+#+begin_example
+./targets/bastille/deploy.sh staging [sha]
+ROUTER_URL=http://192.168.86.29:9101 ./gates/e2e.sh
+HEALTH_MODE=manifest ./gates/health.sh http://192.168.86.29:9101 <sha>
+
+./targets/bastille/deploy.sh production [sha]
+./targets/bastille/front/switch.sh {blue|green|status}
+ROUTER_URL=http://192.168.86.29:9100 ./gates/e2e.sh
+#+end_example
+
+* What this target does and does not give
+
+| capability                          | status |
+|-------------------------------------+--------|
+| C6 — platform-attested record       | *yes* — =jls= is the host's own statement; the host runs the jails |
+| guard 5 — served build identifiable | *yes* — both =x-build-sha= and =/version.json= |
+| reachable rollback target           | *yes* — the idle colour still holds the previous build |
+| promote the tested artifact         | *no* — deploy rebuilds from source per environment; weaker than a digest |
+| route ownership enforced            | *no* — see below |
+
+** Two honest defects [E]
+
+- *Non-VNET jails remap =127.0.0.1= to the jail IP.* The apps bind loopback
+  intending to be unreachable, but =curl http://10.0.0.60:8002/= returns 200.
+  Route ownership is a convention here, not a network fact. VNET jails would
+  make it real.
+- *Promotion is not by identity.* =deploy.sh= installs a commit into a jail, so
+  staging and production build separately. §Cloud mirror requires promoting the
+  artifact staging tested; this target cannot, and Workers versions can (§C6).
