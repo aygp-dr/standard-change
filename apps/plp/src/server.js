@@ -216,3 +216,5 @@ if (isMain) createServer((req, res) => {
 }).listen(PORT, BIND, () => {
   console.log(`plp listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });
+
+// noop 09 — no behaviour; walking the workflow.
