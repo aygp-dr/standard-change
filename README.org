@@ -1,0 +1,236 @@
+#+TITLE: standard-change
+#+SUBTITLE: A label-driven, gate-checked deployment pipeline on a mock storefront monorepo
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-12
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:2 num:t
+
+* What this is
+
+Change enablement and deployment management, demonstrated end to end. Four mock
+storefront apps (=core=, =plp=, =pdp=, =checkout=) behind one router. The apps
+are fixtures; *the product is the gate sequence* — the labels that drive it, the
+environment model underneath it, the change-schedule integration, and the
+guards that make "you cannot skip staging" a structural fact rather than a
+convention.
+
+=spec.org= governs. This file is derived and orients; where they disagree,
+=spec.org= wins. =scenarios.org= is the test plan, =tla/= the formal model of
+the promotion guards.
+
+* Environments
+
+Three kinds of environment, and conflating them is the mistake this model
+exists to prevent. *Team environments are for developing a change; staging is
+the path to production.* They are not the same resource, they are not checked
+out the same way, and a team environment can never promote.
+
+#+begin_src mermaid :eval never-export
+flowchart TB
+    subgraph local["Local — one port block per git worktree"]
+        W0["main worktree<br/>router :10000<br/>apps :10001-10005"]
+        W1["feat/pdp-price<br/>router :10010<br/>apps :10011-10015"]
+        W2["feat/plp-facets<br/>router :10020<br/>apps :10021-10025"]
+    end
+
+    subgraph team["Team environments — parallel, disposable, NOT on the path"]
+        E1["env/checkout-team<br/>checked out by a team"]
+        E2["env/search-team"]
+        E3["env/pdp-team"]
+    end
+
+    subgraph path["Path to production — singleton, queued"]
+        S["staging<br/>held by ONE pr at a time<br/>deploy:staging"]
+        P["production"]
+    end
+
+    W1 --> E1
+    W2 --> E2
+    E1 -.->|"cannot promote"| X(("✗"))
+    E2 -.->|"cannot promote"| X
+    W1 -->|"deploy:staging<br/>guards 0 and 1"| S
+    S -->|"authorizing e2e passes<br/>guards 2, 4, 4b"| P
+    P -->|"health check passes"| M["merge to main<br/>labels released"]
+    M -.->|"everyone else is now<br/>BEHIND main"| W2
+
+    style S fill:#fde68a,stroke:#a16207,color:#000
+    style P fill:#bbf7d0,stroke:#15803d,color:#000
+    style X fill:#fecaca,stroke:#b91c1c,color:#000
+#+end_src
+
+| Environment       | Count      | Checked out by     | Promotes? | Freed by                         |
+|-------------------+------------+--------------------+-----------+----------------------------------|
+| worktree block    | per clone  | =make port-alloc=  | no        | =make port-free=                 |
+| =env/<team>-<app>= | many      | IDP checkout       | *no*      | IDP release, or lease expiry     |
+| =staging=         | *exactly 1* | =deploy:staging=  | yes       | merge, failure, or guard 4b      |
+| =production=      | 1          | =deploy:production= | —        | —                                |
+
+The asymmetry is deliberate. Team environments are cheap, many, and leased —
+losing one costs a re-checkout. Staging is scarce, singular, and *queued*,
+because holding it is holding the only path to production.
+
+* Feature branches and the queue
+
+#+begin_src mermaid :eval never-export
+gitGraph
+    commit id: "main@0"
+    branch feat-pdp
+    commit id: "pdp price fix"
+    checkout main
+    branch feat-plp
+    commit id: "plp facets"
+    checkout feat-pdp
+    commit id: "review fixes"
+    checkout main
+    merge feat-pdp id: "main@1 (deployed)"
+    checkout feat-plp
+    commit id: "REBASE onto main@1"
+    checkout main
+    merge feat-plp id: "main@2 (deployed)"
+#+end_src
+
+=feat-plp= could not take staging while =feat-pdp= held it (guard 1), and could
+not take it afterwards without the rebase (guard 0) — because deploying a tree
+branched from =main@0= would have shipped a storefront missing the pdp price
+fix. *The rebase is not hygiene; it is the re-verification that the two changes
+compose*, and it happens before staging rather than after production.
+
+* The updated check, and why it is containerized
+
+The *updated check* is guard 0 plus guard 4b: a change may only reach the path
+to production while it contains the current tip of =main=, and that must be
+true at the moment it is relied on, not merely when it was requested.
+
+Containers are what make this checkable rather than hopeful. One image per app,
+built once, tagged by the *commit SHA*, promoted by digest:
+
+#+begin_src mermaid :eval never-export
+flowchart LR
+    subgraph build["Build once, on the PR head SHA"]
+        SRC["apps/&lt;group&gt;"] --> IMG["ghcr.io/.../&lt;group&gt;:&lt;sha&gt;<br/>digest sha256:..."]
+    end
+
+    subgraph stagingenv["staging — the mixed-app property"]
+        R1["router"] --> C1["core :&lt;prod-sha&gt;"]
+        R1 --> C2["plp :&lt;PR-sha&gt;"]
+        R1 --> C3["pdp :&lt;prod-sha&gt;"]
+        R1 --> C4["checkout :&lt;prod-sha&gt;"]
+    end
+
+    subgraph prodenv["production"]
+        R2["router"] --> D1["core"] 
+        R2 --> D2["plp :&lt;PR-sha&gt;"]
+        R2 --> D3["pdp"]
+        R2 --> D4["checkout"]
+    end
+
+    IMG -->|"only app:* groups"| C2
+    stagingenv -->|"promote by DIGEST<br/>never rebuild"| prodenv
+    C2 -.->|"x-build-sha header"| HC["gates/health.sh<br/>asserts served SHA"]
+
+    style C2 fill:#fde68a,stroke:#a16207,color:#000
+    style D2 fill:#bbf7d0,stroke:#15803d,color:#000
+#+end_src
+
+Three properties fall out, and each is a scenario in =scenarios.org=:
+
+1. *Only the changed groups come from the PR.* The untouched three run the
+   current production image. Staging therefore tests /this change against
+   current production/, which is what makes the cross-app journeys mean
+   something (scenario D2).
+2. *Production promotes the digest staging tested.* It never rebuilds. A
+   rebuild between staging and production is a different artifact, and every
+   assurance staging bought is void.
+3. *=x-build-sha= is served by the container*, so =gates/health.sh= can assert
+   that the thing we deployed is the thing answering. A 200 alone passes
+   through a deploy that silently did nothing (scenario D6).
+
+The local worktree topology is the same graph with =nginx= and =node= processes
+instead of containers — same router, same ports, same four upstreams. That
+correspondence is the point: what you run at =:10010= is what staging runs.
+
+* ChatOps and the scheduler
+
+The pipeline is driven by labels, so ChatOps is a thin layer that sets labels
+and reads state back. The scheduler is the part that does not exist yet.
+
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    actor Dev
+    participant Chat as ChatOps
+    participant GH as GitHub
+    participant Cal as Change schedule
+    participant Env as staging
+    participant Prod as production
+
+    Dev->>Chat: /deploy pdp
+    Chat->>GH: add deploy:staging to PR
+    GH->>GH: queue.sh — guard 0 (up to date) + guard 1 (singleton)
+    alt behind main or queue busy
+        GH-->>Chat: refused + reason
+        Chat-->>Dev: "rebase onto main" / "held by #N"
+    else claimed
+        GH->>Cal: schedule.sh block — CHANGE window
+        Cal-->>GH: event id
+        GH->>Env: deploy app:* groups by digest
+        GH->>Env: authorizing e2e
+        Env-->>GH: pass -> staging:passed@sha
+        GH->>GH: promote.yml — guard 2 -> deploy:production
+        GH->>Prod: deploy same digests
+        GH->>Prod: gates/health.sh — x-build-sha
+        Prod-->>GH: healthy
+        GH->>GH: PIR comment, merge, release labels
+        GH->>Cal: schedule.sh close — result
+        GH-->>Chat: released; waiting PRs told to rebase
+    end
+#+end_src
+
+** What exists, and what is work
+
+| Piece                                   | State                                   |
+|-----------------------------------------+-----------------------------------------|
+| Label vocabulary and guards             | specified (=spec.org=), formally checked |
+| Guard logic in TLA+                     | *verified* — =tla/check.sh=, both directions |
+| =queue.sh=, =health.sh=, =release.sh=   | specified, tangleable, *unwritten*      |
+| Calendar =block= / =check= / =close=    | *unbuilt* — no account, id, or auth decided |
+| ChatOps =/deploy=, =/status=, =/release= | *unbuilt*                              |
+| IDP environment checkout / release      | *unbuilt* — see =.claude/skills/=       |
+| Telemetry redline on completion         | *unbuilt*                               |
+
+The scheduler work splits in two, and they are genuinely different problems:
+
+- *Change windows* (=CHANGE:= events) are a /record/. Writing them is
+  fire-and-forget; nothing blocks on them. Cheap.
+- *Freezes and emergencies* (=FREEZE:=, =EMERGENCY:=) are a /control/. The
+  pipeline blocks on reading them, so the calendar becomes a dependency in the
+  deployment path — and =preflight= exit 4 (unreachable, no override) *blocks*.
+  A read-path outage stops deployments, which is the correct failure direction
+  and still an outage. The =EMERGENCY_CHANGE= repo variable is the break-glass
+  for the break-glass.
+
+Note the word "emergency" runs in two directions, which is a live source of
+confusion worth stating: an =EMERGENCY:= *calendar event* blocks the estate,
+while a =change:emergency= *label* exempts one PR. The calendar governs
+everyone; the label governs one change.
+
+* Repository map
+
+| Path            | What                                                          |
+|-----------------+---------------------------------------------------------------|
+| =spec.org=      | canonical governing document                                   |
+| =scenarios.org= | labeller and deployment scenarios; the test plan               |
+| =tla/=          | formal model of the promotion guards + =check.sh=              |
+| =CLAUDE.md=     | derived operational contract for agents                        |
+| =.meta/=        | operating disciplines and vocabulary                           |
+| =apps/=         | the four fixture apps                                          |
+| =router/=       | nginx template, routes, Cloudflare Worker                      |
+| =gates/=        | lint, test, e2e, preflight, health                             |
+| =change/=       | queue, lock, schedule, PIR, release                            |
+| =targets/=      | github and cloudflare deploy backends                          |
+
+* Status
+
+Nothing is built. =spec.org= is at 0.3, the scenarios are written, and the TLA+
+model is checked. Every matrix cell in =spec.org= is a hypothesis: no gate has
+run, because no gate exists. The one thing actually verified end to end is the
+guard logic, and only as a model.
