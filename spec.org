@@ -390,13 +390,23 @@ flowchart TB
     style jails fill:#bbf7d0,stroke:#15803d,color:#000
 #+end_src
 
-| range        | what                                   | allocated by        | can collide? |
-|--------------+----------------------------------------+---------------------+--------------|
-| *9000–9099*  | worktree blocks, =9000 + 10n=, n ≤ 9   | =ports.sh=, =ports.tsv= | *yes* — shared namespace |
-| *9100–9101*  | front routers: production, staging      | by hand, here       | *yes*        |
-| 9102–9199    | reserved (team environments)            | —                   | yes          |
-| 7000–8999    | *other services* — dump1090 and friends | not ours            | *avoid*      |
-| =:80=, =8001–8005= | inside every jail                 | fixed, identical everywhere | *no* |
+*The split is =dev(9000+)= and =protected(9100+)=*, and the number carries the
+meaning: below 9100 anyone spins one up, at or above it the port is on the path
+to production.
+
+| range        | tier          | what                                | allocated by        | can collide? |
+|--------------+---------------+-------------------------------------+---------------------+--------------|
+| *9000–9099*  | *dev*         | worktree blocks, =9000 + 10n=, n ≤ 9 | =ports.sh=, =ports.tsv= | *yes* — shared namespace |
+| *9100*       | *protected*   | front router → production            | by hand, here       | *yes*        |
+| *9101*       | *protected*   | front router → staging               | by hand, here       | *yes*        |
+| 9102–9199    | protected     | reserved (team environments)         | —                   | yes          |
+| 7000–8999    | *not ours*    | dump1090 and friends                 | —                   | *avoid*      |
+| =:80=, =8001–8005= | —       | inside every jail                    | fixed, identical everywhere | *no* |
+
+A dev port is disposable and unreviewed; a protected port fronts an estate a
+change has to earn its way onto. *The ceiling at block 9 is the boundary
+between the two tiers*, which is why =ports.sh= refuses block 10 rather than
+letting a worktree land on 9100.
 
 *** Why only the first two rows need a registry
 
