@@ -81,7 +81,7 @@ production:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
 #
 # group	kind	members	cardinality	who resolves a violation
 exclusive	class	itil:standard itil:normal itil:emergency	<=1	a person. The labeller DERIVES standard/normal from the diff; only a person declares an emergency, so the pipeline must not pick
-exclusive	lifecycle	change:requested change:scheduled	<=1 active	the pipeline, as the change advances. There is no terminal label: MERGED is the terminal state, and the forge already says so
+exclusive	lifecycle	change:requested change:scheduled change:complete	<=1 active	the pipeline, as the change advances. change:complete is terminal for VALIDATION and is cleared at cleanup -- after that the forge\047s MERGED is the record
 exclusive	staging-verdict	staging:e2e staging:e2e-failed	<=1	the instrument that ran last, but a recorded FAILURE outranks its pass in guard 4
 exclusive	staging-smoke	staging:smoke staging:smoke-failed	<=1	same
 exclusive	production-verdict	production:e2e production:e2e-failed	<=1	same
