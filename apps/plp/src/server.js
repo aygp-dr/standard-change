@@ -151,8 +151,10 @@ export const BACKGROUND = '#e6f7ee';
 export function panel(d) {
   // esc(): d.query is request text, not config. Issue #13's rule has no
   // exceptions, and this is the shortest path from the wire to the document.
-  if (d.query !== undefined) return `<h2>Search</h2>
-<p>Results for <code>${esc(d.query)}</code></p>`;
+  if (d.query === '') return `<h2>Search</h2>
+<p>Nothing searched for yet — add a term, as in <code>/search?q=shoes</code>, or pick a category below.</p>`;
+  if (d.query !== undefined) return `<h2>${d.results.length} result(s) for <code>${esc(d.query)}</code></h2>
+<div class=g>${d.results.map((s) => `<a href="/p/${encodeURIComponent(s)}">${esc(s)}</a>`).join(' ') || 'Nothing matched. Try a shorter word, or pick a category below.'}</div>`;
   if (d.results === undefined) return '';   // not a category page
   const name = esc(d.category || '(none)');
   if (d.catalogue === 'unavailable')

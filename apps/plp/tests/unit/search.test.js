@@ -44,7 +44,10 @@ test('a search is a 200, matched or not', () => {
 // ---- step 2: the page names the term back -----------------------------------
 
 test('the search page names the term that was searched for', () => {
-  assert.match(panel(render('/search?q=boots')), /Results for <code>boots<\/code>/);
+  // Was /Results for <code>boots<\/code>/. Step 4 moved the term into the
+  // heading next to the count; the claim -- the page says the word back --
+  // is the same one.
+  assert.match(panel(render('/search?q=boots')), /for <code>boots<\/code>/);
 });
 
 test('a search page is not dressed up as a category page', () => {
@@ -101,4 +104,33 @@ test('an empty term matches nothing, not everything', () => {
 test('a category page keeps its own results; search did not take them over', () => {
   assert.deepEqual(render('/c/hats').results, ['SKU301']);
   assert.equal(render('/c/hats').query, undefined);
+});
+
+// ---- step 4: the copy for each of the three outcomes ------------------------
+
+test('a search that matched says how many, and links them', () => {
+  const h = panel(render('/search?q=shoes'));
+  assert.match(h, /3 result\(s\) for <code>shoes<\/code>/);
+  assert.match(h, /href="\/p\/SKU123"/);
+});
+
+// The three outcomes get three different sentences on purpose. "0 results for
+// ''" for an untouched search box reads as a failed search, and a shopper who
+// has not searched yet has not failed at anything.
+test('nothing-matched and nothing-searched-for are different sentences', () => {
+  const none = panel(render('/search?q=zzzznothing'));
+  const idle = panel(render('/search'));
+  assert.match(none, /Nothing matched/);
+  assert.doesNotMatch(none, /Nothing searched for yet/);
+  assert.match(idle, /Nothing searched for yet/);
+  assert.doesNotMatch(idle, /Nothing matched/);
+  assert.doesNotMatch(idle, /result\(s\)/, 'an idle search box reported a count');
+});
+
+// Step 4 rewrote the string step 2 escaped. The escaping has to survive the
+// rewrite, so it is asserted again here against the copy that actually ships.
+test('the term is still escaped in the rewritten copy', () => {
+  const h = renderHtml('/search?q=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E');
+  assert.doesNotMatch(h, /<img src=x onerror/);
+  assert.match(h, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
