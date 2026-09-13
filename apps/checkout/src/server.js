@@ -44,7 +44,7 @@ const SHIP = [
   ['name',    'Full name',    'text'],
   ['line1',   'Address',      'text'],
   ['city',    'City',         'text'],
-  ['postcode','Postcode',     'text'],
+  ['postcode','Postcode / ZIP', 'text'],
 ];
 
 export function shippingForm(q) {
