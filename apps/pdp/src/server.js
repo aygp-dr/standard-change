@@ -215,7 +215,7 @@ This product has not gone away; try again shortly.</p>
 <p class=v>catalogue: unavailable (${esc(d.reason)})</p>`;
   if (!d.found)
     return `<h2>Product not found</h2>
-<p>We have no product <code>${sku}</code>. It may have been renamed or removed.</p>
+<p>We have no product <code>${sku}</code>. It may have been renamed or removed — <a href="/search">search everything</a> instead.</p>
 <p class=v>catalogue: ok — this product is not in it</p>`;
   const p = d.product;
   return `<h2>${esc(p.name)}</h2>
