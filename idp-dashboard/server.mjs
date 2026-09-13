@@ -550,7 +550,18 @@ function render(d){
       col='<td class=dim>'+esc(x.colour)+'</td>';
     return '<tr class="'+(x.sha&&x.sha===d.live_sha&&x.tier==='protected'?'live':'')+'">'+
     '<td class="n-'+esc(x.name)+'">'+esc(x.name)+'</td><td class='+esc(x.tier)+'>'+esc(x.tier)+'</td>'+
-    '<td class=dim>'+esc(x.port)+'</td>'+state+
+    // THE LINK HOST IS WHERE YOU ARE, NOT WHERE THE PROBE WENT. The server
+    // probes 127.0.0.1 because it is on the box; a reader is on the LAN. Using
+    // location.hostname means the link follows whatever address the dashboard
+    // was loaded on, and nothing hardcodes an IP that changes with the network.
+    //
+    // Only for a port something answers on. Linking a reservation or a dark
+    // block offers a click that lands on a connection refused, which reads as
+    // the dashboard being broken rather than the port being empty.
+    (x.up
+      ? '<td><a class=prlink target=_blank rel="noopener noreferrer" href="http://'+
+        location.hostname+':'+esc(x.port)+'/">'+esc(x.port)+'</a></td>'
+      : '<td class=dim>'+esc(x.port)+'</td>')+state+
     '<td class=sha>'+esc(x.sha||'—')+'</td><td class=dim>'+esc(x.app||'—')+'</td>'+
     col+'<td class=dim>'+esc(x.promotes)+'</td></tr>';}).join('');
 }
