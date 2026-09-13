@@ -142,6 +142,18 @@ export function queryOf(path) {
 // Two kinds of result, kept apart in the payload rather than merged into one
 // ranked list: a category is a place to browse and a product is a thing to
 // buy, and a client that cannot tell them apart cannot link them correctly.
+//
+// A CATEGORY HIT REACHES ITS PRODUCTS. This is the defect that was live on
+// production blue: /search?q=shoes matched the shoes category, rendered one
+// link to /c/shoes, and listed no products at all -- while /c/shoes, one click
+// away, listed three. A person who types the name of a category and is shown
+// nothing they can buy has been told, wrongly, that we have nothing.
+//
+// So the products a query reaches are the union of two routes to the same
+// thing: named directly (by product name or SKU), or named THROUGH a category
+// the query matched. Deduped by SKU with the direct hit kept, because "trail"
+// matching Trail Runner by name and again through a category is one product,
+// not two, and `via` records which route found it.
 export function searchResults(q, categories, products) {
   const needle = q.trim().toLowerCase();
   if (!needle) return [];
@@ -151,12 +163,37 @@ export function searchResults(q, categories, products) {
     .map((c) => ({ kind: 'category', slug: c.slug,
                    title: typeof c.title === 'string' ? c.title : c.slug,
                    href: `/c/${encodeURIComponent(c.slug)}`,
-                   skus: c.skus }));
-  const prods = products
-    .filter((p) => hit(p.name) || hit(p.sku))
-    .map((p) => ({ kind: 'product', sku: p.sku, name: p.name,
-                   href: `/p/${encodeURIComponent(p.sku)}` }));
+                   skus: Array.isArray(c.skus) ? c.skus : [] }));
+
+  const byS = new Map(products.map((p) => [p.sku, p]));
+  const seen = new Set();
+  const prods = [];
+  const push = (sku, name, via) => {
+    if (typeof sku !== 'string' || seen.has(sku)) return;
+    seen.add(sku);
+    prods.push({ kind: 'product', sku, name,
+                 href: `/p/${encodeURIComponent(sku)}`, via });
+  };
+  for (const p of products) if (hit(p.name) || hit(p.sku)) push(p.sku, p.name, null);
+  for (const c of cats) {
+    for (const s of c.skus) {
+      // A SKU a category lists but the product file does not carry still
+      // lists, under its SKU -- the same thing /c/<category> has always done
+      // with it. plp does not get to delist a category's item because it
+      // could not find a name for it; that is a data fault for pdp to fix and
+      // an operator can see it on the page.
+      push(s, byS.has(s) ? byS.get(s).name : null, c.slug);
+    }
+  }
   return [...cats, ...prods];
+}
+
+// The SKUs a category lists, resolved to the products they name, in the order
+// the category gave them. Same shape as the `product` results above (sku,
+// name) so that ONE renderer can list either -- see productList().
+export function itemsFor(skus, products) {
+  const byS = new Map(products.map((p) => [p.sku, p]));
+  return skus.map((s) => ({ sku: s, name: byS.has(s) ? byS.get(s).name : null }));
 }
 
 // The category a path names, or null when the path is not a category page.
@@ -255,6 +292,12 @@ function search(d, q, catalogue, products) {
   d.catalogue = catalogue.ok ? 'ok' : 'unavailable';
   d.products = products.ok ? 'ok' : 'unavailable';
   d.results = [];
+  // The products to LIST, in listing order. A separate field from `results`
+  // on purpose: `results` is the mixed, kind-tagged answer a client reasons
+  // about, and `items` is the one thing both this route and /c/:category
+  // render the same way. Always an array, in every state, so the view never
+  // has to ask whether it exists.
+  d.items = [];
   d.count = 0;
 
   if (!q.trim()) {
@@ -271,6 +314,8 @@ function search(d, q, catalogue, products) {
     return d;
   }
   d.results = searchResults(q, catalogue.categories, products.products);
+  d.items = d.results.filter((r) => r.kind === 'product')
+                     .map((r) => ({ sku: r.sku, name: r.name }));
   d.count = d.results.length;
   d.reason = d.count ? null : 'no-results';
   return d;
@@ -294,6 +339,7 @@ export function render(path, catalogue = loadCatalogue(), products = loadProduct
   // and gets routed to the wrong team.
   d.catalogue = catalogue.ok ? 'ok' : 'unavailable';
   d.results = [];
+  d.items = [];
   if (!catalogue.ok) {
     d.found = false;
     d.reason = catalogue.reason;   // catalogue-missing | catalogue-malformed
@@ -303,12 +349,51 @@ export function render(path, catalogue = loadCatalogue(), products = loadProduct
   if (!hit) { d.found = false; d.reason = 'unknown-category'; return d; }
   d.title = typeof hit.title === 'string' ? hit.title : hit.slug;
   d.results = hit.skus;
+  // The SKUs are still `results` -- that is this route's contract and the
+  // e2e/unit assertions read it. `items` is the same list with names attached
+  // for the renderer it now shares with /search. Names are a NICETY here, not
+  // a dependency: an unreadable product file leaves every name null and the
+  // category page lists SKUs exactly as it did before search existed. A
+  // category page must not go dark because a sibling app's data file did.
+  d.items = itemsFor(hit.skus, products.products);
   return d;
 }
 
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
 export const BACKGROUND = '#e6f7ee';
+
+// ---- the product list, which both routes render -----------------------------
+//
+// ONE renderer, used by /c/:category and by /search. It was two, and they
+// diverged exactly the way two copies of anything do: the category page listed
+// products in a wrapping row of links and the search page listed them as
+// stacked rows with a `product` label, so the same product looked like two
+// different things depending on how you arrived at it -- and the search page's
+// copy was never reached for a category-name query at all. A person searching
+// "shoes" and a person browsing /c/shoes are looking at the same shelf.
+//
+// `name` may be null: a SKU a category lists that the product file does not
+// carry. It lists under its SKU rather than vanishing.
+//
+// EVERY interpolation goes through esc(), including the ones that come from
+// config. Issue #13 was a live reflected XSS in this estate through a single
+// unescaped interpolation, and "it comes from a JSON file we ship" is exactly
+// what was said about the values that turned out to be reachable. The href is
+// built with encodeURIComponent AND escaped: the first makes it a correct URL,
+// the second makes it safe to put inside a double-quoted attribute, and
+// neither does the other's job.
+export function productList(items) {
+  if (!items.length) return '';
+  return `<div class=g>${items.map((p) =>
+    `<span style="display:inline-block;margin-right:14px">` +
+    `<a href="${esc(`/p/${encodeURIComponent(p.sku)}`)}" style="margin-right:4px">` +
+    `${esc(p.name || p.sku)}</a>` +
+    // The SKU is shown alongside a name and IS the label when there is none,
+    // so the category page loses nothing it used to show.
+    (p.name ? `<span class=v>${esc(p.sku)}</span>` : '') +
+    `</span>`).join('')}</div>`;
+}
 
 // The category panel: results, or the reason there are none.
 //
@@ -364,15 +449,20 @@ shortly.</p>
 category name, a product name or a SKU.</p>
 <p class=v>catalogue: ok — nothing matched</p>`;
 
-  const row = (r) => (r.kind === 'category'
-    ? `<div class=g><b>category</b> <a href="${esc(r.href)}">${esc(r.title)}</a> ` +
-      `<span class=v>${r.skus.length} item(s)</span></div>`
-    : `<div class=g><b>product</b> <a href="${esc(r.href)}">${esc(r.name)}</a> ` +
-      `<span class=v>${esc(r.sku)}</span></div>`);
+  // Categories first, as places to go; then the products themselves, listed by
+  // the SAME function /c/:category lists them with. The category rows stay --
+  // "browse the whole shelf" is a useful answer and the e2e link check walks
+  // every href in `results` -- but they are no longer the ONLY answer to a
+  // query that names a category, which is what made this page useless.
+  const cats = d.results.filter((r) => r.kind === 'category');
+  const catRows = cats.map((r) =>
+    `<div class=g><b>category</b> <a href="${esc(r.href)}">${esc(r.title)}</a> ` +
+    `<span class=v>${r.skus.length} item(s)</span></div>`).join('');
   return `${form}
 <h2>${d.count} result(s)</h2>
 <p>for <code>${q}</code></p>
-${d.results.map(row).join('')}`;
+${catRows}${d.items.length ? `<p class=g style="color:#666;margin:10px 0 4px">products</p>` : ''}
+${productList(d.items)}`;
 }
 
 export function panel(d) {
@@ -389,8 +479,8 @@ Nothing is wrong with this category; try again shortly.</p>
 <p>We have nothing in <code>${name}</code>. It may have been renamed or removed.</p>
 <p class=v>catalogue: ok — this category is not in it</p>`;
   return `<h2>${esc(d.title)}</h2>
-<p>${d.results.length} result(s) in <code>${name}</code></p>
-<div class=g>${d.results.map((s) => `<a href="/p/${encodeURIComponent(s)}">${esc(s)}</a>`).join(' ')}</div>`;
+<p>${d.items.length} result(s) in <code>${name}</code></p>
+${productList(d.items)}`;
 }
 
 // `port` is the port this process is ACTUALLY answering on: the caller takes it

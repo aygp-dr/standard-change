@@ -172,23 +172,34 @@ test('search does not fall back to half the data and call it no results', () => 
 
 // ---- the health path --------------------------------------------------------
 //
-// Not a restatement of the test above. This one asserts the ACTUAL declared
-// path from routes.json against the ACTUAL shipped data files, which is what
-// guard 5 fetches. The generic no-results test would still pass if someone
-// changed `health` to something that 404s.
-test('the declared health path returns 200 against the shipped data', () => {
-  const d = render(meta.health, loadCatalogue(CATALOGUE_FILE), loadProducts(PRODUCTS_FILE));
-  assert.equal(status(d), 200,
-    `guard 5 fetches ${meta.health} and expects 200; it got ${status(d)}`);
+// AMENDED IN THE DIRECTION OF THE OBSERVATION. These two tests were written
+// when routes.json declared health "/search?q=ping", and they asserted that
+// the declared health path was a search returning 200. #37 moved health to the
+// dedicated /__health/<app> route precisely so that a product change could not
+// take guard 5 down with it -- which is this change. Rebasing onto that main
+// left both tests red against a path render() correctly reports it does not
+// own, and a red test whose subject has moved is not evidence of a defect.
+//
+// What survives is the rule they existed to protect, restated against what is
+// now true: health must NOT be a search, and a no-results search must still be
+// 200 for its own reasons rather than because guard 5 needs it to be.
+test('the declared health path is not a search at all', () => {
+  assert.equal(queryOf(meta.health), null,
+    `health is "${meta.health}"; a health path that is a search fails the day ` +
+    'search gains an opinion -- #24 (pdp /p/PING) and the reason #37 moved it');
+  assert.equal(meta.health, '/__health/plp',
+    'guard 5 and gates/lint-app.mjs both expect the reserved route');
 });
 
-test('the health query is one that matches nothing -- that is the trap', () => {
-  const d = render(meta.health, OK_CATS, OK_PRODS);
-  if (queryOf(meta.health).trim()) {
-    assert.equal(d.count, 0,
-      'if the health query starts matching, this test is no longer proving ' +
-      'that a no-results search is 200');
-  }
+// The no-results 200 is now load-bearing on its own merits, not as a prop
+// under the health check. gates/smoke.sh walks /search?q=shoes as step 2 of
+// the journey and requires 200 text/html, so a search that answered 404 for a
+// miss would still break a gate -- one gate over from where it used to.
+test('a miss on the shipped data is still 200, with the real files', () => {
+  const d = render('/search?q=ping',
+                   loadCatalogue(CATALOGUE_FILE), loadProducts(PRODUCTS_FILE));
+  assert.equal(d.count, 0, '"ping" is supposed to match nothing');
+  assert.equal(status(d), 200, `a no-results search answered ${status(d)}`);
 });
 
 // ---- escaping, in both contexts ---------------------------------------------
