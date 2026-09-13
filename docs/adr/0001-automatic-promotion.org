@@ -706,6 +706,64 @@ yours would replace a build someone is currently looking at."
 Recorded as an observation rather than a decision. The decision it points at —
 batch acceptance — is Option A3, already on the table.
 
+** S8 — a freeze, and an emergency, block the same way
+
+Added 2026-09-13. *A standard or normal change does not progress while either a
+freeze is declared or an emergency is in flight.* One rule, two causes, one
+exemption.
+
+*The rule.* =gates/preflight.sh= refuses with the spec's own codes — exit 3 for
+a freeze, exit 2 for an emergency in flight.
+
+| cause                    | declared by                          | exit |
+|--------------------------+--------------------------------------+------|
+| freeze                   | =freeze= on *any* open PR, or a scheduled freeze overlapping the window | 3 |
+| emergency in flight      | =change:emergency= on any *other* open PR | 2 |
+| *exemption*              | *being =change:emergency= yourself*  | *proceeds* |
+
+*Why they are one rule and not two.* Not "two risky things at once". A freeze
+says the estate is in a state where normal change is unsafe. An emergency says
+*somebody is changing production outside the normal path right now* — so the
+estate is moving under you, your staging pass describes a world that no longer
+exists, and guard 4b will invalidate you when you get there. Refusing at
+preflight costs a wait; proceeding costs the berth, the window and the
+revalidation as well.
+
+*Why =freeze= is a label on a PR rather than a calendar entry.* A freeze is
+usually declared in a hurry, by whoever noticed, and it has to be visible where
+people already look. =schedule.sh freeze= remains for *planned* freezes with
+start and end times. Both are checked; this is the unplanned one.
+
+*Why the emergency exemption is not a loophole.* An emergency is what a freeze
+is *for*. Blocking it would mean the freeze prevents its own remedy. And the
+exemption is narrow: guard 2 (gates green on this head) and guard 5
+(convergence) still have *no bypass*, and the exemption is recorded in the PIR
+rather than waved through.
+
+*Walked, both directions*: =freeze= on #3 refused #28 (=change:standard=) with
+exit 3; the same freeze let #2 through once a person declared it
+=change:emergency=, with the freeze named in the output and a note that it
+lands in the PIR.
+
+*** The defect the walk found: a change with two classes
+
+#2 came out of that test carrying *=change:standard= and =change:emergency= at
+once*. The labeller derives the class from the diff; a person declares an
+emergency; *nothing reconciles them*.
+
+That is not a nuance. Every rule in preflight branches on the class, so a change
+with two of them has an undefined class and the verdict depends on which check
+runs first.
+
+Preflight now refuses it (exit 2) rather than picking one. *Picking would mean
+the pipeline deciding whether something is an emergency*, and that is a
+declaration a person makes, never a derivation — =change/label-owners.tsv= gives
+=change:emergency= a human owner for exactly this reason.
+
+The deeper shape is one this repo keeps finding: *two writers, one fact, no
+reconciliation.* Same as =production:healthy= flipping between a person and a
+workflow (S5), and as the port registry drifting from what is actually bound.
+
 * Open — what happens when a change lands outside its window
 
 Left open deliberately on 2026-09-13, after PR #9 shipped to production outside
