@@ -171,8 +171,26 @@ case "${1:-}" in
       fi
       after="$AT"
     elif [ "${QUEUE:-1}" = 1 ]; then
+      # FIRST FIT, NOT LAST. This took the MAX end among open windows, so one
+      # far-future designated booking dragged every later queued change behind
+      # it: booking #40 for Saturday 2am pushed two ten-minute changes from
+      # tonight into next weekend. ADR 0003 says first-fit and this was not.
+      #
+      # Now: walk the open windows in time order and take the first gap from now
+      # that is wide enough. The gaps designated bookings leave are usable --
+      # that is the point of leaving them.
       after=$(echo "$cur0" | jq -r --arg env "${CHANGE_ENV:-staging}" \
-        '[.windows[]|select(.env==$env and .result==null)|.end]|max // empty')
+        --argjson mins "$mins" --arg now "$(now)" '
+        def mins2sec: . * 60;
+        [ .windows[] | select(.env==$env and .result==null) | {start,end} ]
+        | sort_by(.start)
+        | reduce .[] as $w ($now;
+            if $w.end <= . then .
+            elif ($w.start | . ) > . and (($w.start|fromdate) - (.|fromdate)) >= ($mins|mins2sec)
+              then .
+            else $w.end end)
+        ' 2>/dev/null || echo '')
+      [ "$after" = "null" ] && after=''
     fi
     # shellcheck disable=SC2046  # the split IS the point: slot() prints two fields
     set -- $(slot "$mins" "$after"); start="$1"; end="$2"
