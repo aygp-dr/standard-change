@@ -144,7 +144,7 @@ export function panel(d) {
   if (d.results === undefined) return '';   // not a category page
   const name = esc(d.category || '(none)');
   if (d.catalogue === 'unavailable')
-    return `<h2>No results</h2>
+    return `<h2>No results right now</h2>
 <p>We cannot show <code>${name}</code> right now — the catalogue is unavailable.
 Nothing is wrong with this category; try again shortly.</p>
 <p class=v>catalogue: unavailable (${esc(d.reason)})</p>`;
