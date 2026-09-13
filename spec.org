@@ -359,6 +359,92 @@ Each git worktree owns a contiguous block of ten ports. The router (nginx) liste
 
 Ports 10006–10009 (and the same offsets in each block) are unallocated.
 
+** The port map
+
+One picture, because three schemes coexist and only one of them can collide.
+
+#+begin_src mermaid :eval never-export
+flowchart TB
+    subgraph lan["reachable from 192.168.86.0/24 — pf passes 7000-7699, 8000-9999"]
+        subgraph ours["9000-9199 — this project"]
+            W0["9000-9009  worktree block 0"]
+            W1["9010-9019  block 1"]
+            WN["9090-9099  block 9  (the ceiling)"]
+            FP["9100  front router -> production"]
+            FS["9101  front router -> staging"]
+        end
+        OTHER["8080 dump1090 · 8081 · 8083 · 7500 · 7510 · 7680 · 7681 · 7747 · 9630<br/>OTHER SERVICES — not ours"]
+    end
+    subgraph jails["10.0.0.0/24 — jails, not LAN reachable"]
+        J1["sc-staging  10.0.0.60:80"]
+        J2["sc-prod-1   10.0.0.61:80"]
+        J3["sc-prod-2   10.0.0.62:80"]
+        JA["each jail: nginx :80 -> apps :8001-8005<br/>SAME numbers in every jail"]
+    end
+    FP --> J2
+    FP -.->|idle| J3
+    FS --> J1
+    J1 --> JA
+    style ours fill:#dbeafe,stroke:#1e40af,color:#000
+    style OTHER fill:#fecaca,stroke:#b91c1c,color:#000
+    style jails fill:#bbf7d0,stroke:#15803d,color:#000
+#+end_src
+
+| range        | what                                   | allocated by        | can collide? |
+|--------------+----------------------------------------+---------------------+--------------|
+| *9000–9099*  | worktree blocks, =9000 + 10n=, n ≤ 9   | =ports.sh=, =ports.tsv= | *yes* — shared namespace |
+| *9100–9101*  | front routers: production, staging      | by hand, here       | *yes*        |
+| 9102–9199    | reserved (team environments)            | —                   | yes          |
+| 7000–8999    | *other services* — dump1090 and friends | not ours            | *avoid*      |
+| =:80=, =8001–8005= | inside every jail                 | fixed, identical everywhere | *no* |
+
+*** Why only the first two rows need a registry
+
+A jail has its own IP, so =10.0.0.60:8001=, =10.0.0.61:8001= and
+=10.0.0.62:8001= coexist — verified in hydra's socket table. Ports are free
+where the namespace is not shared, which is why *the deployed config is
+byte-identical across staging and production* and why the port-block scheme
+exists only for worktrees, which do share hydra's namespace.
+
+*** Two ceilings, both real
+
+- *Ten worktrees.* Block 10 starts at 9100 and would take the production
+  router's port — a collision presenting as the router having died.
+  =ports.sh alloc= refuses block 10 rather than walking into it.
+- *pf.* 10000+ is not passed from the LAN, so a block there is loopback-only
+  and looks, from another host, exactly like nothing listening. The rule could
+  be widened — we are root — but ten worktrees is enough and an open range with
+  nothing behind it is surface for no benefit.
+
+** Port allocation on a shared host
+
+hydra runs other things. =8080= is =dump1090=, and =7500=, =7510=, =7680=,
+=7681=, =7747=, =8081=, =8083= and =9630= belong to other services — so
+"pick 8080" collides with a live ADS-B receiver. The project therefore owns a
+*declared range* rather than convenient-looking numbers.
+
+| range        | what                                    | who allocates      |
+|--------------+-----------------------------------------+--------------------|
+| *9000–9099*  | dev worktree blocks, =9000 + 10n=, n ≤ 9 | =ports.sh alloc=, via =ports.tsv= |
+| *9100–9109*  | environment front routers: 9100 production, 9101 staging, 9102+ team | by hand, here |
+| 9110–9199    | reserved for this project               | —                  |
+| 7000–8999    | *other services* — do not use           | not ours           |
+
+*Ten worktrees is the ceiling*, and =ports.sh= refuses block 10 rather than
+silently walking into 9100 and taking the production router's port.
+
+** Jail-internal ports do not consume this range
+
+Inside every jail: nginx on =80=, apps on =8001–8005=. *The same numbers in
+every environment*, because each jail has its own IP — verified in the host's
+socket table, which shows =10.0.0.60:8001=, =10.0.0.61:8001= and
+=10.0.0.62:8001= side by side.
+
+That is the whole reason the deployed config is byte-identical across staging
+and production (§bastille target): *network namespaces make ports free, and a
+registry is only needed where a namespace is shared.* Worktrees share hydra's,
+so they need one; jails do not, so they do not.
+
 ** Reaching a block from another host
 
 Ports bind to =127.0.0.1= by default; =BIND=0.0.0.0= opts a block into the LAN.

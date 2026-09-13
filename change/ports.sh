@@ -6,10 +6,11 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # The registry is the CMDB for the whole clone, so it lives in the MAIN
 # worktree, not in each one. git worktree list prints the main checkout first.
 MAIN=$(git -C "$ROOT" worktree list --porcelain | awk '/^worktree /{print $2; exit}')
-# Block base. 10000 is loopback-only on hydra: pf passes 192.168.86.0/24 to
-# 8000:9999 and 7000:7699 but not 10000+. Set PORT_BASE=9000 for a block that
-# is reachable from another host without touching the firewall.
-BASE0="${PORT_BASE:-10000}"
+# Block base. 9000, not 10000: pf passes 192.168.86.0/24 to 8000:9999 and
+# 7000:7699 but NOT 10000+, so a block at 10000 is loopback-only and looks
+# from another host exactly like nothing listening. The project range is
+# 9000-9099 for worktree blocks (spec.org, Port allocation on a shared host).
+BASE0="${PORT_BASE:-9000}"
 REG="${PORTS_REGISTRY:-$MAIN/ports.tsv}"
 WT=$(git -C "$ROOT" rev-parse --show-toplevel)
 BR=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)
@@ -28,6 +29,16 @@ case "${1:-}" in
       echo "already allocated: block $b"
     else
       b=$(next_block)
+      # Refuse BEFORE writing. The first version appended the row and then
+      # refused, leaving a stale allocation for a block nobody could use.
+      # Ten blocks only: block 10 starts at 9100, which is the production front
+      # router, and that collision would present as the router having died.
+      if [ "$b" -gt 9 ]; then
+        echo "refused: block $b would start at $((BASE0 + 10 * b))," >&2
+        echo "  which is outside 9000-9099. 9100+ is the front routers." >&2
+        echo "  Free a block first:  ./change/ports.sh free   (list: ports.sh list)" >&2
+        exit 4
+      fi
       printf '%s\t%s\t%s\t%s\n' "$b" "$WT" "$BR" "$(date -u +%FT%TZ)" >> "$REG"
       echo "allocated block $b"
     fi
