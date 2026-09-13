@@ -8,26 +8,24 @@
 #+HTML: <p align="center">
 #+HTML: <img alt="spec 0.4" src="https://img.shields.io/badge/spec-0.4_establishing-blue">
 #+HTML: <img alt="ITIL 4" src="https://img.shields.io/badge/ITIL_4-change_enablement-5b2d8e">
-#+HTML: <img alt="TLA+ verified" src="https://img.shields.io/badge/TLA%2B-5_checks_both_directions-2e7d32">
+#+HTML: <img alt="TLA+ verified" src="https://img.shields.io/badge/TLA%2B-7_checks_both_directions-2e7d32">
 #+HTML: <img alt="gates" src="https://img.shields.io/badge/gate--selftest-negative_tested-2e7d32">
 #+HTML: <img alt="support matrix" src="https://img.shields.io/badge/support_matrix-no_cell_supported-b71c1c">
-#+HTML: <img alt="platform" src="https://img.shields.io/badge/built_on-FreeBSD_14.4-ab2b28">
+#+HTML: <img alt="platform" src="https://img.shields.io/badge/built_on-FreeBSD_14.4--RELEASE--p6-ab2b28">
 #+HTML: </p>
 
 * What this is
 
-Change enablement and deployment management, demonstrated end to end. Four mock
-storefront apps (=core=, =plp=, =pdp=, =checkout=) behind one router. The apps
-are fixtures; *the product is the gate sequence* — the labels that drive it, the
-environment model underneath it, the change-schedule integration, and the
-guards that make "you cannot skip staging" a structural fact rather than a
-convention.
+Four mock storefront apps (=core=, =plp=, =pdp=, =checkout=) behind one router,
+used as fixtures. *The product is the gate sequence*: the labels that drive it,
+the environment model underneath it, the change schedule, and the guards that
+make "you cannot skip staging" a structural fact rather than a convention.
 
 =spec.org= governs. This file is derived and orients; where they disagree,
 =spec.org= wins. =scenarios.org= is the test plan, =tla/= the formal model of
 the promotion guards.
 
-* The whole thing on one screen
+* Dashboard
 
 [[file:docs/screenshots/idp-release-dashboard.png]]
 
@@ -291,6 +289,32 @@ expressed as a pipeline nobody turns on.
 then does nothing with it. Every other change queues behind a human reading a
 page. That is a real price and it is the argument for using it rarely.
 
+* Feature branches and the queue
+
+#+begin_src mermaid :eval never-export
+gitGraph
+    commit id: "main@0"
+    branch feat-pdp
+    commit id: "pdp price fix"
+    checkout main
+    branch feat-plp
+    commit id: "plp facets"
+    checkout feat-pdp
+    commit id: "review fixes"
+    checkout main
+    merge feat-pdp id: "main@1 (deployed)"
+    checkout feat-plp
+    commit id: "REBASE onto main@1"
+    checkout main
+    merge feat-plp id: "main@2 (deployed)"
+#+end_src
+
+=feat-plp= could not take staging while =feat-pdp= held it (guard 1), and could
+not take it afterwards without the rebase (guard 0) — because deploying a tree
+branched from =main@0= would have shipped a storefront missing the pdp price
+fix. *The rebase is not hygiene; it is the re-verification that the two changes
+compose*, and it happens before staging rather than after production.
+
 * Environments
 
 Three kinds of environment, and conflating them is the mistake this model
@@ -345,32 +369,6 @@ kind of environment is this?" is answerable from the URL alone.
 The asymmetry is deliberate. Team environments are cheap, many, and leased —
 losing one costs a re-checkout. Staging is scarce, singular, and *queued*,
 because holding it is holding the only path to production.
-
-* Feature branches and the queue
-
-#+begin_src mermaid :eval never-export
-gitGraph
-    commit id: "main@0"
-    branch feat-pdp
-    commit id: "pdp price fix"
-    checkout main
-    branch feat-plp
-    commit id: "plp facets"
-    checkout feat-pdp
-    commit id: "review fixes"
-    checkout main
-    merge feat-pdp id: "main@1 (deployed)"
-    checkout feat-plp
-    commit id: "REBASE onto main@1"
-    checkout main
-    merge feat-plp id: "main@2 (deployed)"
-#+end_src
-
-=feat-plp= could not take staging while =feat-pdp= held it (guard 1), and could
-not take it afterwards without the rebase (guard 0) — because deploying a tree
-branched from =main@0= would have shipped a storefront missing the pdp price
-fix. *The rebase is not hygiene; it is the re-verification that the two changes
-compose*, and it happens before staging rather than after production.
 
 * The updated check, and why it is containerized
 
