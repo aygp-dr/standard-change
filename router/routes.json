@@ -53,6 +53,9 @@
       "/search",
       "/c/:category"
     ],
+    "probes": {
+      "/c/:category": "/c/shoes"
+    },
     "health": "/search?q=ping",
     "journeys": [
       "search"

@@ -45,7 +45,21 @@ ctype()    { curl -sI --max-time 5 "$base$1" | tr -d '\r' | awk 'tolower($1)=="c
 # 1. route ownership, straight from routes.json -- the source of truth
 for app in $(jq -r '.[].app' router/routes.json); do
   for route in $(jq -r --arg a "$app" '.[]|select(.app==$a)|.routes[]' router/routes.json); do
-    path=$(printf '%s' "$route" | sed 's#:[a-zA-Z_]*#PROBE#g')
+    # A parameterised route has no universally valid instance. This gate used
+    # to synthesize one by substitution (/c/:category -> /c/PROBE), which
+    # assumed every value of every parameter exists -- true while the apps
+    # echoed back whatever they were handed, false the moment plp started
+    # checking the category against its catalogue, at which point /c/PROBE is
+    # correctly a 404 and the ownership check failed on a working estate.
+    #
+    # The app declares a real instance in its routes.json (`probes`), because
+    # the app is the only thing that knows one; lint-app.mjs checks the probe
+    # lies inside the route it names, so this cannot be used to point the
+    # ownership check at some easier path. Substitution stays the default for
+    # routes whose parameters are still free (pdp's /p/:sku).
+    path=$(jq -r --arg a "$app" --arg r "$route" \
+             '.[]|select(.app==$a)|.probes[$r] // empty' router/routes.json)
+    [ -n "$path" ] || path=$(printf '%s' "$route" | sed 's#:[a-zA-Z_]*#PROBE#g')
     got=$(owner "$path"); c=$(code "$path")
     if [ "$c" = "200" ] && [ "$got" = "$app" ]; then
       say "$path" "200 $got"; pass=$((pass+1))
@@ -90,6 +104,24 @@ c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --path-as-is \
 [ "$c" = "404" ] && { say "/statics/ traversal" "404 (correct)"; pass=$((pass+1)); } \
                  || fail "statics traversal returned $c, expected 404"
 
+# 2e. owning a route is not promising every address under it exists.
+#
+# The same property as 2b, one level up: for core the prefix is /statics/ and
+# the FILE decides; for plp the prefix is /c/ and the CATALOGUE decides. The
+# ownership loop above now probes /c/shoes, a category that exists, so without
+# this check "plp returns 200 for every /c/*" would sail through every gate --
+# which is the shape of the defect 2b was written for.
+#
+# The 404 must carry plp's name. A router-level 404 would mean plp is not on
+# the path at all, and a 200 with an empty page would mean a person asking for
+# a category we do not carry is told, by every machine in between, that they
+# found one.
+c=$(code /c/definitely-not-a-category)
+who=$(routedto /c/definitely-not-a-category)
+[ "$c" = "404" ] && [ "$who" = "plp" ] \
+  && { say "/c/<unknown category>" "404 from plp (correct)"; pass=$((pass+1)); } \
+  || fail "unknown category returned $c from '${who:--}', expected 404 from plp"
+
 # 2d. a browser must get a page, not a payload.
 #
 # Added after :9200 returned application/json to `Accept: text/html`. The estate
@@ -102,7 +134,10 @@ c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --path-as-is \
 # what we deploy", and the gate should be the thing that says so.
 htmltype() { curl -sI --max-time 5 -H 'Accept: text/html,application/xhtml+xml' "$base$1" \
                | tr -d '\r' | awk 'tolower($1)=="content-type:"{print $2}'; }
-for path in / /checkout /search; do
+# /c/<unknown> is in this list deliberately: a no-results page is still a PAGE.
+# An error path that quietly stops content-negotiating is the easiest place for
+# a JSON blob to reach a person, because nobody clicks the sad path on purpose.
+for path in / /checkout /search /c/definitely-not-a-category; do
   m=$(htmltype "$path")
   case "${m%%;*}" in
     text/html) say "browser GET $path" "text/html"; pass=$((pass+1)) ;;
