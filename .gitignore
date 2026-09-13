@@ -4,3 +4,7 @@ environments.log
 .slot-url
 .change-event-id
 node_modules/
+.env
+.env.ports
+.run/
+router/routes.json

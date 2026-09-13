@@ -1,7 +1,7 @@
 // pdp — node http, no dependencies. Reads PORT; emits x-build-sha (guard 5).
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -14,7 +14,12 @@ export function render(path) {
   return { app: meta.app, path, block: BLOCK, sha: SHA, routes: meta.routes };
 }
 
-createServer((req, res) => {
+// Only listen when run directly. Importing this module (as the unit tests do)
+// must not bind a port, or the test process never exits.
+const isMain = process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) createServer((req, res) => {
   const body = JSON.stringify(render(req.url), null, 2);
   res.writeHead(200, {
     'content-type': 'application/json',

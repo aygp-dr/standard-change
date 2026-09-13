@@ -5,6 +5,6 @@
   "private": true,
   "scripts": {
     "dev": "node src/server.js",
-    "test": "node --test tests/unit"
+    "test": "node --test"
   }
 }
