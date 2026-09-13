@@ -130,8 +130,38 @@ A real one lives where the team already works, and the CAS-on-a-git-ref
 implementation is here because it was the cheapest thing that could be wrong in
 interesting ways — not because a git ref is a good calendar.
 
-Read everything below with that in mind: the *contract* is the artefact, the
-store is a fixture.
+** The calendar is not core to the pipeline
+
+Stronger than "the store is a fixture", and worth saying plainly because an
+earlier draft of this file got it wrong: *the whole calendar — contract
+included — is scaffolding for the grind, not part of the promotion machinery.*
+
+Delete it and the pipeline still refuses everything it refuses today:
+
+| guard | asks | needs the calendar |
+|-------+------+--------------------|
+| 0 | are you up to date with =main=? | no |
+| 1 | is the berth free? | no |
+| 2 | are the gates green on THIS head? | no |
+| 3 | *is a window open?* | *yes — this is the only one* |
+| 4 | is the authorization stack complete on this build? | no |
+| 4b | is that still true at the moment of reliance? | no |
+| 5 | did production converge on this SHA? | no |
+
+Six of seven guards do not know the calendar exists. What actually protects
+production is *evidence bound to a build* and *a singleton berth* — and neither
+is a scheduling concept.
+
+Guard 3 is the one ITIL-specific control here, it is enforced in exactly one
+advisory place (=gates/preflight.sh=, issue #51), and it is the guard whose
+absence changes the least. That ordering is deliberate and it is the answer to
+"why did you not spend more time on the scheduler": *because the scheduler is
+the least load-bearing thing in the repo.*
+
+What the calendar buys is the grind — a queue to stack, expiry to observe,
+closure codes to exercise, and a board that made the stale reservation and the
+five undefined classes visible instead of theoretical. That is worth having and
+it is not the product.
 
 * Explicit non-requirement: the forge does not know about the calendar
 
