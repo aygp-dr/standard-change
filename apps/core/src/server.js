@@ -80,6 +80,7 @@ export const BACKGROUND = '#e8f0ff';
 // (shared/oneui.js), so anything derived from a request must be escaped with
 // esc() by whoever puts it here. Routes absent from the table render nothing.
 export const PANELS = {
+  '/cart': '<h2>Your cart</h2><p>Your cart is empty. Nothing has been added yet.</p>',
 };
 
 export function panel(path) {
