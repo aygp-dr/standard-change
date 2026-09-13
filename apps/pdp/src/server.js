@@ -220,7 +220,8 @@ This product has not gone away; try again shortly.</p>
   const p = d.product;
   return `<h2>${esc(p.name)}</h2>
 <p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability)}</p>
-<p>SKU <code>${sku}</code></p>`;
+<p>SKU <code>${sku}</code></p>
+<p><a href="/cart">View your cart</a></p>`;
 }
 
 // `port` is the port this process is ACTUALLY answering on -- the caller takes
