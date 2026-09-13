@@ -1,1 +1,22 @@
-{"app":"core","port_offset":1,"routes":["/","/login","/account","/cart"],"health":"/","journeys":["home","login","account","cart"]}
+{
+  "app": "core",
+  "port_offset": 1,
+  "routes": [
+    "/",
+    "/login",
+    "/account",
+    "/cart",
+    "/about",
+    "/contact",
+    "/jobs",
+    "/statics/"
+  ],
+  "fallthrough": true,
+  "health": "/",
+  "journeys": [
+    "home",
+    "login",
+    "account",
+    "cart"
+  ]
+}

@@ -18,9 +18,17 @@ const table = apps.flatMap((a) =>
   a.routes.map((r) => ({ prefix: r.replace(/\/:.*$/, '/').replace(/:.*/, ''), app: a.app, port: BASE + a.port_offset }))
 ).sort((x, y) => y.prefix.length - x.prefix.length);
 
+// The default location. nginx's `location / { proxy_pass http://core; }`:
+// a path no app claims is not a router-level 404, it goes to whichever app
+// declares fallthrough and that app decides. Declared in routes.json, not
+// named here, so the router never hardcodes which app is core.
+const fb = apps.find((a) => a.fallthrough);
+const DEFAULT = fb && { prefix: '/', app: fb.app, port: BASE + fb.port_offset };
+
 function route(url) {
   const path = url.split('?')[0];
-  return table.find((t) => (t.prefix === '/' ? path === '/' : path.startsWith(t.prefix)));
+  return table.find((t) => (t.prefix === '/' ? path === '/' : path.startsWith(t.prefix)))
+      || DEFAULT;
 }
 
 createServer((req, res) => {

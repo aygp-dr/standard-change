@@ -41,12 +41,20 @@ stateDiagram-v2
     Assessing --> Scheduled: gates green -> window reserved
     Scheduled --> Implementing: slot arrives, scheduler activates
     Implementing --> Verified: staging deploy + authorizing e2e
-    Verified --> Live: production deploy
+    Verified --> Live: gates green -> promotes itself
+    Verified --> Held: hold:staging present (atypical)
+    Held --> Verified: a person removes the label -> guards re-run
+    Held --> Forfeited: hold outlives its window
+    Forfeited --> [*]: berth freed, pass withdrawn, re-request
     Live --> Completed: estate converged on the new build
     Completed --> [*]: PIR posted, merged, berth freed
 
     note right of Scheduled
         reserving is not deploying
+    end note
+    note right of Held
+        the ONLY human stop.
+        expires to forfeit, never to ship
     end note
     note right of Live
         guard 5 asserts the SERVED build,
@@ -72,7 +80,8 @@ sequenceDiagram
     IDP-->>Dev: window reserved
     IDP->>Stg: slot arrives -> activate, deploy changed apps
     Stg-->>IDP: authorizing e2e green
-    IDP->>Prod: deploy the same digests
+    IDP->>IDP: guard 4c: is hold:staging on the PR right now?
+    IDP->>Prod: no hold -> deploy the same digests
     Prod-->>IDP: N probes, one build -> converged
     IDP->>GH: PIR, merge, release the berth
     GH-->>Dev: shipped
@@ -87,6 +96,7 @@ which:
 | shape                | kind        | example               | added by hand? |
 |----------------------+-------------+-----------------------+----------------|
 | =change:requested=   | request     | someone asked         | *yes*          |
+| =hold:<env>=         | *hold*      | someone said not yet  | *yes*          |
 | =deploy:<env>=       | action      | work is in flight     | no             |
 | =<subject>:<state>=  | observation | *a check came back*   | no             |
 
@@ -99,6 +109,64 @@ Three things this picture claims, each checked elsewhere:
 arrives), *production promotes the digest staging tested* rather than
 rebuilding, and *converged is not alive* — guard 5 samples until one build
 answers, or refuses.
+
+** Passing the gates is what moves a change, not a person
+
+*A standard change that passes its gates goes to production without anyone
+moving it.* That is the decision in =docs/adr/0001-automatic-promotion.org=,
+and it is the reason the gates are worth what they cost: a gate nobody trusts
+enough to promote on is a report, not a gate.
+
+So there is no "promote" button, and adding =deploy:production= by hand is not
+one either — it is an *action* label, and asserting it claims the workflow is
+deploying right now.
+
+*** The one way to stop it: =hold:staging=
+
+Sometimes you want to look at staging yourself. =hold:staging= is how, and it
+is the only human stop in the pipeline:
+
+| | |
+|---------------------+--------------------------------------------------------|
+| *what it does*      | the change stops after =staging:passed=; production is untouched |
+| *who adds it*       | a person, at any time, including mid-run                |
+| *who removes it*    | *a person.* Never the workflow                          |
+| *when it is read*   | at the instant of promotion — guard 4c — not at the staging pass |
+| *on expiry*         | *forfeit*, never promote                                |
+
+Four properties, and each is load-bearing:
+
+1. *Only a person lifts it.* A hold the machine can clear on your behalf is
+   not a hold, it is a delay. The workflow may read this label and may refuse
+   on it; it may never remove it.
+
+2. *It is read at promotion, not at the staging pass.* You can add it while
+   the authorizing e2e is still running and it will still be honoured. This is
+   the same law as guard 4b — *a guard whose subject can change after it is
+   checked must be re-checked at the moment it is relied on* — applied to a
+   person rather than to trunk.
+
+3. *Releasing it re-runs the guards.* A hold is time, and time is exactly what
+   guard 4b watches. A hold long enough to be worth taking is long enough for
+   =main= to move underneath you, so removing the label does not resume a
+   half-finished deployment; it re-enters the guards.
+
+4. *It expires to forfeit, never to ship.* The berth is a singleton, so a hold
+   wedges every other change in the repo — it cannot be indefinite. But the
+   safe direction on timeout is *down*: release the berth, withdraw the
+   staging pass, make the change ask again. A hold that timed out into a
+   production deployment would be the most dangerous label in this repository,
+   because it would ship precisely the change someone had said to look at.
+
+*It is deliberately atypical.* Reaching for it often is a signal about the
+gates, not about the change — it means the suite is not trusted to authorize a
+promotion, and the thing to fix is the suite. The label exists so that
+distrust has somewhere to go that is *visible and counted*, rather than being
+expressed as a pipeline nobody turns on.
+
+*What it costs, stated plainly.* Holding claims the path to production and
+then does nothing with it. Every other change queues behind a human reading a
+page. That is a real price and it is the argument for using it rarely.
 
 * Environments
 

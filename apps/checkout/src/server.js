@@ -6,6 +6,11 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
+// OneUI is the shared UI surface (issue #10). Every app pins it, so a change
+// there is a change to all of them -- the cost is named in
+// docs/cross-cutting-coupling.org, not hidden.
+import { page, loadEstate, VERSION as ONEUI } from '../../../shared/oneui.js';
+const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
 const BLOCK = process.env.BLOCK || '?';
@@ -22,15 +27,7 @@ export function render(path) {
 export const BACKGROUND = '#ffd7e6';
 
 export function renderHtml(path) {
-  const d = render(path);
-  return `<!doctype html><meta charset=utf-8><title>checkout</title>
-<style>body{background:${BACKGROUND};font:14px system-ui;margin:0;padding:40px}
-main{max-width:34rem}code{background:#fff;padding:2px 6px;border-radius:3px}</style>
-<main><h1>${d.app}</h1>
-<p>path <code>${d.path}</code> · build <code>${d.sha}</code> · block <code>${d.block}</code></p>
-<nav><a href="/">core</a><a href="/search">plp</a><a href="/p/SKU1">pdp</a>
-<a href="/cart">cart</a><a href="/checkout">checkout</a><a href="/api/catalog">api</a></nav>
-</main>`;
+  return page(render(path), ESTATE, BACKGROUND);
 }
 
 // Only listen when run directly. Importing this module (as the unit tests do)

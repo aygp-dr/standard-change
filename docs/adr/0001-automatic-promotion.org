@@ -169,6 +169,98 @@ only *sooner*.
 *Take this option if you can. The rest of this document is what to do when you
 cannot.*
 
+*** Problem — core is the default location, so core is on every request
+
+Added 2026-09-13, on the same reasoning as =shared/= above: correct semantics,
+worse fit for this decision, and named rather than hidden.
+
+The estate now mirrors the nginx shape it is standing in for. An unclaimed path
+is not a router-level 404 — it goes to whichever app declares =fallthrough= in
+its =routes.json= (core), and *that app* decides the path does not exist:
+
+: location /statics/  { proxy_pass http://core; }
+: location /          { proxy_pass http://core; }   # was: return 404
+
+*What it costs.* Two things, and the second is the one that matters here.
+
+1. *Core is now in the blast radius of every request in the estate*, not just
+   of =/=, =/login=, =/account=, =/cart= and the shared surface. A core that is
+   down no longer degrades four journeys — it turns every unmatched path in the
+   estate into a 502. Core has become infrastructure while still being labelled
+   =app:core=, exactly the mismatch =shared/= introduced on the library side.
+   The manifest still reports a single-app change.
+
+2. *The gate that caught mis-routing could have been destroyed by this.* The
+   e2e gate asserted "an unrouted path must 404 at the router". A default
+   location makes that assertion impossible to satisfy, and the cheap move —
+   delete the check — would have removed the only thing standing between us and
+   a router that answers 200 for everything. It was rewritten instead to assert
+   the *attribution*: 404, and =x-routed-to= names the fallthrough app. That is
+   a strictly stronger check than the one it replaced, because it now also
+   proves core is on the default path.
+
+*It was nearly worse — and this one actually fired.* The first implementation
+had core own any path matching the declared =/statics/= prefix. =/statics/=
+being declared made =/statics/anything= return *200*. The default location had
+silently become "core claims everything", which is the precise failure the
+rewritten gate exists to catch — and the gate caught it, on the first run,
+before commit. Ownership under =/statics/= is now decided by the file on disk,
+not the prefix, and both halves are pinned: core answers for what it has, and
+*refuses what it does not*. An app that cannot say no cannot be a default
+location.
+
+*Why do it anyway.* Because it is what the system being replicated does, and a
+model of change control that only holds while every path is explicitly claimed
+has not met a real storefront. The cost is that =app:core= now understates its
+own blast radius twice over — once through =shared/=, once through the default
+location. See the blast-radius follow-up below: this is the second independent
+argument for =count(app:*) > 1= not being the right measure of radius.
+
+*** Problem — shared/ makes automatic promotion less safe, and we did it anyway
+
+Extracting =shared/= (OneUI, issue #10) and =external/= is *correct semantics*
+and a *worse fit for this decision*. Both are true and the ADR should say so.
+
+*What it costs.* Under automatic promotion, a change reaches production without
+a person moving it. The gates are what make that safe, and a shared library
+defeats them in a specific way:
+
+| before                              | after                                     |
+|-------------------------------------+-------------------------------------------|
+| a change touched one app            | a =shared/= change touches *every* app    |
+| blast radius was in the manifest    | the manifest still says =app:core=        |
+| =change:standard= was defensible    | it is a coordinated change wearing a standard label |
+
+*=apps/**= is no longer the deployable entity, and the classifier still thinks
+it is.* The =apps/**=-blocks rule was a coarse but honest approximation while
+the apps were self-contained; a shared library breaks the assumption it rests
+on. =shared/= is classified =artifact= now, so it blocks — but it blocks
+*equally*, with no signal that its blast radius is five times a single-app
+change.
+
+*It was nearly worse.* Before this refactor the classifier knew only =apps/=
+and =router/=, so a change to =shared/= would have classified *=inert=* — the
+highest-blast-radius change in the repo waved through as "nothing that can
+appear in a deployed artifact". Verified, not theorised.
+
+*Why do it anyway.* This repo exists to work out change control, not to be
+convenient to deploy. A model that only stays coherent while the apps are
+artificially independent has not been tested against the thing that actually
+breaks monorepos. *We can be wrong in the near term to be more correct later* —
+and the near-term wrongness is now visible and named rather than absent.
+
+*What it means for the options.* It sharpens A2 specifically. Splitting the
+deployable surface out of the monorepo does *not* remove this coupling: five
+repos each importing an unversioned OneUI from a sixth deploy together exactly
+as they do now. The work that pays is *versioning the shared artifact so a
+consumer can lag* — and that is a different task from moving files, which is
+the failure mode most likely to make A2 disappointing. See
+=docs/cross-cutting-coupling.org= and issue #10.
+
+*Open, not scheduled:* the classifier has no notion of blast radius, and
+=idp.py change risk= — which does — is not wired into the pipeline. PR #5
+carries five =app:*= labels and is labelled =change:standard= today.
+
 *** Consequence — the environment tiers (was ADR 0002)
 
 If promotion is automatic, then *which environments can be promoted into* is a

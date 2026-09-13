@@ -1,90 +1,69 @@
 #!/bin/sh
-# deploy-run <pr> -- drive one change through the whole pipeline, for real.
+# deploy-run <pr> [--hold] -- start a change. A light wrapper over `gh label`.
 #
-# Reservation, activation, staging, promotion, production, cutover, settlement:
-# the flow in spec.org, executed against the bastille jails with the actual
-# gates. No simulation of the gates -- sim/ models the SCHEDULING, this runs the
-# estate.
+# This is the whole of a person's part. It adds change:requested and stops.
+# Everything after is the system acting or observing, and the name shape of
+# each label says which (.claude/skills/_shared/vocabulary.md).
+#
+# It deliberately does NOT deploy. An earlier version of this file drove the
+# entire pipeline -- guards, staging, cutover, convergence -- which made it a
+# second implementation of the control flow, and made shipping something a
+# person did by hand rather than something passing the gates did. That script
+# is change/activate.sh now, and activation calls it.
+#
+# So there is no promote button here, and there is no deploy button either.
+# The only verbs a person has are: ask (change:requested), hold (hold:staging),
+# and release the hold.
 set -eu
-PR="${1:?usage: deploy-run <pr>}"
-R=aygp-dr/standard-change
-FRONT_PROD=http://127.0.0.1:9200
-FRONT_STG=http://127.0.0.1:9201
 cd "$(dirname "$0")"
+R="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
 
-step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
-ok()   { printf '   ok   %s\n' "$*"; }
-die()  { printf '   FAIL %s\n' "$*"; exit 1; }
+PR=''; HOLD=0; RELEASE=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --hold)    HOLD=1 ;;
+    --release) RELEASE=1 ;;
+    --status)  PR="${2:?}"; shift
+               gh pr view "$PR" --repo "$R" --json number,title,labels,reviewDecision,mergeStateStatus \
+                 -q '"#\(.number) \(.title)\n  review=\(.reviewDecision) merge=\(.mergeStateStatus)\n  labels: \([.labels[].name]|join(", "))"'
+               ./change/schedule.sh current "$PR" staging >/dev/null 2>&1 \
+                 && echo "  window: $(./change/schedule.sh current "$PR" staging) (open, covering now)" \
+                 || echo "  window: none covering now — ./change/schedule.sh block $PR \"\$(./change/groups.sh $PR)\" 30"
+               exit 0 ;;
+    -*)        echo "usage: deploy-run <pr> [--hold|--release] | --status <pr>" >&2; exit 2 ;;
+    *)         PR="$1" ;;
+  esac
+  shift
+done
+[ -n "$PR" ] || { echo "usage: deploy-run <pr> [--hold|--release] | --status <pr>" >&2; exit 2; }
 
-SHA=$(gh pr view "$PR" --repo "$R" --json headRefOid -q '.headRefOid' | cut -c1-7)
-LABELS=$(gh pr view "$PR" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')
-GROUPS=$(echo "$LABELS" | tr ' ' '\n' | sed -n 's/^app://p' | tr '\n' ' ')
-EMERG=$(echo "$LABELS" | grep -c 'change:emergency' || true)
-step "change under test"
-echo "   PR #$PR  sha=$SHA"
-echo "   labels: $LABELS"
-echo "   groups: ${GROUPS:-none}"
-[ -n "$GROUPS" ] || die "no app:* labels — nothing to deploy"
+# hold:staging is the one human stop: it keeps a change in staging so a person
+# can verify there, instead of letting green gates promote it. Only a person
+# adds it and only a person removes it -- a hold a machine can lift is not a
+# hold. See README.org, "The one way to stop it".
+if [ "$HOLD" = 1 ]; then
+  gh pr edit "$PR" --repo "$R" --add-label hold:staging
+  echo "#$PR held at staging. Production will not be touched."
+  echo "  release with: ./deploy-run $PR --release  (the guards re-run on release)"
+  exit 0
+fi
+if [ "$RELEASE" = 1 ]; then
+  gh pr edit "$PR" --repo "$R" --remove-label hold:staging
+  echo "#$PR released. The guards re-run — a hold is time, and time is what guard 4b watches."
+  exit 0
+fi
 
-step "guard 2 — gates green on THIS head sha"
-BAD=$(gh api "repos/$R/commits/$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid)/check-runs" \
-        --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
-SELF=$(gh api "repos/$R/commits/$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid)/check-runs" \
-        --jq '[.check_runs[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length')
-[ "$BAD" -eq 0 ] || die "$BAD gate(s) not green on $SHA"
-[ "$SELF" -ge 1 ] || die "gate-selftest did not pass; gate results are void"
-ok "all four gates green, self-test passed"
+# Refuse to raise a request for a change that cannot become one. Not a guard --
+# the guards run in the pipeline, on fresher facts than these. This only avoids
+# minting a request that the very next step would reject.
+GROUPS=$(./change/groups.sh "$PR")
+[ -n "$GROUPS" ] || { echo "refused: #$PR carries no app:* label — nothing to deploy" >&2; exit 2; }
 
-step "guard 0 — up to date with main"
-STATE=$(gh pr view "$PR" --repo "$R" --json mergeStateStatus -q .mergeStateStatus)
-case "$STATE" in
-  BEHIND|DIRTY) [ "$EMERG" -gt 0 ] && ok "behind main, but change:emergency" \
-                                   || die "branch is $STATE relative to main — rebase first" ;;
-  *) ok "mergeStateStatus=$STATE" ;;
-esac
-
-step "guard 1 — claim the berth"
-HOLDER=$(gh pr list --repo "$R" --state open --label deploy:staging --json number -q "[.[].number]|map(select(.!=$PR))|first // empty")
-[ -z "$HOLDER" ] || die "staging held by #$HOLDER"
-gh pr edit "$PR" --repo "$R" --add-label deploy:staging >/dev/null
-ok "berth claimed"
-
-step "deploy to staging"
-./targets/bastille/deploy.sh staging "$SHA" | sed 's/^/   /'
-sleep 2
-ok "sc-staging <- $SHA"
-
-step "the authorizing run — e2e against staging"
-ROUTER_URL="$FRONT_STG" ./gates/e2e.sh | tail -1 | sed 's/^/   /' || die "staging e2e failed"
-HEALTH_MODE=manifest HEALTH_SAMPLES=4 ./gates/health.sh "$FRONT_STG" "$SHA" | sed 's/^/   /'
-gh pr edit "$PR" --repo "$R" --add-label staging:passed >/dev/null
-ok "staging:passed@$SHA"
-
-step "deploy to the IDLE colour"
-CUR=$(./targets/bastille/front/switch.sh status | grep -o 'production = [a-z]*' | awk '{print $3}')
-IDLE=$([ "$CUR" = blue ] && echo green || echo blue)
-echo "   live=$CUR  idle=$IDLE"
-./targets/bastille/deploy.sh production "$SHA" | sed 's/^/   /'
-sleep 2
-ok "both production replicas <- $SHA"
-
-step "verify the idle colour BEFORE any traffic"
-IDLE_IP=$([ "$IDLE" = blue ] && echo 10.0.0.61 || echo 10.0.0.62)
-ROUTER_URL="http://$IDLE_IP" ./gates/e2e.sh | tail -1 | sed 's/^/   /' || die "idle colour failed e2e"
-ok "$IDLE verified with no traffic on it"
-
-step "atomic cutover"
-./targets/bastille/front/switch.sh "$IDLE" | sed 's/^/   /'
-ok "production -> $IDLE"
-
-step "guard 5 — convergence through the front"
-HEALTH_MODE=manifest HEALTH_SAMPLES=5 ./gates/health.sh "$FRONT_PROD" "$SHA" | sed 's/^/   /' \
-  || die "production did not converge on $SHA"
-gh pr edit "$PR" --repo "$R" --add-label production:healthy >/dev/null
-ok "converged"
-
-step "settle — release the berth"
-gh pr edit "$PR" --repo "$R" \
-  --remove-label deploy:staging --remove-label staging:passed >/dev/null
-ok "berth freed; labels now: $(gh pr view "$PR" --repo "$R" --json labels -q '[.labels[].name]|join(", ")')"
-printf '\n\033[1m== deployed %s to production (%s), rollback target = %s\033[0m\n' "$SHA" "$IDLE" "$CUR"
+gh pr edit "$PR" --repo "$R" --add-label change:requested
+echo "#$PR requested  groups=$GROUPS"
+if WIN=$(./change/schedule.sh current "$PR" staging 2>/dev/null); then
+  echo "  window $WIN is open and covers now — the scheduler may activate at any moment"
+else
+  echo "  no window covering now. Reserving is not deploying, and it is not yours to do:"
+  echo "  the scheduler books it. Reserving by hand asserts an action nobody took."
+fi

@@ -65,7 +65,9 @@ case "${1:-}" in
     mkdir -p "$WT/.run"
     for a in $(jq -r '.[].app' "$ROOT/router/routes.json"); do
       var="PORT_$(echo "$a" | tr 'a-z' 'A-Z')"; eval "p=\$$var"
-      BUILD_SHA="$SHA" BLOCK="$BLOCK" PORT="$p" node "$WT/apps/$a/src/server.js" \
+      # apps/ is ours; external/ stands in for services we do not deploy
+      d="$WT/apps/$a"; [ -d "$d" ] || d="$WT/external/$a"
+      BUILD_SHA="$SHA" BLOCK="$BLOCK" PORT="$p" node "$d/src/server.js" \
         > "$WT/.run/$a.log" 2>&1 &
       echo $! > "$WT/.run/$a.pid"
     done
