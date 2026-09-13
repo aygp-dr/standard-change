@@ -1,0 +1,128 @@
+#+TITLE: Vocabulary - slipway
+#+SUBTITLE: The working terms of this repo, and their canonical names
+#+OPTIONS: toc:2 num:t ^:nil
+#+STARTUP: overview
+
+* What this is
+
+The load-bearing terms used in this repo. Companion to [[./methodology.org][~methodology.org~]]. For
+the general spec-driven vocabulary - hermeticity as keystone, the test oracle,
+property-based testing, and the related-work sweep behind them - see
+=../../gentle-symbolic-computation/.meta/vocabulary.org=. This file names only the
+terms specific to slipway.
+
+Most of that specific vocabulary does not exist yet: a project's real terms are
+discovered by building it, not declared in advance. What follows is the part
+the /method/ needs in order to start, plus the slots the domain will fill.
+
+* The terms the method needs from the first commit
+
+- *spec* - the one canonical governing document (=spec.org=). Everything else
+  is derived and loses arguments to it.
+- *derived file* - any document restating the spec for a particular reader
+  (=CLAUDE.md= for an agent, =README.org= for a human). A derived file that
+  contradicts the spec is a bug in the derived file.
+- *unit* - one pull request carrying at least one =app:*= label. Everything is
+  indexed by it: the gates run per =app:*= group, the change window names it,
+  the PIR reports on it.
+- *oracle* - the artifact that decides whether a candidate is correct,
+  independent of whoever produced it. Pinned before the candidates.
+- *the gate* - the single command that runs the oracle. A tripwire, not a
+  promotion mechanism: zero findings, no warning tier.
+- *negative test* - feeding a checker known-bad input to watch it reject. A
+  checker that can never fail launders "not done" as "correct"; one that can
+  never pass is useless in the other direction. Both halves are required.
+- *cell* - a =(toolchain, platform)= coordinate. Claims are true /at a cell/.
+  An unobserved cell is not a supported cell, whatever the matrix hopes.
+- *supported vs best-effort* - supported means a PASS was /watched/ on that
+  cell, with versions recorded. Best-effort means expected to work and not yet
+  observed, marked [H].
+- *invariant* - what must hold after a unit runs, stated so that its violation
+  is observable rather than arguable.
+- *provenance* - where a claim or artifact came from, recorded at the artifact
+  rather than in someone's memory.
+- *refutation condition* - the named, runnable observation that would falsify
+  the repo's central claim. Its absence is how a project becomes unfalsifiable
+  and therefore unverifiable.
+- *blast radius* - what a change can break. Used to size the gate, not as a
+  reason to avoid changing things.
+- *review ledger* - the standing issue that accumulates declared deviations and
+  framing shifts, to be reconciled at a spec revision rather than one at a time.
+- *declared deviation* - a rule knowingly broken while parameters are still
+  being established, recorded in the commit and the ledger. The declaration is
+  the whole difference between this and silent wrongness.
+- *experiment* - =experiments/NNN-slug/=: a falsifiable hypothesis, a success
+  criterion, an exact run command, a dated observation log. Promotion requires
+  the criterion observed and a matching contract in the spec.
+
+* Epistemic labels
+
+Applied to any claim in =spec.org= that is not self-evident:
+
+| label | meaning                                                      |
+|-------+--------------------------------------------------------------|
+| [E]   | established - observed, with the observation recorded         |
+| [P]   | provisional - working assumption, expected to be revisited    |
+| [H]   | hypothesis - believed, not yet observed; never a bare claim   |
+| [I]   | inferred - derived from other claims, not directly observed   |
+
+* The name
+
+The name is *standard-change*, from ITIL 4: a pre-authorized, low-risk change that needs no
+CAB review because fixed gates already verify it. The name states the thesis -
+authorization is a property of the /gate sequence/, not of a meeting.
+
+The repo currently lives in a directory named =slipway= (one of the names
+considered, alongside =change-schedule=, =change-window=, =gatehouse=). That
+mismatch is a *declared deviation*, not an alternative reading: =spec.org=
+§Status fixes the name. See [[./methodology.org][~methodology.org~]] §Carried open for the trigger.
+
+* Domain vocabulary
+
+The ITIL 4 terms and their meanings /in this repo/ are the table in =spec.org=
+§Vocabulary - that table is canonical and is not restated here. What follows is
+the handful of terms this repo sharpened past their ITIL definitions.
+
+- *deploy group* - one app directory, and the unit of both building and
+  deploying. =main= and =default= are aliases for =core=. The gate sequence is
+  parameterized by group, which is what lets a PR deploy one app against three
+  production peers.
+- *port block* - ten contiguous ports owned by one git worktree: router at
+  =10000 + 10n=, apps at fixed offsets. The local analogue of a staging slot,
+  and the reason parallel worktrees do not collide.
+- *slot* (=staging-<group>-<n>=) - a full four-app topology where the changed
+  group is the PR build and the other three resolve to current production. A
+  slot is a /cell/ in the sense above: a claim is true at a slot.
+- *the authorizing run* - the e2e run against the staging slot, as opposed to
+  the in-runner run against the PR build. The first proves the build, the
+  second proves the deployment. Only the second authorizes production.
+- *stale lock* - a deployment lock older than 60 minutes, presumed to belong to
+  a runner that died before =release=. Preflight clears it, and the clearance
+  is recorded in the stale run's PIR. A clearance that leaves no record is a
+  refutation condition, not a convenience.
+- *blocked vs failed* - =blocked:lock= and =blocked:freeze= mean the change was
+  never attempted; a red gate means it was attempted and rejected. Collapsing
+  the two loses the distinction change enablement exists to make.
+
+* The artifacts, and which is source of truth
+
+| artifact                   | status  | rule                                            |
+|----------------------------+---------+-------------------------------------------------|
+| =apps/*/routes.json=       | source  | route ownership; hand-edited                     |
+| =router/routes.json=       | derived | union of the above                               |
+| rendered =.nginx.conf=     | derived | =gates/lint.sh= fails if it disagrees with source |
+| =.github/labeler.yml=      | derived | generated from =apps/*/routes.json=              |
+| =ports.tsv=                | source  | CMDB for worktrees                               |
+| =environments.tsv=         | source  | CMDB for staging slots                           |
+| the PIR comment            | derived | generated from deployment records and gate runs  |
+
+A derived artifact never becomes a source of truth by being edited. Editing one
+is how the generated and the real silently diverge - which is precisely what
+refutation condition 6 watches for.
+
+* Terms coined or sharpened here
+
+Added as they are earned. At v0.1 the list is the =deploy group=, =port block=,
+=the authorizing run=, and the =blocked vs failed= distinction above; none is
+established nomenclature outside this repo, and each should be checked against
+prior art before it hardens.

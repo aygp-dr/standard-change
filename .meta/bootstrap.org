@@ -1,0 +1,132 @@
+#+TITLE: Bootstrap - slipway
+#+SUBTITLE: The prompt of record that turns this repo from empty into spec-governed
+#+OPTIONS: toc:2 num:t ^:nil
+#+STARTUP: overview
+
+* What this is
+
+The prompt that produces this repo's two governing documents: =spec.org=
+(canonical) and =CLAUDE.md= (derived operational contract).
+
+It is the generalization, for a project whose domain is not yet stated, of
+=../../gentle-symbolic-computation/.meta/bootstrap.org= - that file is the worked
+instance (a book companion in Common Lisp, so its Phase 1 names chapters and
+Lisp implementations); this one keeps the shape and leaves the domain as the
+input it is.
+
+Run it once, at the start. After that, work by [[./methodology.org][~methodology.org~]]. When the repo
+later meets a second host, run
+=../../gentle-symbolic-computation/.meta/secondary-validation.org=.
+
+=spec.org= is the single source of truth. =CLAUDE.md= restates only what an
+agent needs to /act/ and must not contradict it. If you find yourself writing a
+fact into =CLAUDE.md= that isn't in =spec.org=, add it to =spec.org= first.
+
+* PHASE -1 - the project statement                                      :open:
+
+This is the one input a survey cannot reach, and the only thing blocking
+PHASE 1. Before writing =spec.org=, obtain from JW, in their own words:
+
+- *What slipway is.* One paragraph. No marketing language.
+- *What "done" means for one unit* - a chapter, a module, a feature, an
+  exercise, a port. The /unit/ is the thing the cadence, the contracts and the
+  gates are all defined over; naming it wrong distorts everything downstream.
+- *The cadence*, if there is one (gentle-symbolic-computation: one chapter per
+  Thursday), or an explicit "none".
+- *The target cells* - which =(toolchain, platform)= pairs are /meant/ to be
+  supported. This is intent; PHASE 0 reports which are observable today, and
+  the two are not the same claim.
+
+Do not infer any of these from the repository name. Record the answers in
+=spec.org= §Provenance & scope before writing any other section.
+
+* PHASE 0 - survey, do not assume
+
+- Enumerate the actual repo state: =git ls-files=, the tree, any existing
+  README / Makefile / manifest / =.envrc= / =.beads=. Report what exists before
+  writing anything. /At the time this file was written the repo was empty: zero
+  tracked files, no commits, only =.git= and this =.meta/=./
+- Detect the toolchain on THIS host and record exact versions. Do not claim
+  support you cannot invoke.
+- Check every external tool the build will shell out to, not just the obvious
+  ones. A missing dependency is a named finding, not a failure buried in the
+  middle of a pipeline.
+- Where the project restates external material, extract its structure from the
+  source itself so the unit map is provenance-backed, not recalled.
+
+Report the survey before proceeding. A bootstrap that writes first and looks
+afterwards is the failure mode this phase exists to prevent.
+
+* PHASE 1 - write spec.org
+
+Org-mode, literate. Required sections:
+
+1. *Provenance & scope* - what slipway is (PHASE -1, verbatim), what this repo
+   adds beyond any source material it draws on, and explicit non-goals. The
+   non-goals do as much work as the goals.
+2. *Governance tuple* - define the coordinate every artifact lives at. Name the
+   axes that actually vary here (toolchain, platform, standard/version,
+   dependency pin) and state which tuples are supported vs best-effort.
+3. *Support matrix* - the tuple axes crossed. Mark each cell supported /
+   best-effort / unsupported, each with its reason. A cell nobody has run is
+   not a supported cell.
+4. *Cadence -> unit map* - one row per session or milestone, mapping the unit
+   to the directory and artifacts it produces. If PHASE -1 said "no cadence",
+   say so here rather than inventing one.
+5. *Repository layout & tangling contract* - literate org sources tangle to
+   code via =:tangle= with =:mkdirp t=; specify the source layout, the naming
+   scheme, and the package/system boundary. *No platform token in any
+   filename* - portability is a property recorded in metadata, not encoded in
+   slugs.
+6. *Unit contract* - what every unit carries: its provenance, its invariant
+   (what must hold after it runs), its expected output, and its portability
+   class drawn from §3.
+7. *Adaptation contract* - only if slipway restates external material: the rule
+   for translating the source's idioms into current idiom, with a worked
+   before/after, and an explicit statement of where fidelity to the source
+   overrides modernization and where it does not. If there is no source
+   material, delete this section and say in §10 that it was deleted, so its
+   absence is a decision and not an oversight.
+8. *Verification contract* - the oracle and the gate. What proves a unit
+   correct, the exact command, and the pass criterion. Build this before or
+   alongside the thing it judges, and state how the checker is
+   /negative-tested/ - a checker that can never fail launders "not done" as
+   "correct". Distinguish the documents gate from the code gate; neither
+   substitutes for the other.
+9. *Refutation conditions* - concretely, what observation would falsify the
+   repo's central claim. Not "bugs might exist": a named, runnable observation
+   (e.g. any supported-cell artifact that fails its gate, or output that
+   diverges across two supported tuples with no documented reason).
+10. *Open questions* - unresolved decisions, labeled, not hand-waved.
+
+Use epistemic labels on any claim that is not self-evident: [E] established /
+[P] provisional / [H] hypothesis / [I] inferred. Prefer the vocabulary of
+contract, invariant, provenance, oracle, cell, blast radius (see
+[[./vocabulary.org][~vocabulary.org~]]). Formalism is welcome where it does work; no ornament.
+
+* PHASE 2 - derive CLAUDE.md
+
+Operational only:
+
+- One-paragraph project contract: what this repo is, and what "done" means for
+  one unit.
+- Quickstart: the exact commands, per toolchain actually detected in PHASE 0.
+- Workflow: org -> source, and how to run one unit end to end.
+- Conventions the agent must follow: naming, style, where new work lands.
+- Invariants to preserve, as an explicit do / do-not list, pointing at
+  =spec.org= §Verification and §Refutation rather than restating them.
+- Boundary, stated outright: "=spec.org= governs; when they disagree,
+  =spec.org= wins and =CLAUDE.md= is the bug."
+
+* Constraints
+
+- Every command in either file must be one you actually ran, or can run, on
+  this host. Mark anything unverified [H].
+- Do not invent support. An uninstalled toolchain gets [H] best-effort cells
+  with that fact noted, never a bare "supported".
+- Output org-mode with babel blocks tagged by language. Nested document content
+  uses =#+begin_src markdown=, never =#+begin_src org= - org-in-org is cursed.
+- Diagrams are Mermaid code blocks with =:eval never-export=. Do not generate
+  image files.
+- End by listing what you did *not* verify, and why, so the gaps are visible
+  rather than absent.

@@ -1,0 +1,162 @@
+#+TITLE: Operating disciplines - slipway
+#+SUBTITLE: How this repo works, specialized from gentle-symbolic-computation/.meta
+#+OPTIONS: toc:2 num:t ^:nil
+#+STARTUP: overview
+
+* What this is
+
+The operating manual for /this/ repo. It is the specialization of the general
+disciplines in =../../gentle-symbolic-computation/.meta/methodology.org= - read
+that for the full statement, which is deliberately domain-neutral. Nothing here
+contradicts it; this file records the concrete shapes those disciplines take
+here, and marks honestly the ones that are not yet decided.
+
+/Specialize, do not copy./ A =.meta= that duplicates the general statement goes
+stale the moment the general one is revised, and the duplicate wins arguments
+it should lose. Where this file has nothing specific to add, it points.
+
+* The principle underneath
+
+Cheap generation makes verification the scarce discipline. Everything below is
+downstream of that: the oracle is the load-bearing artifact, built and pinned
+before the things it judges.
+
+* Governing spec
+
+=spec.org= is the single canonical document. =CLAUDE.md= and =README.org= are
+derived: they restate only what is needed to act, and point back. When a
+derived file disagrees with =spec.org=, the spec wins and the derived file is
+the bug. When a /run/ refutes the spec, the spec is amended - it tracks
+observed reality, not intentions, and it is amended in the direction of the
+observation.
+
+The spec is at 0.1, /establishing/. In this phase deviations go to the review
+ledger issue, not into the spec on every step (see §Declared deviations).
+
+* The oracle, and one gate
+
+The oracle is the *gate sequence*, and its fixtures are the thing that makes it
+an oracle rather than a ritual:
+
+- =gates/lint.sh=, =gates/test.sh=, =gates/e2e.sh= - three gates, each exiting
+  non-zero on any finding. Zero findings, no warning tier. A gate is a
+  tripwire, not a promotion mechanism.
+- =gmake gate-selftest= is the *verifier of the verifier*, and it runs /before/
+  the gates' own results count. Each gate has =gates/fixtures/<gate>/fail/= it
+  must reject and =gates/fixtures/<gate>/pass/= it must accept. A gate that
+  fails either direction produces no verdict that run - its PASS is void, not
+  merely suspect.
+- *The second e2e run is the authorizing one.* The in-runner run proves the
+  build; the staging-slot run proves the deployment. Conflating them is how a
+  pipeline certifies an artifact it never actually deployed.
+- *Run it before believing it.* A cell moves from [H] to [E] only when a human
+  watched all three gates pass and pasted the versions into =spec.org= §Host
+  survey of record.
+- *Pick the weakest sound oracle.* The apps are fixtures; their correctness is
+  not the point and does not deserve a strong checker. The gate /sequence/ is
+  the product, so that is where the verification effort belongs - see
+  =spec.org= §Refutation conditions, whose seven entries are tests to be
+  written, not worries.
+
+* Two gates
+
+A documents gate and a code gate check different things and neither substitutes
+for the other. The documents gate must be *hermetic* - no third-party packages,
+no network - so that "the documents are clean" means the same thing on every
+host.
+
+* Experiment-driven development
+
+Speculative or investigative work does not land on the strength of an argument.
+It becomes =experiments/NNN-slug/=:
+
+- =README.org= - *Hypothesis* (falsifiable, one sentence), *Success criterion*,
+  *What could go wrong*, *Running* (the exact command), *Promotion checklist*.
+- =notes.org= - a dated log, one heading per run, recording what was /observed/.
+  Negative results are the point; the experiment that refutes a plan is the
+  cheapest knowledge available.
+- Its own runnable harness. The root never depends on an experiment.
+
+Numbering is monotonic and never reused. Tooling written to audit or migrate
+the repo is itself an experiment - a one-shot checker is evidence, and belongs
+where the next person can re-run it, not in a scratch directory. An experiment
+that refutes a spec claim /amends the spec/.
+
+* Progressive commit protocol
+
+The value of the history is the path, not only the endpoint.
+
+- Conventional commits, one logical step each. A toolchain or fixture change
+  never rides inside a content commit.
+- *Stage specific files by name.* Never =git add -A=, =git add .=, or
+  =git add --all=.
+- Commits touching the spec, the oracle, or the harness carry a git note with
+  two sections: *Timeline* (what was tried, in order, including what failed)
+  and *Reproduction* (exact command, observed output, and the cell it ran on).
+  Push notes explicitly; a qualifying commit with no note is a defect.
+- Issues, not source comments, for anything deferred, partial, or
+  suspected-wrong - and state the *trigger* that forces the revisit, so the
+  decision is a lookup and not a rediscovery.
+
+* Declared deviations while establishing
+
+This repo is at the start, where parameters are being established rather than a
+settled contract enforced. In that phase a rule may be /violated to preserve
+it/: keep the rule as the target, deviate where reality demands, reconcile at a
+review rather than amending the spec on every step.
+
+The line between this and silent wrongness is *consciousness*. A deviation must
+be declared - in the commit message and in a standing review ledger (an issue
+that accumulates deviations and framing shifts). A rule broken out loud and
+recorded is still doing its job; a rule broken quietly is a lie.
+
+* Don't over-clean during the build
+
+Working artifacts - scratchpads, in-progress notes, cross-environment
+illustrations - are tracked and travel between cells. Do not gitignore or tidy
+them mid-build, and do not reflexively delete stray files unless they are
+genuinely derived. Tidiness is for the endpoint.
+
+* Worktrees
+
+Parallel work goes in git worktrees under =worktrees/=, one line of work each,
+removed when done. One agent per worktree.
+
+* Extensions vs core
+
+Auxiliary and cross-paradigm material - tooling, a commonplace book of how the
+rest of the world does this - stays explicitly outside the core: not part of a
+unit's "done", not loaded by the core system, not gated the same way. Marking
+it as an extension keeps the core's contract honest.
+
+* The shape of a good move
+
+Survey -> state or pin the oracle -> smallest thing -> run it (negative-test the
+checker) -> declare it (conventional commit, note the timeline including
+failures) -> capture the lesson. The whole method is an apparatus for not
+fooling yourself.
+
+* Carried open                                                          :open:
+
+Resolved by =spec.org= and no longer open: what this repo is, the unit (one PR
+with an =app:*= label), the oracle and its single =gmake gate= entry point, the
+governance tuple, and the absence of source material (so there is no adaptation
+contract).
+
+Still open, each with the trigger that forces it:
+
+- *No cell is supported.* Every matrix cell in =spec.org= is [H]; nothing has
+  been run because nothing exists yet. Trigger: the first gate run.
+- *The name.* The spec names the repo =standard-change=; it lives in a
+  directory named =slipway=. A declared deviation, carried in the ledger.
+  Trigger: before the first commit that creates a GitHub remote.
+- *Playwright on FreeBSD.* No FreeBSD browser build ships; the system-Chromium
+  =executablePath= route is believed, not observed. Trigger: the first app that
+  serves a page. If refuted, hydra's e2e cell is unsupported and the gate is
+  CI-only.
+- *The change schedule's identity* - which account owns the calendar, its id,
+  and how a runner authenticates. Trigger: the first implementation of
+  =change/schedule.sh=.
+
+The rest of the open items live as issues with their triggers, per §Progressive
+commit protocol - not in this file and not in the spec.
