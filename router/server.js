@@ -29,7 +29,11 @@ createServer((req, res) => {
     res.writeHead(404, { 'content-type': 'application/json', 'x-block': BLOCK });
     return res.end(JSON.stringify({ error: 'no route', path: req.url, block: BLOCK }));
   }
-  const up = request({ host: '127.0.0.1', port: hit.port, path: req.url, method: req.method },
+  // Forward the request headers. Without this the router silently strips
+  // Accept, so an app that content-negotiates works when probed directly and
+  // not through the router -- which is how it would have reached staging.
+  const up = request({ host: '127.0.0.1', port: hit.port, path: req.url,
+                       method: req.method, headers: { ...req.headers, host: `127.0.0.1:${hit.port}` } },
     (r) => {
       res.writeHead(r.statusCode, { ...r.headers, 'x-router-block': BLOCK, 'x-routed-to': hit.app });
       r.pipe(res);
