@@ -1,1 +1,12 @@
-{"app":"mock","port_offset":5,"routes":["/api/catalog","/api/cart"],"health":"/api/catalog","journeys":[]}
+{
+  "app": "mock",
+  "port_offset": 5,
+  "routes": [
+    "/api/catalog",
+    "/api/cart"
+  ],
+  "health": "/api/catalog",
+  "journeys": [],
+  "role": "external-service",
+  "description": "Stands in for an EXTERNAL service the storefront depends on (catalog and cart APIs). Not a test double: no call assertions, no verification. It is a stub backend so the four apps have something real to talk to."
+}

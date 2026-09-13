@@ -1201,10 +1201,20 @@ and the known obstacles, and is the thing the first gate run promotes.
   port itself: "FreeBSD does not support Docker. When configuring the runner,
   use 'host' as the label." That is the constraint stated by the software, not
   inferred: host mode only, so no =container:= or =services:= steps.
-- *Playwright ships no FreeBSD browser build* [E, from its distribution]. A
-  system Chromium 148.0.7778.215 is installed as =/usr/local/bin/chrome= [E],
-  so the intended route is =PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1= plus an
-  explicit =executablePath= in =playwright.config.ts= [H — not yet run].
+- *Playwright cannot run on FreeBSD at all* [E, refuted 2026-09-13]. The
+  earlier hypothesis — skip the browser download and point =executablePath= at
+  the system Chromium — *is wrong, and not for the reason assumed*.
+  =playwright-core= throws =Error: Unsupported platform: freebsd= from
+  =computeDefaultCacheDirectory= during *module initialisation*, before any
+  config, =executablePath= or environment variable is read. There is nothing to
+  configure around.
+
+  Chromium itself is fine: =chrome --headless --dump-dom= against a live
+  worktree router returns the page [E]. So the browser works and the *driver*
+  refuses. Consequences: hydra's e2e cell is *unsupported*, the Playwright gate
+  is *CI-only* (ubuntu-latest), and local end-to-end coverage comes from
+  =gates/e2e.sh=, which needs only =curl= and =jq=. A CDP driver against the
+  system Chromium would also work and is not currently worth building.
 - *eslint is not installed* [E]; it is a project-local dev dependency, so this
   resolves on first =npm install= rather than needing a system package.
 - *=make= is BSD make* [E]; GNU Make 4.4.1 is available as =gmake= [E]. The
@@ -1561,7 +1571,7 @@ observed.
 | eslint    | *not installed* (project-local dep)             |
 | wrangler  | *not installed*                                 |
 | podman    | 5.8.1 — but FreeBSD jails, not Linux OCI images, and rootless unsupported |
-| playwright| *not installed*; =@playwright/test= 1.63.0 resolves from the registry |
+| playwright| 1.63.0 installs, but *cannot run on FreeBSD* — see Known blockers |
 
 Repo state at survey: zero tracked files, no commits, no GitHub remote.
 Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
@@ -1603,9 +1613,9 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
   calendar id, and how =change/schedule.sh= authenticates in a runner. Blocks
   any real =preflight= exit-3 path. Trigger: first implementation of
   =change/schedule.sh=.
-- *Playwright on FreeBSD*: confirm or refute the system-Chromium
-  =executablePath= route. Trigger: first app that serves a page. If refuted,
-  hydra's e2e cell is unsupported and the gate is CI-only.
+- *(refuted 2026-09-13)* Playwright on FreeBSD. =playwright-core= throws
+  =Unsupported platform: freebsd= at module init. Hydra's e2e cell is
+  unsupported and the Playwright gate is CI-only; =gates/e2e.sh= covers local.
 - *=ports.tsv= tangled with spaces, not tabs* [E, observed] — *fixed*. The
   block now carries real tabs; regression check is =grep -cP '\t' ports.tsv=.
 - *=ports.tsv= was both a =:tangle= target and mutable state* — *fixed*, and
