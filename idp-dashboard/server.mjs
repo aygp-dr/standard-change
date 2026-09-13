@@ -98,7 +98,11 @@ async function schedule() {
     // entered. Time remaining is a fact about the CURRENT deployment and about
     // nothing else -- a future booking has a start time, not a remainder.
     const started = Date.now() >= Date.parse(f[2]);
-    return { id: f[0], env: f[1], start: f[2], end, pr: f[5], started,
+    // The duration is a decision somebody made about how long this change needs
+    // -- deploy + soak + walk, floored by schedule.sh. Showing only the start
+    // time hides the one number that says whether the booking can finish.
+    const mins = Math.round((Date.parse(end) - Date.parse(f[2])) / 60000);
+    return { id: f[0], env: f[1], start: f[2], end, pr: f[5], started, mins,
              groups: f.slice(6, -1).join(' '), sha: f.at(-1),
              closes_in_s: left, soak_fits: left > SOAK_S, expired: left <= 0 };
   });
@@ -344,10 +348,10 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa;padding-left:12px}
 .unk{background:#312a14;color:#fbbf24;border:1px solid #5c4a1f}
 .age{color:#6b7280;font-size:11px}
 .ver{color:#6b7280;font-size:11px;font-weight:400;margin-left:8px}
-.br{color:#60a5fa;font-size:11px;margin-left:6px}
+.br{color:#60a5fa;font-size:11px}
 .prlink{color:#e6e6e6;text-decoration:none}
 .prlink:hover{color:#60a5fa;text-decoration:underline}
-.ti{color:#8b93a7;font-size:11px;margin-top:2px}
+.sub{color:#8b93a7;font-size:11px;margin-top:2px}
 .rem-ok{color:#4ade80;font-size:11px;margin-left:8px}
 .rem-warn{color:#fbbf24;font-size:11px;margin-left:8px}
 .rem-bad{color:#f87171;font-size:11px;font-weight:700;margin-left:8px}
@@ -502,7 +506,7 @@ function render(d){
     (x.title?'<div class=ti>'+esc(x.title)+'</div>':'')+'</td>'+
     '<td class=dim>'+esc(x.groups||'—')+'</td>'+
     '<td class=sha>'+esc(x.sha)+'</td>'+
-    '<td>'+remain(x)+'</td>'+
+    '<td>'+remain(x)+'<div class=sub>'+esc(x.mins)+'m</div></td>'+
     '<td class=n-'+esc(x.env)+'>'+(x.in_env?esc(x.env):'')+'</td>'+
     '<td class=dim>'+esc(x.id)+'</td></tr>').join('')
     // "no open window" and "the berth is free" are not the same claim. This
