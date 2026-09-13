@@ -140,6 +140,47 @@ def main():
     print("  suite re-rolls the checks that already passed, which is how a green")
     print("  run gets manufactured out of a genuinely red one.")
     print_balance()
+    print_soak()
+
+
+def soak(n_prs, berths=1, hold_min=30, n_checks=20, p=0.95, reruns=1):
+    """Wall-clock to push n_prs through `berths` berths, and what it does to
+    the emergency share. The berth is a singleton by design (guard 1), so this
+    is the design's throughput ceiling."""
+    green = (1 - (1 - p) ** (reruns + 1)) ** n_checks   # per-attempt, with reruns
+    attempts = 1 / green
+    serial_h = n_prs * attempts * hold_min / 60 / berths
+    mean_wait_h = serial_h / 2                          # mean position in queue
+    return {
+        "n": n_prs, "berths": berths, "green": green, "attempts": attempts,
+        "days": serial_h / 24, "wait_h": mean_wait_h,
+        "emergency": emergency_pressure(mean_wait_h),
+    }
+
+
+def print_soak():
+    print("\n--- soak: several hundred PRs through a singleton berth ---")
+    print(f"  gate suite: 20 checks @ 95%, one re-run of failed checks only")
+    print(f"  berth hold: 30 min (staging deploy + authorizing e2e + production + merge)")
+    print()
+    print(f"{'PRs':>5} {'berths':>7} {'wall-clock':>12} {'mean wait':>11} {'-> emergency':>13}")
+    for n in (100, 200, 500):
+        for b in (1, 4, 16):
+            r = soak(n, b)
+            print(f"{r['n']:>5} {r['berths']:>7} {r['days']:>9.1f} d "
+                  f"{r['wait_h']:>8.1f} h {r['emergency']*100:>11.1f}%")
+    print()
+    print("  At one berth a few hundred PRs is WEEKS of serialized wall-clock,")
+    print("  and the resulting queue wait drives the emergency share to ~100%.")
+    print("  A soak test run that way does not test the pipeline: it tests the")
+    print("  BYPASS, because by the time the queue is that deep every change")
+    print("  has a rational reason to carry change:emergency.")
+    print()
+    print("  That is not a flaw the soak reveals in the gates. It is the")
+    print("  singleton berth reaching its design limit -- and the fix is the")
+    print("  one spec.org already names as the right architecture: hard")
+    print("  contracts at the router and a path to production per team.")
+    print("  The soak requirement is evidence FOR that fix, not a new problem.")
 
 
 def emergency_pressure(berth_wait_h, patience_h=4.0, base_rate=0.05):

@@ -1,0 +1,8 @@
+{
+  "_comment": "Repository-level Actions variables. DEPLOY_TARGET and PRODUCTION_URL are read by .github/workflows/deploy-*.yml; EMERGENCY_CHANGE is the freeze fallback read by gates/preflight.sh when the change calendar is unreachable (spec.org, Change enablement). EMERGENCY_CHANGE=1 blocks the estate; 0 is the normal resting value.",
+  "variables": [
+    { "name": "DEPLOY_TARGET", "value": "github" },
+    { "name": "EMERGENCY_CHANGE", "value": "0" },
+    { "name": "PRODUCTION_URL", "value": "https://aygp-dr.github.io/standard-change" }
+  ]
+}

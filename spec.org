@@ -958,10 +958,14 @@ and the known obstacles, and is the thing the first gate run promotes.
 
 ** Known blockers on hydra (FreeBSD), from the survey
 
-- *nginx is not installed* [E]. =make router= and =make dev= therefore cannot
-  run on hydra as specified. =pkg= additionally reports its repo catalogue
-  needs =pkg update= (root) before nginx could be fetched. Until then the local
-  router is unavailable and the worktree port-block model is unexercised.
+- *nginx* — *resolved 2026-09-13*. The =pkg= catalogue was stale; after
+  =pkg update=, =nginx-1.30.4= installed cleanly [E]. =router/server.js= remains
+  the default local router because it needs no root to run, but the nginx path
+  in the spec is now testable rather than hypothetical.
+- *=gitea-act_runner-0.4.0_4= is packaged* [E] — installing it prints, from the
+  port itself: "FreeBSD does not support Docker. When configuring the runner,
+  use 'host' as the label." That is the constraint stated by the software, not
+  inferred: host mode only, so no =container:= or =services:= steps.
 - *Playwright ships no FreeBSD browser build* [E, from its distribution]. A
   system Chromium 148.0.7778.215 is installed as =/usr/local/bin/chrome= [E],
   so the intended route is =PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1= plus an
@@ -1146,6 +1150,47 @@ pool. Both corrections in §Guard 4b are this section applied:
 The test for any future control is the same: name what it protects, name who
 pays, and if the answer is "the queue pays and production gains nothing",
 it is ceremony.
+
+* At scale
+
+The design has a throughput ceiling and it is the berth. =gates/simulate-gates.py --soak=
+computes it: 20 checks at 95% with one re-run of failed checks, 30-minute
+holds.
+
+| PRs | berths | wall-clock | mean wait | emergency share |
+|-----+--------+------------+-----------+-----------------|
+| 100 |      1 |     2.2 d  |    26.3 h |          100.0% |
+| 100 |     16 |     0.1 d  |     1.6 h |           13.2% |
+| 200 |      1 |     4.4 d  |    52.6 h |          100.0% |
+| 500 |      1 |    11.0 d  |   131.4 h |          100.0% |
+| 500 |     16 |     0.7 d  |     8.2 h |           98.6% |
+
+*A few hundred changes through one berth is weeks of serialized wall-clock*,
+and §The balance says what that queue wait does: the emergency share goes to
+100%. So a high-volume soak run against a singleton berth *does not test the
+pipeline — it tests the bypass*, because by the time the queue is that deep
+every change has a rational reason to carry =change:emergency=.
+
+Read that carefully, because it is not a defect the soak /finds/. It is the
+singleton berth meeting its design limit, exactly where §What this model gets
+wrong, on purpose says it would. The remedy is the one already named there —
+hard contracts at the router and a path to production per team — and the scale
+requirement is *evidence for that fix rather than a new problem*.
+
+Consequences for anyone planning a soak:
+
+- *Do not measure gate behaviour through a deep queue.* Guards 2 and 5 are
+  per-change and can be soaked at any N. Guards 0, 1 and 4b are queue
+  properties and are the thing under test; conflating them wastes the run.
+- *Widen the berth first, or shorten the hold.* Sixteen berths brings 100 PRs
+  to under a day. At 500 even sixteen is not enough, which is the honest signal
+  that per-team paths to production — not more berths on one path — is the
+  answer.
+- *Or do not run it at all.* =gates/pbt-pipeline.py --exhaustive= already
+  enumerates every ordering at a small bound, deterministically, in seconds. A
+  soak buys evidence about /volume and flake/, not about /correctness of the
+  guards/; the exhaustive model already settles the latter more completely than
+  any number of PRs could.
 
 * Refutation conditions
 

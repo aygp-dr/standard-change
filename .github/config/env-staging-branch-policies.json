@@ -1,0 +1,10 @@
+{
+  "_comment": "Applied only because env-staging.json sets custom_branch_policies:true. Each entry is one POST body to repos/{o}/{r}/environments/staging/deployment-branch-policies. Patterns follow the repo's branch convention (worktrees/: feat-*, branches: feat/plp-facets, feat/pdp-price). GitHub branch patterns: '*' does not cross '/'.",
+  "policies": [
+    { "name": "main" },
+    { "name": "feat/*" },
+    { "name": "fix/*" },
+    { "name": "chore/*" },
+    { "name": "docs/*" }
+  ]
+}
