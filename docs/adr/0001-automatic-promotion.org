@@ -764,6 +764,76 @@ The deeper shape is one this repo keeps finding: *two writers, one fact, no
 reconciliation.* Same as =production:healthy= flipping between a person and a
 workflow (S5), and as the port registry drifting from what is actually bound.
 
+* Open — we have only ever walked the positive case
+
+Raised 2026-09-13 after six changes shipped without one failing:
+*we do not know how to clear the environment if a deployment fails.*
+
+** Every cleanup runs only on the success path
+
+| state                    | cleared by           | runs when      |
+|--------------------------+----------------------+----------------|
+| =deploy:staging= (the berth) | =change/settle.sh= | *success only* |
+| the change window        | =change/settle.sh=   | *success only* |
+| =staging:*= observations | =change/settle.sh=   | *success only* |
+| the deployment record    | =change/settle.sh=   | *success only* |
+| the idle colour's build  | *nothing*            | *never*        |
+
+=settle.sh= is reached by passing every guard. *A change that fails reaches none
+of it.* The berth stays held, the window stays open, the observations stay on
+the PR, and no record says what happened.
+
+** It has already bitten, twice, on the happy path
+
+1. *#19's window stayed open after settlement* and later refused #31's booking
+   with "staging is booked by CHG-20260913T1630-19.1" — a change that had
+   shipped an hour earlier. Cause: #19 settled from a worktree predating the
+   redline fix. The *mechanism* was correct and the *instance* still leaked.
+2. *=settle.sh= died mid-run* on an undefined =$repo= and left #20 merged, PIR
+   posted, labels uncleared. Nothing noticed; I noticed.
+
+Both were the *success* path failing partway. A genuine deployment failure has
+not been walked at all.
+
+** The questions nobody has answered
+
+1. *Who releases the berth when a deploy fails?* Nothing does. The next change
+   is refused by guard 1 against a change that is no longer trying.
+2. *What state is the estate in after a failed cutover?* =switch.sh= refuses a
+   colour that is not answering, so it fails closed — but if the cutover
+   succeeds and *guard 5 then fails*, production is serving a build that did
+   not converge and nothing rolls it back.
+3. *Is a failed deployment still =change:complete= eligible?* The ITIL machine
+   says =implementing → failed=, and =failed → implementing= (guile) or
+   =failed → assessing= (our copy). *The two disagree*
+   (=docs/idp-service.org=) and the disagreement only appears on failure.
+4. *Does the window survive a failure?* If a deploy fails at 17:05 in a
+   17:00–17:30 window, is the remainder still the change's to retry in, or
+   forfeited? Nothing decides.
+5. *What clears the idle colour?* Nothing, ever. It holds whatever it held, so
+   "roll back" means "whatever was there last", not "the previous change".
+
+** Why this is not merely untested
+
+The pipeline is *built out of refusals* — every guard's job is to stop
+something. Six of them have been exercised in the direction of *allowing* a
+change through, and the machinery that runs *after* a refusal is almost
+entirely unwritten.
+
+That inverts the usual risk. The tested path is the one where nothing goes
+wrong; the untested path is the one that runs precisely when something already
+has.
+
+** What would answer it
+
+An =abort= verb, symmetric with =settle=: release the berth, redline the window
+=failed=, withdraw the observations, record the deployment as =failure=, and say
+what state the estate is in. Reachable from *any* point, because a failure can
+happen at any point — which means it cannot be a step at the end of a script.
+
+Trigger: *the first deployment that actually fails*, or a deliberate one. The
+second is better, and is the obvious next thing to walk.
+
 * Open — what happens when a change lands outside its window
 
 Left open deliberately on 2026-09-13, after PR #9 shipped to production outside
