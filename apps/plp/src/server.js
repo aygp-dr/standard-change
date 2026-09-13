@@ -153,7 +153,7 @@ Nothing is wrong with this category; try again shortly.</p>
 <p>We have nothing in <code>${name}</code>. It may have been renamed or removed.</p>
 <p class=v>catalogue: ok — this category is not in it</p>`;
   return `<h2>${esc(d.title)}</h2>
-<p>${d.results.length} result(s) in <code>${name}</code></p>
+<p>${d.results.length} ${d.results.length === 1 ? 'result' : 'results'} in <code>${name}</code></p>
 <div class=g>${d.results.map((s) => `<a href="/p/${encodeURIComponent(s)}">${esc(s)}</a>`).join(' ')}</div>`;
 }
 
