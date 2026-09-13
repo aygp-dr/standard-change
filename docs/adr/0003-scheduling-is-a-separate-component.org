@@ -1,0 +1,89 @@
+#+TITLE: ADR 0003 — the change schedule is a separate component, deliberately kept dumb
+#+DATE: 2026-09-13
+
+* Status
+
+Accepted.
+
+* Context
+
+The change schedule decides *when* a change may take the one path to
+production. There is a very large literature on schedulers — priorities, fair
+queueing, backfill, deadline scheduling, preemption — and almost none of it
+applies here, because the resource is not scarce in the way those solve for.
+
+What we actually needed, and now have, is three verbs:
+
+- =block <pr> <groups> <minutes>= — take the next free aligned slot behind
+  whatever is already reserved.
+- =block ... --at <iso>= — take a *named* slot.
+- =reap.sh= — close reservations whose time has passed.
+
+That is the whole scheduler. It is first-fit with an explicit override.
+
+* Decision
+
+*Scheduling rules stay out of the deployment workflow.* The schedule answers
+one question — does an open reservation cover now — and the guards do not ask
+it anything else. No priority, no preemption, no automatic reslotting, no
+backfill of gaps.
+
+If richer scheduling is ever wanted it is *a separate component* that produces
+reservations, and the pipeline keeps reading the same one bit. Nothing below
+=schedule.sh= should learn what a priority is.
+
+* Why
+
+** The scarce resource is a person, not staging
+
+A named hour is usually a developer saying *"I will be at my desk then and I
+want to watch this go out."* That is what makes automatic reslotting wrong
+rather than merely rude: moving the change moves it away from the person who
+arranged to be present, and the value of the slot was the attention, not the
+minutes.
+
+So =--at= does not win a clash, and gaps in the calendar are correct. A
+scheduler that packed them would be optimising utilisation of a resource that
+is not scarce (staging) at the cost of one that is.
+
+** Every rule is a rule that can be wrong at 3am
+
+Each of the guards has cost us a real defect this project: guard 2 had two
+implementations that disagreed, guard 3 reported a path error as "no window",
+=schedule.sh current= still returns 0 for an expired window. Those are simple
+rules and they were still wrong. A priority scheme would be more rules of the
+same kind, in the component that decides who gets production.
+
+** The interesting failures are in expiry and rebooking, not in placement
+
+What the grind actually surfaced was not "the wrong change went first". It was:
+a window that lapsed and was never closed kept answering *yes, you have a
+window*; an un-reaped lapse pushed the whole queue out behind a reservation
+nobody was using; a five-minute slot could not hold a five-minute soak plus the
+walk. None of those are placement problems, and a better placement algorithm
+would not have found any of them.
+
+* Consequences
+
+- The queue is FIFO with holes. Anyone who wants a particular hour asks for it.
+- A designated slot that clashes is *refused*, and moving the other change is a
+  human act recorded as a cancellation — never a silent displacement.
+- Expiry is a first-class outcome (=expired=, distinct from =failed= and
+  =cancelled=), and =reap.sh= is the only thing that produces it.
+- =reap.sh= deliberately does **not** rebook. A reaper that rebooks is a
+  scheduler nobody asked for, and it would hide the signal worth seeing: that
+  the slots are too short for the work they hold.
+- The simulator carries =BOOKING= as an axis (=none= / =queued= / =designated=)
+  and asserts the two booking modes are *indistinguishable at the point of
+  deploying* — if =designated= could reach an environment where =queued= could
+  not, =--at= would be a bypass wearing a calendar's clothes.
+
+* Rejected
+
+- *Priority or preemption.* Nothing here is urgent except an emergency, and an
+  emergency is already exempt from the freeze and the queue rules — but *not*
+  from having a window, because the calendar is what tells everyone else the
+  path is occupied.
+- *Automatic reslotting on expiry.* See above; it destroys the signal and
+  moves changes away from the people watching them.
+- *Backfilling gaps.* The gaps are the design.

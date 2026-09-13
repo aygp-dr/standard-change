@@ -29,7 +29,7 @@ the promotion guards.
 
 * The whole thing on one screen
 
-[[file:screenshots/idp-release-dashboard.png]]
+[[file:docs/screenshots/idp-release-dashboard.png]]
 
 /v1.0.0 · =bc61b6b=. The page reports its own build in the header, for the same
 reason it reports everyone else's: it is the one row a reader cannot check any
