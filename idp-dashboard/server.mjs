@@ -297,7 +297,7 @@ font-weight:700;letter-spacing:.05em}
 .team{color:#a78bfa;font-size:11px}.live{background:#16201380}
 tr.active{background:#1b2740}
 tr.active td{border-bottom-color:#2f4468}
-tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa}
+tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa;padding-left:12px}
 .bar{display:flex;gap:10px;align-items:center;margin:0 0 16px;flex-wrap:wrap}
 .st{padding:5px 13px;border-radius:3px;font-weight:700;font-size:12px;letter-spacing:.05em}
 .ok{background:#14301c;color:#4ade80;border:1px solid #1f5130}
@@ -371,16 +371,26 @@ function flagbox(d){
 }
 function hms(s){const m=Math.floor(Math.abs(s)/60),r=Math.abs(s)%60;
   return (s<0?'-':'')+(m?m+'m ':'')+r+'s';}
+function cls(s){return s<=0?'rem-bad':s<60?'rem-bad':s<150?'rem-warn':'rem-ok';}
 function remain(x){
-  if(x.expired)return '<span class=rem-bad>EXPIRED</span>';
   // Not started: it has a start time, not a remainder.
   if(!x.started)return '<span class=dim>'+esc(x.start)+'</span>';
-  // Running: the remainder is the only number that matters, and the colour is
-  // about whether this deployment can still finish, not about the clock.
-  const s=x.closes_in_s;
-  const c=s<60?'rem-bad':s<150?'rem-warn':'rem-ok';
-  return '<span class='+c+'>'+esc(hms(s))+' left</span>';
+  // THE CLOCK TICKS LOCALLY. The payload carries the window's END, not a
+  // countdown, so the server pushes only when something actually changes --
+  // a per-second value in the payload would differ every tick and defeat that,
+  // which is the bug age_s already caused once. The browser owns the seconds.
+  return '<span class="tick '+cls(x.closes_in_s)+'" data-end="'+esc(x.end)+'">'+
+    (x.closes_in_s<=0?'EXPIRED':esc(hms(x.closes_in_s))+' left')+'</span>';
 }
+// One interval for the page, not one per row, and it re-reads data-end each
+// time so a re-render never leaves a stale ticker running.
+setInterval(()=>{
+  for(const el of document.querySelectorAll('.tick[data-end]')){
+    const s=Math.round((Date.parse(el.dataset.end)-Date.now())/1000);
+    el.textContent=s<=0?'EXPIRED':hms(s)+' left';
+    el.className='tick '+cls(s);
+  }
+},1000);
 // A BANNER ONLY WHEN THERE IS SOMETHING TO SAY. The previous version printed a
 // banner, a chip and a button for the same fact, and the banner's "Declared on
 // #" was left over from when the holder was a PR -- the issue holds it now, so

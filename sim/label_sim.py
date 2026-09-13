@@ -28,6 +28,20 @@ STATES  = ["", "change:requested", "change:scheduled", "deploy:staging",
 # of the world it would deploy into.
 BLOCKERS = ["none", "freeze", "berth-held", "emergency-in-flight"]
 
+# READINESS is a fourth axis, and it belongs to NEITHER of the other three.
+#
+# It is not the class (what kind of change), not the scope (what it can break),
+# not the state (how far it has got) and not a blocker (a fact about the
+# estate). It is the AUTHOR'S OWN STATEMENT that this is not finished, and it is
+# the only input to any guard here that the pipeline does not derive, measure or
+# infer -- it simply believes.
+#
+# It was unmodelled and unread until 2026-09-13: nothing in preflight, guard 4,
+# queue.sh or activate.sh looked at isDraft, so a draft could book a window,
+# take the berth, deploy to staging and collect the observations that authorize
+# production, while its author's marker said do not.
+READY = ["draft", "ready"]
+
 
 def declared():
     """Every label the declaration knows, plus its exclusion groups."""
@@ -51,8 +65,16 @@ def scope_of(cls, scope):
     return set()
 
 
-def may_proceed(cls, scope, state, blocker):
+def may_proceed(cls, scope, state, blocker, ready="ready"):
     """The rules as they stand. Returns (ok, reason)."""
+    # FIRST, AND WITH NO EXEMPTION. A draft is refused before the class is even
+    # consulted, because the class cannot rescue it: itil:emergency is a
+    # statement about the change's URGENCY, and draft is a statement about its
+    # READINESS. An urgent unfinished change is still unfinished, and an
+    # emergency that needs to ship is one `gh pr ready` away -- an act by the
+    # author, which is exactly who should decide.
+    if ready == "draft":
+        return False, "draft: the author says it is not ready"
     if blocker == "freeze" and cls != "itil:emergency":
         return False, "freeze: only an emergency proceeds"
     if blocker == "emergency-in-flight" and cls != "itil:emergency":
@@ -70,10 +92,20 @@ def main():
     print(f"  declaration: {len(labels)} labels, {len(groups)} exclusion groups\n")
 
     findings, rows = [], 0
-    for cls, scope, state, blocker in itertools.product(CLASSES, SCOPES, STATES, BLOCKERS):
+    for cls, scope, state, blocker, ready in itertools.product(
+            CLASSES, SCOPES, STATES, BLOCKERS, READY):
         rows += 1
         derived = scope_of(cls, scope) | {cls} | ({state} if state else set())
-        ok, why = may_proceed(cls, scope, state, blocker)
+        ok, why = may_proceed(cls, scope, state, blocker, ready)
+
+        # 5. A DRAFT MUST NOT REACH AN ENVIRONMENT. The states that mean "it is
+        #    out there" are the deploy:* pair; reaching either while the author
+        #    says draft means the pipeline overrode the one signal it does not
+        #    have to interpret.
+        if ready == "draft" and ok and state.startswith("deploy:"):
+            findings.append(
+                f"DRAFT DEPLOYED: a draft reached {state} ({cls}/{scope}) -- the "
+                f"author marked it not ready and nothing downstream re-asks")
 
         # 1. every derived label must be declared
         for l in derived:

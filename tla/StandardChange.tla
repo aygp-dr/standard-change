@@ -32,10 +32,11 @@ VARIABLES
     merged,       \* merged[p]: landed on main
     mainV,        \* how many changes have merged
     holder,       \* the PR carrying deploy:staging, or NoPR
-    regressed     \* set TRUE if a merge ever reverted an earlier one
+    regressed,    \* set TRUE if a merge ever reverted an earlier one
+    draft         \* draft[p]: the AUTHOR says p is not ready
 
 vars == <<base, gated, stagingPass, prodLabel, emergency, approved,
-          inProd, merged, mainV, holder, regressed>>
+          inProd, merged, mainV, holder, regressed, draft>>
 
 TypeOK ==
     /\ base        \in [PRs -> 0..MaxMerges]
@@ -49,6 +50,7 @@ TypeOK ==
     /\ mainV       \in 0..MaxMerges
     /\ holder      \in PRs \cup {NoPR}
     /\ regressed   \in BOOLEAN
+    /\ draft       \in [PRs -> BOOLEAN]
 
 Init ==
     /\ base        = [p \in PRs |-> 0]
@@ -62,6 +64,8 @@ Init ==
     /\ mainV       = 0
     /\ holder      = NoPR
     /\ regressed   = FALSE
+    \* Nondeterministic: some changes are opened as drafts and some are not.
+    /\ draft       \in [PRs -> BOOLEAN]
 
 Live(p) == ~merged[p]
 
@@ -78,13 +82,13 @@ Push(p) ==
     \* BUILD, and after a push it describes one nobody is proposing to merge --
     \* labeller.yml withdraws production:healthy on synchronize for this reason.
     /\ inProd'      = [inProd      EXCEPT ![p] = FALSE]
-    /\ UNCHANGED <<base, emergency, approved, merged, mainV, holder, regressed>>
+    /\ UNCHANGED <<base, emergency, approved, merged, mainV, holder, regressed, draft>>
 
 GatesPass(p) ==
     /\ Live(p) /\ ~gated[p]
     /\ gated' = [gated EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, stagingPass, prodLabel, emergency, approved,
-                   merged, mainV, holder, regressed, inProd>>
+                   merged, mainV, holder, regressed, inProd, draft>>
 
 Rebase(p) ==
     /\ Live(p) /\ base[p] < mainV
@@ -93,37 +97,58 @@ Rebase(p) ==
     /\ gated'       = [gated       EXCEPT ![p] = FALSE]
     /\ stagingPass' = [stagingPass EXCEPT ![p] = FALSE]
     /\ prodLabel'   = [prodLabel   EXCEPT ![p] = FALSE]
-    /\ UNCHANGED <<emergency, approved, merged, mainV, holder, regressed, inProd>>
+    /\ UNCHANGED <<emergency, approved, merged, mainV, holder, regressed, inProd, draft>>
 
 MarkEmergency(p) ==
     /\ Live(p) /\ ~emergency[p]
     /\ emergency' = [emergency EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, approved,
-                   merged, mainV, holder, regressed, inProd>>
+                   merged, mainV, holder, regressed, inProd, draft>>
 
 Approve(p) ==
     /\ Live(p) /\ ~approved[p]
     /\ approved' = [approved EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency,
-                   merged, mainV, holder, regressed, inProd>>
+                   merged, mainV, holder, regressed, inProd, draft>>
 
 (***************************************************************************)
 (* Guard 0 (up to date with main) and guard 1 (staging is a singleton).    *)
 (***************************************************************************)
+(***************************************************************************)
+(* READINESS. draft[p] is the AUTHOR'S OWN STATEMENT that p is unfinished,  *)
+(* and it is the only input to any guard in this model that the pipeline    *)
+(* does not derive, measure or infer -- it believes it.                     *)
+(*                                                                         *)
+(* Only MarkReady clears it, and nothing sets it back: `gh pr ready` is an  *)
+(* act by the author. A pipeline that could undraft a change would be       *)
+(* overriding the one signal it does not have to interpret.                 *)
+(*                                                                         *)
+(* Note there is NO emergency exemption. itil:emergency is a statement      *)
+(* about URGENCY; draft is a statement about READINESS. An urgent           *)
+(* unfinished change is still unfinished, and shipping it is one author     *)
+(* action away.                                                            *)
+(***************************************************************************)
+MarkReady(p) ==
+    /\ Live(p) /\ draft[p]
+    /\ draft' = [draft EXCEPT ![p] = FALSE]
+    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
+                   inProd, merged, mainV, holder, regressed>>
+
 ClaimStaging(p) ==
     /\ Live(p)
+    /\ ~draft[p]                \* the author says it is ready
     /\ holder = NoPR            \* guard 1
     /\ base[p] = mainV          \* guard 0
     /\ gated[p]
     /\ holder' = p
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
-                   merged, mainV, regressed, inProd>>
+                   merged, mainV, regressed, inProd, draft>>
 
 StagingPassed(p) ==
     /\ Live(p) /\ holder = p /\ gated[p] /\ ~stagingPass[p]
     /\ stagingPass' = [stagingPass EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, prodLabel, emergency, approved,
-                   merged, mainV, holder, regressed, inProd>>
+                   merged, mainV, holder, regressed, inProd, draft>>
 
 (***************************************************************************)
 (* Promotion. Guard 2 (gates green on this head) has no emergency bypass.  *)
@@ -135,7 +160,7 @@ Promote(p) ==
        \/ (emergency[p] /\ approved[p])             \* break glass
     /\ prodLabel' = [prodLabel EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, stagingPass, emergency, approved,
-                   merged, mainV, holder, regressed, inProd>>
+                   merged, mainV, holder, regressed, inProd, draft>>
 
 (***************************************************************************)
 (* SPLIT, 2026-09-13. These were one atomic step, DeployAndMerge, and that  *)
@@ -151,11 +176,11 @@ Promote(p) ==
 (* the others were disagreements, this was an inexpressible defect.         *)
 (***************************************************************************)
 DeployProduction(p) ==
-    /\ Live(p) /\ ~inProd[p] /\ prodLabel[p] /\ gated[p]
+    /\ Live(p) /\ ~draft[p] /\ ~inProd[p] /\ prodLabel[p] /\ gated[p]
     /\ \/ stagingPass[p] \/ (emergency[p] /\ approved[p])        \* guard 4
     /\ inProd' = [inProd EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
-                   merged, mainV, holder, regressed>>
+                   merged, mainV, holder, regressed, draft>>
 
 (***************************************************************************)
 (* The merge is SETTLEMENT, not authorization. regressed records the D4     *)
@@ -177,7 +202,8 @@ Merge(p) ==
     /\ merged'    = [merged EXCEPT ![p] = TRUE]
     /\ mainV'     = mainV + 1
     /\ holder'    = IF holder = p THEN NoPR ELSE holder
-    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved, inProd>>
+    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved, inProd,
+                   draft>>
 
 (***************************************************************************)
 (* main-moved.yml: withdraw verdicts main has outrun, and free the queue.  *)
@@ -194,12 +220,13 @@ MainMoved ==
     \* synchronize. Without it, inProd from an old head keeps authorizing.
     /\ inProd'      = [p \in PRs |-> IF Live(p) /\ base[p] < mainV THEN FALSE ELSE inProd[p]]
     /\ holder'      = IF holder # NoPR /\ base[holder] < mainV THEN NoPR ELSE holder
-    /\ UNCHANGED <<base, gated, emergency, approved, merged, mainV, regressed>>
+    /\ UNCHANGED <<base, gated, emergency, approved, merged, mainV, regressed, draft>>
 
 Next ==
     \/ \E p \in PRs : Push(p) \/ GatesPass(p) \/ Rebase(p) \/ MarkEmergency(p)
                    \/ Approve(p) \/ ClaimStaging(p) \/ StagingPassed(p)
                    \/ Promote(p) \/ DeployProduction(p) \/ Merge(p)
+                   \/ MarkReady(p)
     \/ MainMoved
 
 Spec == Init /\ [][Next]_vars
@@ -233,8 +260,16 @@ NoMergeBeforeProduction == \A p \in PRs : merged[p] => inProd[p]
 \* contain -- i.e. no deployment silently reverts an earlier one.
 NoRegression == regressed = FALSE
 
+(***************************************************************************)
+(* A draft never reaches an environment. Holding the berth counts: staging  *)
+(* is where the observations that authorize production are taken, so a      *)
+(* draft that gets that far has already collected its own authorization.    *)
+(***************************************************************************)
+NoDraftDeployed ==
+    \A p \in PRs : draft[p] => (holder # p /\ ~inProd[p])
+
 Safety ==
     /\ TypeOK /\ AtMostOneHolder /\ NoProdWithoutStaging
     /\ NoRedGatesShipped /\ NoSilentBypass /\ NoRegression
-    /\ NoMergeBeforeProduction
+    /\ NoMergeBeforeProduction /\ NoDraftDeployed
 =============================================================================
