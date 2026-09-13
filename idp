@@ -82,6 +82,21 @@ case "${1:-show}" in
     echo "  #$pr <- $chk cleared"
     ;;
 
+  cancel)
+    # THE MISSING VERB. request and schedule and clear were all built for the
+    # path where a change succeeds; nothing could un-book a slot. Issue #37 is
+    # the same gap at estate scale -- every cleanup in this pipeline runs only
+    # after everything went right.
+    #
+    # It surfaced immediately: #2's window was cancelled in change/schedule.sh
+    # while the IDP still held its slot, so #36 was refused by a calendar that
+    # disagreed with the calendar of record.
+    pr="${2:?usage: idp cancel <pr> [reason]}"; why="${3:-cancelled}"
+    r=$(row "$pr"); [ -n "$r" ] || { echo "  #$pr is not on the calendar" >&2; exit 2; }
+    put "$pr" cancelled "$(printf '%s' "$r"|cut -f3)" - - "$(printf '%s' "$r"|cut -f6)"
+    echo "  #$pr cancelled ($why); the slot is free"
+    ;;
+
   show)
     if [ -n "${2:-}" ]; then
       r=$(row "$2"); [ -n "$r" ] || { echo "  #$2 is not on the calendar"; exit 0; }
