@@ -1,0 +1,160 @@
+#+TITLE: ADR 0001 — scheduled deployment windows with separate activation
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:nil
+
+* Status
+
+Proposed. Scope is the *workflow* — change enablement and the scheduling of
+deployment windows. It is deliberately *not* about the activated deployment
+itself: what a deployment does once it starts is deployment management's
+concern and belongs in a separate decision.
+
+* Context
+
+Changes reach production through a single shared path (§What this model gets
+wrong, on purpose). Today, holding the path and deploying are the same act: a
+change takes the berth and immediately begins. Three problems follow.
+
+1. *Nobody can plan.* A change cannot reserve capacity for later, so ITIL 4's
+   change schedule has nothing to schedule — the calendar records what happened
+   rather than governing what will.
+2. *Guards are evaluated at request time.* Guard 4b exists because the world
+   moves between asking and acting (=experiments/001=). Splitting the two acts
+   gives that re-check a natural home.
+3. *Throughput is opaque.* Without a reservation grid there is no way to say
+   how many changes a day can absorb, so "add more capacity" is untestable.
+
+The change schedule is a calendar, so windows quantize. At 30 minutes that is
+*48 slots per day per berth*, and no gate improvement can buy a slot the
+schedule does not have.
+
+* Decision
+
+Split the single act into two:
+
+- *Reservation* (change enablement) — a change with green gates and an
+  up-to-date base reserves a window on the change schedule. Reserving is not
+  deploying. Guards 0 and 2 are checked here, for fast feedback.
+- *Activation* (deployment management) — a background scheduler activates the
+  reservation when its slot arrives, *re-evaluating every guard at that moment*.
+  A change that is no longer eligible *forfeits the slot* rather than deploying.
+
+Release management stays separate again: a release plans /what/ becomes
+available and may exist long before any window is reserved.
+
+* Consequences, measured
+
+=sim/= is a closed-loop discrete-event simulator (Python + Hypothesis,
+simulated time). It needs no pull requests, no forge, no running apps, no
+worktrees and no network — deliberately, because those verify the port-block
+and worktree rules, which are a different claim about a different system.
+
+** It gives guard 4b its proper home
+
+Reserve a window three hours out; an emergency breaks glass meanwhile:
+
+#+begin_example
+[day 0 00:00] CHG-0001 scheduled -> slot 6 (day 0 03:00)
+[day 0 00:30] CHG-0002 ACTIVATED at slot 1
+[day 0 01:00] CHG-0002 completed at slot 2; trunk -> 1
+[day 0 03:00] CHG-0001 forfeits slot 6: trunk moved: HOTFIX (guard 4b)
+#+end_example
+
+"At reliance, not at request" stops being a rule we remember to apply and
+becomes the thing the scheduler does.
+
+** Hypothesis found two defects the worked example missed
+
+- *Ordering within a quantum.* Activating before completing let a berth be
+  released and retaken in the same slot, so the incoming change evaluated guard
+  4b against a trunk that was about to move. D4's mechanism, reached through
+  scheduling rather than emergency. Fixed: finish, then activate.
+- *Guard 4b at the merge, not only at activation.* At =berths=2= two changes
+  activate in the same slot, both pass (trunk has not moved), then both merge —
+  the first moves trunk and the second ships a tree predating it. *Widening the
+  berth reinstates D4* unless the merge is itself guarded. Activation is not the
+  last point of reliance; the merge is.
+
+** The finding that decides this ADR
+
+Twenty changes, all touching the same deployable surface:
+
+| mix                            | berths | completed | forfeits |
+|--------------------------------+--------+-----------+----------|
+| all artifact                   |      1 |      1/20 |       19 |
+| all artifact                   |      4 |      1/20 |       16 |
+| all artifact                   |      8 |      1/20 |       12 |
+| half artifact / half inert     |      4 |      1/20 |       16 |
+| all inert (docs only)          |      1 |     20/20 |        0 |
+
+*Adding berths moves completions from 1 to 1.* Every merge to a shared artifact
+surface invalidates every other scheduled change against it, so the pipeline
+serializes to roughly one change per revalidation cycle no matter how much
+capacity is added. The contention is not the berth. *It is the shared artifact
+surface.*
+
+This is the scheduler's own simulator reporting that the scheduler is not the
+lever.
+
+* Options considered
+
+** Option A — do not build this; split the apps now  ← recommended if available
+
+If the four apps can be given hard contracts at the router and a path to
+production each, then: no shared surface, so no cross-invalidation; no queue,
+so no berth; no guard 0, 1 or 4b; and scenario D4 becomes *unstateable* rather
+than defended against. The table above is the argument — the all-inert row is
+what every row looks like once changes stop colliding on one surface.
+
+Cost: real engineering on contracts and per-team deploys, which is larger than
+building a scheduler. Nothing else about this ADR is cheaper than that; it is
+only *sooner*.
+
+*Take this option if you can. The rest of this document is what to do when you
+cannot.*
+
+** Option B — reservation + activation split (this decision)
+
+Accepts the shared surface and manages the contention honestly: plans capacity,
+gives guard 4b a home, makes forfeiture visible, and puts a number on the
+ceiling. Does not raise the ceiling — see the table.
+
+Cost: a scheduler, a reservation store, and forfeiture semantics people must
+understand.
+
+** Option C — keep immediate deployment, add berths
+
+The intuitive scaling move, and the measured answer is that it does not work:
+1/20 at one berth, 1/20 at eight. It also silently reinstates D4 unless the
+merge is separately guarded, which the current design did not do until
+Hypothesis found it. *Rejected — it buys nothing and costs a safety property.*
+
+** Option D — shorten the calendar quantum
+
+Below 30 minutes the grid stops matching how humans schedule changes, and the
+binding constraint is revalidation, not slot width. *Rejected as a primary
+lever*; worth revisiting only after the surface is split.
+
+** Option E — do nothing
+
+Leaves the change schedule as a record rather than a control, and leaves guard
+4b evaluated at request time where =experiments/001= showed it fails.
+*Rejected.*
+
+* Decision rule
+
+Choose *A* if the apps can be split within the horizon you care about; the
+scheduler is then wasted work. Choose *B* if they cannot, and treat B's
+measured ceiling as the standing argument for eventually doing A.
+
+Do not choose B expecting throughput. B buys *predictability, legibility and a
+correct place for the guards*. It does not buy capacity, and this ADR would
+rather say so than be quoted later as a promise it never made.
+
+* Follow-ups
+
+- The merge-time guard 4b re-check must reach the real workflows; it currently
+  exists only in =sim/=.
+- Forfeiture needs DX: a forfeited slot must say what moved, what it cost, and
+  how to recover — the operator-message standard in §Guard 4b.
+- Revisit if the surface is split; most of this decision expires with it.

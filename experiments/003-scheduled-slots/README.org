@@ -1,0 +1,61 @@
+#+TITLE: 003 — five scheduled deployment windows, 2026-09-13
+#+DATE: 2026-09-13
+#+OPTIONS: toc:nil num:nil
+
+* Hypothesis
+
+#+begin_quote
+Separating reservation from activation changes observable behaviour: at least
+one of five windows reserved across a day will be *forfeited* at activation
+because the world moved while the slot waited, rather than deploying a stale
+tree.
+#+end_quote
+
+* Success criterion
+
+Each slot reports activate-or-forfeit with a reason. Refuted if every slot
+activates unconditionally — that would mean activation is re-checking nothing
+and the split bought only ceremony.
+
+* Method, and why it is not a calendar
+
+Windows are on the 30-minute grid because that is the change schedule's
+quantum, not a rounding convenience. There is no Google Calendar MCP server
+available in this session (the only configured MCP server, =skills-hub=, failed
+to connect), so the windows are held by in-session one-shot scheduled jobs.
+That substitution is *not* free and is recorded as a deviation:
+
+| Property                  | Calendar | This substitute            |
+|---------------------------+----------+----------------------------|
+| survives session end      | yes      | *no* — jobs die with it    |
+| visible to other people   | yes      | no                         |
+| freeze/emergency events   | yes      | no                         |
+| fires an activation       | no       | yes                        |
+
+So this tests *activation semantics*, not the change schedule as a control.
+
+* The windows
+
+| slot | time  | status                |
+|------+-------+-----------------------|
+|    1 | 10:00 | armed                 |
+|    2 | 13:00 | armed                 |
+|    3 | 14:00 | armed                 |
+|    4 | 18:30 | armed                 |
+|    5 | 19:00 | armed; writes the PIR |
+
+Five of the 34 windows remaining when they were set, against a ceiling of 48
+per day per berth.
+
+Each fires the same procedure: fetch, classify trunk movement with
+=change/divergence.sh=, forfeit on =artifact= or =hotfix=, otherwise activate
+and run =gmake gate-selftest= as the deployment stand-in. Nothing is pushed,
+merged or deployed — the deployment is simulated, the *scheduling* is real.
+
+* Promotion checklist
+
+- [X] Hypothesis stated before the windows fire
+- [X] Substitution for the calendar recorded as a deviation, with its costs
+- [ ] All five slots observed
+- [ ] At least one forfeit with a stated reason
+- [ ] PIR written by slot 5

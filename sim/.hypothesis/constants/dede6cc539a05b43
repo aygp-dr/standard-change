@@ -1,0 +1,4 @@
+# file: /home/jwalsh/ghq/github.com/aygp-dr/slipway/sim/pipeline_sim.py
+# hypothesis_version: 6.151.9
+
+['__main__', 'assessing', 'cancelled', 'completed', 'emergency', 'failed', 'implementing', 'normal', 'rejected', 'scheduled', 'standard', 'submitted']
