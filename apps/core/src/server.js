@@ -131,3 +131,5 @@ if (isMain) createServer((req, res) => {
 }).listen(PORT, BIND, () => {
   console.log(`core listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });
+
+// noop 01 — a change with no behaviour, to walk the workflow.
