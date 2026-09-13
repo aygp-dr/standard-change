@@ -1,0 +1,657 @@
+#+TITLE: Deployment markers — the common shape, and the one field none of them have
+#+SUBTITLE: What six APM vendors agree on, what they do not, and what this estate emits
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:t
+
+* Why this exists
+
+Somebody, six weeks from now, is looking at a latency graph with a step in it
+and wants to know what changed. A *deployment marker* is the annotation that
+answers that. Every APM has one.
+
+The marker is the most durable artefact this pipeline produces. The logs
+rotate. The labels are cleared at settlement — =change/settle.sh= clears
+=staging:*= and =production:*= deliberately, because they are working state.
+The PR is archived. The marker stays on the timeline and is read later, during
+an incident, by somebody who cannot re-check it.
+
+That is what makes it dangerous here. This repository's recurring defect is
+claims written from *intent* rather than *observation*:
+
+- [[./changing-the-pipeline.org]] finding 9 — guard 5 passed on =deadbee=, a
+  SHA that does not exist, because =targets/bastille/deploy.sh= wrote the
+  manifest =gates/health.sh= then read back. The subject supplied its own
+  evidence.
+- [[./label-ownership.org]] rule 1 — an observation may be recorded only by the
+  instrument that took it. Rule 2 — *unreachable is not falsified*.
+
+A deployment marker has exactly this hazard in its most durable form. "I am
+about to deploy X" and "X is running" are different facts. A marker that states
+the second while meaning the first is a false statement placed precisely where
+somebody will trust it. And unlike guard 5 — which was caught within the hour
+because someone re-ran it — *a marker is never re-run*.
+
+* The prior art
+
+Six vendors, read from their own documentation on 2026-09-13. Reachability is
+recorded rather than assumed, because rule 2 applies to research too.
+
+| vendor        | doc reached?                                             |
+|---------------+----------------------------------------------------------|
+| New Relic     | yes                                                      |
+| Blue Triangle | *Cloudflare JS challenge, 403.* Recovered verbatim through the site's Zendesk Help Center API |
+| Datadog       | *Unreachable from hydra.* =docs.datadoghq.com= resolves to =::= / =0.0.0.0= — null-routed. Recovered from Datadog's own GitHub-published OpenAPI and docs sources |
+| Grafana       | yes                                                      |
+| Honeycomb     | yes (=/api/tag/Markers= is a 404 — the page is =/api/markers/create-a-marker=) |
+| Sentry        | yes (=create-a-new-deploy-for-an-organization/= is a 404 — the page is =create-a-deploy/=) |
+| Elastic       | yes, and the route named in the brief is *wrong*: =POST /api/observability/annotations= does not exist. The APM route is =POST /api/apm/services/{serviceName}/annotation=, confirmed against =elastic/kibana= source. This is *observed to be false*, not merely unobserved |
+
+** The endpoints
+
+| vendor        | endpoint                                                            | posted or derived |
+|---------------+---------------------------------------------------------------------+-------------------|
+| New Relic     | =POST /v2/applications/{APP_ID}/deployments.json=                   | posted            |
+| Blue Triangle | =POST https://api.bluetriangletech.com/event-markers=               | posted            |
+| Grafana       | =POST /api/annotations=                                             | posted            |
+| Honeycomb     | =POST /1/markers/{datasetSlug}=                                     | posted            |
+| Sentry        | =POST /api/0/organizations/{org}/releases/{version}/deploys/=       | posted            |
+| Elastic       | =POST /api/apm/services/{serviceName}/annotation=                   | posted            |
+| Datadog       | *no deployment endpoint exists*                                     | *derived*         |
+
+** The common shape
+
+Field names verbatim. Blank means the vendor has no dedicated field for that
+concept — which does not mean the concept is absent, only that it has been
+folded into free text or tags.
+
+| concept          | New Relic       | Blue Triangle       | Grafana        | Honeycomb    | Sentry deploy  | Elastic             | Datadog event         |
+|------------------+-----------------+---------------------+----------------+--------------+----------------+---------------------+-----------------------|
+| *which timeline* | =APP_ID= (path) | =prefix=, =eventType= | =dashboardUID=, =panelId= | =datasetSlug= (path) | =projects=  | =serviceName= (path) | =tags= =service:=     |
+| *which build*    | =revision= (req)| —                   | —              | —            | =version= (path) | =service.version= (req) | =tags= =version:= |
+| *where*          | —               | —                   | =tags=         | —            | =environment= (req) | =service.environment= | =tags= =env:=     |
+| *when*           | =timestamp=     | =eventStart= (req)  | =time=         | =start_time= | =dateStarted=  | =@timestamp= (req)  | =date_happened=       |
+| *when it ended*  | —               | =eventEnd=          | =timeEnd=      | =end_time=   | =dateFinished= | —                   | —                     |
+| *what to display*| =description=, =changelog= | =annotation= (req), =description= | =text= (req) | =message= | =name= | =message=  | =title= (req), =text= (req) |
+| *who*            | =user=          | —                   | —              | —            | =name=         | —                   | —                     |
+| *deep link*      | —               | —                   | —              | =url=        | =url=          | —                   | —                     |
+| *grouping*       | =deploymentType= (NerdGraph) | =lineColor=, =lineStyle=, =lineThickness= | =tags= | =type= | — | =tags=, =annotation.type= (server-set) | =tags=, =alert_type=, =aggregation_key= |
+| *accepted with*  | 2xx + =id=      | not documented      | =200= =&#123;message,id&#125;= | =201= + =id= | =201= | =200= + =_id= | =202= + =event.id= |
+
+** Three findings from that table
+
+*** 1. Only three fields are universal, and "version" is not one of them
+
+Every one of the seven has a *timestamp*, a *free-text label*, and an
+*identity for the timeline the marker lands on*. That is the whole intersection.
+
+*A dedicated version field is not universal.* Grafana and Honeycomb have none
+at all — the build identity goes in =text= or =message= as prose, or into
+=tags= / =type= as an opaque string. New Relic makes =revision= the single
+required field; Elastic makes =service.version= required; Datadog derives it
+from a tag. Environment is worse: three of seven have a real field for it, and
+the rest fold it into tags.
+
+So the minimum marker everyone accepts is *&#123;when, what to show, which
+timeline&#125;* — and every structured fact beyond that degrades to a string
+somewhere. Anything this repo wants to assert *about* a build has to survive
+being read as prose by a human, because on at least two of these sinks that is
+all it will ever be.
+
+*** 2. Instant versus interval is the real divergence, and it is the one that matters here
+
+| shape             | vendors                                              |
+|-------------------+------------------------------------------------------|
+| instant only      | New Relic, Elastic, Datadog                          |
+| optional interval | Blue Triangle, Grafana, Honeycomb, Sentry            |
+
+An interval marker can say "this began at T1 and finished at T2". An instant
+marker forces a choice about *which* fact is being recorded — and the defect
+this document exists to prevent is choosing "started" and letting it render as
+"deployed".
+
+The timestamp units agree on nothing, which is worth knowing before writing an
+adapter: Datadog =date_happened= POSIX seconds as a bare integer; Blue Triangle
+=eventStart= epoch seconds *as a quoted string*; Grafana =time= epoch
+*milliseconds*; Honeycomb =start_time= Unix seconds; Sentry =dateStarted= an
+unspecified string; New Relic =timestamp= and Elastic =@timestamp= ISO 8601.
+
+*** 3. None of the seven has a field for whether the marker is intent or observation
+
+This is the gap, and it is unanimous.
+
+Not one of these APIs distinguishes "a deploy started" from "the estate is
+serving this build", and *not one can represent a deploy that failed*. Sentry
+has =dateStarted= and =dateFinished= but no status. Honeycomb has no verdict.
+New Relic's =timestamp= "cannot be in the future", which hints the record is
+meant to be written after the fact, but nothing enforces it — and nothing stops
+a deployer writing it before.
+
+The consequence is that in every one of these systems, *whether a marker is
+true depends entirely on where in the deploy script the POST was placed*, and
+that placement is invisible to everyone who reads the marker afterwards.
+
+That is not a small thing. It is the deadbee defect with the falsifying
+re-run removed.
+
+*** 4. Datadog is the outlier, and the outlier is the one that is right
+
+Datadog has no deployment-marker endpoint because it does not accept an
+assertion that a deploy happened. It *derives* the marker: the =version= tag
+appears on the timeline because telemetry tagged with that version arrived —
+because the build is running and emitting. Verbatim from its docs, the version
+section shows "the times at which *traces that correspond to this version were
+first and last seen*."
+
+A deployer that never deployed cannot forge that, because the deployer is not
+the writer. This is exactly the independence property
+[[./changing-the-pipeline.org]] identifies as the thing guard 5 lacked: *a check
+is only as good as the independence of its oracle.*
+
+We cannot do derived — nothing in this estate emits APM telemetry. The nearest
+available approximation is to require that the marker be written by the
+*instrument that sampled the estate*, which is the same rule
+[[./label-ownership.org]] already imposes on labels. That is the design below.
+
+* The sink
+
+** wal.sh, evaluated and rejected
+
+=https://wal.sh/?deployment=<url>= was proposed. Probed:
+
+#+begin_example
+bare:         HTTP 200   24586 bytes   text/html
+?deployment=  HTTP 200   24586 bytes   text/html
+byte-identical
+#+end_example
+
+It is a website, not an API. It returns the same page whether the parameter is
+present, absent or malformed. It may well record server-side — but *nothing in
+the response distinguishes a stored marker from a discarded one*, and a sink
+that answers 200 to everything is indistinguishable from a black hole.
+
+That is the guard-5 shape once more: we would be reading our own request's
+acceptance back as evidence that it landed. "We post markers and assume they
+land" is a claim written from intent. Rejected as a sink.
+
+*The idea inside the proposal is right, though, and is kept as a field.* See
+"The link, and the gap it exposes" below.
+
+** beacon.termbox.org, chosen
+
+=https://beacon.termbox.org/= self-describes and publishes OpenAPI 3.0.3 at
+=/spec.json= ("Beacon Telemetry API 0.3.1"). =/webhook= is the ingestion path.
+From the spec, verbatim:
+
+#+begin_example
+POST /webhook
+  requestBody: application/json
+    type: object
+    properties:
+      source: {type: string}
+      event:  {type: string}
+  responses:
+    202: Event queued
+    429: Rate limited
+#+end_example
+
+Two honest observations about that schema, both load-bearing:
+
+1. It *names* two fields. It does not set =additionalProperties: false=, so by
+   the OpenAPI default extra properties are permitted — but permitted is not
+   the same as *retained*. The spec makes no statement about what happens to
+   fields it does not name. So the marker is carried inside the two named
+   fields where it can be (=source=, =event=) and the structured detail rides
+   in an additional =marker= object whose retention is *[H]*, not observed.
+2. =202 Event queued= is the sink agreeing it received bytes. It is the sink's
+   own assertion about our own request. Treating it as proof of storage is the
+   guard-5 shape a third time.
+
+** Confirming receipt: the independent witness
+
+=/health.json= returns a counter this repository does not write:
+
+#+begin_example
+{"status":"healthy","version":"0.3.1","uptime":7238438,
+ "stats":{"pixels_today":36458,"webhooks_today":1,"rate_limited":22193,...}}
+#+end_example
+
+So =change/marker.sh= reads =stats.webhooks_today= from =/health.json= *before*
+the POST and again *after*, and reports whether it moved. A different endpoint,
+a counter the sender does not control: that is an oracle independent of the
+request being checked, which is the property guard 5 did not have.
+
+It is still bounded, and the bound is stated rather than rounded away: a moved
+counter proves *an event was recorded*. It does not prove the =marker= object
+survived, and nothing exposed by this API can prove that. The script says
+=RECEIPT WITNESSED= for the first claim and never makes the second.
+
+* The design
+
+** Four events, three kinds, and the kinds cannot be confused
+
+| event                | kind          | claims                                          | emitted by           |
+|----------------------+---------------+-------------------------------------------------+----------------------|
+| =deploy.started=     | =intent=      | a deploy of this build began                    | =change/activate.sh= |
+| =deploy.converged=   | =observation= | every sample served this build                  | =gates/health.sh=    |
+| =deploy.diverged=    | =observation= | a sample POSITIVELY served a different build    | =gates/health.sh=    |
+| =deploy.unreachable= | =abstention=  | no usable build observation was obtained at all | =gates/health.sh=    |
+
+*=deploy.unconverged= was the v1 event and it is now a refusal.* It collapsed
+"I looked and saw a different build" into "I could not look", which is the one
+collapse [[./label-ownership.org]] rule 2 exists to forbid — published onto the most
+durable artefact the pipeline produces. =health.sh= emitted it whenever its exit
+code was non-zero, and =curl= failing with =code=000= is exactly that. The trap
+was already wired: =.github/workflows/deploy-production.yml= runs this gate on
+=ubuntu-latest=, which cannot open a socket to any environment in this
+repository, so the first marker ever enabled in a workflow would have written a
+permanent false negative. Naming it as a refusal rather than deleting it means
+an old call site gets an explanation instead of a usage error.
+
+=unreachable= carries =kind: "abstention"=, not =observation=, so a reader
+cannot mistake it for a claim about what the estate was serving. It says only
+that this instrument could not look.
+
+*Precedence when a run is mixed: positive evidence outranks absence.* One sample
+that actually saw build X is a fact about the estate; a sample that saw nothing
+is not. So a run with both a divergent sample and an unobservable one marks
+=diverged=, and the counts for all three go in the payload so a reader sees the
+mix rather than a rounded verdict.
+
+*** The verdict is derived from the measurement, not from the argument
+
+This is the finding that sent v1 back. =marker.sh= took =--observed-by= and
+=--samples= as strings and rendered them as an observation:
+
+#+begin_src text :eval no
+  $ ./change/marker.sh converged --env production --sha 660f774 \
+        --observed-by "my-own-fingers" --samples 99999
+  "evidence": { "observed_by": "my-own-fingers", "samples": 99999 }
+  rc=0
+#+end_src
+
+=--samples 0= was accepted too, and rendered =verdict: "converged"= with
+=samples: 0= — the literal "verdict with no measurement behind it" that the
+adjacent error string claimed to refuse. The arity check was not oracle
+independence; the oracle was still the caller's word. [[./interfaces.org]] names
+this file by name under "THE ORACLE IS INDEPENDENT OF THE CALLER".
+
+=--samples= is gone. In its place, an observation requires =--measurement
+<file>=: the *sample ledger* the instrument wrote as it took each sample, one
+row per sample —
+
+#+begin_src text :eval no
+  core      /core/health       200  780ce0a
+  plp       /products/health   200  780ce0a
+  pdp       /product/health    000
+#+end_src
+
+— and =marker.sh= counts the rows itself, classifies each one itself, and
+computes the verdict itself. The event name on the command line then becomes a
+*cross-check*: if the caller's event and the derived verdict disagree, the
+marker is refused and both are printed. Two independent derivations have to
+agree before anything reaches a timeline nobody can re-check.
+
+That also closes a defect nobody had noticed yet. =health.sh= sets =rc=7= when
+=change/evidence.sh record= fails — a =gh= 5xx, a full disk — and v1 read =$rc=
+to choose its event. A paperwork failure would have rendered as an estate
+observation, on exactly the artefact this document argues is the worst possible
+place for a wrong claim. The ledger does not change when =gh= fails.
+
+*** What the caller merely asserted is named as such, in the record
+
+Some fields genuinely cannot be measured here — the environment's name, the
+service, the note, the link. The payload lists them by name under
+=caller_supplied=, so a reader six weeks out can tell a measurement from an
+assertion without having this file in front of them.
+
+=--observed-by= is checked as far as anything here can check it: it must name a
+file that exists in this repository, which refuses =--observed-by
+my-own-fingers=. It is *still* listed as caller-supplied, because "that path
+exists" is not "that program took this measurement". Naming the limit is the
+point; pretending it was closed would be the same defect one level up.
+
+=host= was the literal string ="hydra"=. It is now =uname -n=, because a
+hardcoded hostname is a claim about the world that stops being true the first
+time anybody runs this somewhere else.
+
+*** And the rest, unchanged
+
+- the event name decides the kind, in a closed =case= statement. A caller
+  cannot pass a string that turns one into the other.
+- an *intent* marker is refused if evidence is attached at all. An intent
+  marker carrying evidence is an observation wearing the wrong name, and that
+  is the single confusion this whole document is about.
+- the revision must resolve to a commit, or exit 3. =targets/node/deploy.sh=
+  refuses =deadbee= for this reason and a marker naming a build that does not
+  exist is the same lie with a longer half-life. =--no-verify-sha= exists for
+  marking a ref this checkout lacks, and *stamps* =revision_verified: false=
+  into the payload rather than quietly lowering the standard.
+
+Exit codes are the ones [[./exit-codes.org]] already allocated, for the meanings it
+already gave them. v1 used =4= for a missing flag and =5= for evidence on
+intent, both of which were already spoken for, and =5= was additionally
+reachable by accident through a =jq= parse error on =--samples abc=.
+
+=./change/marker.sh --selftest= exercises 31 cases — every refusal, every
+render, and the beacon's whole default path — and runs in =gmake gate-selftest=.
+It is entirely offline: every assertion resolves before any network call, the
+beacon is unset for every case that does not set it, and the two cases that do
+point at =example.invalid=. Safe in CI and on a host that has never heard of
+the sink.
+
+** Where the markers are emitted, and why not elsewhere
+
+The convergence marker is emitted from inside =gates/health.sh=, in the same
+place the gate writes its own =<env>:healthy= label, for one reason: *that loop
+is the only place in this repository where "the estate is serving X" is a fact
+rather than a plan.*
+
+| candidate site            | what it actually knows                        | may it mark? |
+|---------------------------+-----------------------------------------------+--------------|
+| =targets/node/deploy.sh=  | it started some processes                     | no           |
+| =targets/node/switch.sh=  | it flipped a file and the front agreed         | no — subsumed |
+| =gates/health.sh=         | *it sampled N times per route and saw one build* | *yes*      |
+| =change/settle.sh=        | the paperwork closed                          | no           |
+
+- *deploy.sh* knows only that =nohup node= returned. Marking there would put
+  "deployed" on the timeline at a moment when nothing had checked.
+- *switch.sh* is a genuine observation — it re-reads =x-colour= from the
+  running front rather than the state file, deliberately. But =health.sh= runs
+  against that same front immediately afterwards and carries the colour as a
+  field, so a cutover marker would be a second point for one event. Fewer,
+  more honest markers: the next marker subsumes it.
+- *settle.sh* records =change:complete=, which is a transition of the *change
+  record*, not of the estate. Somebody correlating an incident wants to know
+  when the estate changed, not when the paperwork closed.
+
+The intent marker is emitted from =change/activate.sh= at the exact instant it
+opens the GitHub Deployment record as =in_progress= (capability C6). They state
+the same fact to different audiences, and this is deliberate — *it is not a
+second source of truth*. C6 is the platform record and answers "what is running
+in production"; the marker is a point on somebody's latency graph and answers
+"what changed at 16:43". The marker mechanism never writes a GitHub deployment
+status and never reads one.
+
+** A deploy that fails is visible, in two ways
+
+A marker scheme that only ever emits on success makes failed deploys invisible
+on the timeline — which is where they matter most, because "the estate was
+churning here and never settled" is exactly what an incident review needs.
+
+So: =health.sh= emits =deploy.diverged= when it positively observes the wrong
+build, and =deploy.unreachable= when it could not observe at all — just as it
+withdraws the label. And a deploy that dies before convergence leaves a
+=deploy.started= with no closing marker, which is the intended reading rather
+than an accident.
+
+** Failure of the sink is reported, never swallowed
+
+A telemetry sink is *not a guard*. If the beacon is unreachable the deployment
+must not fail — telemetry does not get a veto over the estate. But =|| true= on
+a marker is how you get a timeline with holes nobody knows about, and a hole
+nobody knows about is worse than no timeline at all, because the timeline still
+looks complete.
+
+So on non-delivery =marker.sh=:
+
+1. prints =MARKER UNDELIVERED= with the reason,
+2. appends the full payload to =.run/markers-undelivered.jsonl= so the hole is
+   recoverable,
+3. exits *75* (=EX_TEMPFAIL=).
+
+Call sites =case= on the code and *only 75 claims a spool*. Every other exit is
+a refusal that happened before any payload existed, so the call sites say
+"REFUSED — nothing was spooled and nothing is recoverable" for those. v1 used a
+bare =|| echo= at both sites and printed one "spooled, recoverable" message for
+every non-zero code, which pointed an operator at =.run/markers-undelivered.jsonl=
+— a file that, on a refusal, was never written and whose directory did not
+exist. A false recovery instruction is worse than no message: the reader stops
+looking. The deployment's verdict is untouched either way.
+
+And the diagnosis distinguishes the two states [[./label-ownership.org]] rule 2 says
+must never be collapsed. An unreachable sink reports "could not observe — *NOT*
+observed to have failed". A 4xx reports that the sink *rejected* the payload,
+and the script reports the rejection rather than reshaping the payload until
+something sticks.
+
+** The link, and the gap it exposes
+
+Every APM in the table that has a deep link — Honeycomb =url=, Sentry =url=,
+New Relic's changelog — has it for the same reason: a marker that links back to
+what produced it is the difference between "something deployed at 16:43" and
+"this deployed at 16:43, here is the evidence".
+
+So the payload carries =link=. It also carries =link_is=, and that second field
+exists because of an honest problem:
+
+*In this estate the deploy does not run in GitHub Actions at all.* No runner can
+open a socket to hydra's =192.168.86.0/24= — the same reachability gap that
+[[./label-ownership.org]] rule 2 is about, and the reason the =production:healthy=
+label is a proxy for a check run in the first place. So the best available link
+is the *gate run* for that SHA, not the deploy that produced it. Those are
+different things and a reader would reasonably assume the stronger one.
+
+=link_is: "gate-run"= says which. Emitting the link without it would be a small
+instance of the exact defect this document is about: letting a reader infer a
+stronger claim than the emitter can support.
+
+** What is not sent
+
+This is a simulation estate and the sink is public.
+
+| sent                                                        | not sent                        |
+|-------------------------------------------------------------+---------------------------------|
+| short SHA, environment name, port, tier, ISO-8601 timestamp | tokens, keys, any credential    |
+| PR number, repo slug, app list                              | user identity or email          |
+| this host's short name (=uname -n=)                         | any other host or address       |
+
+The base URL a gate probed is *reduced to its port*: =--base
+http://192.168.86.30:9070= sends ={"port": 9070}=. The port tier is the fact
+worth having — in this repo the number tells you what an environment is — and
+the address is not.
+
+** The payload
+
+#+begin_src json :eval no
+{
+  "source": "standard-change",
+  "event": "deploy.converged",
+  "marker": {
+    "schema": "deployment-marker/2",
+    "kind": "observation",
+    "verdict": "converged",
+    "service": "storefront",
+    "revision": "780ce0a",
+    "revision_verified": true,
+    "environment": "dev-7",
+    "tier": "dev",
+    "timestamp": "2026-09-13T16:54:59Z",
+    "repo": "aygp-dr/standard-change",
+    "host": "hydra",
+    "caller_supplied": ["environment", "service", "note", "link",
+                        "apps", "colour", "base_port", "observed_by"],
+    "apps": ["checkout", "core", "pdp", "plp", "mock"],
+    "note": "header mode; every route sampled 3 times",
+    "evidence": {
+      "observed_by": "gates/health.sh",
+      "verdict_derived_from": "the measurement, recomputed here",
+      "measured": {
+        "samples_taken": 15,
+        "samples_matched": 15,
+        "samples_diverged": 0,
+        "samples_unobserved": 0,
+        "routes": 5,
+        "builds_seen": ["780ce0a"],
+        "derived_from": "health-samples.7pQ2Lx"
+      },
+      "port": 9070
+    }
+  }
+}
+#+end_src
+
+=schema=, =kind=, =verdict=, =revision_verified=, =caller_supplied= and
+=evidence= are this repo's extension to the common shape — the fields finding 3
+says no vendor provides. The rest maps onto the intersection: =revision= is New
+Relic's name, =service= / =environment= are Datadog's and Sentry's, =timestamp=
+is ISO 8601 as New Relic and Elastic use it.
+
+The schema version moved to =2= because =evidence.samples= — a caller-supplied
+integer — was replaced by =evidence.measured=, which is computed. A consumer
+that read =samples= would silently read nothing; that is worth a version.
+
+*=samples_taken= is the count of rows in the ledger, not the loop bound.* v1
+passed =${3:-${HEALTH_SAMPLES:-5}}=, the number of samples the gate INTENDED to
+take, and dropped the matched count and the observed builds entirely. A run
+where zero of three samples matched rendered as "three samples" beside the one
+build that was *not* there.
+
+** The flow
+
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    participant A as change/activate.sh
+    participant D as targets/node/deploy.sh
+    participant H as gates/health.sh
+    participant M as change/marker.sh
+    participant B as beacon /webhook
+    participant W as beacon /health.json
+    participant P as the beacon pixel
+    A->>M: started (kind=intent, no evidence allowed)
+    M->>B: POST
+    M->>W: read webhooks_today, before and after
+    A->>D: deploy the build
+    D-->>A: processes started (knows nothing more)
+    A->>H: sample the estate N times per route
+    H->>H: write every sample to a ledger as it is taken
+    H->>M: an event, the instrument, and the LEDGER FILE
+    M->>M: recompute the verdict from the ledger, refuse if it disagrees
+    M->>B: POST
+    M->>W: witness the counter
+    M->>P: GET pixel?marker=... (only if DEPLOYMENT_MARKER_BASE is set)
+    Note over M,W: sink down means exit 75 and a spooled payload<br/>the deployment verdict is untouched
+    Note over M,P: the beacon is a notification<br/>its response is never read as evidence
+#+end_src
+
+* The beacon, which is a notification and never an oracle
+
+Separately from the sink, recording a marker fires a one-pixel =GET=:
+
+: $DEPLOYMENT_MARKER_BASE?marker=<event>:<environment>:<revision>:<timestamp>
+
+percent-encoded. That is the whole notification, and *every one of those four
+fields is already in the marker record above*. This is the property that keeps
+it honest: a reader must be able to re-derive the entire beacon from the record
+alone. If they ever cannot, the beacon has become load-bearing — and a
+notification that carries information nothing else holds is no longer a
+notification, it is a second, worse record.
+
+Three things it is not, and each one is enforced rather than promised:
+
+| it is not | enforced by |
+|-----------+-------------|
+| an *oracle* | the response is discarded (=-o /dev/null=) and never parsed. A 200 from a pixel does not mean the deploy was healthy; a failure to reach it does not mean the deploy failed. It cannot mean either — the pixel has never heard of this estate |
+| a *guard* | it cannot reach =exit=. It has no code of its own, and =marker.sh= cannot fail a deployment anyway |
+| *silent* | "I could not notify" is a fact. A beacon that could not be sent prints =BEACON NOT SENT= / =BEACON MISCONFIGURED= and appends a row tagged =what: "beacon"= to =.run/markers-undelivered.jsonl= — the same spool an undelivered marker uses |
+
+** MOCK by default, and the mock is loud
+
+=DEPLOYMENT_MARKER_BASE= is *unset by default*, and unset means mock: no
+outbound request is made. The log then says exactly that, and prints the query
+string that would have gone:
+
+#+begin_src text :eval no
+  beacon: MOCK -- DEPLOYMENT_MARKER_BASE is unset, so no request was made.
+          would GET  ${DEPLOYMENT_MARKER_BASE}?marker=deploy.converged%3Adev-7%3A780ce0a%3A2026-09-13T17%3A04%3A11Z
+          Set it in .env to notify for real (.env.template has an example).
+#+end_src
+
+A mock that prints nothing is indistinguishable from a beacon nobody ever wired
+up, which is the same class of invisibility as a swallowed marker. This is the
+path =--selftest= exercises, by default, in every case that does not set the
+variable itself.
+
+There is a second gate underneath: the beacon only fires on the *send* path.
+A dry-run marker prints =would GET= and sends nothing no matter what the
+variable holds. Default off, twice.
+
+** The base is configuration, and it is validated
+
+No host is named anywhere in =change/marker.sh=. The example value —
+=https://wal.sh/static/pixel.gif= — lives commented out in =.env.template= and
+in this document, so a v2 pointing at an internal collector is a config change
+rather than a patch.
+
+The variable names the *fact* (a deployment marker was recorded), not the
+*mechanism* (a 1×1 gif). =TRACKING_PIXEL= was the other candidate and is worse
+for exactly that reason: the mechanism is the part most likely to change, and a
+v2 that POSTs to a collector would leave that name actively misleading.
+
+A base that is set but is not an absolute =http://= or =https://= URL, or that
+already carries a query string or fragment, is a *configuration error* — it is
+reported as =BEACON MISCONFIGURED=, spooled, and nothing is sent. Not silently
+skipped, and not concatenated into something malformed.
+
+Interpolation is escaped by =jq='s =@uri=, not by hand. =--env= is
+caller-supplied text and reaches that line unchanged; =--env 'dev 7&x'= renders
+=marker=deploy.started%3Adev%207%26x%3A...= and the self-test asserts both that
+the encoding appears and that no raw separator survives.
+
+* Verification record
+
+Run on hydra (FreeBSD 14.4), 2026-09-13, after rebasing onto =origin/main=.
+
+| claim                                                    | how                                              | result |
+|----------------------------------------------------------+--------------------------------------------------+--------|
+| the refusals actually refuse, and for the stated reason  | =./change/marker.sh --selftest=                  | 31/31, rc *and* message asserted on every case |
+| the self-test runs in the gate                           | =gmake -s gate-selftest=                         | passes, exit 0 |
+| the self-test can itself fail                            | mutation: 8 defects injected, one at a time      | every one killed by ≥1 case — see the table below |
+| a converged marker is derived from a real ledger         | =MARKERS=1 ./gates/health.sh http://127.0.0.1:9070 <sha>= | =deploy.converged=, counts computed from the ledger |
+| an unreachable estate abstains rather than falsifying    | same, against a dead port                        | =deploy.unreachable=, =kind: "abstention"= |
+| a divergent estate is distinguished from an absent one   | ledger fixtures in the self-test                 | =diverged= vs =unreachable=, and mixed marks =diverged= |
+| the caller cannot assert a verdict                       | =converged= over a ledger that saw another build | REFUSED, "the measurement says diverged" |
+| dry run is the default and sends nothing                 | sink AND beacon pointed at =127.0.0.1:1=         | exit 0, no request |
+| the beacon is MOCK by default                            | =DEPLOYMENT_MARKER_BASE= unset                   | no request; =beacon: MOCK= and the query string printed |
+| a misconfigured beacon cannot change the exit code       | base without a scheme, and base with a query     | =BEACON MISCONFIGURED=, exit unchanged |
+| shellcheck is clean on all three scripts                 | =./gates/shellcheck.sh=                          | 0 findings |
+| no label ownership was touched                           | =python3 gates/label-audit.py=                    | 16 findings, the same set as =main= |
+
+*Not observed, and marked [H]:*
+
+- *the live beacon =GET=.* It fires only after a marker has actually been
+  delivered to the sink, which needs a reachable sink; and the brief for this
+  change forbids a real request to the example host. Everything up to and
+  including URL construction, validation and encoding is exercised offline;
+  the =curl= line itself and its =BEACON NOT SENT= branch are reviewed, not run.
+- *=deploy.started= from =change/activate.sh=.* That script exits 6 on this host
+  before reaching =deploy_open=, because it still drives =targets/bastille/= on
+  the pre-correction port scheme. The refusal is correct and was kept; the
+  consequence is that the intent-marker path has never executed.
+- *a real staging or production estate.* No nginx on this host and no live
+  protected tier, so every run above is against a dev block or a dead port.
+
+* Found and not fixed
+
+*=gates/health.sh='s app list still loses =jq='s status to a pipe* — fixed
+here, actually: =apps=$(jq ...)= is now tested before =tr= runs. Recorded
+because it is the same defect class as the =| sed= that once shipped an
+UNHEALTHY estate as =passed=, and because it will recur in every script that
+formats a command's output without capturing its code. The general fix is the
+=indent()= utility [[./interfaces.org]] names; this file does it by hand.
+
+*=webhooks_today= is a global counter on a shared public sink.* Another
+client's =POST= moves it. v1's stdout said =RECEIPT WITNESSED: the counter
+moved=, which reads as proof that *this* marker landed and is not. The message
+now says the counter moved and that this is *consistent with* the marker
+landing rather than proof of it. The underlying gap — the sink offers nothing
+that identifies our own event — is unfixed and is a property of the sink.
+
+*Nothing records that a deployment exercised this pipeline change.*
+[[./changing-the-pipeline.org]] is explicit that a change to =gates/= or =change/=
+is proven by N subsequent deployments, not by its own merge, and that the soak
+has nowhere to live yet. This change has zero. Merging it means "fit to begin
+soaking", not "proven".
+
+*Trigger to revisit the beacon:* the first time anybody wants to know whether a
+specific marker landed. That question needs a sink that echoes an identifier,
+and neither the webhook nor the pixel does.

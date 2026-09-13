@@ -1,0 +1,81 @@
+#+TITLE: 015 — do the marker suites test anything?
+#+DATE: 2026-09-13
+
+* Hypothesis
+
+=./change/marker.sh --selftest= (31 cases) and =./gates/health-test.sh= (6
+cases) test what they claim to test: every refusal, every classification, and
+the beacon's default path.
+
+*Falsifiable.* Break one guard; if no case fails, that guard has no test behind
+it and the suite's PASS is void for it — the repo's own rule for gates
+(=spec.org=, Verification contract), applied to the tests.
+
+* Why this and not "the suite is green"
+
+Three tests in this repository this week passed while asserting nothing. A
+suite's green is evidence about the code; it is not evidence about the suite.
+
+=012-guard-mutation= pointed the same instrument at the control plane and found
+that *every* mutation survived. That is the outcome this exists to avoid
+repeating, on a change that is itself entirely about not trusting an assertion
+in place of a measurement.
+
+* Success criterion
+
+Every mutation killed. A mutation killed by exactly *one* case is recorded as a
+result in its own right: it is one edit away from being killed by none.
+
+* Run
+
+#+begin_src sh :eval no
+  ./experiments/015-marker-mutation/mutate.sh
+#+end_src
+
+Restores each file from a =.orig= copy after every mutation, so the tree is
+unchanged when it finishes. Offline. Output: =results.tsv=.
+
+* Result — 2026-09-13, hydra, FreeBSD 14.4
+
+13 mutations, *13 killed, 0 survived.*
+
+| mutation | suite | cases failed | what it broke |
+|----------+-------+--------------+---------------|
+| =verdict-not-derived= | marker | 4 | the cross-check between the caller's event and the derived verdict |
+| =zero-samples-ok= | marker | 1 | the refusal of a ledger with no rows |
+| =instrument-unchecked= | marker | 1 | =--observed-by= having to name a file that exists |
+| =unreachable-is-observation= | marker | 1 | =unreachable= carrying =kind: abstention= |
+| =absence-outranks-evidence= | marker | 4 | the precedence rule — absence made to outrank positive evidence |
+| =malformed-ledger-ok= | marker | 1 | the malformed-row refusal |
+| =intent-may-carry-evidence= | marker | 1 | intent markers refusing evidence |
+| =beacon-unencoded= | marker | 2 | =@uri= replaced by raw interpolation |
+| =beacon-base-unvalidated= | marker | 1 | the absolute-http(s)-URL check |
+| =beacon-fires-on-dry-run= | marker | 1 | the beacon staying off on the dry-run path |
+| =unreachable-is-falsified= | health | 2 | the three-valued split — absence folded back into divergence |
+| =event-derived-from-rc= | health | 3 | the marker event derived from the exit code instead of the counters |
+| =dev-label-reaches-the-forge= | health | 1 | the label env and the marker env being derived separately |
+
+* What the first run found, which is the point of running it
+
+=dev-label-reaches-the-forge= *survived* the first pass — zero cases failed.
+
+The case meant to cover it ran =health.sh= *without* =--pr=, so the label block
+it was asserting about never executed at all, and its =!dev-4:healthy= assertion
+was satisfied by output that could not have contained the string under any
+circumstances. A passing test that asserts nothing, found by the instrument
+built to find exactly that, in the same change that argues for it.
+
+Fixed by passing =--pr 27= against a shimmed =gh=. Second run: killed, 1 case.
+It is a 1 and it should be read as one — a single case stands between that
+label and the forge.
+
+* Marked [H]
+
+- The live beacon =GET= has no mutation here, because it has no test: it fires
+  only after a marker has been delivered to a reachable sink. =beacon-unencoded=
+  and =beacon-base-unvalidated= cover everything up to and including the URL;
+  the =curl= line and its =BEACON NOT SENT= branch are reviewed, not run.
+- The mutations are hand-written =sed= expressions against specific lines. A
+  refactor that moves those lines turns a mutation into =NOT-APPLIED=, which the
+  script reports rather than scoring as a kill. Re-read that column before
+  trusting a green run.

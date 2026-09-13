@@ -120,6 +120,46 @@ deploy_open() {  # deploy_open <environment> <description>
   else
     echo "   warn no deployment record on $1 (API refused) — C6 unattested"
   fi
+  # THE INTENT MARKER, and it is deliberately emitted at the same instant as
+  # in_progress above, because they state the same fact to different audiences:
+  # a deploy of this build began here. It is NOT a second source of truth —
+  # C6 is the platform record and answers "what is running"; the marker is a
+  # point on somebody's latency graph and answers "what changed at 16:43".
+  #
+  # It is `started`, which marker.sh will not let carry evidence. The closing
+  # marker is emitted by gates/health.sh, from the sample ledger, and is the
+  # only one that may say anything about what the estate is serving. See
+  # docs/deployment-markers.org.
+  #
+  # A deploy that never converges therefore leaves a start with no end, and
+  # that is the intended reading: the estate was churning here and did not
+  # settle. Suppressing it would make failed deploys invisible on the timeline,
+  # which is where they matter most.
+  #
+  # MARKERS=1 renders it, MARKER_SEND=1 delivers it; off by default, because a
+  # marker is an outward-facing write to a live third party. The path is
+  # relative to the repo root, like every other path in this file, because the
+  # cd above lands there — the $HERE workaround an earlier draft of this block
+  # carried was written against a version of this script that no longer exists.
+  #
+  # NOTE: nothing reaches this line on hydra today. The refusal at the top of
+  # this file (exit 6) stops activate.sh before any of it runs, because the
+  # script still drives targets/bastille/ on the pre-correction port scheme.
+  # Marked [H], not observed: the start-marker path has never executed.
+  if [ "${MARKERS:-0}" != 0 ] || [ "${MARKER_SEND:-0}" != 0 ]; then
+    mrc=0
+    ./change/marker.sh started \
+        --env "$1" --sha "$SHA" --pr "$PR" --apps "$GROUPS" --note "$2" || mrc=$?
+    case "$mrc" in
+      0) : ;;
+      75) echo "   warn marker not delivered (75, sink unreachable) — the deploy is
+        unaffected, and the payload WAS spooled to .run/markers-undelivered.jsonl,
+        so this build's START is recoverable from there. Not swallowed." >&2 ;;
+      *)  echo "   warn marker REFUSED (rc $mrc) — the deploy is unaffected, but
+        NOTHING WAS SPOOLED: this build's START is missing from the timeline and
+        is not recoverable. See docs/exit-codes.org." >&2 ;;
+    esac
+  fi
 }
 deploy_state() {  # deploy_state <state> [environment_url]
   [ -n "$DEPLOY_ID" ] || return 0
