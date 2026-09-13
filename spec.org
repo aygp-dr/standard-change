@@ -233,6 +233,27 @@ predicates — rather than a rewrite.
 | Post-implementation review    | Auto-generated PR comment after production deployment with gate results and timings   |
 | CMDB                          | =ports.tsv= (worktree ports) and =environments.tsv= (staging slots)                    |
 
+** This spec is intent, not source
+
+*Nothing here tangles.* Every code block is a *reference implementation* — it
+shows one way to satisfy the requirement around it, and the file on disk is the
+source of that file.
+
+The reason is the one §Domain model already argues for the guards: the spec
+states /what must hold/, and an encoding is free. An agent handed this document
+should be able to implement =gates/health.sh= in Python, or the labeller as a
+different action entirely, and be *right* so long as the predicate holds. A
+tangling spec forecloses that — it hands over bytes and calls them a
+requirement.
+
+It also removes a defect this repo hit twice: a change edited directly into
+=Makefile=, committed, and then silently reverted by the next tangle. When the
+spec owns the bytes, every derived file is a place for the document and the
+repository to disagree without anyone noticing.
+
+*So: read the prose for the contract, read the block for an example, and read
+the file for what actually runs.*
+
 * Repository layout
 
 #+begin_example
@@ -307,7 +328,7 @@ apps/<app>/
 
 ** routes.json contract
 
-#+begin_src json :tangle apps/plp/routes.json
+#+begin_src json
 {
   "app": "plp",
   "port_offset": 2,
@@ -376,7 +397,8 @@ block	worktree	branch	allocated_at
 
 The template is rendered once per worktree from =router/routes.json= and =.env.ports=. Each route prefix proxies to the owning app's port. A worktree that has not built an app falls back to the stable app on block 0, which is the local equivalent of a staging slot that deploys only the changed group.
 
-#+begin_src nginx :tangle router/nginx.conf.tmpl
+#+begin_src nginx
+# reference implementation of router/nginx.conf.tmpl -- that file is the source
 # rendered per worktree: BLOCK, and per app PORT_<APP> (falls back to block-0 port)
 worker_processes 1;
 events { worker_connections 64; }
@@ -451,7 +473,8 @@ derived to asserted, and says so where a reviewer can see it.
 
 ** Labeller
 
-#+begin_src yaml :tangle .github/labeler.yml
+#+begin_src yaml
+# reference implementation of .github/labeler.yml -- that file is the source
 app:core:
   - changed-files:
       - any-glob-to-any-file: apps/core/**
@@ -477,7 +500,8 @@ change:normal:
           - .github/**
 #+end_src
 
-#+begin_src yaml :tangle .github/workflows/labeller.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/labeller.yml -- that file is the source
 name: labeller
 on: [pull_request_target]
 permissions: {contents: read, pull-requests: write}
@@ -647,7 +671,8 @@ catches properly at promote time with SHA binding.
 
 ** Guard 1 — staging is a singleton
 
-#+begin_src bash :tangle change/queue.sh :shebang "#!/bin/sh"
+#+begin_src bash :shebang "#!/bin/sh"
+# reference implementation of change/queue.sh -- that file is the source
 # queue.sh claim <pr>   -- guards 0 and 1. Exit 0 claim, 5 queue busy, 6 behind main.
 set -eu
 pr="$2"
@@ -726,7 +751,8 @@ composes with main.
 The emergency path makes this the normal case rather than a rare race: an
 emergency /is/ a merge to main that jumps the queue.
 
-#+begin_src yaml :tangle .github/workflows/main-moved.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/main-moved.yml -- that file is the source
 name: main-moved
 on:
   push:
@@ -862,7 +888,8 @@ artifact, and guard 0 at the /next/ claim will make it rebase anyway.
 
 ** Promotion — staging pass to production
 
-#+begin_src yaml :tangle .github/workflows/promote.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/promote.yml -- that file is the source
 name: promote
 on:
   pull_request:
@@ -924,7 +951,8 @@ governs a change.
 
 ** Health check and release
 
-#+begin_src bash :tangle gates/health.sh :shebang "#!/bin/sh"
+#+begin_src bash :shebang "#!/bin/sh"
+# reference implementation of gates/health.sh -- that file is the source
 # health.sh <base-url> <expected-sha> [samples] -- guard 5. Exit 0, or 7.
 #
 # Asserts CONVERGENCE, not liveness. Two defects the single-sample version had:
@@ -997,7 +1025,8 @@ must not also wedge the pipeline.
 
 On success: =production:healthy=, PIR comment, =deployed:production=, then
 
-#+begin_src bash :tangle change/release.sh :shebang "#!/bin/sh"
+#+begin_src bash :shebang "#!/bin/sh"
+# reference implementation of change/release.sh -- that file is the source
 # release.sh <pr> -- merge (if auto-merge enabled) and free the queue.
 set -eu
 pr="$1"; repo="${GH_REPO:-$GITHUB_REPOSITORY}"
@@ -1059,7 +1088,8 @@ The four check runs guard 2 looks for. Job names matter: =promote.yml= and
 =deploy-production.yml= query =commits/{sha}/check-runs= and match
 =^(gate-selftest|lint|test|e2e)=, so a rename here silently disarms guard 2.
 
-#+begin_src yaml :tangle .github/workflows/gate.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/gate.yml -- that file is the source
 name: gate
 on:
   pull_request:
@@ -1137,7 +1167,8 @@ jobs:
 
 ** deploy-staging.yml skeleton
 
-#+begin_src yaml :tangle .github/workflows/deploy-staging.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/deploy-staging.yml -- that file is the source
 name: deploy-staging
 on:
   pull_request:
@@ -1178,7 +1209,8 @@ the queue reflects "this PR owns the pipeline", not "a deploy job is running".
 
 ** deploy-production.yml skeleton
 
-#+begin_src yaml :tangle .github/workflows/deploy-production.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/deploy-production.yml -- that file is the source
 name: deploy-production
 on:
   pull_request:
@@ -1290,7 +1322,11 @@ Each checklist is a =.github/PULL_REQUEST_TEMPLATE= section and a =pir.sh= field
 
 * Local development
 
-#+begin_src makefile :tangle Makefile
+*The =Makefile= is hand-maintained, not tangled.* It changes often and is
+edited directly, and two changes were silently reverted by a tangle before that
+was recognised. Shown here for orientation; =Makefile= is the source.
+
+#+begin_example
 # Bare metal by choice: this is a CI/CD pipeline simulator and FreeBSD is a
 # poor host for docker/podman. Apps are node processes on a port block.
 # On hydra use gmake; system make is BSD make.
@@ -1308,10 +1344,10 @@ help:
 	@echo "gate              lint, test, e2e"
 
 # .env is generated and gitignored; .env.template is tracked.
+# Compose, do not clobber. change/env.sh preserves local overrides and reports
+# what changed; `cat template ports > .env` silently discarded them.
 .env: .env.template
-	@./change/ports.sh alloc >/dev/null
-	@cat .env.template .env.ports > .env
-	@echo "regenerated .env"
+	@./change/env.sh
 
 env: .env
 
@@ -1363,6 +1399,12 @@ audit-selftest:
 	@echo "pbt-pipeline: both directions confirmed"
 audit:           ; @./gates/audit-controls.py
 docs:            ; @./gates/docs-lint.py
+# Forge through batch emacs, so it works whether or not emacs is running.
+forge-list:      ; @emacs --batch -l standard-change.el -f standard-change-forge-list
+forge-pull:      ; @emacs --batch -l standard-change.el -f standard-change-forge-pull
+forge:           forge-pull forge-list
+forge-check:     ; @emacs --batch -l standard-change.el -f standard-change-forge-check
+
 pbt:             ; @./gates/pbt-pipeline.py --exhaustive
 pbt-random:      ; @./gates/pbt-pipeline.py
 simulate-gates:  ; @./gates/simulate-gates.py
@@ -1371,7 +1413,7 @@ port-alloc:      ; @./change/ports.sh alloc
 port-free:       ; @./change/ports.sh free
 ports:           ; @./change/ports.sh list
 clean:           ; @rm -rf .run .env .env.ports
-#+end_src
+#+end_example
 
 A worktree is a sibling of the main checkout. =make port-alloc= is the first command in a new worktree; =make port-free= is the last.
 
@@ -1437,9 +1479,10 @@ and the known obstacles, and is the thing the first gate run promotes.
 * Verification contract
 
 - *Two gates, different things.* The code gate is =gates/{lint,test,e2e}.sh=.
-  The documents gate is this spec and its derived files: every =:tangle= target
-  resolves, every internal reference names a section that exists, and =CLAUDE.md=
-  asserts nothing absent here. Neither substitutes for the other.
+  The documents gate is this spec: org blocks balance, mermaid renders, every
+  internal reference names a section that exists, and =CLAUDE.md= asserts
+  nothing absent here. It no longer checks tangle targets — there are none
+  (§This spec is intent, not source). Neither gate substitutes for the other.
 - *Ordering is load-bearing.* =gate-selftest= runs /before/ the gates' own
   results count. A gate whose negative fixture it fails to reject produces no
   usable verdict that run — its PASS is void, not merely suspect.
@@ -1506,7 +1549,8 @@ unreachable, which is exactly what the rule was protecting (§Controls audit —
 "the recorded production SHA stays reachable"). The substitute makes the gap
 *observable*, not closed.
 
-#+begin_src yaml :tangle .github/workflows/trunk-audit.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/trunk-audit.yml -- that file is the source
 name: trunk-audit
 on:
   push:
@@ -1991,7 +2035,8 @@ The mechanism is trivial and the ordering is not.
 
 ** The trigger
 
-#+begin_src yaml :tangle .github/workflows/merge-on-healthy.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/merge-on-healthy.yml -- that file is the source
 name: merge-on-healthy
 on:
   pull_request:

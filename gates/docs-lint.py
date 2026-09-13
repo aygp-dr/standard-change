@@ -93,7 +93,50 @@ def selftest():
     return 1
 
 
+def tangle_is_clean():
+    """The spec must not tangle anything.
+
+    spec.org is INTENT, not source (spec.org, This spec is intent). A :tangle
+    directive there hands over bytes and calls them a requirement, which
+    forecloses the implementation freedom the domain model argues for -- and
+    it silently reverted two hand-edits to Makefile before that was noticed.
+    """
+    text = (ROOT / "spec.org").read_text()
+    import re
+    bad = re.findall(r'#\+begin_src[^\n]*:tangle\s+(\S+)', text)
+    if bad:
+        print("FAIL spec.org tangles: " + ", ".join(bad))
+        print("     The spec states what must hold; the file on disk is the source.")
+        return 1
+    print("  spec.org: intent only, tangles nothing")
+    return 0
+
+
+def _unused_old_tangle_check():
+    """kept out of the gate; superseded by the check above"""
+    import subprocess
+    r = subprocess.run(["emacs", "--batch", "-l", "org", "--eval",
+                        '(org-babel-tangle-file "spec.org")'],
+                       cwd=ROOT, capture_output=True, text=True)
+    if r.returncode:
+        print("FAIL tangle failed:", r.stderr.strip()[:120])
+        return 1
+    d = subprocess.run(["git", "diff", "--name-only"], cwd=ROOT,
+                       capture_output=True, text=True).stdout.split()
+    # spec.org itself may legitimately differ; the DERIVED files may not
+    dirty = [f for f in d if f != "spec.org"]
+    if dirty:
+        print("FAIL tangling spec.org changed tracked files: " + ", ".join(dirty))
+        print("     A derived file was edited directly. spec.org governs;")
+        print("     put the change there and re-tangle.")
+        return 1
+    print("  tangle: derived files match spec.org")
+    return 0
+
+
 def main():
+    if "--tangle" in sys.argv:
+        return tangle_is_clean()
     if "--selftest" in sys.argv:
         return selftest()
     findings, n = [], 0

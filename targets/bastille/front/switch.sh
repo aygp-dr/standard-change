@@ -12,16 +12,8 @@ BLUE=10.0.0.61; GREEN=10.0.0.62
 case "${1:-status}" in
   blue|green)
     ip=$([ "$1" = blue ] && echo $BLUE || echo $GREEN)
-    # python, not sed: the replacement contains '#', which terminates a
-    # '#'-delimited BSD sed expression and silently corrupts the edit.
-    python3 - "$ip" "$1" <<'PY'
-import re, sys
-ip, colour = sys.argv[1], sys.argv[2]
-c = open('nginx.conf').read()
-c = re.sub(r'upstream production \{ server [0-9.]+; \}.*',
-           f'upstream production {{ server {ip}; }}   # {colour}', c)
-open('nginx.conf', 'w').write(c)
-PY
+    # Render from the tracked template, never edit a tracked file in place.
+    sed "s/@PRODUCTION@/$ip/" nginx.conf.in > nginx.conf
     pkill -f 'nginx.*front/nginx.conf' 2>/dev/null || true
     sleep 1
     mkdir -p tmp && nginx -c "$PWD/nginx.conf" -p "$PWD" >/dev/null 2>&1 &
@@ -29,6 +21,7 @@ PY
     echo "production -> $1 ($ip)"
     ;;
   status)
+    [ -f nginx.conf ] || sed "s/@PRODUCTION@/$BLUE/" nginx.conf.in > nginx.conf
     cur=$(grep -o 'upstream production { server [0-9.]*' nginx.conf | grep -o '[0-9.]*$')
     col=$([ "$cur" = "$BLUE" ] && echo blue || echo green)
     echo "production = $col ($cur)   serving $(curl -s --max-time 3 http://127.0.0.1:9100/version.json | jq -c . 2>/dev/null)"

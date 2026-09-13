@@ -7,3 +7,6 @@ Concurrent_TTrace_*
 NoMergeGuard.*
 One.*
 NoOwn.*
+states/
+*.old
+*_TTrace_*

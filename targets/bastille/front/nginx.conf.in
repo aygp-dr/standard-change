@@ -1,3 +1,8 @@
+# TEMPLATE. switch.sh renders nginx.conf from this; the rendered file is
+# gitignored because it is MUTABLE STATE -- the blue/green cutover rewrites it,
+# so tracking it meant every switch showed up as an uncommitted change.
+# Fifth instance of the same defect in this repo (ports.tsv four times).
+#
 # Front router on hydra. Two jobs:
 #   1. bridge 192.168.86.0/24 (laptop) to the jails on 10.0.0.0/24
 #   2. be the blue/green switch point for production
@@ -16,7 +21,7 @@ http {
   # THE SWITCH. Exactly one of these is uncommented by switch.sh, so at any
   # instant production is one estate -- never two. That is what makes guard 5
   # trivial here: there is no convergence window to sample through.
-  upstream production { server 10.0.0.61; }   # blue
+  upstream production { server @PRODUCTION@; }   # rendered by switch.sh
   upstream staging    { server 10.0.0.60; }
 
   server { listen 9100; location / { proxy_pass http://production; } }

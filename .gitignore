@@ -17,3 +17,5 @@ sim/.hypothesis/
 *.pyc
 .env.*
 !.env.template
+targets/bastille/front/nginx.conf
+targets/bastille/front/tmp/
