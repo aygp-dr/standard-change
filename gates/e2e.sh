@@ -20,9 +20,11 @@
 # instrument (change/observe.sh, guard4.sh).
 set -eu
 PR=''
+ENV_=''
 while [ $# -gt 0 ]; do
   case "$1" in
-    --pr) PR="${2:?--pr needs a number}"; shift 2 ;;
+    --pr)  PR="${2:?--pr needs a number}"; shift 2 ;;
+    --env) ENV_="${2:?--env needs a name}"; shift 2 ;;
     *)    break ;;
   esac
 done
@@ -131,8 +133,21 @@ echo "  $pass checks passed"
 if [ -n "$PR" ]; then
   repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
   sha=$(curl -sI --max-time 5 "$base/" | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}')
-  if [ "$rc" = 0 ]; then add=staging:e2e; rm_=staging:e2e-failed
-  else                   add=staging:e2e-failed; rm_=staging:e2e; fi
+  # The label must name the environment it observed. Hardcoding "staging" made
+  # a run against the PRODUCTION front record staging:e2e -- the same
+  # ambiguity that let one estate's pass overwrite another's failure, one level
+  # up. Derived from --env, or from the port when it is one we know.
+  if [ -z "$ENV_" ]; then
+    case "$base" in
+      *:9200*) ENV_=staging ;;
+      *:9230*) ENV_=production ;;
+      *:9210*) ENV_=production-blue ;;
+      *:9220*) ENV_=production-green ;;
+      *)       ENV_=unknown ;;
+    esac
+  fi
+  if [ "$rc" = 0 ]; then add="$ENV_:e2e"; rm_="$ENV_:e2e-failed"
+  else                   add="$ENV_:e2e-failed"; rm_="$ENV_:e2e"; fi
   gh pr edit "$PR" --repo "$repo" --add-label "$add" --remove-label "$rm_" >/dev/null 2>&1 \
     || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 || true
   echo "  #$PR <- $add  (observed on $base at build ${sha:-unknown})"

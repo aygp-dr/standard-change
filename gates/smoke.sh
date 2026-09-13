@@ -20,9 +20,11 @@
 # they did not take.
 set -eu
 PR=''
+ENV_=''
 while [ $# -gt 0 ]; do
   case "$1" in
-    --pr) PR="${2:?--pr needs a number}"; shift 2 ;;
+    --pr)  PR="${2:?--pr needs a number}"; shift 2 ;;
+    --env) ENV_="${2:?--env needs a name}"; shift 2 ;;
     *)    break ;;
   esac
 done
@@ -146,8 +148,21 @@ if [ -n "$PR" ]; then
   repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
   sha=$(curl -sI --max-time 5 "$base/" | tr -d '\r' \
           | awk 'tolower($1)=="x-build-sha:"{print $2}')
-  if [ "$rc" = 0 ]; then add=staging:smoke; rm_=staging:smoke-failed
-  else                   add=staging:smoke-failed; rm_=staging:smoke; fi
+  # The label must name the environment it observed. Hardcoding "staging" made
+  # a run against the PRODUCTION front record staging:smoke -- the same
+  # ambiguity that let one estate's pass overwrite another's failure, one level
+  # up. Derived from --env, or from the port when it is one we know.
+  if [ -z "$ENV_" ]; then
+    case "$base" in
+      *:9200*) ENV_=staging ;;
+      *:9230*) ENV_=production ;;
+      *:9210*) ENV_=production-blue ;;
+      *:9220*) ENV_=production-green ;;
+      *)       ENV_=unknown ;;
+    esac
+  fi
+  if [ "$rc" = 0 ]; then add="$ENV_:smoke"; rm_="$ENV_:smoke-failed"
+  else                   add="$ENV_:smoke-failed"; rm_="$ENV_:smoke"; fi
   gh pr edit "$PR" --repo "$repo" --add-label "$add" --remove-label "$rm_" >/dev/null 2>&1 \
     || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 || true
   echo "  #$PR <- $add  (observed on $base at build ${sha:-unknown})"

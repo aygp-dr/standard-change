@@ -29,6 +29,13 @@ rc=0
 
 echo "guard 4 — the authorization stack for #$pr @ $short"
 
+# A human approved THIS change. Not an observation -- nobody measured anything
+# -- and not a request either: it is consent, and it is the one thing in the
+# stack that is about the change rather than about a build's behaviour.
+review=$(gh pr view "$pr" --repo "$repo" --json reviewDecision -q '.reviewDecision // "NONE"')
+if [ "$review" = "APPROVED" ]; then printf '  ok    %-16s %s\n' "review" "APPROVED"
+else printf '  FAIL  %-16s %s\n' "review" "$review"; rc=1; fi
+
 bad=$(gh api "repos/$repo/commits/$head/check-runs" \
   --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
 if [ "$bad" -eq 0 ]; then printf '  ok    %-16s %s\n' "check runs" "green on $short"
