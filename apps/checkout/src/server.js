@@ -9,7 +9,7 @@ const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
 // OneUI is the shared UI surface (issue #10). Every app pins it, so a change
 // there is a change to all of them -- the cost is named in
 // docs/cross-cutting-coupling.org, not hidden.
-import { page, loadEstate, HOST, VERSION as ONEUI } from '../../../shared/oneui.js';
+import { page, loadEstate, esc, HOST, VERSION as ONEUI } from '../../../shared/oneui.js';
 const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
@@ -30,8 +30,39 @@ export const BACKGROUND = '#ffd7e6';
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
 // it, and a tier derived from something the deployer exported would be the
 // estate reporting what it was told (issue #15).
+// The shipping address form.
+//
+// GET, submitting to itself, so the URL stays shareable and the gates can keep
+// probing it -- a POST makes the filled form unlinkable and unprobeable, which
+// is the same argument that keeps /search a GET.
+//
+// Every echoed value goes through esc(). These come off the wire and land in an
+// attribute context (`value="..."`), where the `"` escape is what matters --
+// issue #13 was a live reflected XSS in this repo via a value that reached the
+// page unescaped, and an attribute is a shorter path out than a text node.
+const SHIP = [
+  ['name',    'Full name',    'text'],
+  ['line1',   'Address',      'text'],
+  ['city',    'City',         'text'],
+  ['postcode','Postcode',     'text'],
+];
+
+export function shippingForm(q) {
+  const field = ([n, label, type]) =>
+    `<p><label>${esc(label)}<br><input name="${esc(n)}" type="${esc(type)}" ` +
+    `value="${esc(q.get(n) || '')}" style="width:22rem;padding:4px"></label></p>`;
+  const filled = SHIP.every(([n]) => (q.get(n) || '').trim() !== '');
+  return `<h2>Shipping address</h2>
+<form method="get" action="/checkout">
+${SHIP.map(field).join('\n')}
+<p><button type="submit">Continue</button></p>
+</form>` + (filled ? '<p><b>Ready to continue to payment.</b></p>' : '');
+}
+
 export function renderHtml(path, port) {
-  return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND);
+  const q = new URL(path, 'http://x').searchParams;
+  const extra = path.split('?')[0] === '/checkout' ? shippingForm(q) : '';
+  return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND, extra);
 }
 
 // A DEDICATED HEALTH ROUTE, not a business route.
