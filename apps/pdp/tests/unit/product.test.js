@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import {
   render, renderHtml, status, owns, skuOf, money, loadCatalogue, CATALOGUE_FILE,
+  badge,
 } from '../../src/server.js';
 
 const fixture = (n) =>
@@ -69,6 +70,47 @@ test('availability is rendered as prose, not as the stored slug', () => {
   const h = renderHtml('/p/SKU125');   // out-of-stock in the shipped catalogue
   assert.match(h, /Out of stock/);
   assert.doesNotMatch(h, /out-of-stock/);
+});
+
+// ---- price and availability are badges --------------------------------------
+
+const OPEN = /<span style="display:inline-block[^"]*"[^>]*>/g;
+
+test('price and availability render as badges, not as inline body text', () => {
+  const h = renderHtml('/p/SKU125');            // out-of-stock in the catalogue
+  assert.match(h, /<span style="[^"]*">\$139\.00<\/span>/,
+    'the price is not in a badge');
+  assert.match(h, /<span style="[^"]*">Out of stock<\/span>/,
+    'availability is not in a badge');
+  // Distinguishable, not merely wrapped. Two badges in the same colour would
+  // satisfy the assertions above and show a person nothing.
+  const styles = (h.match(OPEN) || []).map((t) => t.match(/style="([^"]*)"/)[1]);
+  assert.equal(styles.length, 2, `expected two badges, got ${styles.length}`);
+  assert.notEqual(styles[0], styles[1], 'the two badges are styled identically');
+});
+
+test('an availability the catalogue invents cannot reach the style attribute', () => {
+  // page() interpolates the panel RAW (shared/oneui.js), and availability is a
+  // free string that loadCatalogue's shape check accepts. So the swatch is
+  // looked up in a table of literals and never built from the stored slug.
+  const evil = '" onmouseover="alert(1)';
+  const catalogue = { ok: true, reason: null, products: [
+    { sku: 'SKUX', name: 'Probe', price: 1, currency: 'USD', availability: evil }] };
+  const h = renderHtml('/p/SKUX', catalogue);
+  for (const tag of h.match(/<span [^>]*>/g) || [])
+    assert.doesNotMatch(tag, /onmouseover/,
+      `a catalogue-derived value reached a raw attribute: ${tag}`);
+  assert.ok(h.includes('#374151'),
+    'an unrecognised availability should fall through to the neutral swatch');
+  // Still shown, escaped -- an availability we do not recognise is information.
+  assert.ok(h.includes('&quot; onmouseover=&quot;alert(1)'),
+    'the unrecognised slug was dropped rather than escaped');
+});
+
+test('badge escapes the text it is handed', () => {
+  const h = badge('<b>x</b>', 'red');
+  assert.ok(h.includes('&lt;b&gt;x&lt;/b&gt;'), 'badge did not escape its text');
+  assert.doesNotMatch(h, /<b>/, 'badge emitted live markup from its text');
 });
 
 test('money formats to two places and names the currency', () => {

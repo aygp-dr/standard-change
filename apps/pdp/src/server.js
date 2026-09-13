@@ -198,6 +198,36 @@ const AVAILABILITY = {
   'preorder': 'Available to pre-order',
 };
 
+// ---- badges -----------------------------------------------------------------
+//
+// Price and availability are the two facts a person scans a product page for,
+// and they were a bold run and a middot inside a paragraph of body copy. A
+// badge separates them from the prose.
+//
+// INLINE STYLE, and it stays in pdp. The stylesheet is page()'s, in
+// shared/oneui.js, whose own header states the cost: every app pins OneUI, so
+// a class added there is a change to core, plp, pdp and checkout at once. PR
+// #33 proposes exactly such a `.b` class and is NOT merged, so depending on it
+// would make this change undeployable on its own. One app's panel styles
+// itself; if #33 lands, this collapses into `class=b`.
+//
+// The COLOUR is looked up, never interpolated. page() puts `extra` into the
+// document raw, so a catalogue-invented availability reaching a style
+// attribute is that defect one attribute over: an unrecognised slug selects
+// NEUTRAL and appears only as escaped text.
+const SWATCH = {
+  'in-stock': '#166534;background:#dcfce7',
+  'low-stock': '#92400e;background:#fef3c7',
+  'out-of-stock': '#991b1b;background:#fee2e2',
+  'preorder': '#3730a3;background:#e0e7ff',
+};
+const NEUTRAL = '#374151;background:#e5e7eb';
+const PRICE = '#0c4a6e;background:#e0f2fe';
+const BADGE = 'display:inline-block;padding:2px 9px;border-radius:10px;' +
+  'font-size:13px;font-weight:600;margin-right:6px';
+export const badge = (text, swatch) =>
+  `<span style="${BADGE};color:${swatch}">${esc(text)}</span>`;
+
 // The product panel: the product, or the reason there is not one.
 //
 // A person who asks for a SKU we do not have must get a PAGE saying so -- not
@@ -219,7 +249,9 @@ This product has not gone away; try again shortly.</p>
 <p class=v>catalogue: ok — this product is not in it</p>`;
   const p = d.product;
   return `<h2>${esc(p.name)}</h2>
-<p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability)}</p>
+<p>${badge(money(p.price, p.currency), PRICE)}${
+  badge(AVAILABILITY[p.availability] || p.availability,
+        SWATCH[p.availability] || NEUTRAL)}</p>
 <p>SKU <code>${sku}</code></p>`;
 }
 
