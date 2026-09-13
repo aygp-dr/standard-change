@@ -169,6 +169,51 @@ only *sooner*.
 *Take this option if you can. The rest of this document is what to do when you
 cannot.*
 
+*** Problem — shared/ makes automatic promotion less safe, and we did it anyway
+
+Extracting =shared/= (OneUI, issue #10) and =external/= is *correct semantics*
+and a *worse fit for this decision*. Both are true and the ADR should say so.
+
+*What it costs.* Under automatic promotion, a change reaches production without
+a person moving it. The gates are what make that safe, and a shared library
+defeats them in a specific way:
+
+| before                              | after                                     |
+|-------------------------------------+-------------------------------------------|
+| a change touched one app            | a =shared/= change touches *every* app    |
+| blast radius was in the manifest    | the manifest still says =app:core=        |
+| =change:standard= was defensible    | it is a coordinated change wearing a standard label |
+
+*=apps/**= is no longer the deployable entity, and the classifier still thinks
+it is.* The =apps/**=-blocks rule was a coarse but honest approximation while
+the apps were self-contained; a shared library breaks the assumption it rests
+on. =shared/= is classified =artifact= now, so it blocks — but it blocks
+*equally*, with no signal that its blast radius is five times a single-app
+change.
+
+*It was nearly worse.* Before this refactor the classifier knew only =apps/=
+and =router/=, so a change to =shared/= would have classified *=inert=* — the
+highest-blast-radius change in the repo waved through as "nothing that can
+appear in a deployed artifact". Verified, not theorised.
+
+*Why do it anyway.* This repo exists to work out change control, not to be
+convenient to deploy. A model that only stays coherent while the apps are
+artificially independent has not been tested against the thing that actually
+breaks monorepos. *We can be wrong in the near term to be more correct later* —
+and the near-term wrongness is now visible and named rather than absent.
+
+*What it means for the options.* It sharpens A2 specifically. Splitting the
+deployable surface out of the monorepo does *not* remove this coupling: five
+repos each importing an unversioned OneUI from a sixth deploy together exactly
+as they do now. The work that pays is *versioning the shared artifact so a
+consumer can lag* — and that is a different task from moving files, which is
+the failure mode most likely to make A2 disappointing. See
+=docs/cross-cutting-coupling.org= and issue #10.
+
+*Open, not scheduled:* the classifier has no notion of blast radius, and
+=idp.py change risk= — which does — is not wired into the pipeline. PR #5
+carries five =app:*= labels and is labelled =change:standard= today.
+
 *** Consequence — the environment tiers (was ADR 0002)
 
 If promotion is automatic, then *which environments can be promoted into* is a
