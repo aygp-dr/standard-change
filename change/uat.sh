@@ -72,8 +72,19 @@ if [ "$SERVING" != "$SHORT" ]; then
 fi
 echo "  yes  staging is serving $SHORT"
 
-echo "  ..   walking the estate (gates/smoke.sh)"
-if ./gates/smoke.sh "$URL" >/tmp/uat.$$.log 2>&1; then
+# --pr, SO THE INSTRUMENT RECORDS ITSELF. The first version ran smoke without
+# it: the walk happened, acceptance was recorded on its result, and guard 4 then
+# refused for `staging:smoke  no observation recorded` -- the measurement that
+# authorized the acceptance left no trace that it had been taken. A gate is the
+# instrument (change/observe.sh); an instrument that does not record is a claim.
+echo "  ..   walking the estate (gates/e2e.sh --pr, then gates/smoke.sh --pr)"
+if ! ROUTER_URL="$URL" ./gates/e2e.sh --pr "$PR" >/tmp/uat.$$.e2e 2>&1; then
+  tail -3 /tmp/uat.$$.e2e | sed "s/^/       /"; rm -f /tmp/uat.$$.e2e
+  echo "  NO   e2e failed against staging; acceptance is not recorded." >&2
+  exit 1
+fi
+tail -1 /tmp/uat.$$.e2e | sed "s/^/       /"; rm -f /tmp/uat.$$.e2e
+if ./gates/smoke.sh --pr "$PR" "$URL" >/tmp/uat.$$.log 2>&1; then
   RC=0
 else
   RC=$?
