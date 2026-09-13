@@ -1,0 +1,70 @@
+#+TITLE: 004 — what completes a deployment, and does guard 5 know?
+#+DATE: 2026-09-13
+#+OPTIONS: toc:nil num:nil
+
+* Hypothesis
+
+#+begin_quote
+Guard 5 as first written asserts *liveness*, not *convergence*, so a fleet
+that is partway through a rolling deploy passes it at a rate equal to the
+fraction already migrated.
+#+end_quote
+
+* Success criterion
+
+A half-migrated fleet passes the old check about half the time, and the new
+check refuses it every time. Refuted if the old check reliably fails — that
+would mean sampling was sufficient.
+
+* Method
+
+Two instances of =apps/core= on the same port block, differing only in
+=BUILD_SHA= (=oldsha11=, =newsha22=), behind an =nginx= round-robin upstream.
+That is a fleet mid-rollout, exactly: one live service, two live builds.
+
+Needs no cloud. =nginx 1.30.4= became available on hydra on 2026-09-13.
+
+* Observed — 2026-09-13
+
+Round-robin confirmed alternating:
+
+: oldsha11 newsha22 oldsha11 newsha22 oldsha11 newsha22 oldsha11 newsha22
+
+| check                      | result on the half-migrated fleet         |
+|----------------------------+-------------------------------------------|
+| old, single sample, 12 runs | *PASSED 6/12*, failed 6/12                |
+| new, 8 samples             | =UNHEALTHY core: 4/8 samples not serving newsha22=, exit 7 |
+| new, after retiring old    | =ok core / (8/8 on newsha22)=, exit 0     |
+
+*The old check was a coin flip on an estate that was half unmigrated* — and
+re-running it does not help, because each run is an independent sample of the
+same mixed population. That is the worst kind of failure: it looks like flake,
+so the reflex is to retry until green, and retrying until green is exactly
+what manufactures a false pass here.
+
+* Two defects, both now fixed
+
+1. *Two requests per route.* The status code and the =x-build-sha= header came
+   from separate =curl= calls, so during a rollout one could hit an old replica
+   and the other a new one, and the pair would pass while the estate was mixed.
+   Both facts now come from one response via =curl -w '%{http_code} %header{...}'=.
+2. *One sample cannot distinguish converged from lucky.* Now N samples, all of
+   which must report the expected build, plus an explicit =UNCONVERGED= verdict
+   when more than one distinct build is seen.
+
+* What this says about completion
+
+Guard 5 now answers "has the estate converged on this build", which is a
+better question than "is something alive". It still does not answer *when* a
+deployment is complete, because N samples is evidence, not proof: it cannot
+see a replica that serves no traffic during the sampling window. See
+=spec.org= §What completes a deployment.
+
+* Promotion checklist
+
+- [X] Hypothesis stated before the run
+- [X] Old behaviour measured, not assumed (6/12)
+- [X] New behaviour observed on the same fleet
+- [X] Converged case observed to pass
+- [X] Processes cleaned up
+- [ ] Convergence checked against a real rolling target (Workers or Pages)
