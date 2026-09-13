@@ -150,3 +150,61 @@ round two by hand -- they are what makes it repeatable afterwards:
 - a liveness sweep : from every reachable state, is a merged-or-abandoned
   terminal state still reachable? This is the *whole* question -- not whether
   the guards refuse, but whether the estate can be put back.
+
+** The state with no name: in production, out of window, not merged
+
+Observed 2026-09-13 on #38, and it is R7 and R8 arriving together.
+
+A change deploys to staging inside its window, spends the window being
+measured, and the window closes while it is still mid-flight. If it had reached
+production first, the estate is now *serving a build that is not on =main=*, and
+the change request that authorized it has expired. Three facts, all true at
+once:
+
+- production serves the change
+- no open window covers it
+- =main= does not contain it
+
+Nothing in the pipeline can say that. =change:complete= is the only terminal
+state and it is set by =settle.sh=, which merges. There was no verb for "it is
+out there and we are not finishing".
+
+*** Why it is worse than it sounds
+
+The next change to come along reads =main= as the truth about production. It
+branches from a =main= that lacks the deployed change, passes every gate against
+that base, and promoting it *silently reverts* the earlier change -- not as a
+rollback anybody decided on, but as a side effect of the branch point. That is
+the =pipeline= divergence class in =change/divergence.sh=, except the diverging
+artifact is production itself.
+
+The blue/green front makes it quieter still: the idle colour holds the older
+build, so a rollback "works", and what it rolls back to is the state everyone's
+=main= agrees on. The estate heals itself into having lost the change.
+
+*** What we do about it now
+
+=change/abort.sh= gives the state a name and a closure code:
+
+- =change:failed= -- production never served it. Nothing to undo.
+- =change:backed-out= -- production served it and was returned. =--to <sha>= is
+  *required*, because the word asserts an estate action and a closure naming
+  none is the forged-evidence defect this repo keeps finding.
+
+Neither merges. Both clear the berth, redline the window, withdraw the
+deployment records and clear the observation labels, and both post the record
+*before* clearing -- the labels are working state, the comment is the record.
+
+=change/uat.sh= stops the state being reachable by accident: it re-reads the
+window before the smoke walk and again after it, so an acceptance that
+straddles the close is refused rather than recorded.
+
+*** Still not fixed
+
+=change/schedule.sh current= returns *exit 0 for an expired window*. It finds
+the PR's window and never compares the end to now, which is why =preflight=
+said NOT ON THE CALENDAR for #38 at 20:39 while =current= happily handed back a
+window that closed at 20:30. =activate.sh= uses =current=. Two readers of one
+calendar, disagreeing about the one thing a calendar is for. =uat.sh= works
+around it by reading the end itself; the divergence is the real defect and this
+is a second implementation, not a fix.
