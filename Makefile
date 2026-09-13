@@ -15,10 +15,10 @@ help:
 	@echo "gate              lint, test, e2e"
 
 # .env is generated and gitignored; .env.template is tracked.
+# Compose, do not clobber. change/env.sh preserves local overrides and reports
+# what changed; `cat template ports > .env` silently discarded them.
 .env: .env.template
-	@./change/ports.sh alloc >/dev/null
-	@cat .env.template .env.ports > .env
-	@echo "regenerated .env"
+	@./change/env.sh
 
 env: .env
 
@@ -70,6 +70,12 @@ audit-selftest:
 	@echo "pbt-pipeline: both directions confirmed"
 audit:           ; @./gates/audit-controls.py
 docs:            ; @./gates/docs-lint.py
+# Forge through batch emacs, so it works whether or not emacs is running.
+forge-list:      ; @emacs --batch -l standard-change.el -f standard-change-forge-list
+forge-pull:      ; @emacs --batch -l standard-change.el -f standard-change-forge-pull
+forge:           forge-pull forge-list
+forge-check:     ; @emacs --batch -l standard-change.el -f standard-change-forge-check
+
 pbt:             ; @./gates/pbt-pipeline.py --exhaustive
 pbt-random:      ; @./gates/pbt-pipeline.py
 simulate-gates:  ; @./gates/simulate-gates.py

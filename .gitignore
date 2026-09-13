@@ -13,3 +13,7 @@ router/routes.json
 __pycache__/
 targets/bastille/front/tmp/
 worktrees/
+sim/.hypothesis/
+*.pyc
+.env.*
+!.env.template

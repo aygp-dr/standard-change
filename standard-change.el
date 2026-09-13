@@ -154,5 +154,49 @@ worse view rather than to no view."
                                    "\n    labels: {{range .labels}}{{.name}} {{end}}"
                                    "\n\n{{end}}")))))
 
+
+;;;; Batch entry points -------------------------------------------------------
+;; So `gmake forge` works whether or not an interactive Emacs is running.
+;; forge-list-pullreqs is a tabulated-list command and needs a live frame, so
+;; batch mode reads the forge database directly instead.
+
+(defun standard-change--repo ()
+  (let ((default-directory standard-change-root))
+    (require 'forge)
+    (forge-get-repository :tracked?)))
+
+;;;###autoload
+(defun standard-change-forge-pull ()
+  "Refresh forge's local database from the forge. Safe in batch."
+  (interactive)
+  (let ((default-directory standard-change-root))
+    (require 'forge)
+    (let ((repo (or (standard-change--repo) (forge-get-repository :insert!))))
+      (forge--pull repo (lambda (_) (princ "  forge: pulled\n")))
+      (sleep-for 12))))
+
+;;;###autoload
+(defun standard-change-forge-list ()
+  "Print open pull requests from forge's database, with their labels."
+  (interactive)
+  (let ((default-directory standard-change-root))
+    (require 'forge)
+    (let* ((repo (standard-change--repo))
+           (db (and repo (expand-file-name "forge-database.sqlite" user-emacs-directory))))
+      (if (not (and db (file-exists-p db)))
+          (princ "  forge: no database -- run `gmake forge-pull` first\n")
+        ;; closql's accessors move between versions; the schema does not.
+        (let ((rows (emacsql (forge-db)
+                             [:select [number title state] :from pullreq
+                              :where (= repository $s1) :order-by [(asc number)]]
+                             (oref repo id))))
+          (if (null rows)
+              (princ "  forge: no pull requests in the database\n")
+            (dolist (r rows)
+              (princ (format "  #%-4s %-46s %s\n"
+                             (nth 0 r)
+                             (truncate-string-to-width (format "%s" (nth 1 r)) 46)
+                             (nth 2 r))))))))))
+
 (provide 'standard-change)
 ;;; standard-change.el ends here
