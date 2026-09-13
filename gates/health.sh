@@ -86,8 +86,18 @@ if [ -n "$PR" ]; then
   fi
   # "sampled", never "attested": we probed N times and saw one build. Nothing
   # enumerated the instances, because no platform runs this estate.
+  # THE RECORD, and it names the build. `production:healthy` says the estate
+  # converged and cannot say on what, so gates/production-first.sh had to trust
+  # that the labeller withdrew it on every push -- soundness resting on another
+  # workflow having fired (issue #16). This comment states the SHA that was
+  # sampled, so a guard can check it against the head it is about to merge.
+  [ "$rc" = 0 ] && verdict=pass || verdict=fail
+  "$(dirname "$0")/../change/evidence.sh" record "$PR" "$ENV_" healthy "$verdict" "$want" "$base" \
+    || { echo "  FAIL could not record the $ENV_:healthy observation for #$PR"; rc=7; }
+
   if [ "$rc" = 0 ]; then
-    gh pr edit "$PR" --repo "$repo" --add-label "$ENV_:healthy" >/dev/null 2>&1 || true
+    gh pr edit "$PR" --repo "$repo" --add-label "$ENV_:healthy" >/dev/null 2>&1 \
+      || echo "  WARNING could not set $ENV_:healthy on #$PR -- the record above still stands"
     echo "  #$PR <- $ENV_:healthy  (sampled $samples/$samples on $want at $base)"
   else
     gh pr edit "$PR" --repo "$repo" --remove-label "$ENV_:healthy" >/dev/null 2>&1 || true

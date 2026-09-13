@@ -6,7 +6,8 @@ APPS     := $(notdir $(wildcard apps/*))
 EXTERNAL := $(notdir $(wildcard external/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
-        audit audit-selftest docs pbt pbt-random simulate simulate-gates smoke \
+        audit audit-selftest observation-selftest docs pbt pbt-random simulate \
+        simulate-gates smoke \
         port-alloc port-free ports clean
 
 help:  ## show this list
@@ -62,7 +63,18 @@ gate: lint test ; @./gates/e2e.sh $(app) && ./gates/smoke.sh  ## lint, test, e2e
 smoke:  ## walk the estate as a browser would   url=<base>
 smoke: ; @./gates/smoke.sh $(url)
 gate-selftest: docs-selftest  ## prove every gate can fail, then that it passes  ## prove every gate can fail, then that it passes
-	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s audit-selftest
+	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s observation-selftest \
+	  && $(MAKE) -s audit-selftest
+
+# The two guards that authorize on observations, run against recorded PR state,
+# offline. Both directions: they must refuse a measurement taken on a different
+# build, and the suite must be SHOWN to detect that -- the same fixture is run
+# against the frozen pre-#16 guard, which has to authorize the stale one. A
+# suite that passes against the broken guard too has established nothing
+# (issue #16).
+observation-selftest:
+	@./gates/observation-test.sh
+	@./gates/observation-test.sh --selftest
 
 # The documents gate and its own negative test. A gate that cannot fail
 # verifies nothing, so the malformed fixture must be rejected.

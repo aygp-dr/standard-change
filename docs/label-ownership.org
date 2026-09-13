@@ -141,6 +141,57 @@ as authoritative:
 - a *human hold* outranks every automated pass. =hold:staging= is lifted only by
   a person.
 
+* Rule 5 — a label cannot carry a build, so a guard must not authorize on one
+
+Rules 1 to 4 settle *who* may write a label. They say nothing about *what a
+label can hold*, and that is where the next failure came from.
+
+On 2026-09-13, #11's head moved =9d85a33= → =baed821=. Twenty-five minutes
+later the pull request still carried =staging:e2e staging:smoke staging:uat=,
+recorded against =9d85a33=, and guard 4 read them as authorization for
+=baed821=. Nobody had measured what was about to ship (issue #16).
+
+The labels were written by their declared instruments, at a moment when each
+was true. Every rule above was obeyed. The defect is one level down: *a label
+names the measurement and cannot name the build*. =staging:e2e= says e2e
+passed; it cannot say on what.
+
+The pipeline covered that gap with a cleanup step — the labeller withdraws
+every observation on =synchronize=. That makes the guard sound only for as long
+as the cleanup keeps firing, and it fails *open* when it stops. It stopped.
+
+The repair is not a better cleanup. It is to split observations by a property
+of the measurement itself:
+
+| kind | example | can it be re-taken? | what authorizes |
+|------+---------+---------------------+-----------------|
+| repeatable | =staging:e2e=, =staging:smoke=, =production:healthy= | yes, by a machine | the observation *record* — a PR comment naming environment, instrument, verdict and SHA — whose SHA must equal the head being authorized |
+| not repeatable | =staging:uat= | no; a person used the site | the record *and* the label, because the label is the person's own signal and a person may withdraw it |
+
+A record does not go stale and so does not need withdrawing. It stays true
+about the build it names and simply stops matching a newer head. Nothing has to
+fire for that to hold, which is the whole difference:
+
+: durable label          "this PR has passed staging e2e"
+: point-in-time record   "the run at 16:06 observed e2e green on 9d85a33"
+
+The labels stay, and they stay useful — they are the *current-run* signal the
+deployment process sets as it goes and clears as it moves on, and they are what
+a person reads at a glance. What they are no longer is the thing a guard
+authorizes on. Written by =change/evidence.sh record=, read by
+=change/evidence.sh latest=, enforced in =change/guard4.sh= and
+=gates/production-first.sh=, and tested offline by =gates/observation-test.sh=,
+which is itself negative-tested against the frozen pre-#16 guard.
+
+Two things this does *not* fix, recorded so they are not mistaken for fixed:
+
+- nothing stops a person typing an observation marker into a comment by hand,
+  exactly as nothing stops a person adding the label by hand. =evidence.sh
+  latest= reports the comment author and no guard enforces it yet.
+- =change/settle.sh= still requires the =staging:*= labels rather than the
+  records, because it runs where the estate is visible and re-derives the part
+  that matters (what production is serving) directly.
+
 * What this costs, and why it is still right
 
 Rule 2 means the merge on this repository cannot be automated at all: the only
