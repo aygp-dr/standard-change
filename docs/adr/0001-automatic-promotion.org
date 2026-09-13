@@ -473,6 +473,53 @@ Do not choose B expecting throughput. B buys *predictability, legibility and a
 correct place for the guards*. It does not buy capacity, and this ADR would
 rather say so than be quoted later as a promise it never made.
 
+* Open — what happens when a change lands outside its window
+
+Left open deliberately on 2026-09-13, after PR #9 shipped to production outside
+any window and the pipeline had no answer for it.
+
+*What happened.* One window was booked, =CHG-20260913T1430-9.1=, 14:30–15:30Z,
+recorded against SHA =7cd3281=. It was closed =failed= at 15:13 when the
+bastille staging run failed. Everything after — the second staging deploy, the
+production-blue deploy, and the cutover at 15:32 — ran with *no open window at
+all*, against a different SHA, and *no production window was ever booked*:
+=CHANGE_ENV= defaults to =staging=, so nothing in the flow reserves production.
+
+*Why the guard did not fire.* Guard 3 exists in =change/activate.sh= and
+refuses exactly this. It was never reached, because the deployment was
+hand-driven step by step rather than run through activation. *The guard was
+present and bypassed by not being invoked* — which is a different failure from
+a missing guard and arguably a worse one, because the code reads as protected.
+
+*What is unresolved.* Four questions, none of which this repository answers:
+
+1. *Is landing outside the window a rollback condition?* The strict reading
+   says yes: production is running a change nobody authorized for that moment,
+   and the fact it is healthy is beside the point. The looser reading says the
+   change passed every substantive gate and the window is a scheduling
+   construct, so revert the schedule, not the software.
+2. *Does it block the merge?* Refusing to merge leaves production *ahead of
+   trunk*, which is the divergence =merge-on-healthy.yml= exists to prevent.
+   Refusing here may be strictly worse than the thing being objected to.
+3. *What is the escalation?* An unauthorized production change is, in ITIL
+   terms, an unauthorized change and normally triggers a review with a named
+   owner. There is no change authority modelled here and no route to one.
+4. *Can a window be extended rather than forfeited?* =change/state.sh= has
+   =extend= for the berth, with =revalidate=true=, and the schedule has no
+   equivalent. A run that overruns a 30-minute window by two minutes currently
+   has the same standing as one that ran a day late.
+
+*What was done instead, and why it is not an answer.* =change/settle.sh=
+detects the condition and records it as a *deviation* in the PIR. That follows
+the repo's own rule while the spec is at 0.x — record deviations rather than
+suppress them — and it is honest. But recording is not deciding: the change
+shipped, it merged, and the only consequence was a paragraph.
+
+*Trigger to close this.* The first time a change lands outside its window and
+somebody wants a different outcome than "note it and continue". The decision
+needs a change authority to sit with, and inventing one before there is a real
+case to judge would be modelling ceremony rather than control.
+
 * Follow-ups
 
 - *(done 2026-09-13)* the merge-time guard 4b re-check is now in

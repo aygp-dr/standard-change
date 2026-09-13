@@ -9,23 +9,28 @@
 // change here is a change to all of them.
 import { readFileSync } from 'node:fs';
 
-// 1.1.0: page() gained an optional `extra` slot and started escaping the
-// values it interpolates. Additive -- an app that passes three arguments
-// renders exactly what it rendered at 1.0.0 -- but per the note above this is
-// still a change to every app, and every app redeploys.
+// 1.1.0 -- page() gained an optional `extra` slot. A MINOR on top of the 1.0.1
+// security patch, not a replacement for it: 1.0.1 escaped what page()
+// interpolates and that escaping is inherited here unchanged. This release adds
+// to the surface, which is why it is not a patch.
 export const VERSION = '1.1.0';
 
-const SHARED_ROUTES = ['/about', '/contact', '/jobs'];
-const probe = (r) => r.replace(':sku', 'SKU1').replace(':category', 'shoes');
-
-// d.path is whatever the client put in the request line, and it was going
-// straight into the document -- GET /<script>alert(1)</script> came back as
-// markup on every app in the estate. Escape at the point of interpolation, not
-// at the point of parsing, so a new caller cannot forget.
+// d.path is whatever the client put in the request line, and it went straight
+// into the document: GET /<script>alert(1)</script> came back as live markup
+// from every app in the estate, in every environment, including the rollback
+// target. Found by an agent that was editing this file for an unrelated reason.
+//
+// Escape at the point of INTERPOLATION, not at the point where the value
+// enters the app. An app that sanitised its own inputs would still be one
+// forgetful caller away from this, and there are four callers. The renderer is
+// the only place that knows it is building HTML.
 export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+const SHARED_ROUTES = ['/about', '/contact', '/jobs'];
+const probe = (r) => r.replace(':sku', 'SKU1').replace(':category', 'shoes');
 
 export function loadEstate(routesJsonPath, fallback) {
   try {

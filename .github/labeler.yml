@@ -1,18 +1,76 @@
+# THE LABELLER OWNS TWO KINDS OF LABEL, and app:* is TRANSITIVE.
+#
+#   shared   a direct fact: this change touches the shared surface
+#   app:*    derived, from EITHER of two sources:
+#              (a) the app's own file glob          -- direct
+#              (b) the presence of `shared`         -- transitive
+#
+# Both are owned by the labeller and neither may be hand-edited; labeler:skip
+# hands both back to a human at once (change/label-owners.tsv).
+#
+# `shared` exists as its own label so the transitivity is VISIBLE. Inlining
+# shared/** into each app's glob produces the same four app:* labels and gives
+# a reader no way to tell a four-app change from a shared-surface change that
+# implies four apps -- and those need different review. The label says which.
+#
+# This is the fix for a manifest that used to lie: editing shared/oneui.js
+# produced a PR with NO app:* label at all, the highest-blast-radius change in
+# the repo declaring it touched nothing deployable.
+shared:
+  - changed-files:
+      - any-glob-to-any-file: shared/**
+
 app:core:
   - changed-files:
-      - any-glob-to-any-file: apps/core/**
+      - any-glob-to-any-file:
+          - apps/core/**
+          # shared/ is imported by every app, so a change there IS a change to
+          # every app -- the manifest must say so. Before this, editing
+          # shared/oneui.js produced a PR with no app:* label at all: the
+          # highest-blast-radius change in the repo, declaring that it touched
+          # nothing deployable. groups.sh then returned empty and the queue
+          # refused it for the wrong reason.
+          - shared/**
 app:plp:
   - changed-files:
-      - any-glob-to-any-file: apps/plp/**
+      - any-glob-to-any-file:
+          - apps/plp/**
+          # shared/ is imported by every app, so a change there IS a change to
+          # every app -- the manifest must say so. Before this, editing
+          # shared/oneui.js produced a PR with no app:* label at all: the
+          # highest-blast-radius change in the repo, declaring that it touched
+          # nothing deployable. groups.sh then returned empty and the queue
+          # refused it for the wrong reason.
+          - shared/**
 app:pdp:
   - changed-files:
-      - any-glob-to-any-file: apps/pdp/**
+      - any-glob-to-any-file:
+          - apps/pdp/**
+          # shared/ is imported by every app, so a change there IS a change to
+          # every app -- the manifest must say so. Before this, editing
+          # shared/oneui.js produced a PR with no app:* label at all: the
+          # highest-blast-radius change in the repo, declaring that it touched
+          # nothing deployable. groups.sh then returned empty and the queue
+          # refused it for the wrong reason.
+          - shared/**
 app:checkout:
   - changed-files:
-      - any-glob-to-any-file: apps/checkout/**
+      - any-glob-to-any-file:
+          - apps/checkout/**
+          # shared/ is imported by every app, so a change there IS a change to
+          # every app -- the manifest must say so. Before this, editing
+          # shared/oneui.js produced a PR with no app:* label at all: the
+          # highest-blast-radius change in the repo, declaring that it touched
+          # nothing deployable. groups.sh then returned empty and the queue
+          # refused it for the wrong reason.
+          - shared/**
+# mock lives under external/, not apps/ -- external services are stubbed, not
+# deployed by us. The glob still said apps/mock/** after the move, so this
+# label had been unreachable: dead config that reads as coverage.
+# It does NOT take shared/: mock is not ours to redeploy.
 app:mock:
   - changed-files:
-      - any-glob-to-any-file: apps/mock/**
+      - any-glob-to-any-file: external/mock/**
 change:normal:
   - changed-files:
       - any-glob-to-any-file:
