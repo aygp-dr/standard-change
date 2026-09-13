@@ -1,0 +1,254 @@
+#+TITLE: Interfaces — what the pipeline needs from an IDP, a calendar, and a forge
+#+PROPERTY: header-args :mkdirp t
+
+* Why this file
+
+Everything here runs on shell scripts, a git ref and GitHub labels. That is
+deliberate for a simulation, and it hides which parts are *essential* and which
+are *this implementation*. If any of it were replaced by a real IDP (Backstage,
+Cortex, an internal portal) or a real change calendar (ServiceNow, Jira Service
+Management, a Google Calendar), what would it actually have to provide?
+
+This file states the contracts. Each one names the *questions* a component must
+answer, the operations it must support, and — most importantly — the properties
+the answers must have, because those are what the guards depend on and they are
+not obvious from the operation names.
+
+*Nothing here is built beyond the shell implementations named at the end of each
+section.* This is an interface specification, not a plan.
+
+* The properties every interface must have
+
+These are cross-cutting and each one was a defect here first. An implementation
+that satisfies the operations and violates these is worse than no
+implementation, because the guards will trust it.
+
+** UNREACHABLE IS NOT FALSIFIED
+
+Every read must distinguish three answers, not two:
+
+| answer | meaning | what the caller does |
+|--------+----------------------------------+----------------------|
+| yes    | the fact holds                   | proceed              |
+| no     | the fact does not hold           | refuse               |
+| *unknown* | I could not determine it      | *refuse*, differently |
+
+An API that returns =404= for "no window" and =404= for "the calendar is down"
+cannot be used here. A timeout must not deserialise to =false=. This has fired
+six times in this repo — in check-run reads, in a scheduler path error, in a
+health probe, and once inside a guard.
+
+** A FACT NAMES THE BUILD IT IS ABOUT
+
+Every observation, approval and deployment record carries the commit SHA it was
+measured against. "Staging passed" is not a fact; "staging passed at =a013270="
+is. An interface that records verdicts without a build identifier cannot
+support guard 4b, and the pipeline will authorise a change on evidence about a
+different artifact.
+
+** THE ORACLE IS INDEPENDENT OF THE CALLER
+
+A read must report what the system observed, not what the caller asserted.
+=marker.sh= took =--observed-by= and =--samples= from its caller and rendered
+them as an observation; a health check that accepts "I saw 5/5 healthy" as
+input is a logging API, not an oracle. Where an interface takes a verdict as
+*input*, the record must say who supplied it.
+
+** READS ARE RE-READABLE AT THE MOMENT OF RELIANCE
+
+Anything checked at booking is stale when the window opens. The interface must
+support asking again cheaply — which means no "consume the answer" semantics,
+no one-shot tokens, and idempotent reads.
+
+** CLEARING IS NOT ASSERTING
+
+Adding a claim and withdrawing one are different acts with different
+authorities. A person asks for a change; automation may *answer* the ask but
+may not *invent* one. Any permission model needs both verbs, separately.
+
+* 1. The change calendar
+
+** The questions
+
+1. Is there an open window for change =X= on environment =E= covering *now*?
+2. What is booked on =E=, and when?
+3. Is a freeze in force over an interval?
+4. What happened to window =W=?
+
+** Operations
+
+#+begin_src text :eval no
+  block   <change> <groups> <minutes> [--at <instant>]  -> window-id | CLASH | PAST
+  current <change> <env>                                -> window-id | NONE
+  check   <window-id>                                   -> OK | FREEZE <reason>
+  close   <window-id> <code>                            -> ()
+  list    [--open]                                      -> [window]
+  freeze  <start> <end> <reason>                        -> ()
+#+end_src
+
+** Properties beyond the operations
+
+- *Booking is compare-and-swap.* Two agents booking the same slot must not both
+  succeed. A calendar is last-write-wins by default, and the thing being
+  double-booked is the path to production. This is the single strongest reason
+  the calendar here is a git ref rather than a real calendar: CAS first,
+  human-readable second.
+- *=current= must compare the END to now.* Returning a window whose time has
+  passed is the defect that authorised a change nine minutes after its window
+  shut.
+- *A designated slot does not win a clash.* Naming an hour is not an argument
+  about who holds the berth.
+- *Closure codes are a closed set and mean different things:*
+  =passed=, =failed= (attempted, did not complete), =cancelled= (decided
+  against), =expired= (lapsed unattempted), =held=. Collapsing =expired= into
+  =failed= loses the only signal that says the slots are too short.
+- *Windows must be reapable.* Something has to close a window nobody drove, or
+  a stale reservation keeps answering "yes, you have a window" and the queue
+  stacks behind a booking nobody is using.
+
+/Here: =change/schedule.sh= (CAS on =refs/idp/schedule=), =change/reap.sh=./
+
+* 2. The change record (the "RFC")
+
+** The questions
+
+1. What is this change's classification, and who set it?
+2. Where is it in its lifecycle?
+3. What evidence authorises it, and at which build?
+4. What happened, in a form that survives the labels being cleared?
+
+** Operations
+
+#+begin_src text :eval no
+  classify <change> <standard|normal|emergency> <actor>   -> ()
+  state    <change>                                       -> requested|scheduled|complete|failed|backed-out
+  evidence <change> <instrument> <verdict> <sha> <actor>  -> record-id
+  latest   <change> <instrument>                          -> record | NONE
+  close    <change> <code> <narrative>                    -> ()
+#+end_src
+
+** Properties beyond the operations
+
+- *Classification and lifecycle are different namespaces.* "What kind of change
+  is this" and "how far has it got" answer different questions and must not
+  share a field. Exactly one classification; at most one active lifecycle state.
+- *Evidence is append-only and names its instrument.* "Someone said it was
+  fine" is not evidence; "=gates/smoke.sh= observed =pass= on =a013270=" is.
+  The instrument matters because UAT's instrument is a person and everything
+  else's is a script, and a reader must be able to tell.
+- *The record outlives the working state.* Labels are cleared at settlement;
+  the narrative must not be. Write the record *before* clearing anything.
+- *Ownership is declared and enforced.* Every field has exactly one writer.
+  Two writers is how the same value flipped five times in twenty minutes.
+
+/Here: GitHub labels + =change/label-owners.tsv= + =change/evidence.sh=,
+audited by =gates/label-audit.py=./
+
+* 3. The environment registry
+
+** The questions
+
+1. What environments exist, and what is each one *for*?
+2. What is each one running *right now*?
+3. Which addresses are reserved even though nothing answers there?
+4. Can this environment promote?
+
+** Operations
+
+#+begin_src text :eval no
+  declare  <name> <tier> <address> <activated> <promotes>  -> ()
+  list                                                     -> [declaration]
+  observe  <name>                                          -> {up, build, unreachable}
+  claim    <name> <holder>                                 -> OK | HELD-BY <other>
+  release  <name> <holder>                                 -> ()
+#+end_src
+
+** Properties beyond the operations
+
+- *Declared and running are separate registries.* What is NAMED is a decision;
+  what is RUNNING is an observation. One is reviewed, the other is measured.
+  Merging them means a typo can look like an outage and an outage can look like
+  a config change.
+- *=observe= must probe, not read a manifest.* The deployer writes the manifest,
+  so a guard reading it is asking the change whether the change worked. Guard 5
+  passed on a SHA that did not exist for exactly this reason.
+- *=observe= distinguishes refused from timed out.* Nothing listening and
+  accepted-but-never-answered are different incidents; the second is the
+  dangerous one, and it is the one that reads as "down" if you collapse them.
+- *The berth is a lock on the PATH, not on a host.* =claim= is a mutex over
+  "may promote", which is why replicating staging would not change the
+  invariant.
+
+/Here: =environments.tsv= (declared) + =ports.tsv= (running) +
+=targets/node/= + the =deploy:staging= label as the berth./
+
+* 4. The gate runner
+
+** The questions
+
+1. Did the gates pass *on this exact build*?
+2. Did they *run*?
+3. Can this suite be shown to fail?
+
+** Operations
+
+#+begin_src text :eval no
+  run    <suite> <sha>          -> {verdict, ran, detail}
+  report <suite> <sha> <result> -> ()
+  status <sha>                  -> [{suite, verdict, ran, measured-by}]
+#+end_src
+
+** Properties beyond the operations
+
+- *=ran= is a separate field from =verdict=.* A job that never started and a
+  job that failed are not the same fact, and a forge that reports both as
+  =failure= is unusable without a second call. Cost here: half an hour chasing
+  a divergence that did not exist.
+- *The self-test gates the suite.* A suite that cannot be shown to reject its
+  own negative fixture produces *no verdict* that run — not a pass. This is the
+  repo's central rule and it must be part of the interface, not a convention:
+  =run= returns =unknown= when the self-test did not pass.
+- *A result names where it was measured.* A host run and a CI run are both
+  admissible and a reader must always be able to tell them apart. Prefixing is
+  enough; hiding it is not.
+
+/Here: =gmake gate=, =gates/report.sh= (posts =local/= commit statuses),
+=gates/observation-test.sh --selftest=./
+
+* 5. What a CLI needs regardless of backend
+
+The shell scripts here are the CLI. If they were rewritten against real
+services, these are the utilities that would have to exist first — every one of
+them is currently duplicated inline in several scripts, and every duplication
+has diverged at least once.
+
+| utility | why it is not optional |
+|---------+------------------------|
+| =tri(cmd)= — run, return yes/no/*unknown* | The single most repeated bug here. Without it, every call site re-invents the collapse of "could not check" into "no". |
+| =at(sha)= — bind a verdict to a build | Guard 4b is unimplementable without it, and every call site that forgets it authorises stale evidence. |
+| =indent(cmd)= — format output, *return the command's code* | =cmd \vert{} sed= makes =$?= sed's. This shipped an UNHEALTHY estate as =passed=. |
+| =cas(ref, expected, new)= | Any shared state two agents can write. |
+| =owner(label, verb)= — may this actor add/remove? | Needs both verbs. Clearing is not asserting. |
+| =probe(url)= — {up, build, refused, timeout} | Four outcomes, not two. |
+| =when(instant)= — render relative to now | A window's *remaining* time only means something once it has started. |
+
+* 6. What a real IDP would have to give up
+
+Worth stating because the pull is always the other way:
+
+- *No auto-reslotting.* A named hour is usually a person saying they will be
+  present. Moving the change moves it away from them.
+- *No priority queue.* Nothing here is urgent except an emergency, and an
+  emergency is exempt from the freeze and the queue rules — not from having a
+  window, because the window is what tells everyone else the path is occupied.
+- *No "deploy anyway" button.* Every bypass in this repo was removed rather than
+  gated, because a gated bypass is used.
+- *No verdict without an instrument.* A portal that lets a person tick "staging
+  looks fine" is recording an intention. UAT is the one place a human IS the
+  instrument, and even there the record says so.
+
+* Status
+
+Specification only. The shell implementations named above exist and run; none
+of the service interfaces do. =docs/idp-api.org= and =docs/idp-service.org=
+describe an earlier local SQLite service that is not on the promotion path.
