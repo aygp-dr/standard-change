@@ -7,7 +7,7 @@
 
 * Status
 
-- Version: 0.3 (establishing; deviations go to the review ledger issue, not to this file)
+- Version: 0.4 (establishing; deviations go to the review ledger, issue #1)
 - Working repo name: =standard-change= (ITIL 4: a pre-authorized, low-risk change verified by fixed gates). Alternatives considered: =change-schedule=, =change-window=, =slipway=, =gatehouse=.
 - This file is the single canonical document. =CLAUDE.md= and =README.org= are derived and restate only what an agent or reader needs to act.
 
@@ -22,6 +22,57 @@ structural (a definition or a decision), not an observation.
 | [P]   | provisional — working assumption, expected to be revisited     |
 | [H]   | hypothesis — believed, not yet observed; never a bare claim    |
 | [I]   | inferred — derived from other claims, not directly observed    |
+
+** Changelog
+
+*Declared deviation, recorded rather than tidied.* The version sat at 0.3 from
+the spec's first commit through fifteen commits of material change, including
+five changes to guard behaviour and three corrections to claims the spec had
+already published. It should have been bumped at each. 0.4 therefore
+accumulates what ought to have been several revisions, and the discipline in
+§Status was not followed until now.
+
+*** 0.4 — 2026-09-13
+
+Structural:
+- §Domain model — the entities and all six guards restated as platform-neutral
+  predicates, with GitHub label names demoted to an /encoding/ column, plus
+  capabilities C1–C6. This is the change that makes the rest portable.
+- §The balance — production is the objective; the queue and calendar are
+  instruments. Adds refutation condition 8.
+- §At scale, §Controls audit, §What completes a deployment.
+
+Guard behaviour (each driven by an observation, not an argument):
+- Guard 4b classifies divergence (=inert= / =pipeline= / =artifact= / =hotfix=)
+  instead of treating any trunk movement alike, and *never takes the berth for
+  someone else's merge*.
+- Guard 4b is evaluated at three points: trunk movement, deploy, and *merge*.
+  The merge check came from =sim/= at =berths=2=.
+- Guard 2 is evaluated on the emergency path too. It had lived only in
+  =promote.yml=, which the emergency path never reaches — the spec claimed a
+  property the workflows did not implement.
+- Guard 4 is re-checked at merge. Found by TLC once deploy and merge were
+  separate steps.
+- Guard 5 asserts *convergence*, not liveness: N samples, one request each,
+  cache-busted, with an explicit =UNCONVERGED= verdict.
+
+Corrections to published claims:
+- The Deployments API is *not* platform-attested; C6 is unmet on GitHub.
+- GitHub Pages *cannot* set custom response headers, so guard 5 needed a
+  =manifest= mode; the spec had required =x-build-sha= on a target that cannot
+  provide it.
+- =ports.tsv= is mutable state and is no longer a =:tangle= target.
+
+Not carried into this version, and still open: *A5, "deployment is undoable"* —
+an axiom none of the six guards encodes. Nothing in the model has a state
+dimension, so an expand/contract migration or a published library version
+falsifies the rollback assumption that guard 5's failure path relies on.
+
+*** 0.3 and earlier
+
+0.1 the project statement; 0.2 the promotion pipeline, owned labels and guards
+0–5; 0.3 guard 4b, after scenario D4. Recorded in git history and
+=experiments/001=; not reconstructed here.
 
 * Purpose
 
