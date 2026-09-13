@@ -4,7 +4,7 @@
 APPS := $(notdir $(wildcard apps/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
-        simulate port-alloc port-free ports clean
+        audit audit-selftest simulate port-alloc port-free ports clean
 
 help:
 	@echo "env / env-check   .env from .env.template (warns if stale)"
@@ -47,7 +47,14 @@ lint:  ; @./router/generate.sh >/dev/null && \
 	  ./gates/labeller-test.py
 
 gate: lint test ; @./gates/e2e.sh $(app)
-gate-selftest:   ; @./gates/labeller-test.py && ./tla/check.sh
+gate-selftest:   ; @./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s audit-selftest
+audit-selftest:
+	@./gates/audit-controls.py --repo o/r --fixture gates/fixtures/audit/pass >/dev/null \
+	  || { echo "audit rejects a compliant fixture"; exit 1; }
+	@./gates/audit-controls.py --repo o/r --fixture gates/fixtures/audit/fail >/dev/null \
+	  && { echo "audit passes a non-compliant fixture"; exit 1; } || true
+	@echo "audit-controls: both directions confirmed"
+audit:           ; @./gates/audit-controls.py
 simulate:        ; @./change/simulate.sh $(app)
 port-alloc:      ; @./change/ports.sh alloc
 port-free:       ; @./change/ports.sh free

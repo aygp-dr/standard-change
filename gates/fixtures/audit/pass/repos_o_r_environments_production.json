@@ -1,0 +1,2 @@
+{"name":"production","protection_rules":[{"type":"required_reviewers"},{"type":"wait_timer","wait_timer":0}],
+ "deployment_branch_policy":{"protected_branches":true,"custom_branch_policies":false}}

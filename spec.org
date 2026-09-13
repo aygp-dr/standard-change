@@ -835,7 +835,7 @@ Each checklist is a =.github/PULL_REQUEST_TEMPLATE= section and a =pir.sh= field
 APPS := $(notdir $(wildcard apps/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
-        simulate port-alloc port-free ports clean
+        audit audit-selftest simulate port-alloc port-free ports clean
 
 help:
 	@echo "env / env-check   .env from .env.template (warns if stale)"
@@ -878,7 +878,14 @@ lint:  ; @./router/generate.sh >/dev/null && \
 	  ./gates/labeller-test.py
 
 gate: lint test ; @./gates/e2e.sh $(app)
-gate-selftest:   ; @./gates/labeller-test.py && ./tla/check.sh
+gate-selftest:   ; @./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s audit-selftest
+audit-selftest:
+	@./gates/audit-controls.py --repo o/r --fixture gates/fixtures/audit/pass >/dev/null \
+	  || { echo "audit rejects a compliant fixture"; exit 1; }
+	@./gates/audit-controls.py --repo o/r --fixture gates/fixtures/audit/fail >/dev/null \
+	  && { echo "audit passes a non-compliant fixture"; exit 1; } || true
+	@echo "audit-controls: both directions confirmed"
+audit:           ; @./gates/audit-controls.py
 simulate:        ; @./change/simulate.sh $(app)
 port-alloc:      ; @./change/ports.sh alloc
 port-free:       ; @./change/ports.sh free
@@ -950,6 +957,89 @@ and the known obstacles, and is the thing the first gate run promotes.
   nothing that was not observed on a real target cell.
 - *The second e2e run authorizes production*, not the first. The in-runner run
   proves the build; the staging-slot run proves the deployment.
+
+* Controls audit
+
+Every control the spec claims is auditable as JSON, without a UI visit.
+=gates/audit-controls.py= is four reads: rulesets, the workflow files,
+environments, and repository variables.
+
+** Three outcomes, never two
+
+The audit distinguishes =ok= / =FINDING= / =ABSENT= / =UNAVAILABLE=, and the
+last is the one that matters. *An audit that reports "no findings" because it
+could not read anything is worse than no audit* — it launders an unknown as a
+pass, which is the failure mode §Verification contract exists to prevent.
+Unreadable controls exit 2, distinct from findings (1) and clean (0).
+
+** Ruleset rules to spec controls
+
+| Ruleset rule                   | Control it enforces                              | Audit check                                      |
+|--------------------------------+--------------------------------------------------+--------------------------------------------------|
+| Require a pull request         | every change is a PR with =app:*=; no direct push | =rules[].type == "pull_request"=; approvals >= 1  |
+| Require status checks          | the gates are the change authority                | contexts ⊇ {=gate-selftest=, =lint=, =test=, =e2e=} |
+| — its =strict= flag            | guard 0, *at merge only* — see below              | =strict_required_status_checks_policy == true=    |
+| Require deployments to succeed | staging before production                         | =required_deployment_environments= lists =staging= |
+| Require linear history         | one logical step per commit; single-parent rollback | =required_linear_history=                       |
+| Block force push / deletion    | the recorded production SHA stays reachable       | =non_fast_forward=, =deletion=                    |
+| Bypass list                    | who may skip the change authority                 | empty, or only the named emergency actor          |
+| Enforcement status             | rules exist but are not applied                   | =enforcement == "active"=; =evaluate= is a finding |
+| Target branches                | rules cover the production branch                 | =~DEFAULT_BRANCH= or =refs/heads/main=            |
+
+Out of scope, and ignored deliberately: code scanning, code quality, coverage
+thresholds, Copilot review. A project may enable them; this model makes no
+claim about them, and an audit that scored them would be scoring someone else's
+spec.
+
+** =strict= does not protect production [E]
+
+Their natural reading is that =strict_required_status_checks_policy= covers the
+"staging run is on the head SHA" checklist item. It does not, and the reason is
+specific to this pipeline: *production deploys before the merge.* In
+=deploy-production.yml= the health check runs at the deploy step and
+=change/release.sh= merges afterwards. So =strict= gates a merge that happens
+/after/ production has already taken the change.
+
+=strict= is therefore a backstop on =main='s history, not a guard on the
+estate. It is a partial, native implementation of *guard 0* — and only at merge
+time. *Guard 4b remains load-bearing and is not replaceable by any ruleset
+rule*, because the window it closes opens after every ruleset check has passed.
+
+** The per-group limitation dissolved at 0.3
+
+=required_deployments= is static per ruleset and cannot express "only the slot
+for the changed group". That was a real limitation against the 0.1 model's
+=staging-<group>-<n>= slots. At 0.3 staging is a *singleton* (§Labels), so
+=required_deployment_environments: ["staging"]= expresses the control exactly.
+The constraint that made the rule awkward was our own.
+
+** Not expressible as ruleset rules
+
+Three controls need their own reads, and the audit does them:
+
+- *deployment lock* — the issue or discussion body, plus =concurrency= groups
+  in the workflow files. The audit checks =cancel-in-progress: false= on
+  production: a cancelled production deploy leaves an indeterminate estate,
+  which is worse than a queue.
+- *freeze and emergency* — the change schedule, and the =EMERGENCY_CHANGE=
+  repository variable as the fallback when the calendar is unreachable.
+- *environment protection* — =environments/production= must carry a required
+  reviewer for =change:normal=, =wait_timer= 0, and a =deployment_branch_policy=
+  restricting which branches may deploy.
+
+** Availability is itself a finding [E, 2026-09-13]
+
+Against =aygp-dr/standard-change= the audit returns *eight unreadable
+controls*: both =repos/{r}/rulesets= and the classic
+=branches/main/protection= answer =403 Upgrade to GitHub Pro or make this
+repository public=. On a private repo on this plan *the entire ruleset table
+above is unenforceable*, not merely unconfigured.
+
+That is the most important thing the audit has said so far, and it is why the
+unreadable/absent distinction is not pedantry. Options, none yet taken: make
+the repo public (contradicts the default-private rule), take a paid plan, or
+accept that enforcement is advisory here and the workflow-level guards are the
+only real controls. Recorded in §Open items.
 
 * Refutation conditions
 
@@ -1024,6 +1114,10 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
   currently lives in a directory named =slipway=. Declared deviation, review
   ledger. Trigger to resolve: before the first commit that creates a GitHub
   remote.
+- *Ruleset enforcement is unavailable* on a private repo on the current plan
+  (403 on both the rulesets and branch-protection APIs) [E]. Until resolved,
+  every ruleset control is advisory and only the workflow-level guards are
+  real. Trigger: before anyone claims the pipeline is enforced.
 - *Change-schedule identity*: which Google account owns the calendar, its
   calendar id, and how =change/schedule.sh= authenticates in a runner. Blocks
   any real =preflight= exit-3 path. Trigger: first implementation of
