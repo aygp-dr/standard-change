@@ -74,8 +74,21 @@ export const BACKGROUND = '#e8f0ff';
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
 // it, and a tier derived from something the deployer exported would be the
 // estate reporting what it was told (issue #15).
+
+// A per-route panel, keyed by path with the query string stripped. The table
+// holds STATIC strings ONLY: page() interpolates its `extra` argument raw
+// (shared/oneui.js), so anything derived from a request must be escaped with
+// esc() by whoever puts it here. Routes absent from the table render nothing.
+export const PANELS = {
+};
+
+export function panel(path) {
+  return PANELS[path.split('?')[0]] || '';
+}
+
 export function renderHtml(path, port) {
-  return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND);
+  const d = render(path);
+  return page({ ...d, host: HOST, port }, ESTATE, BACKGROUND, panel(d.path));
 }
 
 // A DEDICATED HEALTH ROUTE, not a business route.
