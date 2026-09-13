@@ -132,4 +132,4 @@ if (isMain) createServer((req, res) => {
   console.log(`core listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });
 
-
+// noop 01 — a change with no behaviour, to walk the workflow.
