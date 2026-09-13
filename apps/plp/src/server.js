@@ -145,6 +145,10 @@ export const BACKGROUND = '#e6f7ee';
 // different things because they are different promises: "we do not have that"
 // versus "we cannot tell you right now".
 export function panel(d) {
+  // esc(): d.query is request text, not config. Issue #13's rule has no
+  // exceptions, and this is the shortest path from the wire to the document.
+  if (d.query !== undefined) return `<h2>Search</h2>
+<p>Results for <code>${esc(d.query)}</code></p>`;
   if (d.results === undefined) return '';   // not a category page
   const name = esc(d.category || '(none)');
   if (d.catalogue === 'unavailable')
