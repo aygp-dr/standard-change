@@ -41,6 +41,51 @@ const HOST = process.env.BIND || '0.0.0.0';
 // says what is RUNNING. Hardcoding the list here would make the dashboard a
 // second, silently-diverging map -- the defect this repo keeps finding.
 import { readFileSync, statSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+
+// SQLITE IS A MIRROR, NOT THE AUTHORITY.
+//
+// The schedule lives in the CAS-guarded git ref refs/idp/schedule and the
+// estate lives on the ports. This database is written FROM those, never read
+// back into a verdict -- docs/interfaces.org: "run is a cache with a timestamp,
+// never an authority".
+//
+// What it buys is the one thing the git ref and a live probe cannot: HISTORY.
+// A window that was open and is now closed vanishes from `list --open`, and a
+// build that was serving and is not vanishes the moment it is replaced. Every
+// finding today came from watching a board at the right second; a mirror means
+// the next one can be found by asking a question afterwards.
+//
+// No constraints, no indexes, no NOT NULL -- deliberately. This is a grind
+// artefact and a schema that refuses a row would lose the anomaly that made the
+// row interesting.
+const DB = new DatabaseSync(new URL('../.idp/dashboard.sqlite', import.meta.url).pathname);
+DB.exec(`
+  CREATE TABLE IF NOT EXISTS snapshot (at TEXT, live_colour TEXT, live_sha TEXT,
+                                       freeze INT, emergency INT, windows INT, envs INT);
+  CREATE TABLE IF NOT EXISTS env_seen  (at TEXT, name TEXT, port INT, up INT,
+                                        sha TEXT, app TEXT, colour TEXT, deployed_at TEXT);
+  CREATE TABLE IF NOT EXISTS window_seen (at TEXT, id TEXT, pr TEXT, env TEXT,
+                                          start TEXT, end TEXT, sha TEXT, groups TEXT,
+                                          cls TEXT, started INT, expired INT);
+`);
+function mirror(s) {
+  try {
+    DB.prepare('INSERT INTO snapshot VALUES (?,?,?,?,?,?,?)').run(
+      s.at, s.live_colour, s.live_sha,
+      s.flags.freeze ? 1 : 0, s.flags.emergency ? 1 : 0,
+      s.windows.length, s.envs.length);
+    const e = DB.prepare('INSERT INTO env_seen VALUES (?,?,?,?,?,?,?,?)');
+    for (const x of s.envs)
+      e.run(s.at, x.name, x.port, x.up ? 1 : 0, x.sha, x.app, x.colour,
+            x.deployed_at ? new Date(x.deployed_at).toISOString() : null);
+    const w = DB.prepare('INSERT INTO window_seen VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+    for (const x of s.windows)
+      w.run(s.at, x.id, String(x.pr), x.env, x.start, x.end, x.sha,
+            x.groups, Array.isArray(x.cls) ? x.cls.join(',') : null,
+            x.started ? 1 : 0, x.expired ? 1 : 0);
+  } catch { /* a mirror that fails must not break the view it mirrors */ }
+}
 const ENVS = readFileSync(new URL('../environments.tsv', import.meta.url), 'utf8')
   .split('\n')
   .filter((l) => l.trim() && !l.startsWith('#') && !l.startsWith('name\t'))
@@ -274,7 +319,7 @@ async function snapshot() {
     const e = envs.find((x) => x.name === w.env);
     w.in_env = !!(e && e.up && e.sha && w.sha && e.sha === w.sha);
   }
-  return {
+  const snap = {
     at: new Date().toISOString(),
     dashboard: { version: VERSION, build: BUILD },
     flags,
@@ -282,6 +327,8 @@ async function snapshot() {
     live_sha: front?.sha ?? null,
     envs, windows,
   };
+  mirror(snap);
+  return snap;
 }
 
 // ---- WebSocket (RFC 6455), server->client text frames only ----------------
