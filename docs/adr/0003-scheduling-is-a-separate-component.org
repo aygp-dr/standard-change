@@ -114,6 +114,52 @@ existed. =--short= overrides, loudly.
   deploying* — if =designated= could reach an environment where =queued= could
   not, =--at= would be a bypass wearing a calendar's clothes.
 
+* Explicit non-requirement: the forge does not know about the calendar
+
+*GitHub has no concept of a deploy window, and we are not going to give it one.*
+
+The change schedule can live anywhere a team already keeps one — a shared
+calendar, Jira, ServiceNow, a spreadsheet, a git ref (which is what it is here).
+A skill or a person books it. **Almost none of those are visible to GitHub**,
+and nothing in branch protection, required checks, environments or rulesets can
+express "only between 22:00 and 22:30".
+
+So the forge cannot enforce the window, and we accept that rather than working
+around it.
+
+** What this means in practice
+
+- =gates/preflight.sh= is the only thing that checks the window, and it is a
+  *checklist a person runs*, not a gate the forge applies. Issue #51 records
+  this with the trigger that would force a revisit.
+- Auto-merge, the merge button, =workflow_dispatch= and anything calling a
+  target directly all ignore the calendar completely. That is not a bug in
+  those paths; it is the boundary.
+- A change can therefore be merged, or deployed by a workflow, outside every
+  window, and the schedule will not know. The record will show it — the window
+  closes =expired= and the deployment record names a SHA no window covered — but
+  *after the fact*, which is audit, not prevention.
+
+** Why acknowledging beats bridging
+
+The tempting fix is a bot that mirrors the calendar into a required check, so
+the forge blocks a merge outside a window. We are not doing that:
+
+- It puts the *authority* for "may this proceed" in a mirror, and the mirror is
+  the thing most likely to be stale. A window that closed thirty seconds ago and
+  a mirror that has not caught up are indistinguishable to the forge, and the
+  answer it gives is the wrong one in the dangerous direction.
+- It creates a second reader of the calendar. This repo has hit that defect
+  twice already — guard 2 implemented in both =preflight= and =activate=, and
+  the calendar read by both =preflight= and =schedule.sh current=, which still
+  disagree about whether an expired window is open.
+- It makes the forge's verdict a *cache* of a fact it cannot re-derive, which is
+  precisely the shape every guard here is built to avoid.
+
+An honest gap that everyone knows about is safer than a bridge that is right
+most of the time. The calendar is the authority; the forge stores state and runs
+tests, and it is not asked to adjudicate time.
+
 * Rejected
 
 - *Priority or preemption.* Nothing here is urgent except an emergency, and an
