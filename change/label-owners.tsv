@@ -89,3 +89,5 @@ exclusive	staging-verdict	staging:e2e staging:e2e-failed	<=1	the instrument that
 exclusive	staging-smoke	staging:smoke staging:smoke-failed	<=1	same
 exclusive	production-verdict	production:e2e production:e2e-failed	<=1	same
 exclusive	production-smoke	production:smoke production:smoke-failed	<=1	same
+change:failed	change/abort.sh	yes	no	no	TERMINAL. ITIL closure code: the change did not complete. Production never served it, or never had it made live. Nothing to undo
+change:backed-out	change/abort.sh	yes	no	no	TERMINAL. ITIL closure code: production DID serve this change and was returned to a prior state. abort.sh refuses this without --to <sha>, because the word asserts an estate action
