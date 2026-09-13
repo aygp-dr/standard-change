@@ -57,12 +57,31 @@ write_sched() {  # write_sched <expected-sha> <body>
 # it is a reservation-shaped object that expires mid-deploy. A change starting
 # now and running thirty minutes occupies two calendar slots; that is what a
 # calendar would show a person, so it is what this records.
-slot() {  # slot <minutes>
-  python3 - "$QUANTUM" "$1" <<'SLOT'
+# THE QUEUE. slot() used to answer only "the slot containing now", so a booking
+# either got the berth immediately or was refused -- there was no way to say
+# "after the one in front of me". Stacking ten approved changes meant waiting at
+# a terminal for each window to close.
+#
+# `after` is the earliest start to consider. With it, this returns the first
+# aligned slot at or after that time, so the caller can walk the reservations it
+# already knows about and place itself behind the last one. The clash check in
+# `block` is unchanged and still authoritative: this proposes, that disposes.
+slot() {  # slot <minutes> [after-iso]
+  python3 - "$QUANTUM" "$1" "${2:-}" <<'SLOT'
 import datetime, math, sys
 q, mins = int(sys.argv[1]), int(sys.argv[2])
+after = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else ''
 now = datetime.datetime.now(datetime.timezone.utc).replace(second=0, microsecond=0)
+if after:
+    t = datetime.datetime.strptime(after, '%Y-%m-%dT%H:%M:%SZ').replace(
+        tzinfo=datetime.timezone.utc)
+    # Never propose a slot in the past: a reservation that has already expired
+    # is not a booking, and handing one back would look like success.
+    now = max(now, t)
 start = now.replace(minute=(now.minute // q) * q)
+if start < now:
+    start += datetime.timedelta(minutes=q)
+    now = start
 elapsed = (now - start).total_seconds() / 60
 slots = math.ceil((elapsed + mins) / q)          # >= mins remaining, on a boundary
 print(start.strftime('%Y-%m-%dT%H:%M:%SZ'))
@@ -77,8 +96,19 @@ case "${1:-}" in
     groups="${3:-}"; mins="${4:-$QUANTUM}"
     [ -n "$groups" ] || { echo "refused: no groups — nothing to deploy" >&2; exit 2; }
 
+    # Walk to the back of the queue. Ask for a slot after the latest END among
+    # the OPEN reservations on this environment -- an unresolved window is one
+    # somebody is still entitled to, whether or not its clock has run out.
+    # Without `--now` this never refuses for a clash; it places itself behind
+    # whatever is already booked.
+    st0=$(read_sched); cur0=$(echo "$st0" | jq -r .body)
+    after=''
+    if [ "${QUEUE:-1}" = 1 ]; then
+      after=$(echo "$cur0" | jq -r --arg env "${CHANGE_ENV:-staging}" \
+        '[.windows[]|select(.env==$env and .result==null)|.end]|max // empty')
+    fi
     # shellcheck disable=SC2046  # the split IS the point: slot() prints two fields
-    set -- $(slot "$mins"); start="$1"; end="$2"
+    set -- $(slot "$mins" "$after"); start="$1"; end="$2"
     env="${CHANGE_ENV:-staging}"
     sha=$(gh pr view "$pr" --repo "$repo" --json headRefOid -q '.headRefOid' | cut -c1-7)
     url=$(gh pr view "$pr" --repo "$repo" --json url -q '.url')
