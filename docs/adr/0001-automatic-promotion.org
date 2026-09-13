@@ -656,6 +656,22 @@ scarce thing is the reviewer, and pinning review to one address makes the
 scarcity visible: *you cannot look at two builds at once, so there is exactly
 one slot, so it needs a lease.*
 
+*Scoped correctly, on the same day.* The singleton is *per reviewer*, not
+global. A real organisation has many people with many PRs in flight, and how
+they divide that among themselves is theirs to decide — the pipeline is
+simulating a workflow, not optimising one person's afternoon. So the claim
+above is narrower than it first reads:
+
+- *wrong*: "parallel work is pointless because acceptance serializes"
+- *right*: "acceptance serializes *per reviewer*, and a reviewer holding a
+  review slot is holding a resource nothing currently records"
+
+What generalises is the *lease*, not the count. Ten reviewers means ten slots,
+and every one of them still has the property that deploying over somebody's
+build while they are looking at it is invisible to both parties. That is worth
+a lease at any scale; it just stops being a throughput argument and becomes a
+correctness one.
+
 Not built. The cheap version is =change/state.sh= with a second key, and the
 refusal message writes itself: "#N holds the review slot until 16:40Z; deploying
 yours would replace a build someone is currently looking at."
