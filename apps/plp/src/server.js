@@ -9,7 +9,7 @@ const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
 // OneUI is the shared UI surface (issue #10). Every app pins it, so a change
 // there is a change to all of them -- the cost is named in
 // docs/cross-cutting-coupling.org, not hidden.
-import { page, loadEstate, esc, VERSION as ONEUI } from '../../../shared/oneui.js';
+import { page, loadEstate, esc, HOST, VERSION as ONEUI } from '../../../shared/oneui.js';
 const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
@@ -157,9 +157,13 @@ Nothing is wrong with this category; try again shortly.</p>
 <div class=g>${d.results.map((s) => `<a href="/p/${encodeURIComponent(s)}">${esc(s)}</a>`).join(' ')}</div>`;
 }
 
-export function renderHtml(path, catalogue = loadCatalogue()) {
+// `port` is the port this process is ACTUALLY answering on: the caller takes it
+// off the accepted socket, not from PORT. shared/oneui.js derives the tier from
+// it, and a tier derived from something the deployer exported would be the
+// estate reporting what it was told (issue #15).
+export function renderHtml(path, catalogue = loadCatalogue(), port) {
   const d = render(path, catalogue);
-  return page(d, ESTATE, BACKGROUND, panel(d));
+  return page({ ...d, host: HOST, port }, ESTATE, BACKGROUND, panel(d));
 }
 
 // Only listen when run directly. Importing this module (as the unit tests do)
@@ -173,7 +177,7 @@ if (isMain) createServer((req, res) => {
   // status line and the body cannot describe two different reads of the file.
   const catalogue = loadCatalogue();
   const d = render(req.url, catalogue);
-  const body = wantsHtml ? renderHtml(req.url, catalogue)
+  const body = wantsHtml ? renderHtml(req.url, catalogue, req.socket.localPort)
                          : JSON.stringify(d, null, 2);
   res.writeHead(status(d), {
     'content-type': wantsHtml ? 'text/html; charset=utf-8' : 'application/json',
