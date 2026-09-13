@@ -68,6 +68,12 @@ Verified [E] on 2026-09-12 with GNU Emacs 30.2: all 6 blocks tangle and nested d
 - Run `gate-selftest` before trusting any gate result. A gate that fails to reject its `fixtures/<gate>/fail/` input produces no verdict that run — its PASS is void.
 - Mark any claim you have not observed as `[H]`, and any cell you have not watched pass as unsupported.
 - Call `preflight.sh` before every staging and production deployment. Exit codes: 0 proceed, 2 lock, 3 freeze, 4 calendar unreachable — **4 blocks**, it does not proceed.
+- Take a gate's expectations from the build under test, never from the tree the
+  gate runs in. The estate publishes its own route table at `/__estate.json`;
+  `gates/oracle.sh` resolves it and exits **4 — no verdict, no label** when it
+  cannot. `ORACLE_MODE=tree` restores the old behaviour for inspection and
+  records nothing. See `spec.org` §The oracle and issue #14: the same gate,
+  the same estate, 24 checks from one directory and 27 from another.
 - Put `schedule.sh close` and `lock.sh release` in `always()` steps.
 - Record deviations in the commit message *and* the review ledger issue while the spec is at 0.x.
 

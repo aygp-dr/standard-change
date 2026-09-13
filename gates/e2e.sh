@@ -4,9 +4,15 @@
 # ROUTER_URL is the router under test: a worktree block locally, a staging slot
 # in CI. Same contract either way, which is the point of the port-block model.
 #
+# THE ORACLE COMES FROM THE BUILD, NOT FROM THIS TREE. The expectations below
+# are read from whatever the estate at ROUTER_URL publishes at /__estate.json,
+# resolved by gates/oracle.sh; if it cannot establish one it refuses and this
+# run records nothing. See that file for what went wrong without it (#14).
+#
 # Asserts three things a per-app unit test cannot:
 #   1. ROUTE OWNERSHIP -- each path is served by the app that declares it in
-#      routes.json. A router that sends /search to core returns 200 and is wrong.
+#      the route table THE BUILD PUBLISHES. A router that sends /search to core
+#      returns 200 and is wrong.
 #      One app may declare `fallthrough`: it is the default location, and an
 #      unclaimed path reaches it rather than 404ing at the router. Ownership is
 #      still asserted -- the 404 must carry that app's name.
@@ -32,6 +38,25 @@ base="${ROUTER_URL:-http://127.0.0.1:10000}"
 cd "$(dirname "$0")/.."
 rc=0; pass=0
 
+# Establish the oracle BEFORE measuring anything. A refusal here is exit 4 and
+# no label: this run has not observed the estate, it has declined to guess.
+ORACLE_LIB=1
+ORACLE_ROOT="$PWD"
+. ./gates/oracle.sh
+oracle_resolve "$base" || exit $?
+ROUTES="$ORACLE"
+trap 'rm -f "$ROUTES"' EXIT INT TERM
+echo "  oracle: $ORACLE_FROM -- $ORACLE_WHY"
+# Not a finding; a fact the operator needs. When the estate and this tree
+# disagree about who owns what, say so out loud -- that difference is what
+# silently decided the verdict before #14.
+delta=$(oracle_tree_delta "$ROUTES")
+if [ "$(printf '%s' "$delta" | jq -r '(.estate_only|length) + (.tree_only|length)')" != 0 ]; then
+  printf '%s' "$delta" | jq -r '
+    (.estate_only[]? | "  note: the build owns \(.), which this tree does not declare"),
+    (.tree_only[]?   | "  note: this tree declares \(.), which the build does not own -- NOT asserted")'
+fi
+
 say()  { printf '  %-26s %s\n' "$1" "$2"; }
 fail() { echo "FAIL $*"; rc=1; }
 
@@ -43,8 +68,8 @@ routedto() { curl -sI --max-time 5 "$base$1" | tr -d '\r' | awk 'tolower($1)=="x
 ctype()    { curl -sI --max-time 5 "$base$1" | tr -d '\r' | awk 'tolower($1)=="content-type:"{print $2}'; }
 
 # 1. route ownership, straight from routes.json -- the source of truth
-for app in $(jq -r '.[].app' router/routes.json); do
-  for route in $(jq -r --arg a "$app" '.[]|select(.app==$a)|.routes[]' router/routes.json); do
+for app in $(jq -r '.[].app' "$ROUTES"); do
+  for route in $(jq -r --arg a "$app" '.[]|select(.app==$a)|.routes[]' "$ROUTES"); do
     # A parameterised route has no universally valid instance. This gate used
     # to synthesize one by substitution (/c/:category -> /c/PROBE), which
     # assumed every value of every parameter exists -- true while the apps
@@ -58,7 +83,7 @@ for app in $(jq -r '.[].app' router/routes.json); do
     # ownership check at some easier path. Substitution stays the default for
     # routes whose parameters are still free (pdp's /p/:sku).
     path=$(jq -r --arg a "$app" --arg r "$route" \
-             '.[]|select(.app==$a)|.probes[$r] // empty' router/routes.json)
+             '.[]|select(.app==$a)|.probes[$r] // empty' "$ROUTES")
     [ -n "$path" ] || path=$(printf '%s' "$route" | sed 's#:[a-zA-Z_]*#PROBE#g')
     got=$(owner "$path"); c=$(code "$path")
     if [ "$c" = "200" ] && [ "$got" = "$app" ]; then
@@ -79,7 +104,7 @@ done
 # what decides a path does not exist. Asserting only the status code would
 # pass even if the router had quietly gone back to answering 404 itself, which
 # is a different estate: it would mean core is NOT on the default path.
-fbapp=$(jq -r '.[]|select(.fallthrough)|.app' router/routes.json)
+fbapp=$(jq -r '.[]|select(.fallthrough)|.app' "$ROUTES")
 c=$(code /definitely-not-a-route)
 who=$(routedto /definitely-not-a-route)
 [ "$c" = "404" ] && [ "$who" = "$fbapp" ] \
@@ -152,12 +177,23 @@ cart=$(get /cart    | jq -r '.app' 2>/dev/null)
   && { say "journey add-to-cart" "pdp -> core"; pass=$((pass+1)); } \
   || fail "add-to-cart journey: pdp=$sku cart=$cart"
 
-# 4. one estate: every app behind this router on the same build
-shas=$(for app in $(jq -r '.[].app' router/routes.json); do
-         r=$(jq -r --arg a "$app" '.[]|select(.app==$a)|.health' router/routes.json)
+# 4. one estate: every app behind this router on the same build -- and the
+# ROUTER on that build too. The router is now a reporter like any other: it
+# publishes the route table this gate trusts, so a router deployed from a
+# different build than the apps it fronts is an estate whose oracle describes
+# something other than what is answering. That is the shape of "a build that
+# lies about its own routes", and it belongs in the coherence check rather
+# than in a special case of its own.
+seen=$(for app in $(jq -r '.[].app' "$ROUTES"); do
+         r=$(jq -r --arg a "$app" '.[]|select(.app==$a)|.health' "$ROUTES")
          buildsha "$r"
-       done | sort -u | grep -c . || true)
-[ "$shas" = "1" ] && { say "one estate" "all apps on one build"; pass=$((pass+1)); } \
+       done)
+if [ "$ORACLE_FROM" = estate ]; then
+  seen="$seen
+$ORACLE_SHA"
+fi
+shas=$(printf '%s\n' "$seen" | sort -u | grep -c . || true)
+[ "$shas" = "1" ] && { say "one estate" "apps and router on one build"; pass=$((pass+1)); } \
                   || fail "router fronts $shas distinct builds; the block is not coherent"
 
 echo "  $pass checks passed"
@@ -165,6 +201,17 @@ echo "  $pass checks passed"
 # Record it. Named for WHAT was measured -- contracts on this estate at this
 # build -- because `staging:passed` could not say, and that ambiguity was used
 # once to satisfy guard 4 with a measurement from a different estate.
+#
+# A forced oracle records NOTHING. staging:e2e says "the contracts hold on this
+# estate"; on ORACLE_MODE=tree it would mean "the contracts I happened to have
+# a copy of hold", and #14 is the record of how far apart those two are. You
+# may look without an oracle from the build. You may not convict.
+if [ -n "$PR" ] && [ "$ORACLE_FROM" = tree-forced ]; then
+  echo "  #$PR <- nothing: the oracle was supplied by the caller (ORACLE_MODE=tree)."
+  echo "     This run is a look, not a verdict. Re-run against a build that"
+  echo "     publishes $ORACLE_MANIFEST_PATH to record one."
+  PR=''
+fi
 if [ -n "$PR" ]; then
   repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
   sha=$(curl -sI --max-time 5 "$base/" | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}')
@@ -185,6 +232,8 @@ if [ -n "$PR" ]; then
   else                   add="$ENV_:e2e-failed"; rm_="$ENV_:e2e"; fi
   gh pr edit "$PR" --repo "$repo" --add-label "$add" --remove-label "$rm_" >/dev/null 2>&1 \
     || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 || true
-  echo "  #$PR <- $add  (observed on $base at build ${sha:-unknown})"
+  # Name the ORACLE in the record. staging:e2e named the environment and the
+  # build and left out the one variable that decided the verdict (#14).
+  echo "  #$PR <- $add  (observed on $base at build ${sha:-unknown}, oracle: $ORACLE_FROM@${ORACLE_SHA})"
 fi
 exit $rc
