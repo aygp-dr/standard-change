@@ -1861,10 +1861,10 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
 - Slot count per group (initial: 2 per group; trigger to raise: two consecutive =blocked:lock= on staging for the same group).
 - Whether =change:normal= also requires a CAB-style label from a second reviewer (trigger: first incident caused by a router change).
 - Calendar as the freeze source vs repo variable only (trigger: first preflight exit 4 in a real run).
-- *Directory name vs spec name*: this spec names the repo =standard-change=; it
-  currently lives in a directory named =slipway=. Declared deviation, review
-  ledger. Trigger to resolve: before the first commit that creates a GitHub
-  remote.
+- *(closed)* Directory name vs repo name. =slipway= and =standard-change= are
+  the same project under two names, and both checkouts point at the same
+  remote. Not a deviation — the working-copy path is immaterial to everything
+  the spec governs, which is the point §Domain model makes about encodings.
 - *Guard 2 was unimplemented on the emergency path* — *fixed*. The check-run
   query lived only in =promote.yml=, which is gated on =staging:passed=, so an
   emergency reaching production never evaluated it. Found by auditing the
