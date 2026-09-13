@@ -30,7 +30,11 @@ const ENVS = readFileSync(new URL('../environments.tsv', import.meta.url), 'utf8
   .map(([name, tier, block, base_port, activated, promotes, note]) => ({
     name, tier, block: Number(block), port: Number(base_port),
     activated, promotes, note,
-  }));
+  }))
+  // Highest port first, so the front -- the only address a customer reaches --
+  // is the first row, then the two replicas behind it, then staging, then the
+  // reservations and the dev blocks. Reading order matches blast radius.
+  .sort((a, b) => b.port - a.port);
 
 async function probe(env) {
   // A reservation is not expected to answer. Probing it and printing `dark`
@@ -323,18 +327,15 @@ letter-spacing:.04em;max-width:74rem}
 .unkn{background:#2a2520;color:#fbbf24;border:2px dashed #7c5f1f}
 </style>
 <h1>IDP release dashboard</h1>
-<p class=s><span id=ws>connecting…</span> · <a href="/api/status" style="color:#60a5fa">/api/status</a>
-· every environment row is an HTTP request to that port, nothing read from a manifest</p>
+<p class=s><span id=ws>connecting…</span> · <a href="/api/status" style="color:#60a5fa">/api/status</a></p>
 
 <div id=alarm></div>
 <div class=bar id=flags></div>
 
 <h2>booked windows</h2>
-<p class=s>the change schedule — this and the estate below are what an audit compares</p>
 <table><thead><tr><th>change</th><th>groups</th><th>build</th><th>closes</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
 
 <h2>environments</h2>
-<p class=s>declared in <code>environments.tsv</code>; state is probed live</p>
 <table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>promotes</th></tr></thead><tbody id=e></tbody></table>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));

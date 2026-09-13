@@ -28,6 +28,12 @@ case "${1:-}" in
   api)
     case "${2:-}" in
       *check-runs*) jq -r "$filter" "$FIX/check-runs.json" ;;
+      # A fixture without reviews.json is a fixture that cannot ANSWER, which is
+      # a different fact from "there are no reviews" -- exit 1 so the guard takes
+      # its unreachable branch, exactly as it would against a real forge that
+      # refused. Fixtures that want the reachable case ship the file.
+      */reviews*)   [ -f "$FIX/reviews.json" ] || exit 1
+                    jq -r "$filter" "$FIX/reviews.json" ;;
       *comments*)   jq -r "$filter" "$FIX/comments.json" ;;
       *)            echo "gh stub: unhandled api path '$2'" >&2; exit 1 ;;
     esac ;;

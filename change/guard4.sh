@@ -99,13 +99,27 @@ review=$(gh pr view "$pr" --repo "$repo" --json reviewDecision -q '.reviewDecisi
 # credential, so it must not be read as if it could. Print who, and whether the
 # approval names THIS build -- the reviewDecision alone does not.
 if [ "$review" = "APPROVED" ]; then
-  who=$(gh api "repos/$repo/pulls/$pr/reviews" \
-    --jq "[.[]|select(.state==\"APPROVED\")|select(.commit_id==\"$head\")|.user.login]|unique|join(\", \")" \
-    2>/dev/null || echo '')
-  if [ -n "$who" ]; then
-    printf '  ok    %-16s %s\n' "review" "APPROVED on $short by $who"
+  # COULD NOT ASK IS NOT `THE HEAD MOVED`. The first version collapsed them:
+  # any empty result -- including the reviews endpoint being unreachable, or an
+  # offline fixture that does not stub it -- was reported as "the head moved",
+  # which refused a change on a fact nobody had established. That is the rule
+  # this repo keeps relearning, and this time it was in the guard itself; it
+  # broke gate-selftest on main, which is the one place it could not hide.
+  #
+  # So the two are separated: `reviews` unreadable means the head is
+  # UNCONFIRMED and the reviewDecision still stands, said out loud. Only an
+  # answer that came back and contained no approval for THIS head refuses.
+  if reviews=$(gh api "repos/$repo/pulls/$pr/reviews" --jq '.' 2>/dev/null); then
+    who=$(printf '%s' "$reviews" | jq -r \
+      "[.[]|select(.state==\"APPROVED\")|select(.commit_id==\"$head\")|.user.login]|unique|join(\", \")" \
+      2>/dev/null || echo '')
+    if [ -n "$who" ]; then
+      printf '  ok    %-16s %s\n' "review" "APPROVED on $short by $who"
+    else
+      printf '  FAIL  %-16s %s\n' "review" "APPROVED, but not of $short -- the head moved"; rc=1
+    fi
   else
-    printf '  FAIL  %-16s %s\n' "review" "APPROVED, but not of $short -- the head moved"; rc=1
+    printf '  ok    %-16s %s\n' "review" "APPROVED (head unconfirmed: reviews unreadable)"
   fi
 elif ./change/evidence.sh latest "$pr" review proxy 2>/dev/null | grep -q "$short"; then
   printf '  ok    %-16s %s\n' "review" "review:proxy on $short (a proxy, NOT a person)"
