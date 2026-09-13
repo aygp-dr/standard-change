@@ -153,8 +153,10 @@ rather say so than be quoted later as a promise it never made.
 
 * Follow-ups
 
-- The merge-time guard 4b re-check must reach the real workflows; it currently
-  exists only in =sim/=.
+- *(done 2026-09-13)* the merge-time guard 4b re-check is now in
+  =change/release.sh=: a non-emergency change whose base is =BEHIND= with an
+  =artifact= or =hotfix= divergence has its merge refused (exit 8), its staging
+  pass withdrawn, and its berth *held* while it rebases.
 - Forfeiture needs DX: a forfeited slot must say what moved, what it cost, and
   how to recover — the operator-message standard in §Guard 4b.
 - Revisit if the surface is split; most of this decision expires with it.

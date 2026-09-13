@@ -482,7 +482,7 @@ only thing that can state it is =change:emergency=.
 | 2 | Gates green on head SHA  | =promote.yml=          | refuse to promote                   | *no*             |
 | 3 | No lock, no freeze       | =gates/preflight.sh=   | =blocked:lock= / =blocked:freeze=   | freeze only      |
 | 4 | =staging:passed@head SHA= | =deploy-production.yml= | refuse to deploy                   | yes, with approval |
-| 4b | Head still contains main's tip | =main-moved.yml=, =deploy-production.yml= | withdraw pass, free queue | yes |
+| 4b | Head still contains main's tip | =main-moved.yml=, =deploy-production.yml=, =release.sh= | withdraw pass; hold the berth | yes |
 | 5 | Production health check  | =gates/health.sh=      | roll back, PIR, release             | *no*             |
 
 *Guard 2 and guard 5 have no bypass at all.* An emergency may skip the staging
@@ -775,6 +775,30 @@ On success: =production:healthy=, PIR comment, =deployed:production=, then
 # release.sh <pr> -- merge (if auto-merge enabled) and free the queue.
 set -eu
 pr="$1"; repo="${GH_REPO:-$GITHUB_REPOSITORY}"
+
+# Guard 4b, at the MERGE. Not redundant with the activation check: with more
+# than one deployment in flight, two changes can both pass guard 4b (trunk has
+# not moved yet) and then merge in sequence -- the first moves trunk, the
+# second lands a tree predating it. Found in sim/ at berths=2. Activation is
+# not the last point of reliance; the merge is.
+emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
+  -q '[.labels[].name] | index("change:emergency") // empty')
+if [ -z "$emergency" ]; then
+  state=$(gh pr view "$pr" --repo "$repo" --json mergeStateStatus -q .mergeStateStatus)
+  if [ "$state" = "BEHIND" ] || [ "$state" = "DIRTY" ]; then
+    base=$(gh pr view "$pr" --repo "$repo" --json baseRefOid -q .baseRefOid)
+    class=$(./change/divergence.sh "$base" origin/main || true)
+    case "$class" in
+      artifact|hotfix)
+        gh pr edit "$pr" --repo "$repo" --remove-label staging:passed \
+                                        --remove-label deploy:production
+        gh pr comment "$pr" --repo "$repo" --body \
+          "Merge refused: \`main\` moved during your window and it was a \`$class\` change. Production is deployed but this tree predates what is now on main, so merging it would revert that. Rebase and re-run staging; the berth is held."
+        exit 8 ;;
+    esac
+  fi
+fi
+
 if [ "${AUTO_MERGE:-1}" = "1" ]; then
   gh pr merge "$pr" --repo "$repo" --squash --delete-branch
 else
