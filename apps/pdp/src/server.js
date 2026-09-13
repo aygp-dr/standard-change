@@ -25,11 +25,16 @@ export function renderHtml(path) {
   return `<!doctype html><meta charset=utf-8><title>${d.app}</title>
 <style>body{background:#fff4e0;font:14px/1.6 system-ui;margin:0;padding:40px}
 main{max-width:40rem}code{background:#fff;padding:2px 6px;border-radius:3px}
-nav a{margin-right:14px;display:inline-block}h1{margin:0 0 4px}</style>
+a{margin-right:10px;display:inline-block}h1{margin:0 0 4px}
+.g{margin:2px 0;font-size:13px}.g b{display:inline-block;width:5.5rem;color:#555}</style>
 <main><h1>${d.app}</h1>
-<p>path <code>${d.path}</code> · build <code>${d.sha}</code> · block <code>${d.block}</code></p>
-<nav><a href="/">core</a><a href="/search">plp</a><a href="/p/SKU1">pdp</a>
-<a href="/cart">cart</a><a href="/checkout">checkout</a><a href="/api/catalog">api</a></nav>
+<p>served by <b>${d.app}</b> · path <code>${d.path}</code> · build <code>${d.sha}</code> · block <code>${d.block}</code></p>
+<p class=g style="color:#666;margin:14px 0 6px">every route, by the app that owns it — a link that changes the name above crossed to a sibling app:</p>
+<div class=g><b>${d.app === "core" ? "▸ " : ""}core</b> <a href="/">/</a> <a href="/login">/login</a> <a href="/account">/account</a> <a href="/cart">/cart</a></div>
+<div class=g><b>${d.app === "plp" ? "▸ " : ""}plp</b> <a href="/search">/search</a> <a href="/c/shoes">/c/shoes</a></div>
+<div class=g><b>${d.app === "pdp" ? "▸ " : ""}pdp</b> <a href="/p/SKU1">/p/SKU1</a></div>
+<div class=g><b>${d.app === "checkout" ? "▸ " : ""}checkout</b> <a href="/checkout">/checkout</a> <a href="/checkout/payment">/checkout/payment</a> <a href="/checkout/confirm">/checkout/confirm</a></div>
+<div class=g><b>${d.app === "mock" ? "▸ " : ""}mock</b> <a href="/api/catalog">/api/catalog</a> <a href="/api/cart">/api/cart</a></div>
 </main>`;
 }
 
