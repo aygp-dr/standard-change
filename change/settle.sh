@@ -134,6 +134,49 @@ $DEVIATION
 }Rollback: \`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" >/dev/null
 ok "PIR posted -- the evidence now survives the labels"
 
+# THE DEPLOYMENT RECORD, written here rather than at deploy time.
+#
+# Recording early looked right and was not. The deployer opens a record
+# in_progress and resolves it later, which is GitHub's own model -- but every
+# record deploy-staging opened today resolved to FAILURE, because the workflow
+# dies at queue.sh before deploying (#25). The PR then said "1 failed
+# deployment" while the estate was serving that build perfectly. The record
+# described the WORKFLOW RUN, not the environment.
+#
+# By settlement, production has been observed serving this build. There is
+# nothing left to intend, so the record is written from a fact.
+#
+# Keyed to the SHA, never the branch: settle.sh deletes the branch on merge, and
+# GitHub refuses a deployment for a ref that no longer resolves. A record tied
+# to a branch name cannot outlive the branch.
+#
+# THE DISCONNECT, stated rather than discovered. Recording only completed
+# deployments means:
+#   - the history shows no failures, because a failed deploy never reaches
+#     settlement. "No failed deployments" will read as "nothing ever failed".
+#   - "is a deploy in flight right now?" cannot be answered from the records.
+#     That question belongs to the berth and to `lock`, not here.
+#   - environment protection rules that gate on record CREATION (deployment
+#     branch policies) fire after the fact, so they cannot refuse anything.
+# All three are real losses, taken knowingly against a record that lied.
+_full=$(git rev-parse "$head" 2>/dev/null || echo "$head")
+for _env in staging production; do
+  _url=$([ "$_env" = production ] && echo "$FRONT" || echo "${STAGING_URL:-http://192.168.86.29:9200}")
+  _prod=$([ "$_env" = production ] && echo true || echo false)
+  _id=$(jq -nc --arg ref "$_full" --arg env "$_env" --argjson prod "$_prod" --argjson pr "$pr" --arg sha "$short" \
+         '{ref:$ref,environment:$env,description:"settled: observed serving this build",
+           auto_merge:false,required_contexts:[],production_environment:$prod,
+           payload:{pr:$pr,sha:$sha,recorded_by:"change/settle.sh"}}' \
+        | gh api "repos/$R/deployments" -X POST --input - --jq '.id' 2>/dev/null)
+  # Gate on the id. A loop that checked only the health exit code once reported
+  # success against an HTTP 422 error blob.
+  case "$_id" in ''|*[!0-9]*) echo "   warn no $_env deployment record (API refused) -- C6 unattested"; continue ;; esac
+  gh api "repos/$R/deployments/$_id/statuses" -X POST -f state=success \
+    -f environment_url="$_url" -f description="observed at settlement on $short" >/dev/null 2>&1 \
+    && ok "$_env deployment record $_id -> success" \
+    || echo "   warn $_env record $_id created but status not set"
+done
+
 # REDLINE THE WINDOW. settle.sh checked for one and never closed it, so #11
 # merged and settled while its window stayed open until 17:00Z. An unredlined
 # window is a defect for two reasons: the schedule keeps claiming a change is

@@ -44,6 +44,20 @@ step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 #     about THIS change. auto_merge=false and required_contexts=[] because
 #     guards 0 and 2 already ran above -- letting the API re-decide would put a
 #     second, weaker gate in the path.
+# SUPERSEDED 2026-09-13. These opened a GitHub Deployment in_progress before
+# deploying and resolved it after -- GitHub's own model, and it produced records
+# that described the WORKFLOW RUN rather than the environment. Every one
+# deploy-staging opened resolved to failure, because that workflow dies at
+# queue.sh before it deploys (#25), leaving PRs reading "1 failed deployment"
+# while the estate served the build perfectly.
+#
+# change/settle.sh now writes the record once, at settlement, from an
+# observation -- and keyed to the SHA, because the branch is gone by then.
+# The disconnect that costs is documented there.
+#
+# Left in place because activate.sh is not on any working path today
+# (docs/changing-the-pipeline.org measured ZERO invocations of it), and ripping
+# it out is a bigger change than noting it.
 DEPLOY_ID=''
 deploy_open() {  # deploy_open <environment> <description>
   PROD=$([ "$1" = production ] && echo true || echo false)
