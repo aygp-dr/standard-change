@@ -1,0 +1,70 @@
+Timeline
+--------
+2026-09-13, worktrees/fix-markers, no running estate (this change needs none).
+
+  baseline    gmake -s gate-selftest green at 1a97312; gates/label-audit.py
+              (uncommitted in the main checkout, borrowed read-only) reports 29
+              findings. Both re-run after the change: still green, still 29,
+              same list.
+  failed 1    gates/observation-test.sh reported `current: want authorized, got
+              refused`. change/evidence.sh was not executable; guard 4 ran it as
+              ./change/evidence.sh, got exit 126, and every instrument read as
+              "no observation recorded". Fixed by chmod +x. Worth recording: the
+              guard failed CLOSED on a broken helper, which is the right
+              direction, but the message said "nothing measured this build"
+              rather than "I could not run the reader".
+  failed 2    W6 fired against gates/health.sh, which invokes the recorder as
+              "$(dirname "$0")/../change/evidence.sh" record -- the literal
+              string "evidence.sh record" is absent. The check was a substring
+              match; made it a regex.
+  attempted   `sed -i 's/.../.../' file` -- hydra is FreeBSD, sed -i needs an
+              argument. Used the Edit tool instead.
+  invalid     A `git stash` of change/ gates/ .github/ Makefile to re-run the
+              audit against the baseline also reverted the borrowed
+              label-owners.tsv to origin/main, which has no `persistent`
+              column, so load() returned 0 labels and the audit reported 40
+              undeclared-label findings. Not a regression; the comparison was
+              simply invalid. Compared against the recorded baseline run instead.
+
+Reproduction
+------------
+The demonstration, both directions, on one fixture:
+
+  cd worktrees/fix-markers
+  FX=$PWD/gates/fixtures/observations
+  FIXTURE=$FX/guard4/stale-marker PATH=$PWD/gates/fixtures:$PATH GH_REPO=o/r \
+    $FX/guard4-before-16.sh 42          # exit 0
+  FIXTURE=$FX/guard4/stale-marker PATH=$PWD/gates/fixtures:$PATH GH_REPO=o/r \
+    ./change/guard4.sh 42               # exit 1
+
+before:
+    ok    staging:e2e      present
+    ok    staging:smoke    present
+    ok    staging:uat      present
+    authorized: every required observation is present on baed821
+after:
+    FAIL  staging:e2e      observed 9d85a33, head is baed821 -- that measurement is about a different build
+    FAIL  staging:smoke    observed 9d85a33, head is baed821 -- that measurement is about a different build
+    FAIL  staging:uat      observed 9d85a33, head is baed821 -- that measurement is about a different build
+    NOT authorized
+
+Every observation in that fixture was taken on 9d85a33. The old guard's last
+line says "on baed821" because the head is baed821 and the labels are present;
+it has no way to ask what they were about. That sentence is the bug.
+
+Suite, both directions:
+
+  gmake -s gate-selftest              # includes observation-selftest
+  ./gates/observation-test.sh         # 9/9 cases
+  ./gates/observation-test.sh --selftest
+
+Other cells run and passing: gmake -s lint, gmake -s test (24 tests),
+./gates/docs-lint.py (31 org files, 0 findings), ./gates/labeller-test.py
+(21 passed).
+
+Unverified [H]
+--------------
+No live forge run. The claim that the withdrawal step failed because `gh pr
+edit` had no --repo in a job with no checkout is consistent with the evidence
+in #16 and untested against a real synchronize event. It is moot for soundness
+-- the guards no longer depend on the withdrawal -- but it is not established.
