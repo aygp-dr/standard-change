@@ -27,9 +27,38 @@
 # status that branch protection and guard 2 read.
 set -eu
 cd "$(dirname "$0")/.."
-SHA=$(git rev-parse HEAD)
 R="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
 URL="${GATE_URL:-}"
+
+# THE SUBJECT IS THE ARGUMENT, NOT THE TREE.
+#
+# This script used to read `git rev-parse HEAD` and ignore its argument
+# entirely, so `report.sh 42` ran main's gates and posted the results onto
+# main's SHA while printing a line that read as though it had gated #42. Guard
+# 2 asks about the PR's head; a reporter that answers about the runner's
+# checkout is the same defect as an e2e oracle taken from the runner's tree
+# (PR #21) and as guard 5 passing on a SHA that does not exist.
+#
+# So: if a PR is named, its head SHA is resolved FROM THE FORGE, and the
+# working tree must already BE that commit. This script does not check anything
+# out -- moving the caller's tree under them is worse -- it refuses and says
+# what to run. With no argument it reports on HEAD, which is what CI does.
+SHA=$(git rev-parse HEAD)
+if [ $# -gt 0 ]; then
+  case "$1" in
+    ''|*[!0-9]*) echo "usage: report.sh [pr-number]" >&2; exit 2 ;;
+  esac
+  want=$(gh pr view "$1" --repo "$R" --json headRefOid -q .headRefOid) \
+    || { echo "refused: cannot resolve the head of #$1 from $R" >&2; exit 4; }
+  if [ "$want" != "$SHA" ]; then
+    echo "refused: #$1 is at ${want}" >&2
+    echo "         this tree  is at ${SHA}" >&2
+    echo "         a gate result is about a BUILD. Check out that commit and" >&2
+    echo "         re-run, or run with no argument to report on this tree." >&2
+    exit 3
+  fi
+  echo "subject: #$1, head $(echo "$SHA" | cut -c1-7) -- confirmed against $R"
+fi
 
 post() { # post <context> <state> <description>
   gh api "repos/$R/statuses/$SHA" -X POST -f state="$2" -f context="local/$1" \
