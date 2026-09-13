@@ -23,13 +23,17 @@ EXTENDS Naturals, FiniteSets
 
 CONSTANTS PRs, MaxMerges, Berths,
           Guard4b,        \* withdraw a stale pass when trunk moves
-          MergeGuard4b    \* re-check at the MERGE, not only at deploy
+          MergeGuard4b,   \* re-check at the MERGE, not only at deploy
+          LabellerOwns    \* the labeller owns app:* unless labeler:skip is set
 
 VARIABLES base, gated, stagingPass, prodLabel, emergency, approved, merged,
-          mainV, holders, deploying, mergeClass, regressed, touches
+          mainV, holders, deploying, mergeClass, regressed, touches,
+          skipLabeller,   \* labeler:skip -- the declared bypass
+          derived         \* TRUE iff the manifest still matches the diff
 
 vars == <<base, gated, stagingPass, prodLabel, emergency, approved, merged,
-          mainV, holders, deploying, mergeClass, regressed, touches>>
+          mainV, holders, deploying, mergeClass, regressed, touches,
+          skipLabeller, derived>>
 
 Classes == {"inert", "artifact"}
 
@@ -47,6 +51,8 @@ TypeOK ==
     /\ mergeClass  \in [1..MaxMerges -> Classes]
     /\ regressed   \in BOOLEAN
     /\ touches     \in [PRs -> Classes]
+    /\ skipLabeller \in [PRs -> BOOLEAN]
+    /\ derived      \in [PRs -> BOOLEAN]
 
 Init ==
     /\ base        = [p \in PRs |-> 0]
@@ -62,7 +68,9 @@ Init ==
     /\ mergeClass  = [v \in 1..MaxMerges |-> "inert"]
     /\ regressed   = FALSE
     \* chosen nondeterministically, so every mix of change classes is covered
-    /\ touches     \in [PRs -> Classes]
+    /\ touches      \in [PRs -> Classes]
+    /\ skipLabeller = [p \in PRs |-> FALSE]
+    /\ derived      = [p \in PRs |-> TRUE]
 
 Live(p) == ~merged[p]
 
@@ -79,13 +87,13 @@ Push(p) ==
     /\ stagingPass' = [stagingPass EXCEPT ![p] = FALSE]
     /\ prodLabel'   = [prodLabel   EXCEPT ![p] = FALSE]
     /\ UNCHANGED <<base, emergency, approved, merged, mainV, holders,
-                   deploying, mergeClass, regressed, touches>>
+                   deploying, mergeClass, regressed, touches, skipLabeller, derived>>
 
 GatesPass(p) ==
     /\ Live(p) /\ ~gated[p]
     /\ gated' = [gated EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, stagingPass, prodLabel, emergency, approved, merged,
-                   mainV, holders, deploying, mergeClass, regressed, touches>>
+                   mainV, holders, deploying, mergeClass, regressed, touches, skipLabeller, derived>>
 
 Rebase(p) ==
     /\ Live(p) /\ p \notin deploying /\ base[p] < mainV
@@ -94,19 +102,51 @@ Rebase(p) ==
     /\ stagingPass' = [stagingPass EXCEPT ![p] = FALSE]
     /\ prodLabel'   = [prodLabel   EXCEPT ![p] = FALSE]
     /\ UNCHANGED <<emergency, approved, merged, mainV, holders, deploying,
-                   mergeClass, regressed, touches>>
+                   mergeClass, regressed, touches, skipLabeller, derived>>
 
 MarkEmergency(p) ==
     /\ Live(p) /\ ~emergency[p]
     /\ emergency' = [emergency EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, approved, merged,
-                   mainV, holders, deploying, mergeClass, regressed, touches>>
+                   mainV, holders, deploying, mergeClass, regressed, touches, skipLabeller, derived>>
 
 Approve(p) ==
     /\ Live(p) /\ ~approved[p]
     /\ approved' = [approved EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, merged,
-                   mainV, holders, deploying, mergeClass, regressed, touches>>
+                   mainV, holders, deploying, mergeClass, regressed, touches, skipLabeller, derived>>
+
+(***************************************************************************)
+(* The bypass, modelled. spec.org Every automation has a bypass: labeler:skip *)
+(* hands the manifest to a human, so it may stop matching the diff. The      *)
+(* property that must survive is not "the manifest is always derived" -- it  *)
+(* is that an ASSERTED manifest is always DECLARED.                          *)
+(***************************************************************************)
+SetSkip(p) ==
+    /\ Live(p) /\ ~skipLabeller[p]
+    /\ skipLabeller' = [skipLabeller EXCEPT ![p] = TRUE]
+    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
+                   merged, mainV, holders, deploying, mergeClass, regressed,
+                   touches, derived>>
+
+\* Hand-editing the manifest. Enabled only when the bypass is declared, unless
+\* LabellerOwns is FALSE -- which is the injected defect.
+HandEditManifest(p) ==
+    /\ Live(p) /\ derived[p]
+    /\ (LabellerOwns => skipLabeller[p])
+    /\ derived' = [derived EXCEPT ![p] = FALSE]
+    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
+                   merged, mainV, holders, deploying, mergeClass, regressed,
+                   touches, skipLabeller>>
+
+\* The labeller re-syncs on every push, so a hand edit does not survive one --
+\* unless the bypass is set.
+LabellerSync(p) ==
+    /\ Live(p) /\ ~derived[p] /\ ~skipLabeller[p] /\ LabellerOwns
+    /\ derived' = [derived EXCEPT ![p] = TRUE]
+    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
+                   merged, mainV, holders, deploying, mergeClass, regressed,
+                   touches, skipLabeller>>
 
 \* Guard 1 is now a CAPACITY constraint, not a mutex.
 ClaimBerth(p) ==
@@ -116,20 +156,20 @@ ClaimBerth(p) ==
     /\ gated[p]
     /\ holders' = holders \cup {p}
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
-                   merged, mainV, deploying, mergeClass, regressed, touches>>
+                   merged, mainV, deploying, mergeClass, regressed, touches, skipLabeller, derived>>
 
 StagingPassed(p) ==
     /\ Live(p) /\ p \in holders /\ gated[p] /\ ~stagingPass[p]
     /\ stagingPass' = [stagingPass EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, prodLabel, emergency, approved, merged,
-                   mainV, holders, deploying, mergeClass, regressed, touches>>
+                   mainV, holders, deploying, mergeClass, regressed, touches, skipLabeller, derived>>
 
 Promote(p) ==
     /\ Live(p) /\ ~prodLabel[p] /\ gated[p]                  \* guard 2
     /\ \/ stagingPass[p] \/ (emergency[p] /\ approved[p])
     /\ prodLabel' = [prodLabel EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<base, gated, stagingPass, emergency, approved, merged,
-                   mainV, holders, deploying, mergeClass, regressed, touches>>
+                   mainV, holders, deploying, mergeClass, regressed, touches, skipLabeller, derived>>
 
 (***************************************************************************)
 (* THE SPLIT. Deploying and merging are separate steps, so another change   *)
@@ -142,7 +182,7 @@ StartDeploy(p) ==
     /\ Guard4b => (emergency[p] \/ ~ArtifactDivergence(p))           \* guard 4b
     /\ deploying' = deploying \cup {p}
     /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved,
-                   merged, mainV, holders, mergeClass, regressed, touches>>
+                   merged, mainV, holders, mergeClass, regressed, touches, skipLabeller, derived>>
 
 CompleteMerge(p) ==
     /\ p \in deploying /\ Live(p) /\ mainV < MaxMerges
@@ -162,7 +202,7 @@ CompleteMerge(p) ==
                         IF emergency[p] THEN "artifact" ELSE touches[p]]
     /\ holders'    = holders \ {p}
     /\ deploying'  = deploying \ {p}
-    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved, touches>>
+    /\ UNCHANGED <<base, gated, stagingPass, prodLabel, emergency, approved, touches, skipLabeller, derived>>
 
 \* Withdraw a pass main has outrun. Never takes a berth: preemption is not
 \* staleness (spec.org, Guard 4b).
@@ -176,12 +216,13 @@ MainMoved ==
          IF Live(p) /\ ArtifactDivergence(p) /\ ~emergency[p] /\ p \notin deploying
          THEN FALSE ELSE prodLabel[p]]
     /\ UNCHANGED <<base, gated, emergency, approved, merged, mainV, holders,
-                   deploying, mergeClass, regressed, touches>>
+                   deploying, mergeClass, regressed, touches, skipLabeller, derived>>
 
 Next ==
     \/ \E p \in PRs : Push(p) \/ GatesPass(p) \/ Rebase(p) \/ MarkEmergency(p)
                    \/ Approve(p) \/ ClaimBerth(p) \/ StagingPassed(p)
                    \/ Promote(p) \/ StartDeploy(p) \/ CompleteMerge(p)
+                   \/ SetSkip(p) \/ HandEditManifest(p) \/ LabellerSync(p)
     \/ MainMoved
 
 Spec == Init /\ [][Next]_vars
@@ -210,7 +251,19 @@ NoSilentBypass ==
 \* movement of trunk.
 NoRegression == regressed = FALSE
 
+\* THE BYPASS PROPERTY. A change may ship an asserted manifest -- that is what
+\* labeler:skip is for -- but never a SILENTLY asserted one. The bypass must be
+\* declared on the artifact, which is what makes it auditable.
+ManifestAssertedOnlyIfDeclared ==
+    \A p \in PRs : ~derived[p] => skipLabeller[p]
+
+\* And the bypass must not reach the guards that have none. labeler:skip moves
+\* the manifest; it must not let a red tree merge.
+BypassDoesNotReachGuard2 ==
+    \A p \in PRs : (merged[p] /\ skipLabeller[p]) => gated[p]
+
 Safety ==
     /\ TypeOK /\ BerthCapacity /\ NoProdWithoutStaging
     /\ NoRedGatesShipped /\ NoSilentBypass /\ NoRegression
+    /\ ManifestAssertedOnlyIfDeclared /\ BypassDoesNotReachGuard2
 =============================================================================

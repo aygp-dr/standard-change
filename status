@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""status -- who is waiting, who holds the berth, and who is out of window.
+
+Three questions, and the third is the one with teeth:
+
+  1. Which open PRs are waiting on a deployment?
+  2. Which PR holds staging right now? That IS the in-progress deployment --
+     the label is cleared on release, so a PR carrying deploy:staging is by
+     definition mid-flight (spec.org, Promotion pipeline).
+  3. Is anything deploying OUTSIDE its reserved window?
+
+A deploy:* label outside the change window is a VIOLATION: the window is the
+authorization, and deploying without one means the guards were evaluated at a
+moment nobody agreed to. The single exception is change:emergency, which is
+the one authorized bypass and is why it carries an audit trail.
+
+Reads live from gh, or from recorded JSON with --fixture so it is testable
+with no forge and no open PRs.
+"""
+import argparse
+import datetime as dt
+import json
+import pathlib
+import subprocess
+import sys
+
+DEPLOY = ("deploy:staging", "deploy:production")
+EMERGENCY = "change:emergency"
+SKIP = "labeler:skip"
+
+
+def gh_prs(repo, fixture):
+    if fixture:
+        return json.loads((pathlib.Path(fixture) / "prs.json").read_text())
+    r = subprocess.run(
+        ["gh", "pr", "list", "--repo", repo, "--state", "open", "--limit", "100",
+         "--json", "number,title,labels,headRefName,updatedAt,isDraft"],
+        capture_output=True, text=True)
+    if r.returncode:
+        print(f"  cannot read PRs: {r.stderr.strip()[:90]}", file=sys.stderr)
+        return []
+    return json.loads(r.stdout)
+
+
+def windows(fixture):
+    """Reserved change windows, from the IDP's record."""
+    p = pathlib.Path(fixture) / "changes.tsv" if fixture else pathlib.Path("changes.tsv")
+    if not p.exists():
+        return {}
+    rows = [l.split("\t") for l in p.read_text().splitlines()[1:] if l.strip()]
+    out = {}
+    for r in rows:
+        if len(r) >= 9:
+            out[r[1]] = {"chg": r[0], "state": r[2], "window": r[8] or ""}
+    return out
+
+
+def parse(ts):
+    try:
+        return dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--repo", default="aygp-dr/standard-change")
+    ap.add_argument("--fixture")
+    ap.add_argument("--grace-minutes", type=int, default=30,
+                    help="how long after a window opens a deploy is still in it")
+    args = ap.parse_args()
+
+    prs = gh_prs(args.repo, args.fixture)
+    wins = windows(args.fixture)
+    now = dt.datetime.now(dt.timezone.utc)
+
+    holder, waiting, violations = None, [], []
+    for pr in prs:
+        names = [l["name"] for l in pr.get("labels", [])]
+        deploying = [n for n in names if n in DEPLOY]
+        if not deploying:
+            continue
+        emerg = EMERGENCY in names
+        apps = sorted(n.split(":", 1)[1] for n in names if n.startswith("app:"))
+        rec = {"pr": pr["number"], "title": pr["title"][:44], "labels": deploying,
+               "apps": apps, "emergency": emerg,
+               "branch": pr.get("headRefName", "")}
+
+        if SKIP in names:
+            rec["bypass"] = "labeler:skip — app:* is hand-maintained on this PR"
+        if "deploy:staging" in deploying:
+            holder = rec
+        if "blocked:queue" in names:
+            waiting.append(rec)
+
+        # the violation check
+        w = wins.get(str(pr["number"]), {})
+        start = parse(w.get("window", ""))
+        if emerg:
+            rec["why_ok"] = "change:emergency — authorized bypass"
+        elif not start:
+            violations.append({**rec, "reason": "no reserved change window"})
+        elif not (start <= now <= start + dt.timedelta(minutes=args.grace_minutes)):
+            violations.append({**rec, "reason":
+                               f"outside its window ({w['window']}, +{args.grace_minutes}m)"})
+
+    print("BERTH — the in-progress deployment")
+    if holder:
+        e = "  [EMERGENCY]" if holder["emergency"] else ""
+        print(f"  PR #{holder['pr']}  {holder['title']}{e}")
+        print(f"    apps={','.join(holder['apps']) or '-'}  branch={holder['branch']}")
+    else:
+        print("  free — no PR holds deploy:staging")
+
+    print("\nWAITING — blocked on the queue")
+    if waiting:
+        for w in waiting:
+            print(f"  PR #{w['pr']}  {w['title']}  apps={','.join(w['apps']) or '-'}")
+    else:
+        print("  none")
+
+    bypassed = [r for r in ([holder] if holder else []) + waiting if r.get("bypass")]
+    print("\nBYPASSES — automation suspended, deliberately")
+    if bypassed:
+        for b in bypassed:
+            print(f"  PR #{b['pr']}  {b['bypass']}")
+    else:
+        print("  none")
+
+    print("\nVIOLATIONS — deploying outside an authorized window")
+    if violations:
+        for v in violations:
+            print(f"  PR #{v['pr']}  {','.join(v['labels'])}  {v['reason']}")
+            print(f"    {v['title']}")
+        print(f"\n  {len(violations)} violation(s). A deploy:* label without a window means"
+              "\n  the guards were evaluated at a moment nobody authorized. The only"
+              "\n  exception is change:emergency, which leaves an audit trail.")
+    else:
+        print("  none")
+
+    return 1 if violations else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -82,7 +82,20 @@ def check(p):
     return bad
 
 
+def selftest():
+    """The gate must reject its own malformed fixture."""
+    f = ROOT / "gates" / "fixtures" / "docs" / "bad.org"
+    n = len(check(f))
+    if n >= 5:
+        print(f"  docs-lint: rejects the malformed fixture ({n} findings)")
+        return 0
+    print("  docs-lint accepts a malformed document; it verifies nothing")
+    return 1
+
+
 def main():
+    if "--selftest" in sys.argv:
+        return selftest()
     findings, n = [], 0
     for p in sorted(org_files()):
         n += 1

@@ -433,6 +433,18 @@ stops deploying it. A human hand-adding =app:*= is overwritten on the next
 push; this is intended, and it is why the =app:*= set can be trusted as the
 build manifest.
 
+*=labeler:skip= is the declared exception.* It stops the labeller entirely, so
+=app:*= becomes hand-maintained — for forcing a build across apps the diff does
+not touch. State the cost plainly, because it is the one the model cares about:
+§Domain model says the manifest is *derived, never asserted*, and that if it can
+be asserted "it is not a manifest — it is a wish, and the build ships whatever
+someone typed". =labeler:skip= makes that true on purpose.
+
+So it is a *declared deviation in label form*: visible on the PR, carried into
+the PIR, and surfaced by =./status=. It does not disable any guard — the gates,
+the berth and guards 4b and 5 are unaffected — it only moves the manifest from
+derived to asserted, and says so where a reviewer can see it.
+
 *=staging:passed= is bound to a SHA.* Any push to the PR removes it (and
 =staging:failed=). A pass observed on an earlier commit authorizes nothing.
 
@@ -470,8 +482,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/labeler@v5
+        # labeler:skip hands the manifest back to a human -- for forcing a build
+        # across apps the diff does not touch. See the note below: this converts
+        # a DERIVED artifact into an ASSERTED one, and the PR wears the label
+        # saying so.
+        if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         with:
           sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
+      # change:standard is the COMPLEMENT of change:normal, which actions/labeler
+      # cannot express -- it matches globs, it cannot say "matched no other rule".
+      # The offline oracle modelled this as derived and the config never
+      # implemented it, so PRs got app:* and no change:* at all. Third time the
+      # model and the implementation have diverged; the implementation was wrong
+      # here, and only a live run showed it.
+      - name: classify standard vs normal
+        if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          labels=$(gh pr view "${{ github.event.number }}" --json labels -q '[.labels[].name]')
+          has_app=$(echo "$labels" | jq 'map(select(startswith("app:")))|length')
+          is_normal=$(echo "$labels" | jq 'index("change:normal")//empty')
+          if [ "$has_app" -gt 0 ] && [ -z "$is_normal" ]; then
+            gh pr edit "${{ github.event.number }}" --add-label change:standard \
+              --remove-label change:normal || true
+          elif [ -n "$is_normal" ]; then
+            gh pr edit "${{ github.event.number }}" --remove-label change:standard || true
+          fi
+
       - name: drop stale staging verdicts on a new push
         if: github.event.action == 'synchronize'
         env: {GH_TOKEN: "${{ github.token }}"}
@@ -1156,7 +1193,14 @@ lint:  ; @./router/generate.sh >/dev/null && \
 	  ./gates/labeller-test.py
 
 gate: lint test ; @./gates/e2e.sh $(app)
-gate-selftest:   ; @./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s audit-selftest
+gate-selftest: docs-selftest
+	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s audit-selftest
+
+# The documents gate and its own negative test. A gate that cannot fail
+# verifies nothing, so the malformed fixture must be rejected.
+docs-selftest:
+	@./gates/docs-lint.py
+	@./gates/docs-lint.py --selftest
 audit-selftest:
 	@./gates/audit-controls.py --repo o/r --fixture gates/fixtures/audit/pass >/dev/null \
 	  || { echo "audit rejects a compliant fixture"; exit 1; }
@@ -1481,6 +1525,63 @@ guessing.
 
 Not implemented. Recorded because it falsifies the current guard 5 for any
 canary or gradual rollout, which is the normal case for services.
+
+* Every automation has a bypass
+
+Not a concession — a design rule. An automation without a declared escape hatch
+does not get obeyed, it gets *circumvented*, and a circumvention leaves no
+record. §The balance already measured one instance of this: queue friction does
+not slow delivery, it routes traffic onto =change:emergency=, the one path with
+fewer checks. The general form:
+
+#+begin_quote
+*Design the bypass, or one gets invented in the dark.*
+#+end_quote
+
+The catalogue, so no future exception has to be argued from first principles:
+
+| automation                    | bypass                | what it costs                        | where it shows |
+|-------------------------------+-----------------------+--------------------------------------+----------------|
+| labeller owns =app:*=         | =labeler:skip=        | manifest becomes asserted, not derived | label on the PR |
+| staging must pass             | =change:emergency=    | no staging evidence for this change  | label + approval + PIR |
+| the berth queue               | =change:emergency=    | jumps the queue                      | label + PIR    |
+| the freeze window             | =EMERGENCY_CHANGE=    | the calendar stops governing         | repo variable  |
+| guard 0 up-to-date            | =change:emergency=    | may ship behind trunk                | PIR records the divergence |
+| *guard 2 gates green*         | *none*                | —                                    | —              |
+| *guard 5 production healthy*  | *none*                | —                                    | —              |
+
+** The two that have none, and why
+
+The rule is not "everything has a bypass". It is:
+
+#+begin_quote
+Everything has a bypass *except the things whose bypass would make the system
+lie about itself.*
+#+end_quote
+
+Guard 2 is the gate suite's verdict on this exact tree. Bypass it and every
+downstream record — the staging pass, the PIR, the deployment record — asserts
+a verification that did not happen. Guard 5 is the only evidence that what was
+deployed is what is serving; bypass it and "deployed" becomes a claim rather
+than an observation (§What completes a deployment).
+
+Those are not stricter rules than the others. They are the rules that keep the
+*other* bypasses honest: =change:emergency= is a legible, auditable act
+precisely because the records it appears in are otherwise true.
+
+** What makes a bypass acceptable
+
+Three properties, and all three are required:
+
+1. *Visible on the artifact* — a label on the PR, not a flag in a job.
+2. *Carried into the record* — the PIR names it and who authorized it.
+3. *Narrow* — it suspends one automation, not the guards around it.
+   =labeler:skip= stops the labeller and touches no gate; =change:emergency=
+   skips the staging environment and still faces guards 2 and 5.
+
+A "force" flag fails all three, which is why =docs/idp-api.org= refuses to
+offer one: a flag that appears to bypass guards 2 or 5 would be a lie in the
+API surface.
 
 * The balance
 

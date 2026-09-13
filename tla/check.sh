@@ -40,5 +40,6 @@ if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
 rm -rf Neg.tla Neg.cfg NoMergeGuard.tla NoMergeGuard.cfg One.tla One.cfg \
+       NoOwn.tla NoOwn.cfg \
        *_TTrace_*.tla *_TTrace_*.bin states
 echo "== both directions confirmed"

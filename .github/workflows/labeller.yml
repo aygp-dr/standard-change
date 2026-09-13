@@ -6,8 +6,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/labeler@v5
+        # labeler:skip hands the manifest back to a human -- for forcing a build
+        # across apps the diff does not touch. See the note below: this converts
+        # a DERIVED artifact into an ASSERTED one, and the PR wears the label
+        # saying so.
+        if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         with:
           sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
+      # change:standard is the COMPLEMENT of change:normal, which actions/labeler
+      # cannot express -- it matches globs, it cannot say "matched no other rule".
+      # The offline oracle modelled this as derived and the config never
+      # implemented it, so PRs got app:* and no change:* at all. Third time the
+      # model and the implementation have diverged; the implementation was wrong
+      # here, and only a live run showed it.
+      - name: classify standard vs normal
+        if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          labels=$(gh pr view "${{ github.event.number }}" --json labels -q '[.labels[].name]')
+          has_app=$(echo "$labels" | jq 'map(select(startswith("app:")))|length')
+          is_normal=$(echo "$labels" | jq 'index("change:normal")//empty')
+          if [ "$has_app" -gt 0 ] && [ -z "$is_normal" ]; then
+            gh pr edit "${{ github.event.number }}" --add-label change:standard \
+              --remove-label change:normal || true
+          elif [ -n "$is_normal" ]; then
+            gh pr edit "${{ github.event.number }}" --remove-label change:standard || true
+          fi
+
       - name: drop stale staging verdicts on a new push
         if: github.event.action == 'synchronize'
         env: {GH_TOKEN: "${{ github.token }}"}

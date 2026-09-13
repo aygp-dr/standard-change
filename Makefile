@@ -48,7 +48,14 @@ lint:  ; @./router/generate.sh >/dev/null && \
 	  ./gates/labeller-test.py
 
 gate: lint test ; @./gates/e2e.sh $(app)
-gate-selftest:   ; @./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s audit-selftest
+gate-selftest: docs-selftest
+	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s audit-selftest
+
+# The documents gate and its own negative test. A gate that cannot fail
+# verifies nothing, so the malformed fixture must be rejected.
+docs-selftest:
+	@./gates/docs-lint.py
+	@./gates/docs-lint.py --selftest
 audit-selftest:
 	@./gates/audit-controls.py --repo o/r --fixture gates/fixtures/audit/pass >/dev/null \
 	  || { echo "audit rejects a compliant fixture"; exit 1; }

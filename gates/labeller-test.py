@@ -45,9 +45,14 @@ def matches(glob, path):
 def label_for(rules, paths):
     got = {l for l, globs in rules.items()
            if any(matches(g, p) for g in globs for p in paths)}
-    # change:standard is the complement of change:normal when apps are touched
+    # change:standard is the complement of change:normal -- actions/labeler
+    # cannot express "matched no other rule", so a workflow STEP must apply it.
+    # Assert the step exists rather than assuming the behaviour: modelling it
+    # here while the config lacked it is exactly how PRs #2 and #3 ended up
+    # with app:* and no change:* at all.
     if any(p.startswith("apps/") for p in paths) and "change:normal" not in got:
-        got.add("change:standard")
+        if "classify standard vs normal" in WORKFLOW.read_text():
+            got.add("change:standard")
     return got
 
 
