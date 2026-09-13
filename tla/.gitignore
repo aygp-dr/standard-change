@@ -1,0 +1,5 @@
+*_TTrace_*.tla
+*_TTrace_*.bin
+Neg.tla
+Neg.cfg
+states/
