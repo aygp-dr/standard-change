@@ -3,9 +3,14 @@
 # apps at fixed offsets. ports.tsv is the CMDB (spec.org, Router and ports).
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-REG="${PORTS_REGISTRY:-$ROOT/ports.tsv}"
+# The registry is the CMDB for the whole clone, so it lives in the MAIN
+# worktree, not in each one. git worktree list prints the main checkout first.
+MAIN=$(git -C "$ROOT" worktree list --porcelain | awk '/^worktree /{print $2; exit}')
+REG="${PORTS_REGISTRY:-$MAIN/ports.tsv}"
 WT=$(git -C "$ROOT" rev-parse --show-toplevel)
 BR=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)
+
+[ -f "$REG" ] || printf 'block\tworktree\tbranch\tallocated_at\n' > "$REG"
 
 next_block() {
   used=$(awk -F'\t' 'NR>1 {print $1}' "$REG" 2>/dev/null | sort -n)
