@@ -1043,6 +1043,79 @@ the repo public (contradicts the default-private rule), take a paid plan, or
 accept that enforcement is advisory here and the workflow-level guards are the
 only real controls. Recorded in §Open items.
 
+* The balance
+
+*The objective is protecting production. The queue and the calendar are
+instruments.* Stating the hierarchy matters because every control below has a
+cost, and a control whose cost is paid in queue time buys nothing unless it
+also reduces the chance of an unsafe change reaching the estate.
+
+** What each control actually protects
+
+| Control              | Protects                | Cost is paid in       | Removable? |
+|----------------------+-------------------------+-----------------------+------------|
+| gate-selftest        | *production*            | seconds               | no         |
+| lint / test / e2e    | *production*            | minutes               | no         |
+| guard 5 health check | *production*            | seconds               | no         |
+| guard 4 staging pass | *production*            | one staging cycle     | emergency only |
+| guard 4b divergence  | *production*            | a rebase, when earned | no         |
+| guard 0 up-to-date   | production, indirectly  | a rebase              | emergency only |
+| guard 1 singleton    | *the queue*             | berth wait            | *negotiable* |
+| freeze window        | *the calendar*          | berth wait            | *negotiable* |
+| change window record | nothing; it is a record | nothing               | n/a        |
+
+The first five are load-bearing: each closes a path by which a broken or
+unauthorized change reaches production. The last three are coordination
+devices. They are worth having, and they are the ones to tune.
+
+** Over-protecting the queue costs production safety
+
+This is not the usual safety-versus-speed trade, and reading it that way gets
+the sign wrong.
+
+=change:emergency= is the *one* label that bypasses staging. So queue friction
+does not convert into slower-but-equally-safe delivery — it converts into
+traffic on the path with fewer checks. =gates/simulate-gates.py= models it: at
+a mean berth wait of two hours roughly a sixth of changes route to emergency;
+past about four hours it is the majority. Tighten the queue far enough and you
+have optimised your way to *less* production safety, through the only door you
+deliberately left open.
+
+The practical consequences, which is why this section exists rather than being
+a remark:
+
+- *Guard 1's singleton is the tunable*, not the gates. If the berth is the
+  bottleneck, add berths (per-team paths to production, §What this model gets
+  wrong) before weakening a gate. Never trade a gate for throughput; the gates
+  are the reason the berth is worth holding.
+- *Freezes should be narrow and few.* A freeze protects the calendar's promise,
+  not the estate. A standing freeze is indistinguishable from a slow queue, and
+  produces the same emergency traffic.
+- *A change window is a record and must never block.* The moment writing it can
+  fail closed, a calendar outage becomes a deployment outage — see
+  §Change enablement, preflight exit 4, and the =EMERGENCY_CHANGE= fallback that
+  exists precisely because a /record/ was allowed to become a /control/.
+- *Watch the emergency rate as the health metric.* A rising share of
+  =change:emergency= is not an incident trend; it is the queue reporting that it
+  has become too expensive to use honestly. The PIR already records every
+  bypass, so the number is free.
+
+** Where the balance was already wrong, and corrected
+
+Guard 4b as first written withdrew =deploy:staging= on any movement of =main=.
+That protected production and charged the queue for it indiscriminately — a
+README merge cost a full rebase and re-verify, and the berth went back to the
+pool. Both corrections in §Guard 4b are this section applied:
+
+- *classify the divergence*, so only =artifact= and =hotfix= — the classes that
+  can actually change what ships — withdraw the staging pass;
+- *never take the berth for someone else's merge*, because losing your position
+  to another team's emergency is a cost with no corresponding safety gain.
+
+The test for any future control is the same: name what it protects, name who
+pays, and if the answer is "the queue pays and production gains nothing",
+it is ceremony.
+
 * Refutation conditions
 
 Concretely, what observation falsifies this repo's central claim — /that the
@@ -1061,6 +1134,9 @@ gate sequence prevents an unauthorized or unsafe production deployment/:
    =gates/lint.sh= exits 0.
 7. A stale lock older than 60 minutes is cleared without the clearance
    appearing in a PIR.
+8. The share of changes carrying =change:emergency= rises without a matching
+   rise in incidents — the queue has become too expensive to use honestly, and
+   the bypass is absorbing normal traffic (§The balance).
 
 Each is a test to be written, not merely a worry. Until they exist as
 executable checks, the central claim is [H].

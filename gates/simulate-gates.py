@@ -139,6 +139,38 @@ def main():
     print("  Hence: re-run FAILED CHECKS, never the whole suite. Re-running the")
     print("  suite re-rolls the checks that already passed, which is how a green")
     print("  run gets manufactured out of a genuinely red one.")
+    print_balance()
+
+
+def emergency_pressure(berth_wait_h, patience_h=4.0, base_rate=0.05):
+    """Fraction of changes that route to change:emergency as the queue slows.
+
+    Over-protecting the queue does not trade safety for speed -- it trades
+    safety for safety. change:emergency is the ONE label that bypasses
+    staging, so every hour of avoidable berth wait pushes changes onto the
+    path with fewer checks. Logistic in wait/patience; base_rate is the
+    genuinely-urgent floor.
+    """
+    import math
+    return base_rate + (1 - base_rate) / (1 + math.exp(-(berth_wait_h - patience_h)))
+
+
+def print_balance():
+    print("\n--- the balance: queue friction converts into emergency traffic ---")
+    print(f"{'mean berth wait':>16}  {'emergency share':>16}  {'changes bypassing staging':>26}")
+    for h in (0.5, 1, 2, 4, 8, 16):
+        e = emergency_pressure(h)
+        bar = "#" * int(e * 40)
+        print(f"{h:>14.1f}h  {e*100:>15.1f}%  {bar}")
+    print()
+    print("  The queue and the calendar are INSTRUMENTS. Production is the")
+    print("  objective. Every minute the berth is held for a reason unrelated")
+    print("  to production safety is pure cost -- and past roughly a working")
+    print("  half-day of wait, it stops being merely cost: changes start")
+    print("  routing to change:emergency, which is the one path that skips")
+    print("  staging entirely. Tighten the queue far enough and you have")
+    print("  optimised your way to LESS production safety, through the only")
+    print("  door you left open.")
 
 
 if __name__ == "__main__":
