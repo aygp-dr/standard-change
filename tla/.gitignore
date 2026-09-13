@@ -3,3 +3,6 @@
 Neg.tla
 Neg.cfg
 states/
+Concurrent_TTrace_*
+NoMergeGuard.*
+One.*

@@ -19,5 +19,26 @@ printf '== positive: Guard4b=TRUE must pass ......................... '
 if run StandardChange | grep -q 'Model checking completed. No error has been found'; then echo 'PASS'
 else echo 'FAIL'; run StandardChange | grep -E 'Error' | head -5; exit 1; fi
 
-rm -rf Neg.tla Neg.cfg *_TTrace_*.tla *_TTrace_*.bin states
+# The concurrent model: berths > 1, deploy and merge as separate steps, and
+# divergence classes. StandardChange.tla remains valid for what it models
+# (one berth, atomic deploy+merge) -- it is a special case, not a rival.
+sed 's/MergeGuard4b = TRUE/MergeGuard4b = FALSE/' Concurrent.cfg > NoMergeGuard.cfg
+sed 's/MODULE Concurrent/MODULE NoMergeGuard/' Concurrent.tla > NoMergeGuard.tla
+sed 's/Berths = 2/Berths = 1/' Concurrent.cfg > One.cfg
+sed 's/MODULE Concurrent/MODULE One/' Concurrent.tla > One.tla
+
+printf '== concurrent negative: no merge guard must regress ....... '
+if run NoMergeGuard | grep -q 'Invariant Safety is violated'; then echo 'FAIL as required'
+else echo 'BAD: berths>1 cannot reach the defect; the model verifies nothing'; exit 1; fi
+
+printf '== concurrent positive: berths=2, both guards ............... '
+if run Concurrent | grep -q 'No error has been found'; then echo 'PASS'
+else echo 'FAIL'; exit 1; fi
+
+printf '== concurrent positive: berths=1 (the atomic model case) .... '
+if run One | grep -q 'No error has been found'; then echo 'PASS'
+else echo 'FAIL'; exit 1; fi
+
+rm -rf Neg.tla Neg.cfg NoMergeGuard.tla NoMergeGuard.cfg One.tla One.cfg \
+       *_TTrace_*.tla *_TTrace_*.bin states
 echo "== both directions confirmed"
