@@ -247,6 +247,96 @@ Worth stating because the pull is always the other way:
   looks fine" is recording an intention. UAT is the one place a human IS the
   instrument, and even there the record says so.
 
+* 7. The data model, speculatively
+
+Written as entities and keys rather than tables, because the storage engine is
+the least interesting decision here. What matters is which facts are *separate
+rows* — nearly every defect in this repo was two facts sharing one field, or one
+fact living in two places.
+
+** CHANGE — the record
+
+: change_id, forge_ref, classification, classified_by, lifecycle, opened_at, closed_at, closure_code, narrative
+
+- =classification= and =lifecycle= are *separate columns*. "What kind of change"
+  and "how far has it got" answer different questions. Exactly one
+  classification, at most one active lifecycle state.
+- =classified_by= exists because the labeller derives a class from the diff and
+  a person declares an emergency, and nothing reconciles them. A change carrying
+  both is a change whose class is undefined while every rule branches on it.
+- =closure_code= is a closed enum, and =expired= is NOT =failed=. Collapsing
+  them loses the only signal that says the slots are too short.
+- =narrative= is written *before* any working state is cleared.
+
+** WINDOW — the reservation
+
+: window_id, change_id, environment, start, end, groups, sha, booked_at, result, result_at
+
+- =(environment, [start,end))= must be non-overlapping among rows where
+  =result IS NULL=. This is the only true uniqueness constraint in the model
+  and it is the one the whole thing rests on. *Enforce it in the store*, not in
+  the caller — the caller is two agents racing.
+- =result IS NULL= means *unresolved*, not *in force*. A window whose end has
+  passed and whose result is null is a lapsed reservation and still occupies
+  the environment until something reaps it.
+- =sha= is on the window, so a booking names the build it was made for. A head
+  that moves after booking invalidates the reservation, and you can only see
+  that if the reservation recorded what it was for.
+- A change may hold *at most one* unresolved window. Not enforced by the
+  non-overlap rule — two non-overlapping windows for one change is a different
+  mistake, and it happened twice today before anything could ask the question.
+
+** OBSERVATION — the evidence
+
+: observation_id, change_id, instrument, verdict, sha, observed_at, observed_by, environment, target
+
+- Append-only. A withdrawal is a *new row*, never an update, because an audit
+  needs to see that a verdict was taken and then retracted.
+- =(change_id, instrument, sha)= is what a guard queries. Not
+  =(change_id, instrument)= — that is the stale-evidence bug.
+- =instrument= matters because UAT's instrument is a person and everything
+  else's is a script. =observed_by= is the actor; both are needed, and a portal
+  that records only the second cannot tell a measurement from an assertion.
+
+** ENVIRONMENT — declared, and RUN — observed
+
+: environment: name, tier, address, activated, promotes
+: run:         environment, sha, started_at, observed_at, state
+
+Two entities on purpose. The first is a *decision* and is reviewed; the second
+is a *measurement* and is probed. Merging them lets a typo look like an outage.
+=run= is a cache with a timestamp, never an authority — the authority is the
+probe, and a =run= row older than a few seconds answers "what did we last see",
+not "what is serving".
+
+** ESTATE — the world
+
+: estate_flag: flag, declared_by, declared_at, cleared_by, cleared_at, reason
+
+Not attached to a change, which is the entire point. A flag on a change is a
+flag whose carrier is exempt from it. =cleared_by= is a separate column from
+=declared_by= because asserting and withdrawing are different acts with
+different authorities.
+
+** What the model deliberately does NOT have
+
+- *No priority column.* Adding one creates the question "who gets production
+  first", which nothing here needs and every scheduler answers badly.
+- *No =deployed_by= on CHANGE.* A change is not deployed; a *build* is deployed
+  to an *environment*. Putting it on the change makes a redeploy indistinguishable
+  from the first deploy.
+- *No boolean =healthy=.* Three-valued or nothing: healthy, unhealthy, could not
+  reach. A boolean forces the collapse this repo keeps finding.
+- *No cascade delete.* An observation outlives the change it is about; the
+  record is the point.
+
+** Who owns scheduling
+
+A person, explicitly. There is no auto-scheduler and the model has no field to
+support one. Booking, rescheduling and cancelling are acts by a named actor;
+=reap.sh= is the one automation that touches a window, it produces exactly one
+outcome (=expired=), and it does not rebook.
+
 * Status
 
 Specification only. The shell implementations named above exist and run; none
