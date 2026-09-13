@@ -1674,6 +1674,139 @@ A "force" flag fails all three, which is why =docs/idp-api.org= refuses to
 offer one: a flag that appears to bypass guards 2 or 5 would be a lie in the
 API surface.
 
+* Labels as state transitions
+
+The labels are not annotations on a process running elsewhere. *They are the
+state machine*: an observation emits a label, and the label drives the next
+transition. =staging:passed= is emitted by the authorizing e2e;
+=production:healthy= by guard 5's convergence check; the merge is triggered by
+=production:healthy=. Each transition is caused by *evidence*, not by a command.
+
+That is a genuinely good property — a command-driven pipeline advances because
+someone asked, and this one advances because something was observed — and it
+has one sharp consequence.
+
+** Three kinds of label, and only one is safe to trust
+
+| kind          | examples                                      | emitted by      | forgeable? |
+|---------------+-----------------------------------------------+-----------------+------------|
+| *derived*     | =app:*=, =change:standard=, =change:normal=   | the labeller, from the diff | no — resynced on every push |
+| *request*     | =deploy:staging=, =change:emergency=, =labeler:skip= | a human    | yes, and that is the point  |
+| *observation* | =staging:passed=, =production:healthy=, =blocked:*= | a gate    | *yes, and that is a hole*   |
+
+A request label is meant to be added by hand. An observation label is a
+*claim that something was measured*, and GitHub does not distinguish a label
+written by a workflow from one typed by a person with write access.
+
+** So a label-triggered workflow must re-derive, not trust
+
+#+begin_quote
+If a label drives behaviour, the workflow it drives must re-establish the fact
+the label asserts. Otherwise the label is a self-report, and adding it by hand
+is a privilege escalation.
+#+end_quote
+
+Concretely: hand-adding =production:healthy= would trigger
+=merge-on-healthy.yml= with *no deployment having happened at all*. The fix is
+not to police who may add labels — it is for the merge job to run guard 5
+itself rather than believe the label. Which is the same rule as §C6 (*a
+platform can attest to what is running only if it runs it*) and the same rule
+as guard 4b (*re-check at the moment of reliance*), arriving a third time in a
+new place.
+
+This is why =gates/health.sh= is cheap and idempotent by design: it is meant to
+be run again at every point that depends on its answer, not once with the
+result cached in a label.
+
+* Speculation — production:healthy as a merge trigger
+
+The mechanism is trivial and the ordering is not.
+
+** The trigger
+
+#+begin_src yaml :tangle .github/workflows/merge-on-healthy.yml
+name: merge-on-healthy
+on:
+  pull_request:
+    types: [labeled]
+permissions: {contents: write, pull-requests: write}
+jobs:
+  merge:
+    if: github.event.label.name == 'production:healthy'
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      # Guard 4b at the merge, AGAIN. production:healthy says the estate is
+      # serving this change; it says nothing about whether main has moved
+      # since. If it has, merging now would land a tree that predates what is
+      # already on main -- and production is ALREADY serving it.
+      - name: main must not have outrun production
+        run: |
+          state=$(gh pr view "$PR" --json mergeStateStatus -q .mergeStateStatus)
+          case "$state" in
+            BEHIND|DIRTY)
+              gh pr comment "$PR" --body "PRODUCTION IS AHEAD OF MAIN. \`production:healthy\` is set and the estate is serving this change, but \`main\` moved during the deploy (\`$state\`) so the merge is refused. This is not recoverable by merging -- see spec.org, the divergence below."
+              gh pr edit "$PR" --add-label blocked:diverged
+              exit 9 ;;
+          esac
+      # Re-derive the fact the label asserts. GitHub cannot distinguish a label
+      # written by a gate from one typed by a person, so trusting
+      # production:healthy would make hand-adding it a way to merge with no
+      # deployment at all.
+      - name: guard 5, again — do not trust the label that triggered this
+        run: |
+          SHA=$(gh pr view "$PR" --json headRefOid -q .headRefOid | cut -c1-7)
+          HEALTH_MODE=manifest HEALTH_SAMPLES=5 \
+            ./gates/health.sh "${{ vars.PRODUCTION_URL }}" "$SHA" \
+            || { gh pr edit "$PR" --remove-label production:healthy
+                 gh pr comment "$PR" --body "production:healthy was set but production is not serving \`$SHA\`. The label has been withdrawn and the merge refused."
+                 exit 1; }
+      - run: ./change/release.sh "$PR"
+#+end_src
+
+** The divergence it exposes
+
+Production deploys *before* the merge (§What completes a deployment names the
+three events: live, closed, merged, in that order). So between =production:healthy=
+and the merge there is a window where *the estate is serving a change that
+trunk does not contain*. If the merge is then refused, the system has no
+defined state for it:
+
+| divergence              | recoverable by | cost                          |
+|-------------------------+----------------+-------------------------------|
+| main ahead of production | deploying      | a deploy — routine            |
+| *production ahead of main* | *rolling back* | *undoing a change users have already seen* |
+
+The second is strictly worse, and the current ordering produces it. Which
+suggests the inversion:
+
+** The inversion worth considering [H]
+
+*Merge first, deploy from main.* Then the only reachable divergence is
+main-ahead-of-production, which a deploy fixes. Production can never be
+serving something trunk does not contain.
+
+What it costs is exactly what =docs/release-strategies.org= found: "on main"
+becomes *intent* rather than *evidence*, because the merge now happens before
+the production evidence exists. You trade a divergence that needs a rollback
+for one that needs a deploy, and you pay for it by weakening what a merge
+means.
+
+*Neither ordering is free, and this model currently picks the expensive one
+without having said so.* Blue/green makes the rollback cheap enough that the
+current ordering is defensible — =switch.sh= back to the previous colour is a
+second, and the previous build is still live on the idle jail. Without
+blue/green it would not be.
+
+** What is still unencoded
+
+Even with the guard above, =blocked:diverged= names a state the model cannot
+*resolve*: production is serving X, main does not contain X, and no guard says
+which should win. Resolving it needs the A5 question — *is this change
+reversible?* — which none of the six guards asks (§Changelog, D-05). The
+trigger is implementable today; the state it can land in is not.
+
 * The balance
 
 *The objective is protecting production. The queue and the calendar are

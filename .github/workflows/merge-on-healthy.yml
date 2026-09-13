@@ -1,0 +1,38 @@
+name: merge-on-healthy
+on:
+  pull_request:
+    types: [labeled]
+permissions: {contents: write, pull-requests: write}
+jobs:
+  merge:
+    if: github.event.label.name == 'production:healthy'
+    runs-on: ubuntu-latest
+    env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
+    steps:
+      - uses: actions/checkout@v4
+      # Guard 4b at the merge, AGAIN. production:healthy says the estate is
+      # serving this change; it says nothing about whether main has moved
+      # since. If it has, merging now would land a tree that predates what is
+      # already on main -- and production is ALREADY serving it.
+      - name: main must not have outrun production
+        run: |
+          state=$(gh pr view "$PR" --json mergeStateStatus -q .mergeStateStatus)
+          case "$state" in
+            BEHIND|DIRTY)
+              gh pr comment "$PR" --body "PRODUCTION IS AHEAD OF MAIN. \`production:healthy\` is set and the estate is serving this change, but \`main\` moved during the deploy (\`$state\`) so the merge is refused. This is not recoverable by merging -- see spec.org, the divergence below."
+              gh pr edit "$PR" --add-label blocked:diverged
+              exit 9 ;;
+          esac
+      # Re-derive the fact the label asserts. GitHub cannot distinguish a label
+      # written by a gate from one typed by a person, so trusting
+      # production:healthy would make hand-adding it a way to merge with no
+      # deployment at all.
+      - name: guard 5, again — do not trust the label that triggered this
+        run: |
+          SHA=$(gh pr view "$PR" --json headRefOid -q .headRefOid | cut -c1-7)
+          HEALTH_MODE=manifest HEALTH_SAMPLES=5 \
+            ./gates/health.sh "${{ vars.PRODUCTION_URL }}" "$SHA" \
+            || { gh pr edit "$PR" --remove-label production:healthy
+                 gh pr comment "$PR" --body "production:healthy was set but production is not serving \`$SHA\`. The label has been withdrawn and the merge refused."
+                 exit 1; }
+      - run: ./change/release.sh "$PR"

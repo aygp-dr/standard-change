@@ -1,0 +1,60 @@
+#!/bin/sh
+# envs -- every environment this change model knows about, in one view.
+#
+# Three registries that do not know about each other, which is the point of
+# looking at them together:
+#   GitHub environments   what the forge will gate a deployment on
+#   bastille jails        what is actually serving
+#   ports.tsv             local worktree blocks (development, not a target)
+set -eu
+R="${GH_REPO:-aygp-dr/standard-change}"
+cd "$(dirname "$0")"
+h() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+
+h "GitHub environments — https://github.com/$R/deployments"
+ENVS=$(gh api "repos/$R/environments" --jq '.environments[]?.name' 2>/dev/null || true)
+if [ -z "$ENVS" ]; then
+  echo "  none defined."
+  echo "  Payloads exist at .github/config/ and have never been applied;"
+  echo "  deploy-production.yml names 'environment: production', which without"
+  echo "  one carries no reviewer gate and no branch restriction."
+else
+  for e in $ENVS; do
+    printf '  %-14s' "$e"
+    gh api "repos/$R/environments/$e" \
+      --jq '"reviewers=" + ((.protection_rules[]?|select(.type=="required_reviewers")|"yes")//"no")
+            + "  branch_policy=" + (if .deployment_branch_policy then "restricted" else "any" end)' 2>/dev/null
+  done
+fi
+
+h "GitHub deployments"
+D=$(gh api "repos/$R/deployments" --jq 'length' 2>/dev/null || echo 0)
+if [ "$D" = "0" ]; then
+  echo "  none. Nothing has deployed THROUGH the forge -- deploy-staging.yml and"
+  echo "  deploy-production.yml have never run, because a GitHub-hosted runner"
+  echo "  cannot reach 10.0.0.0/24. See docs/deployment-targets.org."
+else
+  gh api "repos/$R/deployments" --jq '.[]|"  \(.environment) \(.sha[0:7]) by \(.creator.login) \(.created_at)"' | head -8
+fi
+
+h "bastille jails — what is actually serving"
+# Do NOT parse `bastille list`: with a 5-digit JID it prints "88201sc-staging"
+# with no space, so every field shifts and $2==name never matches. jls gives
+# clean columns.
+for spec in "sc-staging 10.0.0.60" "sc-prod-1 10.0.0.61" "sc-prod-2 10.0.0.62"; do
+  set -- $spec; j=$1; ip=$2
+  jls -j "$j" >/dev/null 2>&1 || { printf '  %-12s %-11s jail not running\n' "$j" "$ip"; continue; }
+  v=$(curl -s --max-time 2 "http://$ip/version.json" 2>/dev/null || echo '{}')
+  printf '  %-12s %-11s %s\n' "$j" "$ip" "$(echo "$v" | jq -c . 2>/dev/null || echo unreachable)"
+done
+
+h "production cutover"
+./targets/bastille/front/switch.sh status 2>/dev/null | sed 's/^/  /' || echo "  front router down"
+printf '  staging   http://192.168.86.29:9101\n  production http://192.168.86.29:9100\n'
+
+h "local worktree blocks — development, never a deployment target"
+if [ -f ports.tsv ]; then
+  awk -F'\t' 'NR>1{printf "  block %-3s %-9s %s\n", $1, $3, $2}' ports.tsv
+else
+  echo "  no ports.tsv"
+fi
