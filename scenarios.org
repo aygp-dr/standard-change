@@ -269,14 +269,35 @@ All three are the same shape as =docs/interfaces.org= §8: a guard that is
 the top of preflight and never again; the class is set once and never expires;
 and =queue.sh= answers about a state it never verified it was asked about.
 
-*** Expected, once fixed
+*** Decision: 1 is DEFERRED. 2 and 3 are defects.
 
-1. =targets/node/deploy.sh= refuses a protected environment with no open window
-   covering now, independent of =preflight=.
-2. =queue.sh claim= refuses when the PR holds no =deploy:staging=, rather than
-   echoing =claimed=. "Nothing to validate" is not "validated".
-3. An =itil:*= classification is re-derived or re-confirmed when a change is
-   activated, not trusted from whenever it was last written.
+*Deferred — guard 3 on the deploy path.* A person reads the calendar, sees
+their window, and deploys. =preflight= is the checklist they run, and a
+checklist a human follows is a real control; enforcing the window a second time
+inside every target would be a second implementation of guard 3, which is the
+defect this repo has already hit twice (guard 2 in preflight vs activate, the
+calendar in preflight vs =current=). Building it now buys nothing and costs a
+divergence.
+
+*The trigger that forces the revisit:* *the first deployment initiated by
+automation rather than by a person.* At that moment nothing reads the calendar
+at all — there is no checklist, and =preflight='s exit code is advice nobody
+receives. Any of these counts: a workflow that calls a target directly, a
+scheduled job, an agent driving =deploy.sh= unattended, or =change/activate.sh=
+being revived.
+
+Until then this is a *known, accepted gap*, not an open bug, and it is written
+down so nobody rediscovers it and treats it as one.
+
+*Still defects, and small:*
+
+1. =queue.sh claim= must refuse when the PR holds no =deploy:staging=, rather
+   than echoing =claimed=. "Nothing to validate" is not "validated", and the
+   caller cannot tell the difference from the output.
+2. An =itil:*= classification must be re-confirmed when a change is activated,
+   not trusted from whenever it was last written. #44 carried =itil:emergency=
+   for two hours after the exercise that set it, and would have been exempted
+   from guard 0 and guard 1 on that basis.
 
 Nothing was deployed. The berth was not taken; the estate was untouched.
 
