@@ -68,12 +68,18 @@ const sh = (cmd, args) => new Promise((res) =>
 const prMeta = new Map();
 async function resolvePr(n) {
   if (prMeta.has(n)) return prMeta.get(n);
-  const out = await sh('gh', ['pr', 'view', String(n), '--json', 'headRefName,title,url']);
-  let v = { branch: null, title: null, url: null };
+  const out = await sh('gh', ['pr', 'view', String(n), '--json', 'headRefName,title,url,labels']);
+  let v = { branch: null, title: null, url: null, cls: null };
   if (out) {
     try {
       const j = JSON.parse(out);
-      v = { branch: j.headRefName, title: j.title, url: j.url };
+      // The CLASS, not the whole label set. preflight branches on it, and an
+      // unclassified change satisfies every rule that branches on it -- so the
+      // absence has to be visible, not blank.
+      const cls = (j.labels || []).map((x) => x.name)
+        .filter((x) => x.startsWith('itil:')).map((x) => x.slice(5));
+      v = { branch: j.headRefName, title: j.title, url: j.url,
+            cls: cls.length === 1 ? cls[0] : (cls.length ? 'conflict' : null) };
     } catch { /* leave nulls: an unparseable answer is not an answer */ }
   }
   prMeta.set(n, v);
@@ -365,6 +371,13 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa;padding-left:12px}
 .age{color:#6b7280;font-size:11px}
 .ver{color:#6b7280;font-size:11px;font-weight:400;margin-left:8px}
 .br{color:#60a5fa;font-size:11px}
+.chip{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;
+font-weight:700;letter-spacing:.05em;margin-right:8px;vertical-align:1px}
+.cls-std{background:#11301c;color:#86efac;border:1px solid #16a34a}
+.cls-nrm{background:#12233d;color:#93c5fd;border:1px solid #2563eb}
+.cls-emg{background:#3b1414;color:#fca5a5;border:1px solid #b91c1c}
+.cls-bad{background:#3a2a08;color:#fde68a;border:1px solid #b45309}
+.cls-none{background:#1f1f24;color:#8b93a7;border:1px dashed #4b5563}
 .prlink{color:#e6e6e6;text-decoration:none}
 .prlink:hover{color:#60a5fa;text-decoration:underline}
 .sub{color:#8b93a7;font-size:11px;margin-top:2px}
@@ -444,6 +457,28 @@ function when(iso){
   const t=d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   return same?t:d.toLocaleString([], {month:'short', day:'numeric',
                                       hour:'numeric', minute:'2-digit'});
+}
+// ITIL 4 does not mandate a palette. This is the common ITSM-tooling
+// convention: standard green (pre-authorised, routine), normal blue (assessed,
+// needs authorisation), emergency red (expedited). The abbreviation carries the
+// meaning and the colour only reinforces it -- colour alone excludes anyone who
+// cannot distinguish these, and this board is read under pressure.
+//
+// The no-class case is deliberately loud. preflight branches on the class, so
+// a change with no class satisfies every rule that branches on it; blank would
+// read as 'nothing to see'.
+//
+// No backticks anywhere in this page. The whole page is a template literal in
+// server.mjs, so one backtick in a COMMENT ends the literal and the file stops
+// parsing. Third variant of the same trap today, after an escaped newline and a
+// nested quote.
+function cls_chip(c){
+  const m={standard:['cls-std','STD','itil:standard — pre-authorised, routine'],
+           normal:['cls-nrm','NRM','itil:normal — assessed, needs authorisation'],
+           emergency:['cls-emg','EMG','itil:emergency — expedited; exempt from freeze and queue'],
+           conflict:['cls-bad','2 CLASSES','two itil: labels — the class is undefined and every rule branches on it']};
+  const e=m[c]||['cls-none','NO CLASS','no itil: label — every rule that branches on the class is satisfied by default'];
+  return '<span class="chip '+e[0]+'" title="'+esc(e[2])+'">'+esc(e[1])+'</span>';
 }
 function cls(s){return s<=0?'rem-bad':s<60?'rem-bad':s<150?'rem-warn':'rem-ok';}
 function remain(x){
@@ -526,7 +561,7 @@ function render(d){
     '<td class=sha>'+esc(x.sha)+'</td>'+
     '<td>'+remain(x)+'<div class=sub>'+esc(x.mins)+'m</div></td>'+
     '<td class=n-'+esc(x.env)+'>'+(x.in_env?esc(x.env):'')+'</td>'+
-    '<td class=dim>'+esc(x.id)+
+    '<td class=dim>'+cls_chip(x.cls)+esc(x.id)+
       ' <button class=clr data-clear="'+esc(String(x.pr).replace('#',''))+'" '+
       'title="give this slot back">clear</button></td></tr>').join('')
     // "no open window" and "the berth is free" are not the same claim. This
