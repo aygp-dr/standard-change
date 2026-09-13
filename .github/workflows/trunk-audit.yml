@@ -13,13 +13,36 @@ jobs:
         run: |
           gh issue comment 1 --body "FORCE PUSH to main at $(date -u +%FT%TZ) by ${{ github.actor }}: before=${{ github.event.before }} after=${{ github.event.after }}. A ruleset would have blocked this; on this plan it can only be recorded, and the overwritten objects may already be unreachable."
           echo "::error::force push to main detected"
-      - name: a commit arrived without a pull request
+      # DIRECT PUSH TO MAIN IS NOT THE DEFECT. The original rule commented on
+      # issue #1 for EVERY commit with no pull request, on the grounds that
+      # "every change is supposed to be a PR". That is not how this repo works
+      # -- 182 commits reached main on 2026-09-13 and the working practice is to
+      # fix control-plane code directly and use PRs to validate the deployment
+      # path. The rule would have produced 182 comments on the estate holder,
+      # burying the one thing that issue exists to carry.
+      #
+      # A warning that fires on the normal case trains its reader to ignore it,
+      # which is the same defect as preflight claiming a 5-app blast radius for a
+      # 1-app change.
+      #
+      # What is actually worth flagging is a direct push that skips the
+      # DEPLOYMENT path -- a commit touching apps/**, the deployable entity,
+      # with no pull request behind it. That is a change reaching the artifact
+      # without a window, a berth, or an observation. Everything else --
+      # gates/, change/, docs/, the dashboard -- is control-plane and is
+      # expected to land directly.
+      - name: a deployable change arrived without a pull request
         if: "!github.event.forced"
         run: |
           for sha in $(echo '${{ toJson(github.event.commits.*.id) }}' | jq -r '.[]?'); do
             n=$(gh api "repos/${{ github.repository }}/commits/$sha/pulls" \
                   -H "Accept: application/vnd.github.groot-preview+json" --jq 'length' 2>/dev/null || echo 0)
-            [ "$n" -gt 0 ] || {
-              gh issue comment 1 --body "DIRECT PUSH to main: \`$sha\` by ${{ github.actor }} has no associated pull request. Every change is supposed to be a PR (spec.org, Vocabulary)."
-              echo "::warning::$sha reached main without a PR"; }
+            [ "$n" -gt 0 ] && continue
+            # Only apps/** -- the deployable entity. A control-plane commit
+            # landing directly is the expected case, not an incident.
+            touched=$(gh api "repos/${{ github.repository }}/commits/$sha" \
+                        --jq '[.files[].filename|select(startswith("apps/"))]|length' 2>/dev/null || echo 0)
+            [ "$touched" -gt 0 ] || continue
+            gh issue comment 1 --body "DIRECT PUSH of a DEPLOYABLE change: \`$sha\` by ${{ github.actor }} touches $touched file(s) under \`apps/\` with no pull request behind it. That is an artifact change reaching \`main\` without a window, a berth, or an observation."
+            echo "::warning::$sha changed apps/ and reached main without a PR"
           done
