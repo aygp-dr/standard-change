@@ -808,10 +808,17 @@ gh pr edit "$pr" --repo "$repo" \
   --remove-label deploy:staging --remove-label deploy:production \
   --remove-label staging:passed --remove-label production:healthy
 ./change/lock.sh release
-# Tell everyone waiting that they are now behind main and must rebase.
-for w in $(gh pr list --repo "$repo" --state open --label blocked:queue --json number -q '.[].number'); do
-  gh pr comment "$w" --repo "$repo" --body "Staging freed by #$pr. Rebase onto \`main\`, then add \`deploy:staging\`."
-done
+
+# Announce ONCE, on the queue issue -- never fan out to every waiter.
+#
+# The previous version commented on each blocked:queue PR. At the several-
+# hundred-PR scale that is one API call per waiter per release, and worse than
+# the cost: the queue has no ordering, so telling everyone at once produces a
+# thundering herd that all rebase and race for a berth exactly one of them can
+# take. Announcing once turns the queue into something waiters read rather than
+# something that pages them.
+gh issue comment "${QUEUE_ISSUE:-1}" --repo "$repo" --body \
+  "Staging freed by #$pr at $(date -u +%FT%TZ). Next claimant: rebase onto \`main\` first -- guard 0 will refuse a branch that is behind."
 #+end_src
 
 Repo variable =AUTO_MERGE=0= turns the last hop manual: production is deployed
@@ -1376,9 +1383,10 @@ observed.
 | python3   | 3.11.15                                         |
 | emacs     | GNU Emacs 30.2 (tangles this file; 6 blocks [E]) |
 | chromium  | 148.0.7778.215 as =/usr/local/bin/chrome=       |
-| nginx     | *not installed*                                 |
+| nginx     | 1.30.4 (installed 2026-09-13 after =pkg update=) |
 | eslint    | *not installed* (project-local dep)             |
 | wrangler  | *not installed*                                 |
+| podman    | 5.8.1 — but FreeBSD jails, not Linux OCI images, and rootless unsupported |
 | playwright| *not installed*; =@playwright/test= 1.63.0 resolves from the registry |
 
 Repo state at survey: zero tracked files, no commits, no GitHub remote.
@@ -1394,8 +1402,8 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
   drive). This is the single largest open portability risk.
 - The Google Calendar used as the change schedule was not contacted; the
   account, calendar id, and credential path are unstated (see Open items).
-- nginx was not installed; =pkg= catalogue is stale and updating it needs root,
-  which was not taken.
+- (resolved) =pkg update= was run with root on 2026-09-13; nginx 1.30.4 and
+  gitea-act_runner 0.4.0 installed.
 - The GitHub and Cloudflare targets were not exercised.
 
 * Open items (tracked as issues, not here)

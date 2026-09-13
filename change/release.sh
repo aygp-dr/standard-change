@@ -35,7 +35,14 @@ gh pr edit "$pr" --repo "$repo" \
   --remove-label deploy:staging --remove-label deploy:production \
   --remove-label staging:passed --remove-label production:healthy
 ./change/lock.sh release
-# Tell everyone waiting that they are now behind main and must rebase.
-for w in $(gh pr list --repo "$repo" --state open --label blocked:queue --json number -q '.[].number'); do
-  gh pr comment "$w" --repo "$repo" --body "Staging freed by #$pr. Rebase onto \`main\`, then add \`deploy:staging\`."
-done
+
+# Announce ONCE, on the queue issue -- never fan out to every waiter.
+#
+# The previous version commented on each blocked:queue PR. At the several-
+# hundred-PR scale that is one API call per waiter per release, and worse than
+# the cost: the queue has no ordering, so telling everyone at once produces a
+# thundering herd that all rebase and race for a berth exactly one of them can
+# take. Announcing once turns the queue into something waiters read rather than
+# something that pages them.
+gh issue comment "${QUEUE_ISSUE:-1}" --repo "$repo" --body \
+  "Staging freed by #$pr at $(date -u +%FT%TZ). Next claimant: rebase onto \`main\` first -- guard 0 will refuse a branch that is behind."
