@@ -6,6 +6,15 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
+// The nav is built from router/routes.json at startup, not baked in: a route
+// added to any app must appear without editing five source files.
+let ALL_ROUTES = [];
+try {
+  ALL_ROUTES = JSON.parse(readFileSync(join(here, '..', '..', '..', 'router', 'routes.json'), 'utf8'))
+    .sort((a, b) => a.port_offset - b.port_offset);
+} catch { ALL_ROUTES = [meta]; }
+const SHARED = ["/about", "/contact", "/jobs"];
+const probe = (r) => r.replace(':sku', 'SKU1').replace(':category', 'shoes');
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
 const BLOCK = process.env.BLOCK || '?';
@@ -28,11 +37,11 @@ main{max-width:34rem}code{background:#fff;padding:2px 6px;border-radius:3px}</st
 <main><h1>${d.app}</h1>
 <p>served by <b>${d.app}</b> · path <code>${d.path}</code> · build <code>${d.sha}</code> · block <code>${d.block}</code></p>
 <p class=g style="color:#666;margin:14px 0 6px">every route, by the app that owns it — a link that changes the name above crossed to a sibling app:</p>
-<div class=g><b>${d.app === "core" ? "▸ " : ""}core</b> <a href="/">/</a> <a href="/login">/login</a> <a href="/account">/account</a> <a href="/cart">/cart</a></div>
-<div class=g><b>${d.app === "plp" ? "▸ " : ""}plp</b> <a href="/search">/search</a> <a href="/c/shoes">/c/shoes</a></div>
-<div class=g><b>${d.app === "pdp" ? "▸ " : ""}pdp</b> <a href="/p/SKU1">/p/SKU1</a></div>
-<div class=g><b>${d.app === "checkout" ? "▸ " : ""}checkout</b> <a href="/checkout">/checkout</a> <a href="/checkout/payment">/checkout/payment</a> <a href="/checkout/confirm">/checkout/confirm</a></div>
-<div class=g><b>${d.app === "mock" ? "▸ " : ""}mock</b> <a href="/api/catalog">/api/catalog</a> <a href="/api/cart">/api/cart</a></div>
+${ALL_ROUTES.map((a) => `<div class=g><b>${a.app === d.app ? "▸ " : ""}${a.app}</b> ` +
+  a.routes.filter((r) => !SHARED.includes(r))
+          .map((r) => `<a href="${probe(r)}">${probe(r)}</a>`).join(" ") + `</div>`).join("")}
+<p class=g style="color:#666;margin:18px 0 4px">shared surface — every app links back to core:</p>
+<div class=g><b>core</b> ${SHARED.map((r) => `<a href="${r}">${r}</a>`).join(" ")}</div>
 </main>`;
 }
 

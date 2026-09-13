@@ -26,6 +26,10 @@ http {
     location /login         { proxy_pass http://core; }
     location /account       { proxy_pass http://core; }
     location /cart          { proxy_pass http://core; }
+    # shared surface: every app links back to these, so the router must own them
+    location /about         { proxy_pass http://core; }
+    location /contact       { proxy_pass http://core; }
+    location /jobs          { proxy_pass http://core; }
     location /search        { proxy_pass http://plp; }
     location /c/            { proxy_pass http://plp; }
     location /p/            { proxy_pass http://pdp; }

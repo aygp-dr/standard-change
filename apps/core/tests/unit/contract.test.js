@@ -22,7 +22,8 @@ test('render echoes the path it was asked for', () => {
 // compared the file to itself and could never fail. The expected set is
 // written out here on purpose: changing routes.json must now break a test and
 // force a deliberate edit, which is what makes it a contract.
-const EXPECTED_ROUTES = ["/", "/login", "/account", "/cart"].map(String);
+const EXPECTED_ROUTES = ["/", "/login", "/account", "/cart",
+                         "/about", "/contact", "/jobs"].map(String);
 
 test("routes.json matches the declared contract for this app", () => {
   assert.deepEqual(meta.routes, EXPECTED_ROUTES);

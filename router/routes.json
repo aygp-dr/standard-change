@@ -19,7 +19,10 @@
       "/",
       "/login",
       "/account",
-      "/cart"
+      "/cart",
+      "/about",
+      "/contact",
+      "/jobs"
     ],
     "health": "/",
     "journeys": [
