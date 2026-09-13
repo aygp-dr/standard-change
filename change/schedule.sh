@@ -260,6 +260,45 @@ case "${1:-}" in
   # The clash check did not catch it and should not have -- the windows did not
   # overlap. One change holding two slots is a different mistake, and nothing
   # could see it because nothing could ask this question.
+  # unschedule <pr> [reason] -- give the slot back.
+  #
+  # The inverse of `block`, and it is ONE VERB because it is one decision. Doing
+  # it by hand meant `windows`, then `close ... cancelled` per id, then
+  # `gh pr edit --remove-label change:scheduled` -- three commands where
+  # forgetting the third leaves the PR claiming a reservation the calendar has
+  # already given away. That is the two-sources-for-one-fact defect, reachable
+  # by anyone who gets bored halfway.
+  #
+  # CANCELLED, not expired: somebody decided. reap.sh owns `expired` and only
+  # `expired`; a slot handed back deliberately is a different fact from one that
+  # lapsed, and the closure codes are the place that distinction lives.
+  #
+  # It does NOT touch the class, the approval, or any observation. The change is
+  # still approved and still measured -- it just is not booked. Un-booking is
+  # not un-approving.
+  unschedule)
+    _pr="${2:?usage: schedule.sh unschedule <pr> [reason]}"
+    _why="${3:-no reason given}"
+    _n=0
+    for _id in $("$0" windows "$_pr" | awk '{print $1}'); do
+      "$0" close "$_id" cancelled >/dev/null 2>&1 && {
+        echo "  $_id cancelled"; _n=$((_n + 1)); }
+    done
+    if [ "$_n" -eq 0 ]; then
+      echo "  #$_pr held no open window; nothing to give back" >&2
+    else
+      gh pr edit "$_pr" --repo "$repo" --remove-label change:scheduled >/dev/null 2>&1 || true
+      gh pr comment "$_pr" --repo "$repo" --body \
+"Unscheduled: $_n window(s) given back, closed \`cancelled\`.
+
+**Reason:** $_why
+
+\`change:scheduled\` cleared. This is *cancelled*, not *expired* — somebody decided, rather than the slot lapsing. The change is still approved and its observations still stand; it simply is not booked. Re-book with \`./change/schedule.sh block $_pr <groups> <minutes>\`." >/dev/null 2>&1 || true
+      echo "  change:scheduled cleared -- approved, unbooked"
+    fi
+    ;;
+
+
   windows)
     _pr="${2:?usage: schedule.sh windows <pr> [env]}"
     _env="${3:-}"

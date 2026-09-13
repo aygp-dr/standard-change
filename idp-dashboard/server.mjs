@@ -271,6 +271,22 @@ const server = createServer(async (req, res) => {
     return send(r === '' && action === 'on' ? 500 : 200, 'application/json',
       JSON.stringify({ ok: true, label, action, flags: s2.flags }, null, 2));
   }
+  // POST /api/schedule/<pr>/clear -- hand the slot back.
+  //
+  // The API is deliberately one verb per decision, matching the CLI. There is
+  // no PATCH of a window, no "move to", no reschedule-in-one-call: rescheduling
+  // is unschedule then block, and keeping them separate means the calendar
+  // never holds a half-applied move. It is POST because it writes, and it takes
+  // no body because there is nothing to configure -- which slot to give back is
+  // "all of them", since a change should hold exactly one.
+  if (req.method === 'POST' && /^\/api\/schedule\/\d+\/clear$/.test(req.url || '')) {
+    const pr = req.url.split('/')[3];
+    const out = await sh('./change/schedule.sh', ['unschedule', pr, 'cleared from the dashboard']);
+    const s2 = await snapshot();
+    for (const c of clients) { try { c.write(frame(JSON.stringify(s2))); } catch { clients.delete(c); } }
+    return send(200, 'application/json',
+      JSON.stringify({ ok: true, pr: Number(pr), detail: out.trim() }, null, 2));
+  }
   if (req.url === '/api/status') return send(200, 'application/json', JSON.stringify(await snapshot(), null, 2));
   if (req.url === '/healthz') return send(200, 'application/json', JSON.stringify({ ok: true }));
   if (req.url !== '/') return send(404, 'text/plain', 'not found');
@@ -358,6 +374,8 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa;padding-left:12px}
 button{font:inherit;font-size:12px;padding:5px 12px;border-radius:3px;cursor:pointer;
 background:#1a1d26;color:#c9d1d9;border:1px solid #30363d}
 button:hover{background:#232733}
+button.clr{font-size:11px;padding:2px 8px;border-color:#30363d;color:#8b93a7;margin-left:8px}
+button.clr:hover{border-color:#b45309;color:#fde68a;background:#2a2010}
 button.b-freeze{border-color:#2563eb;color:#93c5fd}
 button.b-freeze:hover{background:#12233d}
 button.b-emergency{border-color:#b91c1c;color:#fca5a5}
@@ -508,7 +526,9 @@ function render(d){
     '<td class=sha>'+esc(x.sha)+'</td>'+
     '<td>'+remain(x)+'<div class=sub>'+esc(x.mins)+'m</div></td>'+
     '<td class=n-'+esc(x.env)+'>'+(x.in_env?esc(x.env):'')+'</td>'+
-    '<td class=dim>'+esc(x.id)+'</td></tr>').join('')
+    '<td class=dim>'+esc(x.id)+
+      ' <button class=clr data-clear="'+esc(String(x.pr).replace('#',''))+'" '+
+      'title="give this slot back">clear</button></td></tr>').join('')
     // "no open window" and "the berth is free" are not the same claim. This
     // lists UNRESOLVED reservations -- a window whose end has passed but which
     // nobody closed is still listed, and an empty list means nobody holds a
@@ -541,8 +561,19 @@ ws.onclose=()=>{
 ws.onmessage=e=>render(JSON.parse(e.data));
 document.addEventListener('click',e=>{
   const b=e.target.closest('button[data-label]');
-  if(b)toggle(b.dataset.label,b.dataset.action);
+  if(b){toggle(b.dataset.label,b.dataset.action);return;}
+  const c=e.target.closest('button[data-clear]');
+  if(c)clearSlot(c.dataset.clear);
 });
+async function clearSlot(pr){
+  // Asks, because giving a slot back is a decision and the next change takes
+  // it. Not destructive -- the change stays approved and its observations
+  // stand -- so one confirm is enough.
+  if(!confirm('Give back #'+pr+"'s window? The change stays approved; it just "+
+              'will not be booked.'))return;
+  await fetch('/api/schedule/'+pr+'/clear',{method:'POST'});
+  render(await (await fetch('/api/status')).json());
+}
 fetch('/api/status').then(r=>r.json()).then(render);
 </script>`;
 
