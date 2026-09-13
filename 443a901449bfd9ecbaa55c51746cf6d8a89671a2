@@ -1,0 +1,19 @@
+Timeline
+- Two tooling failures first, both mine, both resembling findings:
+  'unbounded CHOOSE' from NoPR == CHOOSE x : x \notin PRs (fixed by making
+  NoPR a CONSTANT model value with ASSUME), then 'Deadlock reached' on the
+  positive run -- not a violation, just the terminal state where every PR
+  has merged. Added CHECK_DEADLOCK FALSE.
+- Negative run then reproduced scenario D4 in 11 states.
+- Positive run exhausted the space: 0 states left on queue, so the pass is
+  exhaustive at this bound rather than truncated.
+
+Reproduction
+  ./tla/check.sh
+  negative (Guard4b=FALSE): Error: Invariant Safety is violated
+                            /\ regressed = TRUE
+                            2783 states generated, 611 distinct
+  positive (Guard4b=TRUE):  Model checking completed. No error has been found.
+                            3781 states generated, 830 distinct, depth 16
+Cell: FreeBSD 14.4 amd64, OpenJDK 21.0.10, tla2tools 2.20
+  ($HOME/ghq/github.com/aygp-dr/tla-plus-tutorial/tla2tools.jar)
