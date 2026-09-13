@@ -171,6 +171,16 @@ export function render(path, catalogue = loadCatalogue()) {
 // the gates assert on; HTML is only served when the client asks for it.
 export const BACKGROUND = '#fff4e0';
 
+// An error page should not look like a page that worked. pdp renders the same
+// chrome whether it found the product or not, so a 404 and a 200 were
+// distinguishable only by reading the words -- and gates/smoke.sh already
+// proved nobody clicks the sad path on purpose.
+//
+// Keyed off `found`, the same field status() uses, so the colour cannot
+// disagree with the status code. If it renders red it returned 404 or 503.
+export const ERROR_BACKGROUND = '#ffe3e3';
+const background = (d) => (d.found ? BACKGROUND : ERROR_BACKGROUND);
+
 const SYMBOL = { USD: '$', GBP: '£', EUR: '€' };
 export function money(price, currency) {
   const sym = SYMBOL[currency];
@@ -215,7 +225,7 @@ This product has not gone away; try again shortly.</p>
 
 export function renderHtml(path, catalogue = loadCatalogue()) {
   const d = render(path, catalogue);
-  return page(d, ESTATE, BACKGROUND, panel(d));
+  return page(d, ESTATE, background(d), panel(d));
 }
 
 // Only listen when run directly. Importing this module (as the unit tests do)
