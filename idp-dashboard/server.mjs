@@ -477,7 +477,13 @@ function cls_chip(c){
            normal:['cls-nrm','NRM','itil:normal — assessed, needs authorisation'],
            emergency:['cls-emg','EMG','itil:emergency — expedited; exempt from freeze and queue'],
            conflict:['cls-bad','2 CLASSES','two itil: labels — the class is undefined and every rule branches on it']};
-  const e=m[c]||['cls-none','NO CLASS','no itil: label — every rule that branches on the class is satisfied by default'];
+  // UNDEFINED, not 'none' or 'empty'. gates/preflight.sh:164 already calls this
+  // state 'a change whose class is undefined', and that is the accurate word:
+  // there is no answer, as opposed to an answer that happens to be empty. The
+  // distinction matters because every rule below branches on the class, and a
+  // rule branching on an undefined value takes whichever arm it was written to
+  // take -- which is not a decision anybody made.
+  const e=m[c]||['cls-none','UNDEFINED','no itil: label — the class is undefined, and every rule that branches on it is satisfied by default'];
   return '<span class="chip '+e[0]+'" title="'+esc(e[2])+'">'+esc(e[1])+'</span>';
 }
 function cls(s){return s<=0?'rem-bad':s<60?'rem-bad':s<150?'rem-warn':'rem-ok';}
