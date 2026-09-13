@@ -201,7 +201,7 @@ pipeline simulator, so apps are dependency-free node processes on port blocks.
 longest-prefix contract driven by =router/routes.json=.
 
 Verified live: three blocks (main + two worktrees), 18/18 ports answering,
-routing isolated (=:10010/search= → =block 1=, =:10020/search= → =block 2=),
+routing isolated (=:9010/search= → =block 1=, =:9020/search= → =block 2=),
 and =x-build-sha= present on all three — the precondition guard 5 needs.
 
 Four defects that *no amount of reading would have found*:

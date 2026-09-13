@@ -1,0 +1,48 @@
+# THE LABEL OWNERSHIP DECLARATION. Machine-readable on purpose.
+#
+# Prose cannot stop the failure this exists for: an agent reads the repo, sees
+# a label it thinks should be set, and writes automation that sets it -- while
+# a different automation, equally reasonably, withdraws it. Neither is wrong
+# about the world. The label has no owner. On PR #9 production:healthy flipped
+# five times in twenty minutes between a person and github-actions.
+#
+# Before adding ANY label write to ANY script or workflow, find its row here.
+# If the writer you are adding is not the declared owner, you are building the
+# thrash. gates/label-audit.py enforces this against a PR's timeline.
+#
+# owner        the ONE thing that may write this label
+# human_add    may a person add it by hand?
+# human_rm     may a person remove it by hand?
+# notes        why
+#
+# label	owner	human_add	human_rm	notes
+app:*	labeller	no	no	derived from the diff; recomputed every push. Take it over with labeler:skip, never by editing
+change:standard	labeller	no	no	derived; same
+change:normal	labeller	no	no	derived; same
+labeler:skip	human	yes	yes	the opt-out that transfers ownership of the derived labels
+change:requested	human	yes	no	the human's part of starting a change; the pipeline clears it
+change:scheduled	scheduler	no	no	set when a window is booked
+change:complete	change/settle.sh	no	no	TERMINAL, and the record. Never cleared
+release	human	yes	no	INTENT. A person adds it; the scheduler consumes it. A trigger that stays on re-fires
+hold:staging	human	yes	yes	the only human stop. A hold a machine can lift is not a hold
+deploy:staging	workflow	no	no	ACTION in flight, and the berth claim guard 1 reads
+deploy:production	workflow	no	no	action in flight
+staging:e2e	gates/e2e.sh --pr	no	no	observation; the gate is the instrument
+staging:e2e-failed	gates/e2e.sh --pr	no	no	observation
+staging:smoke	gates/smoke.sh --pr	no	no	observation
+staging:smoke-failed	gates/smoke.sh --pr	no	no	observation
+staging:uat	human	yes	no	THE EXCEPTION: for acceptance the person IS the instrument. Via change/observe.sh, which checks the build matches
+production:e2e	gates/e2e.sh --pr	no	no	observation
+production:smoke	gates/smoke.sh --pr	no	no	observation
+production:healthy	gates/health.sh --pr	no	no	observation. Typed by hand on #9 because health.sh had no --pr; that was the ownership defect
+staging:passed	RETIRED	no	no	named no measurement and no environment; replaced by the staging:* stack
+staging:failed	RETIRED	no	no	same
+deployed:production	RETIRED	no	no	replaced by change:complete plus the deployment record
+blocked:queue	change/queue.sh	no	no	set and cleared by the queue
+blocked:lock	change/lock.sh	no	no	set and cleared by the lock
+blocked:diverged	workflow	no	yes	a human may clear it after rebasing
+blocked:freeze	gates/preflight.sh	no	no	set and cleared by preflight
+change:emergency	human	yes	yes	bypasses the queue; a person must own declaring an emergency
+staging:in-progress	workflow	no	no	action in flight
+production:e2e-failed	gates/e2e.sh --pr	no	no	observation
+production:smoke-failed	gates/smoke.sh --pr	no	no	observation

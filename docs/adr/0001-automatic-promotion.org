@@ -1,0 +1,531 @@
+#+TITLE: ADR 0001 — automatic promotion to production, gated by evidence
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:nil
+
+* Status
+
+Accepted. *Supersedes ADR 0002*, which described the environment tiers as a
+separate decision; they are a consequence of this one.
+
+*Retitled 2026-09-13.* This was filed as "scheduled deployment windows with
+separate activation", which named a mechanism and not a decision. The windows,
+the berth, the tiers and the dashboard are all things this decision *needs*;
+none of them is the thing being decided. An ADR titled after its mechanism
+invites the next reader to argue about the mechanism.
+
+Note also that *B is the fallback* — four cheaper options beat it on the number
+that matters (§Decision rule). Recorded that way on purpose: an ADR presenting
+its own decision as the answer, when the measurement says otherwise, is
+advocacy rather than a record. Scope is the *workflow* — change enablement and the scheduling of
+deployment windows. It is deliberately *not* about the activated deployment
+itself: what a deployment does once it starts is deployment management's
+concern and belongs in a separate decision.
+
+* Context
+
+Changes reach production through a single shared path (§What this model gets
+wrong, on purpose). Today, holding the path and deploying are the same act: a
+change takes the berth and immediately begins. Three problems follow.
+
+1. *Nobody can plan.* A change cannot reserve capacity for later, so ITIL 4's
+   change schedule has nothing to schedule — the calendar records what happened
+   rather than governing what will.
+2. *Guards are evaluated at request time.* Guard 4b exists because the world
+   moves between asking and acting (=experiments/001=). Splitting the two acts
+   gives that re-check a natural home.
+3. *Throughput is opaque.* Without a reservation grid there is no way to say
+   how many changes a day can absorb, so "add more capacity" is untestable.
+
+The change schedule is a calendar, so windows quantize. At 30 minutes that is
+*48 slots per day per berth*, and no gate improvement can buy a slot the
+schedule does not have.
+
+* Decision
+
+#+begin_quote
+*A change that passes its gates moves to production without a person moving
+it.* People raise a change and, for a normal change, approve it. Nobody
+performs the promotion.
+#+end_quote
+
+So there is no "push to staging" step and no "now push to production" step. A
+change is promoted by *evidence arriving*: the authorizing run passes and
+=staging:passed= appears; guard 2 is satisfied and =deploy:production= follows;
+convergence is measured and =production:healthy= follows; the merge is
+triggered by that. Each transition is caused by an observation, not a command
+(§Labels as state transitions in =spec.org=).
+
+*What a person still does*, and it is deliberately small:
+
+| act                  | who    | why it cannot be automated              |
+|----------------------+--------+-----------------------------------------|
+| raise the change     | human  | it is the intent                        |
+| approve =change:normal= | human | the gates cannot judge a control-plane change |
+| break glass          | human  | =change:emergency= is an authorization, not a measurement |
+
+Everything else is the system. *The approval gate sits before production, not
+between staging and production* — a change that has earned staging has earned
+production, because the same evidence governs both.
+
+** The mechanism this requires
+
+Automatic promotion is only safe if nothing can promote on stale evidence, and
+that is what the rest of this ADR is about:
+
+- *Reservation* (change enablement) — a change with green gates and an
+  up-to-date base reserves a window on the change schedule. Reserving is not
+  deploying. Guards 0 and 2 are checked here, for fast feedback.
+- *Activation* (deployment management) — a background scheduler activates the
+  reservation when its slot arrives, *re-evaluating every guard at that moment*.
+  A change that is no longer eligible *forfeits the slot* rather than deploying.
+
+Release management stays separate again: a release plans /what/ becomes
+available and may exist long before any window is reserved.
+
+* Consequences, measured
+
+=sim/= is a closed-loop discrete-event simulator (Python + Hypothesis,
+simulated time). It needs no pull requests, no forge, no running apps, no
+worktrees and no network — deliberately, because those verify the port-block
+and worktree rules, which are a different claim about a different system.
+
+** It gives guard 4b its proper home
+
+Reserve a window three hours out; an emergency breaks glass meanwhile:
+
+#+begin_example
+[day 0 00:00] CHG-0001 scheduled -> slot 6 (day 0 03:00)
+[day 0 00:30] CHG-0002 ACTIVATED at slot 1
+[day 0 01:00] CHG-0002 completed at slot 2; trunk -> 1
+[day 0 03:00] CHG-0001 forfeits slot 6: trunk moved: HOTFIX (guard 4b)
+#+end_example
+
+"At reliance, not at request" stops being a rule we remember to apply and
+becomes the thing the scheduler does.
+
+** Hypothesis found two defects the worked example missed
+
+- *Ordering within a quantum.* Activating before completing let a berth be
+  released and retaken in the same slot, so the incoming change evaluated guard
+  4b against a trunk that was about to move. D4's mechanism, reached through
+  scheduling rather than emergency. Fixed: finish, then activate.
+- *Guard 4b at the merge, not only at activation.* At =berths=2= two changes
+  activate in the same slot, both pass (trunk has not moved), then both merge —
+  the first moves trunk and the second ships a tree predating it. *Widening the
+  berth reinstates D4* unless the merge is itself guarded. Activation is not the
+  last point of reliance; the merge is.
+
+** The finding that decides this ADR — corrected 2026-09-13
+
+*An earlier revision of this ADR claimed that adding berths changes nothing:
+1/20 completions at one berth and 1/20 at eight. That was wrong, and the error
+was in the harness, not the model.* It reserved each change once and never let
+a forfeited change rebase and re-book, so every forfeit was permanent. With
+re-booking, berths do buy throughput:
+
+| berths | one-shot (wrong) | re-booking (correct) | validations per ship |
+|--------+------------------+----------------------+----------------------|
+|      1 |             1/20 |                 3/20 |                 21.7 |
+|      2 |             1/20 |                 6/20 |                 18.3 |
+|      4 |             1/20 |                14/20 |                 13.9 |
+|      8 |             1/20 |                20/20 |                 10.5 |
+|     16 |             1/20 |                20/20 |                 10.5 |
+
+What survives the correction — and is the sharper finding — is the last column.
+*Every shipped change costs ten to twenty validation runs.* Adding berths
+parallelizes that work; it does not reduce it. The shared artifact surface
+means each merge invalidates the other scheduled changes, and they must
+revalidate whether or not there is a berth free to revalidate in.
+
+So the argument for Option A changes shape but not direction. It is *not* that
+capacity cannot help — it can. It is that *the pipeline does an order of
+magnitude more validation work than it ships changes*, and no amount of
+capacity touches that ratio. Splitting the surface is what removes the
+invalidation, and with it the ratio.
+
+A release train attacks the same ratio from the other side by validating a
+batch once — measured at *0.58 validations per ship against 13.63*, a 23×
+reduction, at the cost of mean latency (2.6 h vs 12.5 h). See
+=docs/release-strategies.org=; that note also finds the throughput-optimal
+train is red more often than green, and that the analytic optimum sits at a
+92–99% predicted emergency share on this repo's own balance curve — i.e.
+unreachable. A short (≈1 h) train captures ~98% of the available amortization
+and stays on the reachable part of the curve.
+
+* Options considered
+
+** Option 0 — automation blocks on facts; a human checks judgment  ← strongest after 2026-09-13
+
+*A person still starts the deployment, and still confirms they are inside the
+window they asked for. CI/CD does not verify that; it blocks on the handful of
+things a machine can actually observe.*
+
+The split is by *what is mechanically checkable*, not by what is important:
+
+| CI/CD blocks on (observable facts)        | a human confirms (judgment)              |
+|-------------------------------------------+------------------------------------------|
+| the environment is already held — a deployment is in progress | *am I in the window I requested?* |
+| an emergency is in flight                 | *should this go now, given what I know?* |
+| a change freeze covers this moment        | *is the thing in staging the thing I meant?* |
+| the branch is behind =main=               | *did I actually look at it?*             |
+
+Each left-hand item is a query with an unambiguous answer: a label exists or it
+does not, a window overlaps or it does not, a merge state is =BEHIND= or it is
+not. None of them requires the pipeline to know what the change *is*.
+
+*Why this rose to the top today.* Three findings on 2026-09-13, in one hour of
+walking a one-line change through the pipeline:
+
+1. *Guard 5 is tautological in manifest mode.* =deploy.sh staging deadbee=
+   followed by =health.sh= in manifest mode reports =5/5 on deadbee= and exits
+   0. =deadbee= is not a commit in this repository. The deployer writes
+   =/var/run/version.json= from the SHA it is handed and the guard reads it
+   back — it verifies the deployer's own assertion against itself. This is the
+   guard whose row in the vocabulary reads *"no bypass, ever"*.
+
+2. *The authorizing gate cannot run in the environment that authorizes.* The
+   e2e gate asserts =x-routed-to=, a header only the node stand-in router
+   emits. nginx does not set it, so the gate fails in staging and production
+   for a reason unrelated to the change.
+
+3. *The deployed thing is not the tested thing.* The jails run
+   =targets/bastille/app.py=, a Python stand-in. =apps/*/src/server.js= — what
+   every unit test, lint rule and local e2e run exercises — is never installed
+   in any environment.
+
+Any one of these is enough to refuse automatic promotion. Together they say
+something sharper: *the pipeline's confidence was not coming from its
+verification.* It was coming from the fact that nobody had checked the
+verification. An automation that claims to have verified and has not is
+strictly worse than one that blocks on four facts and says so, because the
+first spends the trust the second never asks for.
+
+*What it costs.* It is not automatic promotion, so it does not get the
+latency. It keeps a person in the loop for every production change, which is
+the cost Options A–E were all trying to remove.
+
+*What it buys.* Every claim the system makes is one it can actually support.
+The four blocking checks are cheap, observable, and not fakeable by the thing
+they constrain — which is precisely the property guard 5 turned out to lack.
+
+*It is not a retreat to Option E.* Doing nothing leaves the tautological guard
+in place and still calls it a guard. Option 0 deletes the claim and keeps the
+mechanism: the pipeline still refuses a held berth, a freeze, an emergency and
+a stale branch, automatically and without argument. It simply stops asserting
+that it has verified the change is good.
+
+*Route back to automatic promotion.* Option 0 is not permanent. It becomes
+Option B or A the moment the verification is worth trusting, and there is a
+concrete test for that: *a guard that cannot be made to fail by breaking the
+thing it guards is not a guard.* Guard 5 must reject a fabricated SHA. The e2e
+gate must run against nginx. The jails must run the apps the tests exercise.
+Until then, the honest position is that a human is doing the verifying, and
+the pipeline should say so rather than imply otherwise.
+
+** Option A — do not build this; split the apps now  ← recommended if available
+
+If the four apps can be given hard contracts at the router and a path to
+production each, then: no shared surface, so no cross-invalidation; no queue,
+so no berth; no guard 0, 1 or 4b; and scenario D4 becomes *unstateable* rather
+than defended against. The table above is the argument — the all-inert row is
+what every row looks like once changes stop colliding on one surface.
+
+Cost: real engineering on contracts and per-team deploys, which is larger than
+building a scheduler. Nothing else about this ADR is cheaper than that; it is
+only *sooner*.
+
+*Take this option if you can. The rest of this document is what to do when you
+cannot.*
+
+*** Problem — core is the default location, so core is on every request
+
+Added 2026-09-13, on the same reasoning as =shared/= above: correct semantics,
+worse fit for this decision, and named rather than hidden.
+
+The estate now mirrors the nginx shape it is standing in for. An unclaimed path
+is not a router-level 404 — it goes to whichever app declares =fallthrough= in
+its =routes.json= (core), and *that app* decides the path does not exist:
+
+: location /statics/  { proxy_pass http://core; }
+: location /          { proxy_pass http://core; }   # was: return 404
+
+*What it costs.* Two things, and the second is the one that matters here.
+
+1. *Core is now in the blast radius of every request in the estate*, not just
+   of =/=, =/login=, =/account=, =/cart= and the shared surface. A core that is
+   down no longer degrades four journeys — it turns every unmatched path in the
+   estate into a 502. Core has become infrastructure while still being labelled
+   =app:core=, exactly the mismatch =shared/= introduced on the library side.
+   The manifest still reports a single-app change.
+
+2. *The gate that caught mis-routing could have been destroyed by this.* The
+   e2e gate asserted "an unrouted path must 404 at the router". A default
+   location makes that assertion impossible to satisfy, and the cheap move —
+   delete the check — would have removed the only thing standing between us and
+   a router that answers 200 for everything. It was rewritten instead to assert
+   the *attribution*: 404, and =x-routed-to= names the fallthrough app. That is
+   a strictly stronger check than the one it replaced, because it now also
+   proves core is on the default path.
+
+*It was nearly worse — and this one actually fired.* The first implementation
+had core own any path matching the declared =/statics/= prefix. =/statics/=
+being declared made =/statics/anything= return *200*. The default location had
+silently become "core claims everything", which is the precise failure the
+rewritten gate exists to catch — and the gate caught it, on the first run,
+before commit. Ownership under =/statics/= is now decided by the file on disk,
+not the prefix, and both halves are pinned: core answers for what it has, and
+*refuses what it does not*. An app that cannot say no cannot be a default
+location.
+
+*Why do it anyway.* Because it is what the system being replicated does, and a
+model of change control that only holds while every path is explicitly claimed
+has not met a real storefront. The cost is that =app:core= now understates its
+own blast radius twice over — once through =shared/=, once through the default
+location. See the blast-radius follow-up below: this is the second independent
+argument for =count(app:*) > 1= not being the right measure of radius.
+
+*** Problem — shared/ makes automatic promotion less safe, and we did it anyway
+
+Extracting =shared/= (OneUI, issue #10) and =external/= is *correct semantics*
+and a *worse fit for this decision*. Both are true and the ADR should say so.
+
+*What it costs.* Under automatic promotion, a change reaches production without
+a person moving it. The gates are what make that safe, and a shared library
+defeats them in a specific way:
+
+| before                              | after                                     |
+|-------------------------------------+-------------------------------------------|
+| a change touched one app            | a =shared/= change touches *every* app    |
+| blast radius was in the manifest    | the manifest still says =app:core=        |
+| =change:standard= was defensible    | it is a coordinated change wearing a standard label |
+
+*=apps/**= is no longer the deployable entity, and the classifier still thinks
+it is.* The =apps/**=-blocks rule was a coarse but honest approximation while
+the apps were self-contained; a shared library breaks the assumption it rests
+on. =shared/= is classified =artifact= now, so it blocks — but it blocks
+*equally*, with no signal that its blast radius is five times a single-app
+change.
+
+*It was nearly worse.* Before this refactor the classifier knew only =apps/=
+and =router/=, so a change to =shared/= would have classified *=inert=* — the
+highest-blast-radius change in the repo waved through as "nothing that can
+appear in a deployed artifact". Verified, not theorised.
+
+*Why do it anyway.* This repo exists to work out change control, not to be
+convenient to deploy. A model that only stays coherent while the apps are
+artificially independent has not been tested against the thing that actually
+breaks monorepos. *We can be wrong in the near term to be more correct later* —
+and the near-term wrongness is now visible and named rather than absent.
+
+*What it means for the options.* It sharpens A2 specifically. Splitting the
+deployable surface out of the monorepo does *not* remove this coupling: five
+repos each importing an unversioned OneUI from a sixth deploy together exactly
+as they do now. The work that pays is *versioning the shared artifact so a
+consumer can lag* — and that is a different task from moving files, which is
+the failure mode most likely to make A2 disappointing. See
+=docs/cross-cutting-coupling.org= and issue #10.
+
+*Open, not scheduled:* the classifier has no notion of blast radius, and
+=idp.py change risk= — which does — is not wired into the pipeline. PR #5
+carries five =app:*= labels and is labelled =change:standard= today.
+
+*** Consequence — the environment tiers (was ADR 0002)
+
+If promotion is automatic, then *which environments can be promoted into* is a
+safety property, not a naming convention. Hence three tiers, with the port
+number carrying the meaning:
+
+| tier        | ports     | promotes? | watched?             |
+|-------------+-----------+-----------+----------------------|
+| *dev*       | 9000–9099 | no        | no — disposable      |
+| *team*      | 9100–9199 | *no*      | listed, not monitored |
+| *protected* | 9200–9299 | *yes*     | yes — this is the estate |
+
+A tier is a property of the *address* rather than a rule someone remembers:
+anything at 9100–9199 is a dead end by construction, and =ports.sh= refuses a
+dev block that would cross into it. The team tier is *specified and not
+provisioned* — its purpose is to make "cannot promote" structural, and the port
+range plus the IDP's refusal to lease =staging= already achieve that. Trigger
+to build it: the first team environment that outlives a worktree.
+
+*** Consequence — what is worth watching
+
+=./dashboard= shows the queue first, then protected, then team, then the open
+changes. Dev is absent on purpose, and so are DORA metrics: every DORA metric
+takes a deployment that *reached production* as its unit, so a forfeited window
+and a revalidation are invisible to it — and under automatic promotion those
+are the dominant cost. A row reading =Deploy Freq: 0/day= beside a pipeline
+burning 10–20 validations per shipped change is worse than no row.
+
+Evaluating MonoWatch is what made this concrete: 17 services × 3 environments,
+every cell the same build, because a monorepo ships =apps/**= as one unit. *It
+is a dashboard for the architecture options A and A2 would move us to.* If we
+take one, this consequence expires and something MonoWatch-shaped becomes
+correct.
+
+** Option A2 — split the deployment out of the monorepo
+
+Distinct from A, and cheaper. A says give each app a contract and its own path
+to production; *A2 says only move the deployable surface out*, leaving the code
+where it is. One repo per deployable, or a deployment repo that consumes built
+artifacts, so a change to =pdp= cannot invalidate a change to =plp= because
+they no longer share a trunk.
+
+That is the whole of the contention: §The finding that decides this ADR
+measured 10–20 validation runs per shipped change, and *every one of them is
+caused by changes sharing a trunk they do not share a surface with*. Splitting
+the trunk removes the invalidation without requiring the full contract work.
+
+Cost: artifact promotion between repos, and a version-pinning problem where
+there was none. Cheaper than A, and it does not fix cross-app journeys — those
+still need somewhere to run, which is what staging remains for.
+
+** Option A3 — release trains
+
+Batch whatever is ready on a cadence and validate the batch once.
+=docs/release-strategies.org= measured it: *0.58 validations per shipped change
+against 13.63*, a 23× reduction, at 2.6 h mean latency against 12.5 h.
+
+It attacks the ratio directly rather than the capacity, which makes it the only
+option here that improves the number Option C cannot touch. Two findings that
+came with it and should not be lost:
+
+- the *throughput-optimal* train is red more often than green (P(green)
+  0.41–0.53) — you batch until the batch usually fails, and staff for
+  diagnosis;
+- the analytic optimum sits at a *92–99% predicted emergency share* on this
+  repo's own balance curve, i.e. unreachable. A short (≈1 h) train captures
+  ~98% of the amortisation and stays on the reachable part.
+
+*This is what the volume argument forces.* At Yegge's ~175 commits/day against
+a 30-minute build, our own =capacity_report= gives 48 slots/day/berth — 3.6×
+oversubscribed before a single gate fails. A train is not an optimisation
+there; it is the only shape that fits.
+
+** Option A4 — deploy main, not branches
+
+Every deployment is a deployment *of main*; features are independently tested,
+merged, and then main is what ships. Guard 0 becomes *unstateable* — there is
+no branch to be behind — and the berth stops needing to bind a branch.
+
+What it costs is what =docs/release-strategies.org= names: *"on main" becomes
+intent, not evidence.* The merge happens before the production evidence exists,
+so the thing that says a change is good is a merge rather than an observation.
+It also leaves guard 4b's predicate merely relocated from a branch to a SHA,
+not removed.
+
+Pairs naturally with a *merge queue*, which builds each candidate against
+current main and is guard 0 plus the merge-time half of guard 4b done natively
+(§A merge queue is most of this model, natively). Unavailable on this plan; on
+an enterprise account it is a switch.
+
+** Option B — reservation + activation split (this decision)
+
+Accepts the shared surface and manages the contention honestly: plans capacity,
+gives guard 4b a home, makes forfeiture visible, and puts a number on the
+ceiling. Does not raise the ceiling — see the table.
+
+Cost: a scheduler, a reservation store, and forfeiture semantics people must
+understand.
+
+** Option C — keep immediate deployment, add berths
+
+Berths *do* raise throughput once forfeited changes re-book (3/20 → 20/20 from
+one berth to eight), so the earlier flat rejection was wrong. What they do not
+do is reduce validation work per shipped change, which stays at 10–20×. And
+adding berths silently reinstates D4 unless the merge is separately guarded —
+Hypothesis found that at =berths=2=, and it is now fixed in =release.sh=.
+*Accepted as a partial measure*: reach for it when latency is the complaint,
+but it buys capacity at an unchanged unit cost, and it is not a substitute for
+A or for a train.
+
+** Option D — shorten the calendar quantum
+
+Below 30 minutes the grid stops matching how humans schedule changes, and the
+binding constraint is revalidation, not slot width. *Rejected as a primary
+lever*; worth revisiting only after the surface is split.
+
+** Option E — do nothing
+
+Leaves the change schedule as a record rather than a control, and leaves guard
+4b evaluated at request time where =experiments/001= showed it fails.
+*Rejected.*
+
+* Decision rule
+
+In order of preference, and all of them beat B on the number that matters:
+
+1. *A* — contracts plus a path to production per team. Removes the contention.
+2. *A2* — split only the deployable surface out of the monorepo. Removes the
+   shared trunk, which is what actually causes the invalidation, without the
+   full contract work.
+3. *A4 + merge queue* — deploy main, let the forge build each candidate against
+   current main. Most of the front half of this model, natively, on enterprise.
+4. *A3* — release trains. The only option that improves *validations per ship*
+   (23×) rather than capacity. Mandatory at high commit volume.
+5. *B* — this decision. Correct only when none of the above is reachable.
+
+*B is the fallback, not the recommendation.* Choose it when the surface cannot
+be split in the horizon you care about, and treat its measured ceiling as the
+standing argument for eventually doing 1–4.
+
+Do not choose B expecting throughput. B buys *predictability, legibility and a
+correct place for the guards*. It does not buy capacity, and this ADR would
+rather say so than be quoted later as a promise it never made.
+
+* Open — what happens when a change lands outside its window
+
+Left open deliberately on 2026-09-13, after PR #9 shipped to production outside
+any window and the pipeline had no answer for it.
+
+*What happened.* One window was booked, =CHG-20260913T1430-9.1=, 14:30–15:30Z,
+recorded against SHA =7cd3281=. It was closed =failed= at 15:13 when the
+bastille staging run failed. Everything after — the second staging deploy, the
+production-blue deploy, and the cutover at 15:32 — ran with *no open window at
+all*, against a different SHA, and *no production window was ever booked*:
+=CHANGE_ENV= defaults to =staging=, so nothing in the flow reserves production.
+
+*Why the guard did not fire.* Guard 3 exists in =change/activate.sh= and
+refuses exactly this. It was never reached, because the deployment was
+hand-driven step by step rather than run through activation. *The guard was
+present and bypassed by not being invoked* — which is a different failure from
+a missing guard and arguably a worse one, because the code reads as protected.
+
+*What is unresolved.* Four questions, none of which this repository answers:
+
+1. *Is landing outside the window a rollback condition?* The strict reading
+   says yes: production is running a change nobody authorized for that moment,
+   and the fact it is healthy is beside the point. The looser reading says the
+   change passed every substantive gate and the window is a scheduling
+   construct, so revert the schedule, not the software.
+2. *Does it block the merge?* Refusing to merge leaves production *ahead of
+   trunk*, which is the divergence =merge-on-healthy.yml= exists to prevent.
+   Refusing here may be strictly worse than the thing being objected to.
+3. *What is the escalation?* An unauthorized production change is, in ITIL
+   terms, an unauthorized change and normally triggers a review with a named
+   owner. There is no change authority modelled here and no route to one.
+4. *Can a window be extended rather than forfeited?* =change/state.sh= has
+   =extend= for the berth, with =revalidate=true=, and the schedule has no
+   equivalent. A run that overruns a 30-minute window by two minutes currently
+   has the same standing as one that ran a day late.
+
+*What was done instead, and why it is not an answer.* =change/settle.sh=
+detects the condition and records it as a *deviation* in the PIR. That follows
+the repo's own rule while the spec is at 0.x — record deviations rather than
+suppress them — and it is honest. But recording is not deciding: the change
+shipped, it merged, and the only consequence was a paragraph.
+
+*Trigger to close this.* The first time a change lands outside its window and
+somebody wants a different outcome than "note it and continue". The decision
+needs a change authority to sit with, and inventing one before there is a real
+case to judge would be modelling ceremony rather than control.
+
+* Follow-ups
+
+- *(done 2026-09-13)* the merge-time guard 4b re-check is now in
+  =change/release.sh=: a non-emergency change whose base is =BEHIND= with an
+  =artifact= or =hotfix= divergence has its merge refused (exit 8), its staging
+  pass withdrawn, and its berth *held* while it rebases.
+- Forfeiture needs DX: a forfeited slot must say what moved, what it cost, and
+  how to recover — the operator-message standard in §Guard 4b.
+- Revisit if the surface is split; most of this decision expires with it.

@@ -17,3 +17,14 @@ sim/.hypothesis/
 *.pyc
 .env.*
 !.env.template
+targets/bastille/front/nginx.conf
+targets/bastille/front/tmp/
+dashboard.html
+deployments/
+
+# Runtime state, tracked by mistake. Same defect class as ports.tsv: a file that
+# a running process writes has no business in git -- it is stale the moment it
+# is committed, and it makes every checkout disagree with every host.
+targets/bastille/front/tmp/*.pid
+targets/node/.*.log
+targets/node/live

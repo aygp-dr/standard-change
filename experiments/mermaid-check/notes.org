@@ -1,0 +1,27 @@
+#+TITLE: mermaid-cli on FreeBSD
+#+DATE: 2026-09-13
+
+* Hypothesis
+
+=@mermaid-js/mermaid-cli= cannot render on hydra, for the same reason
+Playwright cannot (spec.org, refuted 2026-09-13: =Unsupported platform:
+freebsd=).
+
+* Result: refuted for mermaid, unlike Playwright
+
+Puppeteer refuses to *download* a browser for freebsd/x64, but it will *use*
+one it is handed. Chromium 148 is already installed at =/usr/local/bin/chrome=.
+
+: npx @mermaid-js/mermaid-cli -p pptr.json -i x.mmd -o x.svg
+: # pptr.json: {"executablePath":"/usr/local/bin/chrome","args":["--no-sandbox"]}
+
+All 6 README.org diagrams render, 11–48 KB each. The difference from
+Playwright is that =playwright-core= throws at *module init* on an unsupported
+platform, before any option can be supplied; puppeteer only fails when it tries
+to resolve a browser it would have downloaded.
+
+* Why it matters
+
+Mermaid semicolons are statement separators, and a malformed diagram is
+invisible until something renders it. Rendering is the only check; this is how
+that check runs on hydra rather than only in CI.

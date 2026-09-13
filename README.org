@@ -31,7 +31,7 @@ the promotion guards.
 
 The ordinary path, end to end. Emergencies, forfeited windows and what happens
 when =main= moves underneath you are all real and all deliberately absent here
-— see =docs/adr/0001-scheduled-deployment-windows.org= and =scenarios.org=.
+— see =docs/adr/0001-automatic-promotion.org= and =scenarios.org=.
 
 #+begin_src mermaid :eval never-export
 stateDiagram-v2
@@ -41,12 +41,20 @@ stateDiagram-v2
     Assessing --> Scheduled: gates green -> window reserved
     Scheduled --> Implementing: slot arrives, scheduler activates
     Implementing --> Verified: staging deploy + authorizing e2e
-    Verified --> Live: production deploy
+    Verified --> Live: gates green -> promotes itself
+    Verified --> Held: hold:staging present (atypical)
+    Held --> Verified: a person removes the label -> guards re-run
+    Held --> Forfeited: hold outlives its window
+    Forfeited --> [*]: berth freed, pass withdrawn, re-request
     Live --> Completed: estate converged on the new build
     Completed --> [*]: PIR posted, merged, berth freed
 
     note right of Scheduled
         reserving is not deploying
+    end note
+    note right of Held
+        the ONLY human stop.
+        expires to forfeit, never to ship
     end note
     note right of Live
         guard 5 asserts the SERVED build,
@@ -72,17 +80,131 @@ sequenceDiagram
     IDP-->>Dev: window reserved
     IDP->>Stg: slot arrives -> activate, deploy changed apps
     Stg-->>IDP: authorizing e2e green
-    IDP->>Prod: deploy the same digests
+    IDP->>IDP: guard 4c: is hold:staging on the PR right now?
+    IDP->>Prod: no hold -> deploy the same digests
     Prod-->>IDP: N probes, one build -> converged
     IDP->>GH: PIR, merge, release the berth
     GH-->>Dev: shipped
 #+end_src
 
-Three things this picture is making claims about, each checked elsewhere:
-*reserving is not deploying* (the guards are re-evaluated when the slot
+** One label starts a change
+
+A person adds *=change:requested=* and that is the whole of their part.
+Everything after is the system acting or observing, and the *name shape* says
+which:
+
+| shape                | kind        | example               | added by hand? |
+|----------------------+-------------+-----------------------+----------------|
+| =change:requested=   | request     | someone asked         | *yes*          |
+| =release=            | *request*   | someone said go now   | *yes*          |
+| =hold:<env>=         | *hold*      | someone said not yet  | *yes*          |
+| =deploy:<env>=       | action      | work is in flight     | no             |
+| =<subject>:<state>=  | observation | *a check came back*   | no             |
+
+=production:healthy= reads as a check result because that is what it is.
+=deploy:staging= is not a way to ask for a deployment — it marks that the
+workflow is deploying, right now.
+
+Three things this picture claims, each checked elsewhere:
+*reserving is not deploying* (guards are re-evaluated when the window
 arrives), *production promotes the digest staging tested* rather than
 rebuilding, and *converged is not alive* — guard 5 samples until one build
 answers, or refuses.
+
+** Passing the gates is what moves a change, not a person
+
+*A standard change that passes its gates goes to production without anyone
+moving it.* That is the decision in =docs/adr/0001-automatic-promotion.org=,
+and it is the reason the gates are worth what they cost: a gate nobody trusts
+enough to promote on is a report, not a gate.
+
+So there is no "promote" button, and adding =deploy:production= by hand is not
+one either — it is an *action* label, and asserting it claims the workflow is
+deploying right now.
+
+*** Two namespaces: annotations, and the record
+
+| namespace                    | what it is                                | lifetime                        |
+|------------------------------+-------------------------------------------+---------------------------------|
+| =staging:*=, =production:*=  | build/deploy *annotations* — a fact about a BUILD in an ENVIRONMENT | ephemeral; cleared per change   |
+| =change:*=                   | the *record* — a fact about the CHANGE    | durable; never cleared          |
+
+=change:requested= → =change:scheduled= → *=change:complete=*. That is the state
+machine, and =change:complete= is the *terminal state*.
+
+=production:healthy= is not terminal, and neither is =staging:uat=. Neither is
+about the change; both are about a build that happens to be the change's head
+at this moment. Push once and both are lies — which is why the labeller
+withdraws every one of them on =synchronize=.
+
+It also settles what may be cleared at completion. Annotations are cleared,
+because the record summarises them and the PR timeline keeps every add and
+remove with actor and timestamp. The record is not.
+
+*** Adding a label and removing it are different acts
+
+Who may *add* a label is not the same question as who may *remove* one, and
+the two labels a person adds are opposites in both directions:
+
+| label | added by | removed by |
+|----------------+---------------------------+--------------------------------|
+| =release=      | *a person only* — intent  | *automation* — the scheduler consumes it |
+| =hold:staging= | *a person only*           | *a person only*                |
+
+A person must add =release= because it is the intent to ship and no machine
+may infer it. Automation must remove it because a trigger that stays on
+re-fires, and the second firing deploys a change that is already live.
+
+=hold:staging= is the mirror. A person must lift it, because the entire
+content of a hold is that a human has not looked yet — and only that human
+knows when they have. A hold a machine can clear is not a hold, it is a delay.
+
+*** The one way to stop it: =hold:staging=
+
+Sometimes you want to look at staging yourself. =hold:staging= is how, and it
+is the only human stop in the pipeline:
+
+| | |
+|---------------------+--------------------------------------------------------|
+| *what it does*      | the change stops after =staging:passed=; production is untouched |
+| *who adds it*       | a person, at any time, including mid-run                |
+| *who removes it*    | *a person.* Never the workflow                          |
+| *when it is read*   | at the instant of promotion — guard 4c — not at the staging pass |
+| *on expiry*         | *forfeit*, never promote                                |
+
+Four properties, and each is load-bearing:
+
+1. *Only a person lifts it.* A hold the machine can clear on your behalf is
+   not a hold, it is a delay. The workflow may read this label and may refuse
+   on it; it may never remove it.
+
+2. *It is read at promotion, not at the staging pass.* You can add it while
+   the authorizing e2e is still running and it will still be honoured. This is
+   the same law as guard 4b — *a guard whose subject can change after it is
+   checked must be re-checked at the moment it is relied on* — applied to a
+   person rather than to trunk.
+
+3. *Releasing it re-runs the guards.* A hold is time, and time is exactly what
+   guard 4b watches. A hold long enough to be worth taking is long enough for
+   =main= to move underneath you, so removing the label does not resume a
+   half-finished deployment; it re-enters the guards.
+
+4. *It expires to forfeit, never to ship.* The berth is a singleton, so a hold
+   wedges every other change in the repo — it cannot be indefinite. But the
+   safe direction on timeout is *down*: release the berth, withdraw the
+   staging pass, make the change ask again. A hold that timed out into a
+   production deployment would be the most dangerous label in this repository,
+   because it would ship precisely the change someone had said to look at.
+
+*It is deliberately atypical.* Reaching for it often is a signal about the
+gates, not about the change — it means the suite is not trusted to authorize a
+promotion, and the thing to fix is the suite. The label exists so that
+distrust has somewhere to go that is *visible and counted*, rather than being
+expressed as a pipeline nobody turns on.
+
+*What it costs, stated plainly.* Holding claims the path to production and
+then does nothing with it. Every other change queues behind a human reading a
+page. That is a real price and it is the argument for using it rarely.
 
 * Environments
 
@@ -94,27 +216,27 @@ out the same way, and a team environment can never promote.
 #+begin_src mermaid :eval never-export
 flowchart TB
     subgraph local["Local — one port block per git worktree"]
-        W0["main worktree<br/>router :10000<br/>apps :10001-10005"]
-        W1["feat/pdp-price<br/>router :10010<br/>apps :10011-10015"]
-        W2["feat/plp-facets<br/>router :10020<br/>apps :10021-10025"]
+        W0["main worktree<br/>router :9000<br/>apps :9001-9005"]
+        W1["feat/pdp-price<br/>router :9010<br/>apps :9011-9015"]
+        W2["feat/plp-facets<br/>router :9020<br/>apps :9021-9025"]
     end
 
     subgraph team["Team environments — parallel, disposable, NOT on the path"]
-        E1["env/checkout-team<br/>checked out by a team"]
-        E2["env/search-team"]
-        E3["env/pdp-team"]
+        E1["env/checkout-team :9100<br/>cannot promote"]
+        E2["env/search-team :9110<br/>cannot promote"]
+        E3["env/pdp-team :9120<br/>cannot promote"]
     end
 
     subgraph path["Path to production — singleton, queued"]
-        S["staging<br/>held by ONE pr at a time<br/>deploy:staging"]
-        P["production"]
+        S["staging :9201<br/>held by ONE change at a time"]
+        P["production :9200<br/>blue/green"]
     end
 
     W1 --> E1
     W2 --> E2
     E1 -.->|"cannot promote"| X(("✗"))
     E2 -.->|"cannot promote"| X
-    W1 -->|"deploy:staging<br/>guards 0 and 1"| S
+    W1 -->|"change:requested<br/>guards 0 and 1"| S
     S -->|"authorizing e2e passes<br/>guards 2, 4, 4b"| P
     P -->|"health check passes"| M["merge to main<br/>labels released"]
     M -.->|"everyone else is now<br/>BEHIND main"| W2
@@ -124,12 +246,16 @@ flowchart TB
     style X fill:#fecaca,stroke:#b91c1c,color:#000
 #+end_src
 
-| Environment       | Count      | Checked out by     | Promotes? | Freed by                         |
-|-------------------+------------+--------------------+-----------+----------------------------------|
-| worktree block    | per clone  | =make port-alloc=  | no        | =make port-free=                 |
-| =env/<team>-<app>= | many      | IDP checkout       | *no*      | IDP release, or lease expiry     |
-| =staging=         | *exactly 1* | =deploy:staging=  | yes       | merge, failure, or guard 4b      |
-| =production=      | 1          | =deploy:production= | —        | —                                |
+| Environment       | Ports       | Tier        | Count       | Promotes? | Freed by                     |
+|-------------------+-------------+-------------+-------------+-----------+------------------------------|
+| worktree block    | *9000–9099* | *dev*       | per clone   | no        | =gmake port-free=            |
+| =env/<team>-<app>= | *9100–9199* | *team*     | many        | *no*      | IDP release, or lease expiry |
+| =staging=         | *9201*      | *protected* | *exactly 1* | yes       | merge, failure, or guard 4b  |
+| =production=      | *9200*      | *protected* | 1 (+1 idle) | —         | —                            |
+
+*The port number is the tier.* An address below 9100 is disposable, 9100–9199
+is real but cannot promote, and 9200+ is the path to production — so "which
+kind of environment is this?" is answerable from the URL alone.
 
 The asymmetry is deliberate. Team environments are cheap, many, and leased —
 losing one costs a re-checkout. Staging is scarce, singular, and *queued*,
@@ -165,7 +291,21 @@ compose*, and it happens before staging rather than after production.
 
 The *updated check* is guard 0 plus guard 4b: a change may only reach the path
 to production while it contains the current tip of =main=, and that must be
-true at the moment it is relied on, not merely when it was requested.
+true *at the moment it is relied on*, not merely when it was requested.
+
+Neither treats every merge alike. =change/divergence.sh= classifies what landed:
+
+| class      | what moved on main                        | effect                       |
+|------------+-------------------------------------------+------------------------------|
+| =inert=    | docs, notes, the model                     | nothing — you are not stale  |
+| =pipeline= | =targets/=, =gates/=, =.github/=           | re-verify; how you ship changed |
+| *=artifact=* | *=apps/=*, =router/=                     | *blocked* — you would revert it |
+| *=hotfix=* | any merge carrying =Change-Type: emergency= | *blocked* — you would revert a fix |
+
+*=apps/**= is the deployable entity*, so any change to it blocks — not just a
+change to the same app. That coarseness is a property of the monorepo, and
+=docs/adr/0001-automatic-promotion.org= is where the options that
+remove it live.
 
 Containers are what make this checkable rather than hopeful. One image per app,
 built once, tagged by the *commit SHA*, promoted by digest:
@@ -213,7 +353,7 @@ Three properties fall out, and each is a scenario in =scenarios.org=:
 
 The local worktree topology is the same graph with =nginx= and =node= processes
 instead of containers — same router, same ports, same four upstreams. That
-correspondence is the point: what you run at =:10010= is what staging runs.
+correspondence is the point: what you run at =:9010= is what staging runs at =:9201=.
 
 * Interfaces, and the scheduler
 

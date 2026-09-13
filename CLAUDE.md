@@ -44,7 +44,18 @@ Verified [E] on 2026-09-12 with GNU Emacs 30.2: all 6 blocks tangle and nested d
 
 ## Conventions
 
-- **Port blocks.** Each worktree owns ten ports: base `10000 + 10n`, router on the base, apps at fixed offsets (core 1, plp 2, pdp 3, checkout 4, mock backend 5). `ports.tsv` is the registry. Never hardcode a port; read `.env.ports`.
+- **Port tiers — the number tells you what an environment is.**
+  `9000-9099` **dev** (worktree blocks, `9000 + 10n`, n ≤ 9, disposable),
+  `9100-9199` **team** (real environments that **cannot promote**),
+  `9200-9299` **protected** (`9200` staging, `9210` production blue, `9220`
+  production green — the path to production). Corrected 2026-09-13: this file
+  previously said `9200` production / `9201` staging, which gave the two
+  production replicas no addresses of their own and put blue/green outside the
+  block scheme. A dev block must never cross into 9100; `ports.sh` refuses
+  block 10. Never hardcode a port; read `.env.ports`.
+- **Inside a jail**, nginx is `:80` and apps are `8001-8005` — identical in
+  every environment, because each jail has its own IP. Ports are only scarce
+  where a namespace is shared.
 - **`routes.json` is the source.** The router config, the labeller config, and the journey list are all generated from `apps/*/routes.json`. Edit the source, regenerate; never hand-edit a generated file.
 - **Deploy groups are app directories.** `main` and `default` are aliases for `core`.
 - **No platform token in any filename.** Portability is recorded in the spec's matrix, not encoded in slugs.

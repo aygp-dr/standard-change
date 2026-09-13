@@ -1,0 +1,96 @@
+#+TITLE: ADR 0002 — protected and team environments
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:nil
+
+* Status
+
+*Superseded by ADR 0001* (2026-09-13), which was retitled to
+/automatic promotion to production, gated by evidence/.
+
+This was filed as a separate decision about environments and dashboards. It is
+not one. If promotion is automatic, *which environments can be promoted into*
+is a safety property of that decision, and what is worth watching follows from
+it. Splitting them into two ADRs implied two choices where there was one.
+
+Kept for the reasoning and the MonoWatch evaluation; the decision itself now
+lives in ADR 0001 §Consequence — the environment tiers.
+
+* Context
+
+Two questions turned out to be the same question.
+
+*What environments exist?* =README.org= has said since early on that team
+environments are for developing a change while staging is the path to
+production, and that a team environment can never promote. That distinction
+lived in prose and in nobody's head.
+
+*What is worth watching?* Evaluating MonoWatch made the gap concrete. It renders
+17 services × 3 environments, and in a monorepo *every cell shows the same
+build* — a 51-cell grid displaying one fact. Its System Configuration panel is
+per-service enable/disable toggles, which presumes services with independent
+lifecycles.
+
+*MonoWatch is not wrong; it is a dashboard for a different architecture* — the
+one ADR 0001 options A and A2 would move us to. Using it now would render an
+architecture we do not have.
+
+* Decision
+
+*Two tiers, and the port number says which.*
+
+| tier          | ports       | promotes? | watched? |
+|---------------+-------------+-----------+----------|
+| *dev*         | 9000–9099   | no        | *no* — disposable |
+| *team*        | 9100–9199   | *no*      | listed, not monitored |
+| *protected*   | 9200–9299   | *yes*     | *yes* — this is the estate |
+
+A tier is a property of the *address*, not a rule someone remembers: anything
+at 9100–9199 is a dead end by construction, and =ports.sh= refuses a dev block
+that would cross into it.
+
+** The dashboard follows from the tiers
+
+=./dashboard= shows four panels, in this order:
+
+1. *change schedule / queue* — the berth is the scarce thing, so it is first
+2. *protected* — staging, then blue and green with one marked ACTIVE and the
+   other named as the rollback target
+3. *team* — listed, so the tier is visible, marked not provisioned
+4. *open changes* — with their labels, because the labels are the state
+
+Dev is *absent on purpose*. Six lines of estate state, against MonoWatch's 51
+cells, is the honest amount a one-berth monorepo has.
+
+*What we do not show, and why:* DORA metrics. =docs/release-standards.org=
+established that every DORA metric takes a deployment that reached production
+as its unit, so a forfeited window and a revalidation are invisible to it — and
+those are our dominant cost. A DORA row here would read =Deploy Freq: 0/day,
+Failure Rate: 0%= while the pipeline burns 10–20 validation runs per shipped
+change. *Displaying a metric that cannot see the cost is worse than displaying
+nothing.*
+
+* What we are not building yet
+
+The team tier is *specified and unprovisioned*. Three names and three ports
+exist; no jails back them.
+
+That is deliberate. The tier's purpose is to make "this environment cannot
+promote" *structural* rather than procedural, and that job is done by the port
+range and the IDP's refusal to lease =staging= — both of which exist now.
+Provisioning jails for them would add three environments nothing currently
+tests, to demonstrate a property already enforced.
+
+*Trigger to build them:* the first time a team needs an environment that
+outlives a worktree. Not before.
+
+* Consequences
+
+- The dashboard cannot be repointed at a per-service tool without first
+  splitting the monorepo — which makes it a *standing reminder* of ADR 0001's
+  options rather than a workaround for them.
+- If we take option A or A2, *this ADR expires* and something MonoWatch-shaped
+  becomes correct. Recorded so that is a recognised transition rather than a
+  surprise.
+- The tier boundary is enforced in exactly one place (=ports.sh=), so it is
+  cheap to change and cheap to break. §Changing the rules is the relevant
+  caution.

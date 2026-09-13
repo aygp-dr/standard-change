@@ -1,0 +1,88 @@
+#+TITLE: Smoke-test tooling on FreeBSD: what is actually available
+#+DATE: 2026-09-13
+
+* Question
+
+The system this repository models deploys to AWS behind a WAF, in an
+environment that runs Playwright and reports results back into GitHub as check
+runs. Hydra cannot do that. What can it do?
+
+* Survey, from =pkg search= on hydra (FreeBSD 14.4)
+
+| tool                 | packaged?              | verdict for this repo                |
+|----------------------+------------------------+--------------------------------------|
+| Playwright           | no, and npm fails      | *out.* =playwright-core= throws =Unsupported platform: freebsd= at module init, before any option can be passed |
+| =puppeteer-core=     | npm, needs a browser   | *works* — see below                  |
+| geckodriver          | =geckodriver-0.36.0_6= | *works in principle*: real WebDriver, with =firefox-155= |
+| chromium             | =chromium-151=         | present at =/usr/local/bin/chrome=   |
+| k6                   | =k6-2.2.0_1=           | *available*; load, not journeys      |
+| siege, vegeta, hey, wrk, httperf | packaged   | load generators, not browsers        |
+| gatling              | =gatling-0.16_1=       | this is the FreeBSD *file transfer* gatling, not the Scala load tool |
+| JMeter               | *not packaged*         | Java, would need manual install      |
+| Cypress, Selenium server | not packaged       | —                                    |
+
+* The refutation
+
+"No browser automation on FreeBSD" is *false*, and it was worth checking rather
+than inheriting from the Playwright result.
+
+The distinction is *when* the platform check happens. =playwright-core= refuses
+at module init, so no configuration can rescue it. Puppeteer only fails when it
+tries to resolve a browser it would have *downloaded* — hand it one and it runs:
+
+: import puppeteer from 'puppeteer-core';
+: const b = await puppeteer.launch({ executablePath: '/usr/local/bin/chrome',
+:                                    args: ['--no-sandbox'] });
+
+Against staging on =:9200=, a real headless Chromium reported:
+
+: {"h1":"checkout","bg":"rgb(255, 215, 230)","links":16}
+
+=rgb(255, 215, 230)= is =#ffd7e6= — the change under review, read as a
+*computed style* by a browser, not grepped out of the HTML source. This is the
+class of assertion =curl= cannot make: it is the difference between "the
+stylesheet says pink" and "the page renders pink".
+
+Same technique already in use here: =mermaid-cli= renders all six README
+diagrams on hydra via =-p pptr.json= with the same =executablePath=.
+
+* Why we still use a label
+
+Availability was never the blocker. *Reachability* is.
+
+The estate runs on hydra's =192.168.86.0/24= and on jail addresses in
+=10.0.0.0/24=. A GitHub runner is =ubuntu-latest= and there is no self-hosted
+runner. Nothing GitHub schedules can open a socket to any environment in this
+repository, so no gate that runs *against a deployed estate* can ever report
+itself as a check run.
+
+In the modelled system the environment is inside AWS and the runner can reach
+it, so Playwright reports a check run and branch protection can require it.
+Here the measurement is taken outside GitHub's reach and carried back in by
+hand.
+
+*So the label is a proxy for a check run.* =staging:smoke= means exactly what a
+required check would have meant: an instrument ran against a deployed estate
+and this was the result. The label is weaker in one specific way — a check run
+is bound to a commit SHA by the platform, and a label is not bound to anything.
+That is why =.github/workflows/labeller.yml= withdraws *every* staging
+observation on =synchronize=: it is hand-rolled replacement for the binding
+GitHub would have done, and without it a =staging:uat= recorded against an old
+build keeps authorizing new ones.
+
+This is the same shape as C6 in =spec.org=: *a platform can attest to what is
+running only if it runs it.* It cannot run this, so it cannot attest, so we
+carry the attestation in by hand and take on the job of invalidating it.
+
+* Conclusion
+
+Not changing the tooling. =gates/smoke.sh= is curl plus a =wget= link crawl and
+that is proportionate: it catches the failures that actually occurred today
+(an estate serving JSON to a browser, one app pretending to be an estate).
+
+Recorded because the *reason* has changed. It is no longer "Playwright does not
+work on FreeBSD" — puppeteer-core does. It is that a browser-driven gate would
+still not be reportable to GitHub, so it would buy assertion power (computed
+styles, rendering, client-side behaviour) and no authority. If a case appears
+that needs computed style — a regression curl cannot see — =puppeteer-core= and
+the system chromium are the route, and this experiment is the proof it runs.

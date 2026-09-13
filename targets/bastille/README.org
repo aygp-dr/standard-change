@@ -1,6 +1,15 @@
 #+TITLE: bastille target — staging and production
 #+OPTIONS: toc:nil num:nil
 
+*Port tiers.* The number says what an environment is and whether it can
+promote (=spec.org= §The port map):
+
+| range       | tier        | can promote? |
+|-------------+-------------+--------------|
+| 9000–9099   | *dev*       | no — disposable worktree blocks |
+| 9100–9199   | *team*      | *no* — real, and a dead end by construction |
+| 9200–9299   | *protected* | *yes* — the path to production |
+
 * The shape
 
 Each environment is *one jail with its own IP*, and inside it nginx fronts the
@@ -22,7 +31,7 @@ flowchart LR
 
 * Why this kills the port-block scheme, for deployed environments
 
-The =10000 + 10n= port blocks exist because worktrees share one host's network
+The =9000 + 10n= port blocks exist because worktrees share one host's network
 namespace and must not collide. *A jail has its own namespace, so the collision
 cannot happen* — and every environment can therefore use the *same* port
 layout.

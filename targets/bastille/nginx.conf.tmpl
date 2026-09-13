@@ -26,11 +26,23 @@ http {
     location /login         { proxy_pass http://core; }
     location /account       { proxy_pass http://core; }
     location /cart          { proxy_pass http://core; }
+    # shared surface: every app links back to these, so the router must own them
+    location /about         { proxy_pass http://core; }
+    location /contact       { proxy_pass http://core; }
+    location /jobs          { proxy_pass http://core; }
     location /search        { proxy_pass http://plp; }
     location /c/            { proxy_pass http://plp; }
     location /p/            { proxy_pass http://pdp; }
     location /checkout      { proxy_pass http://checkout; }
     location /api/          { proxy_pass http://mock; }
-    location / { return 404 '{"error":"no route"}'; }
+    # statics live under apps/core/src/statics and are served by core, not by
+    # nginx: the deployable unit owns its assets, so a static ships and rolls
+    # back with the app rather than with the router.
+    location /statics/      { proxy_pass http://core; }
+
+    # The default location. Not `return 404` -- an unclaimed path goes to core
+    # and core decides. This is why core is on the path of every request in the
+    # estate; the cost is recorded in docs/adr/0001-automatic-promotion.org.
+    location /              { proxy_pass http://core; }
   }
 }

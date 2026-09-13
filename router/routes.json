@@ -19,8 +19,13 @@
       "/",
       "/login",
       "/account",
-      "/cart"
+      "/cart",
+      "/about",
+      "/contact",
+      "/jobs",
+      "/statics/"
     ],
+    "fallthrough": true,
     "health": "/",
     "journeys": [
       "home",
@@ -28,18 +33,6 @@
       "account",
       "cart"
     ]
-  },
-  {
-    "app": "mock",
-    "port_offset": 5,
-    "routes": [
-      "/api/catalog",
-      "/api/cart"
-    ],
-    "health": "/api/catalog",
-    "journeys": [],
-    "role": "external-service",
-    "description": "Stands in for an EXTERNAL service the storefront depends on (catalog and cart APIs). Not a test double: no call assertions, no verification. It is a stub backend so the four apps have something real to talk to."
   },
   {
     "app": "pdp",
@@ -64,5 +57,17 @@
     "journeys": [
       "search"
     ]
+  },
+  {
+    "app": "mock",
+    "port_offset": 5,
+    "routes": [
+      "/api/catalog",
+      "/api/cart"
+    ],
+    "health": "/api/catalog",
+    "journeys": [],
+    "role": "external-service",
+    "description": "Stands in for an EXTERNAL service the storefront depends on (catalog and cart APIs). Not a test double: no call assertions, no verification. It is a stub backend so the four apps have something real to talk to."
   }
 ]

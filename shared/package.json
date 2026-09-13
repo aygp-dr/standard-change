@@ -1,0 +1,8 @@
+{
+  "name": "@standard-change/oneui",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "main": "oneui.js",
+  "description": "Shared UI surface. NOT an app: no routes.json, no port, nothing to deploy on its own. Every app depends on it, which is exactly why it lives outside apps/."
+}

@@ -50,7 +50,8 @@ def label_for(rules, paths):
     # Assert the step exists rather than assuming the behaviour: modelling it
     # here while the config lacked it is exactly how PRs #2 and #3 ended up
     # with app:* and no change:* at all.
-    if any(p.startswith("apps/") for p in paths) and "change:normal" not in got:
+    if (any(p.startswith(("apps/", "shared/", "external/")) for p in paths)
+            and "change:normal" not in got):
         if "classify standard vs normal" in WORKFLOW.read_text():
             got.add("change:standard")
     return got
@@ -72,6 +73,20 @@ SCENARIOS = [
     ("L6",  ["README.org"], set()),
     ("L7",  ["apps/pdp/fixtures/catalog.json"], {"app:pdp", "change:standard"}),
     ("L8",  ["gates/e2e.sh"], {"change:normal"}),
+    # shared/ is imported by every app we deploy, so a change there is a change
+    # to all of them and the manifest must say so. Before this rule existed,
+    # editing shared/oneui.js produced NO app:* label -- the highest-blast-radius
+    # change in the repo declaring it touched nothing deployable, and groups.sh
+    # then returned empty so the queue refused it for entirely the wrong reason.
+    ("L12", ["shared/oneui.js"],
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
+    # ...and mock does NOT come along. It is an external service stub under
+    # external/, not something we deploy, so it does not pin our shared surface.
+    ("L13", ["shared/oneui.js", "apps/core/x.js"],
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
+    # external/ is somebody else's service. Touching the stub is not a change to
+    # any app of ours.
+    ("L14", ["external/mock/src/server.js"], {"app:mock", "change:standard"}),
 ]
 
 # Removal scenarios: (before, after, label that must DISAPPEAR)

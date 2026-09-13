@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { render } from '../../src/server.js';
+import { render, staticFile, assets } from '../../src/server.js';
 
 const meta = JSON.parse(readFileSync(new URL('../../routes.json', import.meta.url)));
 
@@ -22,7 +22,8 @@ test('render echoes the path it was asked for', () => {
 // compared the file to itself and could never fail. The expected set is
 // written out here on purpose: changing routes.json must now break a test and
 // force a deliberate edit, which is what makes it a contract.
-const EXPECTED_ROUTES = ["/", "/login", "/account", "/cart"].map(String);
+const EXPECTED_ROUTES = ["/", "/login", "/account", "/cart",
+                         "/about", "/contact", "/jobs", "/statics/"].map(String);
 
 test("routes.json matches the declared contract for this app", () => {
   assert.deepEqual(meta.routes, EXPECTED_ROUTES);
@@ -30,6 +31,43 @@ test("routes.json matches the declared contract for this app", () => {
 
 test("render advertises the contract routes", () => {
   assert.deepEqual(render("/").routes, EXPECTED_ROUTES);
+});
+
+// core is the estate's default location (routes.json: fallthrough), so it is
+// the app that decides a path does not exist. These pin the two halves of that
+// job -- it must answer for what it owns, and refuse what it does not. Without
+// the second, 'default location' silently becomes 'core returns 200 for
+// anything', and the router's ownership gate can never fail again.
+test('core declares itself the fallthrough', () => {
+  assert.equal(meta.fallthrough, true);
+});
+
+test('core refuses a path no app claims', () => {
+  for (const p of ['/definitely-not-a-route', '/search', '/p/SKU1'])
+    assert.equal(render(p).found, false, `core claimed ${p}`);
+});
+
+// The declared route /statics/ tells the router where to send these. It must
+// not, by itself, make everything under it exist -- that is how a default
+// location stops being able to say no.
+test('under /statics/ the file decides, not the prefix', () => {
+  assert.equal(render('/statics/oneui.css').found, true);
+  assert.equal(render('/statics/not-a-file.css').found, false);
+  assert.equal(render('/statics/../../../etc/passwd').found, false);
+  assert.equal(render('/statics/').found, true, 'the index is still served');
+  assert.ok(assets().includes('oneui.css'));
+});
+
+test('core answers for every route it declares', () => {
+  for (const r of meta.routes) assert.equal(render(r).found, true, `core disowned ${r}`);
+});
+
+test('statics are served from the app, and only from inside it', () => {
+  assert.ok(staticFile('/statics/oneui.css'), 'oneui.css not served');
+  assert.equal(staticFile('/statics/oneui.css').type, 'text/css');
+  assert.equal(staticFile('/statics/nope.css'), null);
+  for (const p of ['/statics/../../../etc/passwd', '/statics/..%2f..%2fpackage.json'])
+    assert.equal(staticFile(p), null, `traversal escaped: ${p}`);
 });
 
 test('every declared route is servable', () => {

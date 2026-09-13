@@ -233,6 +233,27 @@ predicates — rather than a rewrite.
 | Post-implementation review    | Auto-generated PR comment after production deployment with gate results and timings   |
 | CMDB                          | =ports.tsv= (worktree ports) and =environments.tsv= (staging slots)                    |
 
+** This spec is intent, not source
+
+*Nothing here tangles.* Every code block is a *reference implementation* — it
+shows one way to satisfy the requirement around it, and the file on disk is the
+source of that file.
+
+The reason is the one §Domain model already argues for the guards: the spec
+states /what must hold/, and an encoding is free. An agent handed this document
+should be able to implement =gates/health.sh= in Python, or the labeller as a
+different action entirely, and be *right* so long as the predicate holds. A
+tangling spec forecloses that — it hands over bytes and calls them a
+requirement.
+
+It also removes a defect this repo hit twice: a change edited directly into
+=Makefile=, committed, and then silently reverted by the next tangle. When the
+spec owns the bytes, every derived file is a place for the document and the
+repository to disagree without anyone noticing.
+
+*So: read the prose for the contract, read the block for an example, and read
+the file for what actually runs.*
+
 * Repository layout
 
 #+begin_example
@@ -307,7 +328,7 @@ apps/<app>/
 
 ** routes.json contract
 
-#+begin_src json :tangle apps/plp/routes.json
+#+begin_src json
 {
   "app": "plp",
   "port_offset": 2,
@@ -329,14 +350,120 @@ apps/<app>/
 
 Each git worktree owns a contiguous block of ten ports. The router (nginx) listens on the block base; apps listen on base + offset.
 
-| Worktree              | Block | nginx | core  | plp   | pdp   | checkout | mock backend |
-|-----------------------+-------+-------+-------+-------+-------+----------+--------------|
-| main (stable)         |     0 | 10000 | 10001 | 10002 | 10003 |    10004 |        10005 |
-| first branch worktree |     1 | 10010 | 10011 | 10012 | 10013 |    10014 |        10015 |
-| second                |     2 | 10020 | 10021 | 10022 | 10023 |    10024 |        10025 |
-| n-th                  |     n | 10000+10n | +1 | +2   | +3    | +4       | +5           |
+| Worktree              | Block | router | core | plp  | pdp  | checkout | mock |
+|-----------------------+-------+--------+------+------+------+----------+------|
+| main (stable)         |     0 |   9000 | 9001 | 9002 | 9003 |     9004 | 9005 |
+| first branch worktree |     1 |   9010 | 9011 | 9012 | 9013 |     9014 | 9015 |
+| second                |     2 |   9020 | 9021 | 9022 | 9023 |     9024 | 9025 |
+| n-th (n ≤ 9)          |     n | 9000+10n | +1 | +2   | +3   | +4       | +5   |
 
-Ports 10006–10009 (and the same offsets in each block) are unallocated.
+Offsets 6–9 in each block are unallocated. *Block 9 is the last*: block 10
+would start at 9100, which is the team tier (§The port map).
+
+** The port map
+
+One picture, because three schemes coexist and only one of them can collide.
+
+#+begin_src mermaid :eval never-export
+flowchart TB
+    subgraph lan["reachable from 192.168.86.0/24 — pf passes 7000-7699, 8000-9999"]
+        subgraph ours["9000-9299 — this project"]
+            W0["9000-9009  worktree block 0"]
+            W1["9010-9019  block 1"]
+            WN["9090-9099  block 9  (the ceiling)"]
+            TE["9100-9199  team envs — cannot promote"]
+            FP["9200  front router -> production"]
+            FS["9201  front router -> staging"]
+        end
+        OTHER["8080 dump1090 · 8081 · 8083 · 7500 · 7510 · 7680 · 7681 · 7747 · 9630<br/>OTHER SERVICES — not ours"]
+    end
+    subgraph jails["10.0.0.0/24 — jails, not LAN reachable"]
+        J1["sc-staging  10.0.0.60:80"]
+        J2["sc-prod-1   10.0.0.61:80"]
+        J3["sc-prod-2   10.0.0.62:80"]
+        JA["each jail: nginx :80 -> apps :8001-8005<br/>SAME numbers in every jail"]
+    end
+    FP --> J2
+    FP -.->|idle| J3
+    FS --> J1
+    J1 --> JA
+    style ours fill:#dbeafe,stroke:#1e40af,color:#000
+    style OTHER fill:#fecaca,stroke:#b91c1c,color:#000
+    style jails fill:#bbf7d0,stroke:#15803d,color:#000
+#+end_src
+
+*Three tiers, and the number says which*: =dev(9000+)=,
+=team(9100+)= and =protected(9200+)=. The port encodes whether an environment
+can promote, the same way a label's name encodes its kind
+(§Labels as state transitions).
+
+| range        | tier          | what                                | allocated by        | can collide? |
+|--------------+---------------+-------------------------------------+---------------------+--------------|
+| *9000–9099*  | *dev*         | worktree blocks, =9000 + 10n=, n ≤ 9 | =ports.sh=, =ports.tsv= | *yes* — shared namespace |
+| *9100–9199*  | *team*        | =env/<team>-<app>= — *cannot promote* | IDP checkout        | *yes*        |
+| *9200*       | *protected*   | front router → production            | by hand, here       | *yes*        |
+| *9201*       | *protected*   | front router → staging               | by hand, here       | *yes*        |
+| 9202–9299    | protected     | reserved                             | —                   | yes          |
+| 7000–8999    | *not ours*    | dump1090 and friends                 | —                   | *avoid*      |
+| =:80=, =8001–8005= | —       | inside every jail                    | fixed, identical everywhere | *no* |
+
+The middle tier is the one worth having a range for. =README.org= §Environments
+already says *team environments are for developing a change; staging is the
+path to production* — and that they can never promote. Giving them their own
+hundred makes that a property of the address rather than a rule someone
+remembers: *anything at 9100–9199 is a dead end by construction.*
+
+So: 9000 disposable, 9100 real but terminal, 9200 the path to production. *The
+ceiling at block 9 is the boundary between dev and team*, which is why
+=ports.sh= refuses block 10 rather than letting a worktree land in a tier that
+means something else.
+
+*** Why only the first two rows need a registry
+
+A jail has its own IP, so =10.0.0.60:8001=, =10.0.0.61:8001= and
+=10.0.0.62:8001= coexist — verified in hydra's socket table. Ports are free
+where the namespace is not shared, which is why *the deployed config is
+byte-identical across staging and production* and why the port-block scheme
+exists only for worktrees, which do share hydra's namespace.
+
+*** Two ceilings, both real
+
+- *Ten worktrees.* Block 10 starts at 9100, which is the team tier — a dev
+  block would be squatting an address that claims to be a team environment.
+  =ports.sh alloc= refuses block 10 rather than crossing the boundary.
+- *pf.* 10000+ is not passed from the LAN, so a block there is loopback-only
+  and looks, from another host, exactly like nothing listening. The rule could
+  be widened — we are root — but ten worktrees is enough and an open range with
+  nothing behind it is surface for no benefit.
+
+** Port allocation on a shared host
+
+hydra runs other things. =8080= is =dump1090=, and =7500=, =7510=, =7680=,
+=7681=, =7747=, =8081=, =8083= and =9630= belong to other services — so
+"pick 8080" collides with a live ADS-B receiver. The project therefore owns a
+*declared range* rather than convenient-looking numbers.
+
+| range        | what                                    | who allocates      |
+|--------------+-----------------------------------------+--------------------|
+| *9000–9099*  | dev worktree blocks, =9000 + 10n=, n ≤ 9 | =ports.sh alloc=, via =ports.tsv= |
+| *9100–9109*  | environment front routers: 9100 production, 9101 staging, 9102+ team | by hand, here |
+| 9110–9199    | reserved for this project               | —                  |
+| 7000–8999    | *other services* — do not use           | not ours           |
+
+*Ten worktrees is the ceiling*, and =ports.sh= refuses block 10 rather than
+silently walking into 9100 and taking the production router's port.
+
+** Jail-internal ports do not consume this range
+
+Inside every jail: nginx on =80=, apps on =8001–8005=. *The same numbers in
+every environment*, because each jail has its own IP — verified in the host's
+socket table, which shows =10.0.0.60:8001=, =10.0.0.61:8001= and
+=10.0.0.62:8001= side by side.
+
+That is the whole reason the deployed config is byte-identical across staging
+and production (§bastille target): *network namespaces make ports free, and a
+registry is only needed where a namespace is shared.* Worktrees share hydra's,
+so they need one; jails do not, so they do not.
 
 ** Reaching a block from another host
 
@@ -376,7 +503,8 @@ block	worktree	branch	allocated_at
 
 The template is rendered once per worktree from =router/routes.json= and =.env.ports=. Each route prefix proxies to the owning app's port. A worktree that has not built an app falls back to the stable app on block 0, which is the local equivalent of a staging slot that deploys only the changed group.
 
-#+begin_src nginx :tangle router/nginx.conf.tmpl
+#+begin_src nginx
+# reference implementation of router/nginx.conf.tmpl -- that file is the source
 # rendered per worktree: BLOCK, and per app PORT_<APP> (falls back to block-0 port)
 worker_processes 1;
 events { worker_connections 64; }
@@ -451,7 +579,8 @@ derived to asserted, and says so where a reviewer can see it.
 
 ** Labeller
 
-#+begin_src yaml :tangle .github/labeler.yml
+#+begin_src yaml
+# reference implementation of .github/labeler.yml -- that file is the source
 app:core:
   - changed-files:
       - any-glob-to-any-file: apps/core/**
@@ -464,6 +593,9 @@ app:pdp:
 app:checkout:
   - changed-files:
       - any-glob-to-any-file: apps/checkout/**
+app:mock:
+  - changed-files:
+      - any-glob-to-any-file: apps/mock/**
 change:normal:
   - changed-files:
       - any-glob-to-any-file:
@@ -474,7 +606,8 @@ change:normal:
           - .github/**
 #+end_src
 
-#+begin_src yaml :tangle .github/workflows/labeller.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/labeller.yml -- that file is the source
 name: labeller
 on: [pull_request_target]
 permissions: {contents: read, pull-requests: write}
@@ -644,7 +777,8 @@ catches properly at promote time with SHA binding.
 
 ** Guard 1 — staging is a singleton
 
-#+begin_src bash :tangle change/queue.sh :shebang "#!/bin/sh"
+#+begin_src bash :shebang "#!/bin/sh"
+# reference implementation of change/queue.sh -- that file is the source
 # queue.sh claim <pr>   -- guards 0 and 1. Exit 0 claim, 5 queue busy, 6 behind main.
 set -eu
 pr="$2"
@@ -723,7 +857,8 @@ composes with main.
 The emergency path makes this the normal case rather than a rare race: an
 emergency /is/ a merge to main that jumps the queue.
 
-#+begin_src yaml :tangle .github/workflows/main-moved.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/main-moved.yml -- that file is the source
 name: main-moved
 on:
   push:
@@ -815,12 +950,41 @@ ship an image missing a hotfix"/ are different facts, and treating them alike
 fails in both directions — a README merge forcing a full re-verify teaches
 people the guard is noise, and a hotfix merge not forcing one is scenario D4.
 
+*=apps/**= is the deployable entity.* In a container world the deployable is an
+image and =apps/<x>/= maps to one; in a monorepo the directory is the closest
+honest approximation. So *any* change to =apps/**= landing on main while a
+change is on the deploy path is a blocker — not "a change to the same app", but
+any of them, because the monorepo ships them together.
+
+=targets/**= is deliberately *not* artifact. It is the deployment /mechanism/:
+changing =deploy.sh= changes how a thing ships, not what ships, so it demands
+re-verification rather than a revert.
+
 | Class      | What landed                                | Berth | Staging pass | Message                                    |
 |------------+--------------------------------------------+-------+--------------+--------------------------------------------|
 | =inert=    | docs, =.meta=, =scenarios=, =experiments=, =tla= | kept  | *kept*       | informational only                         |
-| =pipeline= | =gates/=, =change/=, =.github/=, =Makefile= | kept  | kept, re-run gates | "how you are verified changed"        |
+| =pipeline= | =targets/=, =gates/=, =change/=, =.github/=, =Makefile= | kept  | kept, re-run gates | "how you are verified or shipped changed" |
 | =artifact= | =apps/=, =router/=, =targets/=             | kept + extended | *withdrawn* | "rebase and re-run staging"       |
 | =hotfix=   | any merge carrying =Change-Type: emergency= | kept + extended | *withdrawn* | "you would ship without the fix"    |
+
+*** This granularity belongs to the model we support
+
+The rule is *"any =apps/**= change blocks"*, which is right for Option B — the
+monorepo with one berth, the thing this spec actually implements. It is
+deliberately coarser than the truth, and the ADR options are what make it
+finer:
+
+| if we took...                    | the rule becomes                          |
+|----------------------------------+-------------------------------------------|
+| *B* (this spec)                  | any =apps/**= change blocks — one trunk, one deployable |
+| *A2* split the deployable out    | only an *overlapping app* blocks; =pdp= and =plp= stop invalidating each other |
+| *A* contracts + path per team    | nothing cross-app blocks; the class stops mattering |
+| *A4* deploy main                 | guard 0 is unstateable, so the class only governs guard 4b |
+
+So the coarseness is a *property of the monorepo*, not a defect in the
+classifier — and it is the same coarseness §The finding that decides this ADR
+measures as 10–20 validations per shipped change. Refining it without splitting
+the trunk would be optimising a symptom.
 
 *The berth is never taken away by someone else's merge.* This is the correction
 scenario D4's first fix got wrong: withdrawing =deploy:staging= freed the queue,
@@ -859,7 +1023,8 @@ artifact, and guard 0 at the /next/ claim will make it rebase anyway.
 
 ** Promotion — staging pass to production
 
-#+begin_src yaml :tangle .github/workflows/promote.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/promote.yml -- that file is the source
 name: promote
 on:
   pull_request:
@@ -921,7 +1086,8 @@ governs a change.
 
 ** Health check and release
 
-#+begin_src bash :tangle gates/health.sh :shebang "#!/bin/sh"
+#+begin_src bash :shebang "#!/bin/sh"
+# reference implementation of gates/health.sh -- that file is the source
 # health.sh <base-url> <expected-sha> [samples] -- guard 5. Exit 0, or 7.
 #
 # Asserts CONVERGENCE, not liveness. Two defects the single-sample version had:
@@ -994,7 +1160,8 @@ must not also wedge the pipeline.
 
 On success: =production:healthy=, PIR comment, =deployed:production=, then
 
-#+begin_src bash :tangle change/release.sh :shebang "#!/bin/sh"
+#+begin_src bash :shebang "#!/bin/sh"
+# reference implementation of change/release.sh -- that file is the source
 # release.sh <pr> -- merge (if auto-merge enabled) and free the queue.
 set -eu
 pr="$1"; repo="${GH_REPO:-$GITHUB_REPOSITORY}"
@@ -1056,7 +1223,8 @@ The four check runs guard 2 looks for. Job names matter: =promote.yml= and
 =deploy-production.yml= query =commits/{sha}/check-runs= and match
 =^(gate-selftest|lint|test|e2e)=, so a rename here silently disarms guard 2.
 
-#+begin_src yaml :tangle .github/workflows/gate.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/gate.yml -- that file is the source
 name: gate
 on:
   pull_request:
@@ -1134,7 +1302,8 @@ jobs:
 
 ** deploy-staging.yml skeleton
 
-#+begin_src yaml :tangle .github/workflows/deploy-staging.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/deploy-staging.yml -- that file is the source
 name: deploy-staging
 on:
   pull_request:
@@ -1175,7 +1344,8 @@ the queue reflects "this PR owns the pipeline", not "a deploy job is running".
 
 ** deploy-production.yml skeleton
 
-#+begin_src yaml :tangle .github/workflows/deploy-production.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/deploy-production.yml -- that file is the source
 name: deploy-production
 on:
   pull_request:
@@ -1287,7 +1457,11 @@ Each checklist is a =.github/PULL_REQUEST_TEMPLATE= section and a =pir.sh= field
 
 * Local development
 
-#+begin_src makefile :tangle Makefile
+*The =Makefile= is hand-maintained, not tangled.* It changes often and is
+edited directly, and two changes were silently reverted by a tangle before that
+was recognised. Shown here for orientation; =Makefile= is the source.
+
+#+begin_example
 # Bare metal by choice: this is a CI/CD pipeline simulator and FreeBSD is a
 # poor host for docker/podman. Apps are node processes on a port block.
 # On hydra use gmake; system make is BSD make.
@@ -1305,10 +1479,10 @@ help:
 	@echo "gate              lint, test, e2e"
 
 # .env is generated and gitignored; .env.template is tracked.
+# Compose, do not clobber. change/env.sh preserves local overrides and reports
+# what changed; `cat template ports > .env` silently discarded them.
 .env: .env.template
-	@./change/ports.sh alloc >/dev/null
-	@cat .env.template .env.ports > .env
-	@echo "regenerated .env"
+	@./change/env.sh
 
 env: .env
 
@@ -1360,6 +1534,12 @@ audit-selftest:
 	@echo "pbt-pipeline: both directions confirmed"
 audit:           ; @./gates/audit-controls.py
 docs:            ; @./gates/docs-lint.py
+# Forge through batch emacs, so it works whether or not emacs is running.
+forge-list:      ; @emacs --batch -l standard-change.el -f standard-change-forge-list
+forge-pull:      ; @emacs --batch -l standard-change.el -f standard-change-forge-pull
+forge:           forge-pull forge-list
+forge-check:     ; @emacs --batch -l standard-change.el -f standard-change-forge-check
+
 pbt:             ; @./gates/pbt-pipeline.py --exhaustive
 pbt-random:      ; @./gates/pbt-pipeline.py
 simulate-gates:  ; @./gates/simulate-gates.py
@@ -1368,7 +1548,7 @@ port-alloc:      ; @./change/ports.sh alloc
 port-free:       ; @./change/ports.sh free
 ports:           ; @./change/ports.sh list
 clean:           ; @rm -rf .run .env .env.ports
-#+end_src
+#+end_example
 
 A worktree is a sibling of the main checkout. =make port-alloc= is the first command in a new worktree; =make port-free= is the last.
 
@@ -1434,9 +1614,10 @@ and the known obstacles, and is the thing the first gate run promotes.
 * Verification contract
 
 - *Two gates, different things.* The code gate is =gates/{lint,test,e2e}.sh=.
-  The documents gate is this spec and its derived files: every =:tangle= target
-  resolves, every internal reference names a section that exists, and =CLAUDE.md=
-  asserts nothing absent here. Neither substitutes for the other.
+  The documents gate is this spec: org blocks balance, mermaid renders, every
+  internal reference names a section that exists, and =CLAUDE.md= asserts
+  nothing absent here. It no longer checks tangle targets — there are none
+  (§This spec is intent, not source). Neither gate substitutes for the other.
 - *Ordering is load-bearing.* =gate-selftest= runs /before/ the gates' own
   results count. A gate whose negative fixture it fails to reject produces no
   usable verdict that run — its PASS is void, not merely suspect.
@@ -1503,7 +1684,8 @@ unreachable, which is exactly what the rule was protecting (§Controls audit —
 "the recorded production SHA stays reachable"). The substitute makes the gap
 *observable*, not closed.
 
-#+begin_src yaml :tangle .github/workflows/trunk-audit.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/trunk-audit.yml -- that file is the source
 name: trunk-audit
 on:
   push:
@@ -1988,7 +2170,8 @@ The mechanism is trivial and the ordering is not.
 
 ** The trigger
 
-#+begin_src yaml :tangle .github/workflows/merge-on-healthy.yml
+#+begin_src yaml
+# reference implementation of .github/workflows/merge-on-healthy.yml -- that file is the source
 name: merge-on-healthy
 on:
   pull_request:

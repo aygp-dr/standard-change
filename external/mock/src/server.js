@@ -6,6 +6,11 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
+// OneUI is the shared UI surface (issue #10). Every app pins it, so a change
+// there is a change to all of them -- the cost is named in
+// docs/cross-cutting-coupling.org, not hidden.
+import { page, loadEstate, VERSION as ONEUI } from '../../../shared/oneui.js';
+const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
 const BLOCK = process.env.BLOCK || '?';
@@ -16,15 +21,25 @@ export function render(path) {
   return { app: meta.app, path, block: BLOCK, sha: SHA, routes: meta.routes };
 }
 
+// An HTML view so the estate can be clicked through. JSON stays the contract
+// the gates assert on; HTML is only served when the client asks for it.
+export const BACKGROUND = '#efeaf7';
+
+export function renderHtml(path) {
+  return page(render(path), ESTATE, BACKGROUND);
+}
+
 // Only listen when run directly. Importing this module (as the unit tests do)
 // must not bind a port, or the test process never exits.
 const isMain = process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMain) createServer((req, res) => {
-  const body = JSON.stringify(render(req.url), null, 2);
+  const wantsHtml = /text\/html/.test(req.headers.accept || '');
+  const body = wantsHtml ? renderHtml(req.url)
+                         : JSON.stringify(render(req.url), null, 2);
   res.writeHead(200, {
-    'content-type': 'application/json',
+    'content-type': wantsHtml ? 'text/html; charset=utf-8' : 'application/json',
     'x-build-sha': SHA,
     'x-app': meta.app,
     'x-block': BLOCK,

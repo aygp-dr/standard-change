@@ -87,6 +87,23 @@ And one thing to *not* adopt without extending: the singular =version=. Our
 guard 5 now asserts convergence, so our record has to be able to say "two
 builds, 90/10" or it will be less expressive than the check that feeds it.
 
+* Decision — do not adopt it
+
+*Not adding the dependency.* This repo simulates the change-control process;
+the ledger is a production implementation of the record. Taking it on would
+mean a Guile toolchain in every environment and in CI, to store facts the
+simulation can hold in a file — and =targets/bastille/deploy.sh= already writes
+=/var/run/version.json=, which is the record guard 5 actually reads.
+
+What we take instead is the *design*, which is free: rollback as a separate
+append-only event rather than a status edit, =started= and =completed= as an
+interval, and a mutable status as capability C5. Those are in
+§What to adopt above and cost nothing.
+
+The MCP server under =mcp-server/= is the piece worth revisiting *if* the
+record ever needs to be queried by something other than a shell script —
+=docs/idp-api.org= §settlement is the shape it would serve. Not now.
+
 * Status
 
 Read-only comparison. Nothing in this repo depends on the ledger, and no guard,

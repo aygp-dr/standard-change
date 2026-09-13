@@ -40,6 +40,53 @@ and name which one.
 **`change:requested` is the only label a person adds to start a change.**
 Everything after is the system acting or observing.
 
+### Two namespaces: annotations, and the record
+
+The sharper cut, and the one that says which labels may be cleared:
+
+| namespace | what it is | lifetime |
+|---|---|---|
+| `staging:*`, `production:*` | **build/deploy annotations.** Facts about a BUILD in an ENVIRONMENT | ephemeral — they expire when the head moves, and are cleared per change |
+| `change:*` | **the record.** Facts about the CHANGE | durable — it is the thing being recorded |
+
+`change:requested` → `change:scheduled` → **`change:complete`**. That is the
+state machine, and `change:complete` is the terminal state.
+
+`production:healthy` is not terminal and neither is `staging:uat`, because
+neither is about the change — they are about a build that happens to be the
+change's head right now. Push once and both are lies, which is why
+`labeller.yml` withdraws every one of them on `synchronize`.
+
+This also settles what may be cleared. Annotations are cleared at completion
+because the record summarises them and the PR timeline retains every add and
+remove with actor and timestamp — 25 events on #9, checked, so clearing
+destroys nothing. `change:*` is never cleared, because it *is* the record.
+
+`app:*` and `change:standard` also survive: they describe what the change was.
+
+### Adding and removing are different acts, with different owners
+
+The table above says who may *add* a label. It is not the same question as who
+may *remove* one, and collapsing the two gets both wrong:
+
+| label | add | remove |
+|---|---|---|
+| `release` | **a person only.** It is intent: "take this one all the way now" | **automation.** The scheduler consumes it when it picks the change up |
+| `hold:staging` | **a person only** | **a person only** — a hold a machine can lift is not a hold |
+| `change:requested` | a person | automation, as the change moves on |
+| `deploy:<env>` | automation | automation |
+| `<subject>:<state>` | automation | automation, when the observation stops being true |
+
+`release` and `hold:staging` are the two labels a person adds, and they are
+*opposites in both directions*. A person must add `release` because it is the
+intent to ship, and no machine may infer it. Automation must remove it because
+a trigger that stays on re-fires, and the second firing deploys a change that
+is already live. The reverse holds for `hold:staging`: a person must be the one
+to lift it, because the whole content of a hold is that a human has not looked
+yet, and only that human knows when they have.
+
+So "who owns this label" is the wrong question. Ask it twice.
+
 `production:healthy` and `staging:passed` read as check results because that is
 what they are. `deploy:staging` is a verb plus a target and marks an action in
 flight — it is not a way to ask for a deployment.

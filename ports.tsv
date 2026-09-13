@@ -1,4 +1,5 @@
 block	worktree	branch	allocated_at
-0	/home/jwalsh/ghq/github.com/aygp-dr/slipway	main	2026-09-13T00:40:35Z
 1	/home/jwalsh/ghq/github.com/aygp-dr/slipway/worktrees/feat-pdp	feat/pdp-price	2026-09-13T00:40:35Z
 2	/home/jwalsh/ghq/github.com/aygp-dr/slipway/worktrees/feat-plp	feat/plp-facets	2026-09-13T00:40:35Z
+0	/home/jwalsh/ghq/github.com/aygp-dr/slipway	main	2026-09-13T14:38:54Z
+4	/home/jwalsh/ghq/github.com/aygp-dr/slipway/worktrees/feat-search	feat/plp-no-results	2026-09-13T15:42:11Z

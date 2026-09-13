@@ -31,7 +31,13 @@ jobs:
           R=${{ github.repository }}
           N=${{ github.event.number }}
           files=$(gh pr diff "$N" --repo "$R" --name-only)
-          has_app=$(echo "$files" | grep -c '^apps/' || true)
+          # DEPLOYABLE SURFACE, not just apps/. shared/ is pinned by every app
+          # and external/ carries app:mock, so a change to either is a change to
+          # something deployable and must be classified. Grepping only ^apps/
+          # left a shared/ change with five app:* labels and NO change:* class
+          # at all -- unclassified, and therefore matching no guard's idea of
+          # what it was looking at.
+          has_app=$(echo "$files" | grep -cE '^(apps|shared|external)/' || true)
           is_normal=$(echo "$files" | grep -cE '^(router|gates|change|targets)/|^\.github/' || true)
           echo "changed=$(echo "$files" | wc -l) apps=$has_app normal=$is_normal"
           if [ "$is_normal" -gt 0 ]; then
@@ -42,9 +48,21 @@ jobs:
             gh pr edit "$N" --repo "$R" --remove-label change:normal || true
           fi
 
-      - name: drop stale staging verdicts on a new push
+      # Every observation is about a BUILD. The labels do not carry the SHA they
+      # were taken at, so a push must withdraw all of them -- otherwise a
+      # staging:uat recorded by a person who looked at the old build goes on
+      # authorizing the new one through guard 4, and nobody has looked at what
+      # is shipping. Same law as guard 4b: a guard whose subject can change
+      # after it is checked must be re-checked at the moment it is relied on.
+      #
+      # staging:uat is included deliberately. A human observation is not more
+      # durable than a machine one -- it is about a build in exactly the same
+      # way, and a person who accepted 7cd3281 has said nothing about 8370c74.
+      - name: withdraw every staging observation on a new push
         if: github.event.action == 'synchronize'
         env: {GH_TOKEN: "${{ github.token }}"}
         run: |
-          gh pr edit "${{ github.event.number }}" \
-            --remove-label staging:passed --remove-label staging:failed || true
+          for l in staging:passed staging:failed staging:e2e staging:e2e-failed \
+                   staging:smoke staging:smoke-failed staging:uat; do
+            gh pr edit "${{ github.event.number }}" --remove-label "$l" || true
+          done
