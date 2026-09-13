@@ -10,16 +10,58 @@ written; the rest were filled in as refusals were discovered.
 | code | means                              | who returns it |
 |------+------------------------------------+----------------|
 |    0 | *proceed* — the check passed       | all            |
-|    1 | *refused* — the check failed       | all            |
+|    1 | *refused* — the check failed       | all, =marker.sh= |
 |    2 | *usage*, or a lock is held         | all            |
-|    3 | *freeze*, or the SHA does not exist | =preflight=, =deploy.sh= |
-|    4 | *I could not check*                | =preflight=, =oracle.sh= |
+|    3 | *freeze*, or the SHA does not exist | =preflight=, =deploy.sh=, =marker.sh= |
+|    4 | *I could not check*                | =preflight=, =oracle.sh=, =marker.sh= |
 |    5 | *the queue is busy* — someone holds the berth | =preflight=, =schedule.sh= |
 |    6 | *behind main* — guard 0            | =queue.sh=     |
 |    7 | *no window* — guard 3              | =activate.sh=  |
 |    8 | *main moved under you* — guard 4b at the merge | =release.sh= |
 |    9 | *CAS conflict* — state changed under us | =state.sh= |
-|   75 | *sink unreachable* (EX_TEMPFAIL)   | the marker script |
+|   75 | *sink unreachable* (EX_TEMPFAIL)   | =marker.sh=    |
+
+* What =change/marker.sh= returns, and why it invented nothing
+
+The rule above is "every shell gate and change script uses these and only
+these", and the first draft of the marker script broke it in both directions:
+=4= for a missing flag (=4= is *I could not check*, and it *blocks*) and =5= for
+evidence on an intent marker (=5= is *the queue is busy*). Worse, =5= was also
+reachable by accident — =--samples abc= fell through to =jq=, which died under
+=set -e= carrying its own status, so a jq parse error and a deliberate refusal
+left the same number on the floor.
+
+It now returns only codes that already existed, and it returns them for the
+meanings they already had:
+
+| code | when                                                  |
+|------+-------------------------------------------------------|
+|    1 | *refused*: the evidence does not support the marker asked for — no instrument named, an instrument that is not a file here, no measurement, a measurement of zero samples, a malformed ledger, evidence attached to an intent marker, or the caller's event disagreeing with what the ledger computes |
+|    2 | *usage*: an unknown event name, an unknown flag, or a marker with no environment to be placed on |
+|    3 | the revision is not a commit in this repository — the =deadbee= refusal, the same meaning =targets/node/deploy.sh= gives it |
+|    4 | *I could not check*: the measurement ledger could not be read. Not "the estate is fine" and not "the estate is broken" |
+|   75 | the sink was unreachable or refused the payload |
+
+The refusals all share code =1= and are told apart by what they print, which is
+the stronger assertion anyway: =marker.sh --selftest= matches the message as
+well as the code on every one of them, so a refusal that starts firing for the
+wrong reason is caught even though the number did not change.
+
+=--samples= no longer exists, so the jq leak has no path: the sample count is
+*counted from the ledger*, and a caller has nothing left to assert it with.
+
+* The beacon returns nothing at all
+
+=DEPLOYMENT_MARKER_BASE= turns the marker's outbound notification from a mock
+into a real request. It has no exit code of its own *by construction*: a beacon
+that could not be sent prints =BEACON NOT SENT= or =BEACON MISCONFIGURED=,
+appends a row tagged =what: "beacon"= to =.run/markers-undelivered.jsonl=, and
+returns. It cannot reach =exit=.
+
+That is not laziness about error handling, it is the contract: the beacon is a
+*notification about a record*, and the record is the evidence. A notification
+that can change the caller's verdict has become an oracle, and its response
+would then be evidence about a deployment it has never heard of.
 
 * Why 4 is not 1, and why it blocks
 
