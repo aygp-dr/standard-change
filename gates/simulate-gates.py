@@ -174,7 +174,7 @@ def print_soak():
     print("  and the resulting queue wait drives the emergency share to ~100%.")
     print("  A soak test run that way does not test the pipeline: it tests the")
     print("  BYPASS, because by the time the queue is that deep every change")
-    print("  has a rational reason to carry change:emergency.")
+    print("  has a rational reason to carry itil:emergency.")
     print()
     print("  That is not a flaw the soak reveals in the gates. It is the")
     print("  singleton berth reaching its design limit -- and the fix is the")
@@ -184,10 +184,10 @@ def print_soak():
 
 
 def emergency_pressure(berth_wait_h, patience_h=4.0, base_rate=0.05):
-    """Fraction of changes that route to change:emergency as the queue slows.
+    """Fraction of changes that route to itil:emergency as the queue slows.
 
     Over-protecting the queue does not trade safety for speed -- it trades
-    safety for safety. change:emergency is the ONE label that bypasses
+    safety for safety. itil:emergency is the ONE label that bypasses
     staging, so every hour of avoidable berth wait pushes changes onto the
     path with fewer checks. Logistic in wait/patience; base_rate is the
     genuinely-urgent floor.
@@ -208,7 +208,7 @@ def print_balance():
     print("  objective. Every minute the berth is held for a reason unrelated")
     print("  to production safety is pure cost -- and past roughly a working")
     print("  half-day of wait, it stops being merely cost: changes start")
-    print("  routing to change:emergency, which is the one path that skips")
+    print("  routing to itil:emergency, which is the one path that skips")
     print("  staging entirely. Tighten the queue far enough and you have")
     print("  optimised your way to LESS production safety, through the only")
     print("  door you left open.")

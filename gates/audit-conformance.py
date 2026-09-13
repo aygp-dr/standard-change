@@ -37,9 +37,9 @@ WORKFLOWS = {
 # repo with request labels and no observation labels is running something else.
 LABELS = {
     "change:requested":  "request — the only one a person adds",
-    "change:standard":   "derived",
-    "change:normal":     "derived",
-    "change:emergency":  "request — the authorized bypass",
+    "itil:standard":   "derived",
+    "itil:normal":     "derived",
+    "itil:emergency":  "request — the authorized bypass",
     "deploy:staging":    "action in flight",
     "deploy:production": "action in flight",
     "staging:passed":    "observation",
@@ -109,7 +109,7 @@ def audit(repo):
                  "driven by commands, not evidence"))
 
     # -- every app directory needs a labeller rule, or its changes deploy
-    #    unlabelled. PR #7 touched apps/mock and got change:standard with no
+    #    unlabelled. PR #7 touched apps/mock and got itil:standard with no
     #    app:mock, because the rule was never added when the app was.
     apps, e1 = gh(f"repos/{repo}/contents/apps", ".[].name")
     cfg, e2 = gh(f"repos/{repo}/contents/.github/labeler.yml", ".content")

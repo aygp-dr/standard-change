@@ -9,7 +9,7 @@ pr="$1"; repo="${GH_REPO:-$GITHUB_REPOSITORY}"
 # second lands a tree predating it. Found in sim/ at berths=2. Activation is
 # not the last point of reliance; the merge is.
 emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
-  -q '[.labels[].name] | index("change:emergency") // empty')
+  -q '[.labels[].name] | index("itil:emergency") // empty')
 if [ -z "$emergency" ]; then
   state=$(gh pr view "$pr" --repo "$repo" --json mergeStateStatus -q .mergeStateStatus)
   if [ "$state" = "BEHIND" ] || [ "$state" = "DIRTY" ]; then

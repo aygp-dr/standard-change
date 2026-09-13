@@ -5,7 +5,7 @@ pr="$2"
 repo="${GH_REPO:-$GITHUB_REPOSITORY}"
 
 emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
-  -q '[.labels[].name] | index("change:emergency") // empty')
+  -q '[.labels[].name] | index("itil:emergency") // empty')
 
 # Guard 0: up to date with main (standard and normal changes only).
 #

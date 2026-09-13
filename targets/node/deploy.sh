@@ -17,18 +17,31 @@
 # blocks 1 and 2 (:9010/:9020), which is a production environment inside the
 # tier whose defining property is that anyone may reclaim it.
 #
+#   dev-<n>           block n   :900n0   n = 0..9, disposable
 #   staging           block 20  :9200
 #   production-blue   block 21  :9210
 #   production-green  block 22  :9220
+#
+# DEV BLOCKS GO THROUGH HERE TOO, as of 2026-09-13. They did not, and the
+# consequence was that every worktree and every agent hand-rolled its own
+# `node apps/<x>/src/server.js &` loop -- a second implementation of deployment,
+# the same defect class as deploy-run duplicating the control flow. It drifted
+# immediately: some callers forgot router/generate.sh, some forgot BIND, and
+# none of them registered the block, which is why ports.tsv claimed three
+# allocations with nothing listening.
+#
+# One script deploys every environment. What differs between dev and production
+# is the port block and who may deploy there, not how.
 set -eu
-env="${1:?usage: deploy.sh <staging|production-blue|production-green> <sha>}"
+env="${1:?usage: deploy.sh <dev-0..dev-9|staging|production-blue|production-green> <sha>}"
 sha="${2:?}"
 root=$(cd "$(dirname "$0")/../.." && pwd)
 case "$env" in
+  dev-[0-9])        block=${env#dev-} ;;
   staging)          block=20 ;;
   production-blue)  block=21 ;;
   production-green) block=22 ;;
-  *) echo "usage: deploy.sh {staging|production-blue|production-green} <sha>" >&2; exit 2 ;;
+  *) echo "usage: deploy.sh {dev-0..dev-9|staging|production-blue|production-green} <sha>" >&2; exit 2 ;;
 esac
 base=$((9000 + block * 10))
 wt="$root/deployments/$env"
@@ -66,5 +79,22 @@ done
 sleep 1
 ( cd "$wt" && BUILD_SHA="$short" BLOCK="$env" BASE_PORT="$base" BIND=0.0.0.0 \
     nohup node router/server.js > "$wt/.router.log" 2>&1 & )
+# Register the block. ports.sh allocates by editing a file and never asks what
+# is bound, so a block whose process died stayed "held" forever and a block
+# started outside the registry was invisible. Deploying IS the allocation:
+# the row is written by the thing that actually started the processes.
+if [ "$block" -lt 10 ]; then
+  wt=$(git -C "$root" rev-parse --show-toplevel 2>/dev/null || echo "$root")
+  br=$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo detached)
+  python3 - "$root/ports.tsv" "$block" "$wt" "$br" <<'PORTS'
+import sys, pathlib, datetime
+f, blk, wt, br = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+rows = [l for l in f.read_text().split("\n") if l.strip()] if f.exists() else ["block\tworktree\tbranch\tallocated_at"]
+hdr, body = rows[0], [r for r in rows[1:] if r.split("\t")[0] != blk]
+body.append("\t".join([blk, wt, br, datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")]))
+f.write_text("\n".join([hdr] + body) + "\n")
+PORTS
+fi
+
 sleep 2
 echo "  $env <- $short  (block $block, :$base)"

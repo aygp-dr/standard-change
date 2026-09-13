@@ -68,23 +68,73 @@ else
   note "one path to production, one change at a time. Wait, or ask them."
 fi
 
-# --- is an emergency or a freeze in front of me? -------------------------
-emg=$(gh pr list --repo "$R" --state open --label change:emergency \
-       --json number -q "[.[].number]|map(select(. != $pr))|join(\", \")" 2>/dev/null || echo "?")
-if [ "$emg" = "?" ]; then
-  no "I could not check for emergencies in flight." 4
-elif [ -z "$emg" ]; then
-  yes "there is no emergency in flight ahead of me"
-else
-  no "an emergency is in flight: #$emg" 2
-  note "it may land under you and invalidate your staging pass (guard 4b)."
+# --- is the estate open to ordinary changes? ------------------------------
+#
+# ONE RULE, TWO CAUSES. A standard or normal change may not progress while
+# either is true:
+#
+#   a FREEZE is declared    -- `freeze` on any open PR, or a scheduled freeze
+#                              overlapping this window
+#   an EMERGENCY is in flight -- itil:emergency on any other open PR
+#
+# They block for the same reason and it is not "two risky things at once". A
+# freeze says the estate is in a state where normal change is unsafe. An
+# emergency says someone is actively changing production outside the normal
+# path -- so the estate is moving under you, your staging pass describes a
+# world that no longer exists, and guard 4b will invalidate you anyway. Better
+# to stop here than to spend a berth and a window finding that out.
+#
+# THE ONLY EXEMPTION IS BEING AN EMERGENCY YOURSELF. An emergency is what a
+# freeze is for; blocking it would mean the freeze prevents its own remedy.
+# itil:emergency is a person's declaration (change/label-owners.tsv) and
+# never inferred.
+is_emg=$(echo "$labels" | tr ' ' '\n' | grep -cx 'itil:emergency' || true)
+
+# A change is ONE class. itil:standard is derived by the labeller from the
+# diff; itil:emergency is declared by a person. Nothing reconciles them, so a
+# PR can carry both -- observed on #2. That is not a nuance, it is a change
+# whose class is undefined, and every rule below branches on the class.
+# Refuse rather than pick one: picking would mean the pipeline deciding whether
+# something is an emergency, which is a person's call by declaration.
+_std=$(echo "$labels" | tr ' ' '\n' | grep -cx 'itil:standard' || true)
+_nrm=$(echo "$labels" | tr ' ' '\n' | grep -cx 'itil:normal' || true)
+if [ "$is_emg" -gt 0 ] && [ $((_std + _nrm)) -gt 0 ]; then
+  no "this change has TWO classes: itil:emergency and $([ "$_std" -gt 0 ] && echo itil:standard || echo itil:normal)" 2
+  note "the labeller derives the class from the diff; a person declares an"
+  note "emergency. Nothing reconciles them, so both are sitting here and every"
+  note "rule below branches on which one is true."
+  note "recovery: a person removes the class that is wrong. Not the pipeline --"
+  note "deciding whether something is an emergency is a declaration, not a"
+  note "derivation."
 fi
 
-if [ -n "${win:-}" ] && ./change/schedule.sh check "$win" >/dev/null 2>&1; then
-  yes "there is no change freeze over my window"
-elif [ -n "${win:-}" ]; then
-  no "a change FREEZE covers my window" 3
-  ./change/schedule.sh check "$win" 2>&1 | sed 's/^/        /'
+frozen=$(gh pr list --repo "$R" --state open --label freeze \
+          --json number,title -q '[.[]|"#\(.number) \(.title)"]|join("; ")' 2>/dev/null || echo "?")
+emg=$(gh pr list --repo "$R" --state open --label itil:emergency \
+       --json number -q "[.[].number]|map(select(. != $pr))|join(\", #\")" 2>/dev/null || echo "?")
+
+if [ "$frozen" = "?" ] || [ "$emg" = "?" ]; then
+  no "I could not check whether the estate is open." 4
+elif [ "$is_emg" -gt 0 ]; then
+  yes "this is itil:emergency -- the freeze and queue rules do not apply to it"
+  [ -n "$frozen" ] && note "freeze in force ($frozen); an emergency is what a freeze is FOR."
+  [ -n "$emg" ]    && note "other emergencies in flight: #$emg"
+  note "this will be in the PIR, and guard 2 and guard 5 still have no bypass."
+elif [ -n "$frozen" ]; then
+  no "a DEPLOYMENT FREEZE is in force" 3
+  note "declared on: $frozen"
+  note "standard and normal changes do not progress during a freeze."
+  note "recovery: wait for the label to come off, or have a person declare"
+  note "this itil:emergency -- their call, never yours."
+elif [ -n "$emg" ]; then
+  no "an EMERGENCY is in flight: #$emg" 2
+  note "standard and normal changes do not progress while one is running."
+  note "it will land under you and invalidate your staging pass (guard 4b),"
+  note "so stopping now costs you a wait; proceeding costs you the berth,"
+  note "the window and the revalidation as well."
+  note "recovery: wait for #$emg to settle, then re-request."
+else
+  yes "the estate is open -- no freeze, no emergency in flight"
 fi
 
 # --- is a person holding this deliberately? ------------------------------

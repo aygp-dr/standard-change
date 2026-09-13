@@ -104,6 +104,51 @@ def main():
             fails.append(f"settle.sh clears PERSISTENT label '{label}'. "
                          f"It describes what the change is and must survive settlement.")
 
+    # Exclusion groups. Cardinality is a different fact from ownership, and the
+    # rows above cannot express it -- #2 carried itil:standard AND
+    # itil:emergency at once, leaving its class undefined while every rule in
+    # preflight branched on the class.
+    #
+    # Checked statically: no single script may be able to ADD two members of one
+    # group. That does not prove a PR never holds two (two scripts, or a human
+    # plus a script, still can -- which is why preflight checks it live too), but
+    # it catches the easy half at no cost.
+    groups = {}
+    for line in DECL.read_text().splitlines():
+        f = line.split("\t")
+        if len(f) >= 4 and f[0] == "exclusive":
+            groups[f[1]] = set(f[2].split())
+
+    for name, members in groups.items():
+        for src, written in [(w, ls) for w, ls in
+                             [(w, {l for l in writes if w in writes[l]}) for w in
+                              {x for ss in writes.values() for x in ss}]]:
+            both = members & written
+            # Adding two members is FINE if each add is paired with removing the
+            # others -- that is the if/elif pattern labeller.yml uses, and it is
+            # the correct way to change a class. Flagging it was a false
+            # positive on the first run of this check. Only an add with no
+            # corresponding remove can leave two on a PR at once.
+            if len(both) > 1 and name == "class":
+                try:
+                    text = (ROOT / src).read_text(encoding="utf-8")
+                except Exception:
+                    continue
+                unpaired = {l for l in both
+                            if f"--remove-label {l}" not in text
+                            and f'--remove-label "{l}"' not in text}
+                if len(unpaired) > 1:
+                    fails.append(f"{src}: adds {sorted(unpaired)} without removing "
+                                 f"the other -- mutually exclusive in group "
+                                 f"'{name}'. One change, one class.")
+
+    undeclared = {l for l in writes if matches(l, decl) is None}
+    for name, members in groups.items():
+        missing = members - set(decl)
+        if missing:
+            fails.append(f"exclusion group '{name}' names undeclared label(s) "
+                         f"{sorted(missing)} -- declare them or remove them from the group.")
+
     for f in fails:
         print(f"FAIL {f}")
     print(f"  {len(decl)} labels declared, {len(writes)} written in-tree, "

@@ -97,6 +97,14 @@ case "$ms" in
     gh pr edit "$pr" --repo "$R" --add-label blocked:diverged >/dev/null
     exit 9 ;;
 esac
+# The validation state machine ends here. Every guard has passed, production is
+# observed serving this build, and the evidence is present -- so the change is
+# COMPLETE, and that is a fact about the change rather than about the forge.
+# Set before the merge, because the merge is what follows completion, not what
+# constitutes it. Cleanup clears it once the forge records the merge.
+gh pr edit "$pr" --repo "$repo" --add-label change:complete >/dev/null 2>&1 || true
+ok "change:complete -- validation done, merging"
+
 if [ "$state" = "MERGED" ]; then ok "already merged"
 else gh pr merge "$pr" --repo "$R" --squash --delete-branch >/dev/null && ok "merged, branch deleted"; fi
 
@@ -126,6 +134,18 @@ $DEVIATION
 }Rollback: \`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" >/dev/null
 ok "PIR posted -- the evidence now survives the labels"
 
+# REDLINE THE WINDOW. settle.sh checked for one and never closed it, so #11
+# merged and settled while its window stayed open until 17:00Z. An unredlined
+# window is a defect for two reasons: the schedule keeps claiming a change is
+# in flight, and schedule.sh refuses an OVERLAPPING window on the same
+# environment -- so a settled change's ghost blocks the next booking.
+# Caught when #19 tried to book and preflight said "not on the calendar".
+if [ -n "${win:-}" ]; then
+  ./change/schedule.sh close "$win" passed >/dev/null 2>&1 \
+    && ok "window $win redlined: passed" \
+    || echo "   warn could not close window $win -- check the schedule by hand"
+fi
+
 # 5. Clear. Two different reasons, and the second is the load-bearing one.
 #
 #    ANNOTATIONS THAT RECORD -- staging:e2e, staging:uat, production:healthy.
@@ -138,9 +158,15 @@ ok "PIR posted -- the evidence now survives the labels"
 #    are a lease on an environment, and leaving one set means the NEXT change
 #    can never start. Clearing them is the release, not the tidying.
 #
-#    NOT cleared: change:complete is the record. app:* and change:standard
+#    change:complete IS cleared here. It was set before the merge as the
+#    terminal state of VALIDATION; once the forge records MERGED it restates
+#    a fact the platform owns, and two records of one fact can disagree while
+#    the platform's cannot.
+#
+#    NOT cleared: app:* and itil:* describe what the change WAS.
 #    describe what the change was, and remain true after it shipped.
-for l in change:requested deploy:staging deploy:production \
+for l in change:requested change:scheduled change:complete \
+        deploy:staging deploy:production \
          staging:e2e staging:smoke staging:uat staging:passed staging:failed \
          staging:in-progress staging:e2e-failed staging:smoke-failed \
          production:e2e production:smoke production:healthy \
@@ -148,9 +174,8 @@ for l in change:requested deploy:staging deploy:production \
          deployed:production blocked:queue blocked:lock blocked:diverged release; do
   gh pr edit "$pr" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
 done
-gh pr edit "$pr" --repo "$R" --add-label change:complete >/dev/null
-ok "berth released, working labels cleared"
+ok "berth released; validation labels cleared, change:complete included"
 
 echo
-echo "  settled: #$pr is change:complete"
+echo "  settled: #$pr merged -- the forge is the record now"
 echo "  labels:  $(gh pr view "$pr" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')"

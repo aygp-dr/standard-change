@@ -1,0 +1,8 @@
+[
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "**`production:healthy` PASSED on `9d85a33`**\n\nsampled 5/5\n\n<!-- observation v1 env=production instrument=healthy verdict=pass sha=9d85a33 -->"
+  }
+]

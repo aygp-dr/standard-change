@@ -1,0 +1,20 @@
+{
+  "check_runs": [
+    {
+      "name": "gate-selftest",
+      "conclusion": "success"
+    },
+    {
+      "name": "lint",
+      "conclusion": "success"
+    },
+    {
+      "name": "test",
+      "conclusion": "success"
+    },
+    {
+      "name": "e2e",
+      "conclusion": "success"
+    }
+  ]
+}

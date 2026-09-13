@@ -1,0 +1,110 @@
+#+TITLE: What made this hard to test, and will again on a rebuild
+#+DATE: 2026-09-13
+
+* Why write this
+
+Everything in =docs/changing-the-pipeline.org= is about the pipeline being
+unfalsifiable. This is narrower and more practical: *the specific things that
+made testing awkward today*, which a rebuild will hit again because they are
+properties of the shape, not of the mistakes.
+
+* 1. A gate's verdict depended on the working directory
+
+=gates/e2e.sh= and =gates/health.sh= read =router/routes.json= relative to the
+tree they run from, while =ROUTER_URL= points at a deployed estate. Same gate,
+same estate, opposite verdicts depending on where you stood (#14, #24).
+
+Observed twice: e2e reported 24 checks / failed from one tree and 27 / passed
+from another; guard 5 called a healthy estate =UNHEALTHY= because the deployed
+build had moved pdp's health path and the main checkout still had the old one.
+
+*On a rebuild*: any gate that takes expectations from the filesystem and
+observations from the network has this. The rule that avoids it is the one
+guard 5 also violates — *prefer a fact the system reports about itself over a
+fact the caller supplies about it.*
+
+* 2. Nothing distinguished "cannot observe" from "observed to be false"
+
+=merge-on-healthy.yml= withdrew =production:healthy= whenever =health.sh= exited
+non-zero, including when that was because no socket could be opened. A marker
+script reported a *rejection* when the host was unreachable. A =curl= fallback
+of =|| echo 000= concatenated with curl's own output to produce =000000=.
+
+*On a rebuild*: every probe needs three outcomes, not two. Collapsing
+unreachable into false produces confident wrong answers, and they are wrong in
+the direction of destroying someone else's measurement.
+
+* 3. Test fixtures that could not fail
+
+Three in one day:
+
+- a contract test compared =render().routes= to the file =render= reads
+- the labeller oracle asserted =if "staging:passed" not in WORKFLOW.read_text()=
+  — satisfied by the string appearing anywhere, in any step, under any condition
+- =NoMergeBeforeProduction= was defined in the TLA+ spec and never added to
+  =Safety=, so the negative run passed
+
+*On a rebuild*: a test that has never been watched failing is a hypothesis. The
+=gate-selftest= discipline exists for this and it only covers the gates it knows
+about — each of the three above sat outside it.
+
+* 4. Concurrency the harness did not model
+
+Four agents on four dev blocks surfaced: two PRs editing =shared/oneui.js=
+(loud, git catches it), two agents wanting the same block (silent, the second
+replaces the first), and an observation recorded against a build that a push had
+already replaced (silent, and it authorised a merge).
+
+*On a rebuild*: see =docs/concurrent-change.org=. The kinds need different
+mechanisms and only the loud one has one.
+
+* 5. The platform could not run the thing under test
+
+No GitHub runner can reach the estate, so every gate that matters runs on the
+host and reports by label. That makes labels a proxy for check runs, which makes
+label ownership a correctness concern rather than tidiness (#16, #30), and it
+makes =deploy-staging= — which has never once run successfully (#25) — invisible
+until someone looked.
+
+*On a rebuild*: decide early whether CI can reach the estate. Everything about
+how evidence is carried follows from that answer, and retrofitting it is what
+produced the label taxonomy.
+
+* 6. Renaming was cheap only because the labels were renamed, not re-created
+
+Splitting =change:*= into =itil:*= (classification) and =change:*= (lifecycle)
+touched 9 files and 16 live labels. It was cheap *because* =gh label edit
+--name= renames in place and every historical PR carried the new name
+automatically.
+
+Creating new labels and deleting old ones would have silently rewritten the
+class of every settled change to *nothing*, and the history is the record.
+
+*On a rebuild*: a namespace that holds two kinds of fact will need splitting.
+Plan to rename, never to re-create, and never let a migration touch settled
+records.
+
+* 7. The thing being tested kept changing under the test
+
+The sharpest one. =gates/e2e.sh= was edited by three different changes in one
+afternoon while being the gate that authorised all three. The =mktemp -t=
+portability defect in #21 would have reduced it from 27 checks to *zero on CI
+while exiting cleanly* — caught by reading the diff, not by running it, because
+running it on the author's host was exactly the environment where it worked.
+
+*On a rebuild*: this is the soak argument in
+=docs/changing-the-pipeline.org=. A control-plane change is not proven by its
+own green run; it is proven by later changes passing through it. Anything else
+is measuring the gate with itself.
+
+* The short version
+
+| symptom                        | root                                    |
+|--------------------------------+-----------------------------------------|
+| verdict depends where you stand | oracle from the caller, not the subject |
+| confident wrong answers        | unreachable collapsed into false        |
+| green means nothing            | fixture never watched failing           |
+| silent wrong results           | concurrency with no lease               |
+| evidence carried by hand       | CI cannot reach the estate              |
+| migration risks the record     | one namespace, two kinds of fact        |
+| the gate tests itself          | control-plane change proven by its own run |

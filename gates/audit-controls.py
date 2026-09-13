@@ -106,11 +106,11 @@ def audit_rulesets(a, repo, fixture):
             a.add(ABSENT, "PR required", "no pull_request rule; direct pushes possible")
         else:
             n = pr["parameters"].get("required_approving_review_count", 0)
-            # >= 1 because change:normal touches router/gates/change/.github and
+            # >= 1 because itil:normal touches router/gates/change/.github and
             # needs a named change authority (spec.org, Labels).
             a.add(OK if n >= 1 else FINDING, "PR required",
                   f"approvals={n}" if n >= 1 else
-                  f"approvals={n}; change:normal would reach production unreviewed")
+                  f"approvals={n}; itil:normal would reach production unreviewed")
 
         sc = by_type.get("required_status_checks")
         if not sc:
@@ -182,7 +182,7 @@ def audit_environments(a, repo, fixture):
             a.add(OK if "required_reviewers" in kinds else FINDING,
                   "production reviewers",
                   "required" if "required_reviewers" in kinds else
-                  "change:normal can reach production unreviewed")
+                  "itil:normal can reach production unreviewed")
             wait = next((r for r in rules if r["type"] == "wait_timer"), None)
             a.add(OK if not wait or wait.get("wait_timer") == 0 else FINDING,
                   "production wait_timer",

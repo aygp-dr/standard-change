@@ -511,8 +511,35 @@ blocked it: =merge-on-healthy.yml= *triggers* on =production:healthy=, and a
 trigger is not a gate.
 
 *Decides*: the ordering needed a control, not a convention.
-=gates/production-first.sh= now refuses a merge when a PR carries =app:*= and
-lacks =production:healthy=, runs as a check, and is in the required list. The
+=gates/production-first.sh= refuses a merge when a PR carries =app:*= and lacks
+=production:healthy=, runs as a check, and is in the required list.
+
+*CORRECTION, same day (issue #29).* The sentence above overstated what was
+fixed, and the overstatement survived three shipped changes before anything
+caught it.
+
+*The check cannot block a new PR.* It runs on =pull_request/opened=, which fires
+*before* the labeller has applied any =app:*= label, so it takes the "no app:*
+labels — nothing deploys" branch and reports success. It declares
+=types: [... labeled, unlabeled]= so it should re-run once the labels land, and
+it never has: =actions/labeler= writes with =GITHUB_TOKEN=, and events produced
+by =GITHUB_TOKEN= do not trigger further workflow runs. Thirty runs, every one
+=event=pull_request=, not one =labeled=.
+
+So it evaluates exactly once, in the only window where the labels are
+guaranteed absent, and then never again. #28 — a single-line change to
+=apps/core=, never deployed anywhere — is green.
+
+*What is actually true*: the ordering is enforced by =change/settle.sh= and by a
+person running =gates/production-first.sh= by hand, both of which run where the
+estate is visible. The CI check is decoration. The distinction matters because
+S3's whole lesson was that *a trigger is not a gate* — and the fix for it turned
+out to be a check that is not a gate either, for a different reason.
+
+*The irony worth recording*: =.github/workflows/labeller.yml= carries a comment
+warning about exactly this trap — "Derive from the DIFF, not from the labels
+actions/labeler just wrote" — written after an earlier race in this same
+project. The lesson was available, in the adjacent file, and was not applied. The
 TLA+ spec could not express the defect at all — it modelled deploy and merge as
 one atomic step — so =NoMergeBeforeProduction= was added with =ProdFirst= as a
 switchable constant.
@@ -656,12 +683,86 @@ scarce thing is the reviewer, and pinning review to one address makes the
 scarcity visible: *you cannot look at two builds at once, so there is exactly
 one slot, so it needs a lease.*
 
+*Scoped correctly, on the same day.* The singleton is *per reviewer*, not
+global. A real organisation has many people with many PRs in flight, and how
+they divide that among themselves is theirs to decide — the pipeline is
+simulating a workflow, not optimising one person's afternoon. So the claim
+above is narrower than it first reads:
+
+- *wrong*: "parallel work is pointless because acceptance serializes"
+- *right*: "acceptance serializes *per reviewer*, and a reviewer holding a
+  review slot is holding a resource nothing currently records"
+
+What generalises is the *lease*, not the count. Ten reviewers means ten slots,
+and every one of them still has the property that deploying over somebody's
+build while they are looking at it is invisible to both parties. That is worth
+a lease at any scale; it just stops being a throughput argument and becomes a
+correctness one.
+
 Not built. The cheap version is =change/state.sh= with a second key, and the
 refusal message writes itself: "#N holds the review slot until 16:40Z; deploying
 yours would replace a build someone is currently looking at."
 
 Recorded as an observation rather than a decision. The decision it points at —
 batch acceptance — is Option A3, already on the table.
+
+** S8 — a freeze, and an emergency, block the same way
+
+Added 2026-09-13. *A standard or normal change does not progress while either a
+freeze is declared or an emergency is in flight.* One rule, two causes, one
+exemption.
+
+*The rule.* =gates/preflight.sh= refuses with the spec's own codes — exit 3 for
+a freeze, exit 2 for an emergency in flight.
+
+| cause                    | declared by                          | exit |
+|--------------------------+--------------------------------------+------|
+| freeze                   | =freeze= on *any* open PR, or a scheduled freeze overlapping the window | 3 |
+| emergency in flight      | =change:emergency= on any *other* open PR | 2 |
+| *exemption*              | *being =change:emergency= yourself*  | *proceeds* |
+
+*Why they are one rule and not two.* Not "two risky things at once". A freeze
+says the estate is in a state where normal change is unsafe. An emergency says
+*somebody is changing production outside the normal path right now* — so the
+estate is moving under you, your staging pass describes a world that no longer
+exists, and guard 4b will invalidate you when you get there. Refusing at
+preflight costs a wait; proceeding costs the berth, the window and the
+revalidation as well.
+
+*Why =freeze= is a label on a PR rather than a calendar entry.* A freeze is
+usually declared in a hurry, by whoever noticed, and it has to be visible where
+people already look. =schedule.sh freeze= remains for *planned* freezes with
+start and end times. Both are checked; this is the unplanned one.
+
+*Why the emergency exemption is not a loophole.* An emergency is what a freeze
+is *for*. Blocking it would mean the freeze prevents its own remedy. And the
+exemption is narrow: guard 2 (gates green on this head) and guard 5
+(convergence) still have *no bypass*, and the exemption is recorded in the PIR
+rather than waved through.
+
+*Walked, both directions*: =freeze= on #3 refused #28 (=change:standard=) with
+exit 3; the same freeze let #2 through once a person declared it
+=change:emergency=, with the freeze named in the output and a note that it
+lands in the PIR.
+
+*** The defect the walk found: a change with two classes
+
+#2 came out of that test carrying *=change:standard= and =change:emergency= at
+once*. The labeller derives the class from the diff; a person declares an
+emergency; *nothing reconciles them*.
+
+That is not a nuance. Every rule in preflight branches on the class, so a change
+with two of them has an undefined class and the verdict depends on which check
+runs first.
+
+Preflight now refuses it (exit 2) rather than picking one. *Picking would mean
+the pipeline deciding whether something is an emergency*, and that is a
+declaration a person makes, never a derivation — =change/label-owners.tsv= gives
+=change:emergency= a human owner for exactly this reason.
+
+The deeper shape is one this repo keeps finding: *two writers, one fact, no
+reconciliation.* Same as =production:healthy= flipping between a person and a
+workflow (S5), and as the port registry drifting from what is actually bound.
 
 * Open — what happens when a change lands outside its window
 
