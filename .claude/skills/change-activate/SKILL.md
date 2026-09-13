@@ -5,7 +5,7 @@ description: Act as the deployment scheduler when a reserved change window comes
 
 # change-activate — the scheduler's verb
 
-Read `../_shared/vocabulary.md` first.
+Read `../_shared/vocabulary.md` first. This skill owns one label kind; see the table in `change-request/SKILL.md`.
 
 **This is the one operation no client calls.** A change cannot activate itself,
 and neither can a person asking you to deploy. The scheduler invokes it when a

@@ -1746,6 +1746,27 @@ verb plus a target and reads as an action because it is one. A new label whose
 name does not fit one of these three shapes is probably conflating two kinds —
 which is how =deploy:staging= spent three revisions in the request column.
 
+** The check list is the pipeline, visible
+
+Because every stage is a workflow keyed on a label, a PR shows the whole shape
+at once — including the parts not taken:
+
+#+begin_example
+1 in progress, 3 skipped, 1 successful
+  in progress   gate / gate-selftest
+  skipped       deploy-staging / deploy
+  skipped       promote / promote
+  skipped       deploy-production / deploy
+  successful    labeller / label
+#+end_example
+
+That is the state machine rendered by the forge for free, and it is worth
+having on purpose rather than by accident. One caveat on reading it: GitHub
+says *skipped* for "the =if:= condition was not met", which looks like a
+decision and is really just "not this change's turn yet". A stage that is
+skipped because =change:requested= has not been added is indistinguishable, in
+that list, from one skipped because a guard refused.
+
 ** So a label-triggered workflow must re-derive, not trust
 
 #+begin_quote

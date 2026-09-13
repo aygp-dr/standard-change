@@ -1,9 +1,21 @@
 ---
-name: change-schedule
-description: Reserve a deployment window on the change schedule, read what is scheduled, and check team environments in and out of the IDP. Use when asked to schedule or book a deployment, request a change window, see what is deploying today or who holds an environment, check out or release a team/app environment, clear a stale checkout, or explain why a deployment is blocked on the queue, a freeze, or an emergency. Covers reservation only — it does not start deployments and does not close them out.
+name: change-request
+description: Raise a change request so a change can begin, read the change schedule, and check team environments in and out of the IDP. Use when asked to start or request a change, book or ask for a deployment window, see what is deploying today or who holds an environment, check out or release a team/app environment, clear a stale checkout, or explain why a change is blocked on the queue, a freeze, or an emergency. This is the REQUEST side only — it never deploys and never closes a change out.
 ---
 
-# change-schedule — reserve, and read
+# change-request — the human act
+
+One skill per kind of label (`../_shared/vocabulary.md`), because the kinds are
+what the pipeline is made of:
+
+| skill | owns | label kind |
+|---|---|---|
+| **change-request** | what a person asks for | **request** — `change:requested` |
+| change-activate | what the workflow does | **action** — `deploy:<env>` |
+| change-settle | what came back | **observation** — `<subject>:<state>` |
+
+A skill that spanned two kinds would be a skill that lets you assert something
+you did not measure. That is why there are three.
 
 Read `../_shared/vocabulary.md` first. This skill covers **reservation**, the
 first of three verbs (`docs/idp-api.org`). It never starts a deployment.

@@ -5,7 +5,7 @@ description: Close out a deployment by gathering evidence that the estate conver
 
 # change-settle — evidence in, verdict out
 
-Read `../_shared/vocabulary.md` first.
+Read `../_shared/vocabulary.md` first. This skill owns one label kind; see the table in `change-request/SKILL.md`.
 
 ## This skill cannot mark anything complete
 
