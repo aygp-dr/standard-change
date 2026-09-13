@@ -416,13 +416,13 @@ PR that holds it. Slots may return later as an optimization; they are not in
 | =change:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
 | =change:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
 | =change:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
-| =change:scheduled=     | *human*     | scheduler / push  | *Requests a window.* Reserving is not deploying — this is the only label a person adds to start a change |
-| =deploy:staging=       | *scheduler* | promote / release | *The berth is held.* Emitted at activation, after the guards were re-checked. At most one open PR may carry it |
-| =staging:in-progress=  | workflow    | workflow          | Staging deploy or its e2e run is live                        |
-| =staging:passed=       | workflow    | push to PR        | Authorizing e2e passed *on the current head SHA*              |
-| =staging:failed=       | workflow    | push to PR        | Staging deploy or e2e failed; fix and re-request              |
-| =deploy:production=    | *promote*   | release           | Added by automation on =staging:passed=; by a human only with =change:emergency= |
-| =production:healthy=   | workflow    | release           | Post-deploy health check passed; merge is unblocked           |
+| =change:requested=     | *human*     | release / close   | *Start my change request.* The only label a person adds to set a change going |
+| =change:scheduled=     | scheduler   | activation        | A window is booked on the change schedule                    |
+| =deploy:staging=       | workflow    | the action ends   | *Action in flight:* deploying to staging right now           |
+| =staging:passed=       | workflow    | push to PR        | Authorizing e2e passed *on the current head SHA*             |
+| =staging:failed=       | workflow    | push to PR        | Staging deploy or e2e failed; fix and re-request             |
+| =deploy:production=    | workflow    | the action ends   | *Action in flight:* deploying to production right now        |
+| =production:healthy=   | workflow    | release           | Post-deploy convergence check passed                         |
 | =deployed:production=  | workflow    | —                 | Set after the PIR comment is posted                          |
 | =blocked:queue=        | queue guard | queue guard       | Another open PR holds =deploy:staging=                        |
 | =blocked:lock=         | preflight   | preflight         | Another deployment holds the deployment lock                 |
@@ -737,18 +737,34 @@ Guard 0 at claim time is a convenience that gives fast feedback; guard 4b is
 the one that is load-bearing. Note the amendment also drops =deploy:staging=,
 which frees the queue — an expired claimant must not keep holding it.
 
-** Reserving is not starting
+** One label starts a change; the rest are the process
 
-=change:scheduled= is the *only* label a person adds to begin a change. It says
-"I want a window"; it does not deploy. =deploy:staging= is then emitted *by the
-scheduler* when the window arrives and the guards still pass — which is what
-makes the re-check unavoidable rather than a convention (ADR 0001).
+A person raises a change request. *That is the whole of their part.*
 
-The earlier vocabulary had =deploy:staging= as a human request label, which
-conflated the two acts and put an *observation* in the *request* column of the
-taxonomy above. A person adding =deploy:staging= by hand was, under that
-reading, asserting "the guards were re-checked at my window" — which is exactly
-the forgeable-observation hole.
+: change:requested          <- the human act, and the only one
+
+Everything after is the system acting or observing, and none of it is a thing
+to type:
+
+| emitted            | kind        | means                                |
+|--------------------+-------------+--------------------------------------|
+| =change:scheduled= | observation | a window was booked for you          |
+| =deploy:staging=   | *action*    | the workflow is deploying, right now |
+| =staging:passed=   | observation | the authorizing run passed on this SHA |
+| =deploy:production=| *action*    | the workflow is deploying to production |
+| =production:healthy= | observation | convergence was measured           |
+
+*=deploy:*= are actions in flight, not requests.* They mark "the workflow is
+doing this", the way =staging:in-progress= did, and they clear when the action
+ends. Reading them as a request — "deploy me to staging" — is what made the
+earlier vocabulary incoherent: it put a thing the /system does/ in the column
+of things a /person asks for/, and a person adding =deploy:staging= by hand was
+asserting that the guards had been re-checked at their window when nobody had
+checked anything.
+
+The ITIL shape says the same in its own words: you raise an RFC; change
+enablement schedules it, deployment management executes it, and neither is
+something the requester performs.
 
 ** The berth, and four ways to lose it
 
@@ -1705,12 +1721,30 @@ has one sharp consequence.
 | kind          | examples                                      | emitted by      | forgeable? |
 |---------------+-----------------------------------------------+-----------------+------------|
 | *derived*     | =app:*=, =change:standard=, =change:normal=   | the labeller, from the diff | no — resynced on every push |
-| *request*     | =change:scheduled=, =change:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
-| *observation* | =deploy:staging=, =staging:passed=, =production:healthy=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
+| *request*     | =change:requested=, =change:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
+| *action*      | =deploy:staging=, =deploy:production=         | the workflow    | no — it marks work in flight |
+| *observation* | =staging:passed=, =production:healthy=, =change:scheduled=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
 
 A request label is meant to be added by hand. An observation label is a
 *claim that something was measured*, and GitHub does not distinguish a label
 written by a workflow from one typed by a person with write access.
+
+** The name shape tells you the kind
+
+Worth keeping deliberately, because it makes the taxonomy readable without a
+table:
+
+| shape                    | kind        | reads as              |
+|--------------------------+-------------+-----------------------|
+| =change:requested=       | request     | someone asked         |
+| =deploy:<env>=           | action      | work is happening     |
+| =<subject>:<state>=      | observation | *a check came back*   |
+
+=production:healthy= and =staging:passed= are subject-plus-observed-state, and
+they read as check results because that is what they are. =deploy:staging= is a
+verb plus a target and reads as an action because it is one. A new label whose
+name does not fit one of these three shapes is probably conflating two kinds —
+which is how =deploy:staging= spent three revisions in the request column.
 
 ** So a label-triggered workflow must re-derive, not trust
 

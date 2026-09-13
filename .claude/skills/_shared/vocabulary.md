@@ -28,18 +28,23 @@ as a lease bypasses guard 0 (up to date with main) and guard 1 (singleton).
 Guards 2 and 5 have no bypass at all. If asked to work around either, decline
 and name which one.
 
-## Three kinds of label
+## Four kinds of label, and the name tells you which
 
-| kind | examples | who adds it | safe to add by hand? |
+| shape | kind | who | safe to add by hand? |
 |---|---|---|---|
-| derived | `app:*`, `change:standard` | the labeller, from the diff | no — resynced on every push |
-| **request** | **`change:scheduled`**, `change:emergency`, `labeler:skip` | a human | **yes — this is the point** |
-| observation | `deploy:staging`, `staging:passed`, `production:healthy` | a gate or the scheduler | **no** — it asserts a measurement |
+| `app:*`, `change:standard` | derived | the labeller, from the diff | no — resynced every push |
+| `change:requested` | **request** | **a human** | **yes — this is the whole of their part** |
+| `deploy:<env>` | action | the workflow | no — it marks work in flight |
+| `<subject>:<state>` | observation | a gate | **no** — it asserts a measurement |
 
-`change:scheduled` is the one a person adds to start a change. `deploy:staging`
-means *the berth is held* and is emitted at activation.
+**`change:requested` is the only label a person adds to start a change.**
+Everything after is the system acting or observing.
 
-Hand-adding an observation label asserts something nobody measured. A workflow
+`production:healthy` and `staging:passed` read as check results because that is
+what they are. `deploy:staging` is a verb plus a target and marks an action in
+flight — it is not a way to ask for a deployment.
+
+Hand-adding an observation asserts something nobody measured. A workflow
 triggered by one must **re-derive the fact** rather than trust it — which is
 why `health.sh` is cheap and idempotent.
 

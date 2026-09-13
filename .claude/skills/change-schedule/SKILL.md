@@ -10,15 +10,18 @@ first of three verbs (`docs/idp-api.org`). It never starts a deployment.
 
 ## The label to add
 
-**`change:scheduled`** — the only label a person adds to begin a change.
+**`change:requested`** — the only label a person adds to start a change.
 
-It says *"I want a window"*. It does not deploy, and it does not claim the
-berth. `deploy:staging` appears later, emitted by the **scheduler** when the
-window arrives and the guards still pass (`change-activate`).
+It raises the request. It does not book a window, claim a berth, or deploy.
+Everything after is the system: `change:scheduled` when a window is booked,
+`deploy:staging` while the deployment is running, `staging:passed` and
+`production:healthy` when checks come back.
 
-Do not add `deploy:staging` by hand. It is an *observation* label: it asserts
-"the guards were re-checked at my window", and adding it yourself asserts
-something nobody measured. See `../_shared/vocabulary.md`.
+Do not add `deploy:staging` or `deploy:production` by hand. They are **actions
+in flight**, not requests — adding one says "the workflow is deploying right
+now", which is not something a person can truthfully assert. Do not add
+`production:healthy` either: it is a check result, and typing it claims a
+measurement nobody took. See `../_shared/vocabulary.md`.
 
 ## Reserve a window
 
