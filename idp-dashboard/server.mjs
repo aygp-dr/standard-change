@@ -1,5 +1,23 @@
 // IDP release dashboard -- what is on each environment, and what is booked.
 //
+// WHAT THIS IS FOR, AND WHAT IT BECOMES.
+//
+// Right now it drives the grind. A queue you can see is a queue you can stack,
+// expire, reap and re-book, and most of scenarios.org came from watching this
+// board rather than from reading scripts -- the stale reservation, the five
+// UNDEFINED classes, the window that lapsed unreaped, the env column claiming
+// eight changes were on staging when none were.
+//
+// What it simplifies to, in a real pipeline, is narrower: THE SEQUENCING OF
+// CHANGES. Which change holds the path to production, which are behind it, and
+// when. An existing pipeline already has its own build and test reporting; what
+// it usually lacks is one place showing the order, and the order is the part
+// people argue about at 3am.
+//
+// So the estate table is scaffolding for this repo's own testing and the
+// windows table is the durable idea. If this were adopted anywhere, the top
+// half is what would survive.
+//
 // NO DEPENDENCIES. The repo forbids adding any, so the WebSocket is implemented
 // against RFC 6455 directly: the handshake is a SHA-1 of the client key plus
 // the magic GUID, and server->client text frames are unmasked with a 2-, 4- or
