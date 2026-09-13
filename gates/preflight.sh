@@ -164,10 +164,20 @@ is_emg=$(echo "$labels" | tr ' ' '\n' | grep -cx 'itil:emergency' || true)
 # whose class is undefined, and every rule below branches on the class.
 # Refuse rather than pick one: picking would mean the pipeline deciding whether
 # something is an emergency, which is a person's call by declaration.
-_std=$(echo "$labels" | tr ' ' '\n' | grep -cx 'itil:standard' || true)
-_nrm=$(echo "$labels" | tr ' ' '\n' | grep -cx 'itil:normal' || true)
-if [ "$is_emg" -gt 0 ] && [ $((_std + _nrm)) -gt 0 ]; then
-  no "this change has TWO classes: itil:emergency and $([ "$_std" -gt 0 ] && echo itil:standard || echo itil:normal)" 2
+# COUNT THEM, DO NOT PATTERN-MATCH A PAIR. This used to fire only when
+# itil:emergency was one of them, so itil:standard + itil:normal -- two classes,
+# class undefined, every rule below branching on it -- passed silently. And the
+# message said "TWO" from a hardcoded string, so three classes would have been
+# reported as two.
+#
+# Any count above one is the same defect: the class is undefined. The message
+# now names what is actually there.
+_classes=$(echo "$labels" | tr ' ' '\n' | grep -x 'itil:\(standard\|normal\|emergency\)' | sort -u)
+_n=$(printf '%s' "$_classes" | grep -c . || true)
+_std=$(printf '%s\n' "$_classes" | grep -cx 'itil:standard' || true)
+_nrm=$(printf '%s\n' "$_classes" | grep -cx 'itil:normal' || true)
+if [ "$_n" -gt 1 ]; then
+  no "this change has $_n classes: $(printf '%s' "$_classes" | tr '\n' ' ')" 2
   note "the labeller derives the class from the diff; a person declares an"
   note "emergency. Nothing reconciles them, so both are sitting here and every"
   note "rule below branches on which one is true."

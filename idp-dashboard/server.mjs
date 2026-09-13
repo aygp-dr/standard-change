@@ -78,8 +78,11 @@ async function resolvePr(n) {
       // absence has to be visible, not blank.
       const cls = (j.labels || []).map((x) => x.name)
         .filter((x) => x.startsWith('itil:')).map((x) => x.slice(5));
-      v = { branch: j.headRefName, title: j.title, url: j.url,
-            cls: cls.length === 1 ? cls[0] : (cls.length ? 'conflict' : null) };
+      // Carry the LIST, not a verdict. The chip used to collapse any count
+      // above one into the literal string '2 CLASSES', which is a false number
+      // the moment there are three -- a claim written from an assumption about
+      // the data rather than from the data.
+      v = { branch: j.headRefName, title: j.title, url: j.url, cls };
     } catch { /* leave nulls: an unparseable answer is not an answer */ }
   }
   prMeta.set(n, v);
@@ -472,18 +475,34 @@ function when(iso){
 // server.mjs, so one backtick in a COMMENT ends the literal and the file stops
 // parsing. Third variant of the same trap today, after an escaped newline and a
 // nested quote.
-function cls_chip(c){
+function cls_chip(cs){
   const m={standard:['cls-std','STD','itil:standard — pre-authorised, routine'],
            normal:['cls-nrm','NRM','itil:normal — assessed, needs authorisation'],
-           emergency:['cls-emg','EMG','itil:emergency — expedited; exempt from freeze and queue'],
-           conflict:['cls-bad','2 CLASSES','two itil: labels — the class is undefined and every rule branches on it']};
-  // UNDEFINED, not 'none' or 'empty'. gates/preflight.sh:164 already calls this
-  // state 'a change whose class is undefined', and that is the accurate word:
-  // there is no answer, as opposed to an answer that happens to be empty. The
+           emergency:['cls-emg','EMG','itil:emergency — expedited; exempt from freeze and queue']};
+  // MORE THAN ONE: show the highest-precedence class present with a +, so the
+  // reader sees WHICH class would be argued for as well as that it is
+  // ambiguous. Red when emergency is among them, because that is the one whose
+  // presence grants an exemption; amber otherwise, because standard+normal is
+  // a real defect but not a bypass risk. No count in the label -- the count
+  // goes in the title, where it can be right.
+  if (Array.isArray(cs) && cs.length > 1) {
+    const rank=['emergency','normal','standard'];
+    const top=rank.find((r)=>cs.includes(r))||cs[0];
+    const bad=cs.includes('emergency')?'cls-emg':'cls-bad';
+    return '<span class="chip '+bad+'" title="'+esc(cs.length+' itil: labels ('+
+      cs.map((x)=>'itil:'+x).join(', ')+') — the class is undefined; preflight refuses with exit 2')+
+      '">'+esc((m[top]?m[top][1]:top.toUpperCase())+'+')+'</span>';
+  }
+  const c=Array.isArray(cs)?cs[0]:cs;
+  // UND -- three letters, so it sits in the same column as STD / NRM / EMG and
+  // the eye reads the set rather than one odd-width outlier. The word it
+  // abbreviates is 'undefined', which is what gates/preflight.sh already calls
+  // this state -- and it is the accurate word: there is no answer, as opposed
+  // to an answer that happens to be empty. The
   // distinction matters because every rule below branches on the class, and a
   // rule branching on an undefined value takes whichever arm it was written to
   // take -- which is not a decision anybody made.
-  const e=m[c]||['cls-none','UNDEFINED','no itil: label — the class is undefined, and every rule that branches on it is satisfied by default'];
+  const e=m[c]||['cls-none','UND','no itil: label — the class is undefined, and every rule that branches on it is satisfied by default'];
   return '<span class="chip '+e[0]+'" title="'+esc(e[2])+'">'+esc(e[1])+'</span>';
 }
 function cls(s){return s<=0?'rem-bad':s<60?'rem-bad':s<150?'rem-warn':'rem-ok';}
