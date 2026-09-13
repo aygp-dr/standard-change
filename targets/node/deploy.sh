@@ -41,7 +41,36 @@ case "$env" in
   staging)          block=20 ;;
   production-blue)  block=21 ;;
   production-green) block=22 ;;
-  *) echo "usage: deploy.sh {dev-0..dev-9|staging|production-blue|production-green} <sha>" >&2; exit 2 ;;
+  *)
+    # A DECLARED NAME IS NOT A USAGE ERROR. environments.tsv names environments
+    # that exist as reservations -- the 9100 team tier -- and telling someone
+    # "unknown environment" for a name the repo itself declares sends them
+    # looking for a typo. Look it up and say which of the two things is true.
+    row=$(awk -F'\t' -v n="$env" '!/^#/ && $1==n {print; exit}' "$root/environments.tsv" 2>/dev/null || true)
+    if [ -n "$row" ]; then
+      act=$(printf '%s' "$row" | cut -f5)
+      prt=$(printf '%s' "$row" | cut -f4)
+      tier=$(printf '%s' "$row" | cut -f2)
+      if [ "$act" = yes ]; then
+        # Declared ACTIVATED, and this script has no block for it. That is a
+        # disagreement between the map and the deployer, not a user error, and
+        # it is the direction that actually hurts: somebody marked an
+        # environment live and nothing can deploy to it.
+        echo "refused: '$env' is declared ACTIVATED (:$prt) but deploy.sh has no" >&2
+        echo "  block for it. environments.tsv and this script disagree about" >&2
+        echo "  what exists. Fix the case statement above, or set activated=no." >&2
+        exit 7
+      fi
+      echo "refused: '$env' is DECLARED but not activated (tier $tier, :$prt)." >&2
+      echo "  It is a reservation: the ports are held so nothing else takes them," >&2
+      echo "  and no process is expected to answer there. Activating it is a" >&2
+      echo "  decision, not a deploy -- set activated=yes in environments.tsv and" >&2
+      echo "  add its block here, in one change somebody reviews." >&2
+      [ "$tier" = team ] && echo "  Note: the team tier CANNOT promote. Guard 4 reads staging:* and" >&2
+      [ "$tier" = team ] && echo "  production:* observations; nothing downstream reads a team verdict." >&2
+      exit 6
+    fi
+    echo "usage: deploy.sh {dev-0..dev-9|staging|production-blue|production-green} <sha>" >&2; exit 2 ;;
 esac
 base=$((9000 + block * 10))
 wt="$root/deployments/$env"

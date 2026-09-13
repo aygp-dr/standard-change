@@ -1,1 +1,36 @@
-env	holder	pr	checked_out_at	expires_at	note
+# THE ENVIRONMENT DECLARATION. One row per environment that EXISTS AS A NAME.
+#
+# An address is reserved by being declared here, not by something listening on
+# it. That is the whole point of the `activated` column: a declared, inactive
+# environment still owns its ports, so nothing else can be allocated onto them
+# and a reader can see the shape of the estate before it is built. ports.tsv is
+# the CMDB of what is RUNNING; this is the map of what is NAMED.
+#
+# tier is read off the number and the number is the contract (CLAUDE.md):
+#   9000-9099  dev        worktree blocks, disposable
+#   9100-9199  team       real environments that CANNOT promote
+#   9200-9299  protected  the path to production
+#
+# promotes=no is not a policy toggle. A team environment cannot promote because
+# nothing downstream of it reads its verdict -- guard 4 names staging:* and
+# production:* observations and nothing else. Setting it to yes would not grant
+# the power, it would only make the file lie.
+name	tier	block	base_port	activated	promotes	note
+dev-0	dev	0	9000	auto	no	worktree block, allocated by change/ports.sh
+dev-1	dev	1	9010	auto	no	worktree block
+dev-2	dev	2	9020	auto	no	worktree block
+dev-3	dev	3	9030	auto	no	worktree block
+dev-4	dev	4	9040	auto	no	worktree block
+dev-5	dev	5	9050	auto	no	worktree block
+dev-6	dev	6	9060	auto	no	worktree block
+dev-7	dev	7	9070	auto	no	worktree block
+dev-8	dev	8	9080	auto	no	worktree block
+dev-9	dev	9	9090	auto	no	worktree block
+staging-core-1	team	10	9100	no	no	PLACEHOLDER. Per-app team staging for core. Declared, not activated
+staging-plp-1	team	11	9110	no	no	PLACEHOLDER. Per-app team staging for plp. Declared, not activated
+staging-pdp-1	team	12	9120	no	no	PLACEHOLDER. Per-app team staging for pdp. Declared, not activated
+staging-checkout-1	team	13	9130	no	no	PLACEHOLDER. Per-app team staging for checkout. Declared, not activated
+staging	protected	20	9200	yes	yes	the authorizing environment; guard 4 reads staging:* from here
+production-blue	protected	21	9210	yes	yes	production replica
+production-green	protected	22	9220	yes	yes	production replica
+front	protected	23	9230	yes	yes	reads the live colour per request; never deployed to directly
