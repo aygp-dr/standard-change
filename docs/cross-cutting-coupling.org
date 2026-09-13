@@ -88,6 +88,52 @@ shared oracle without being ported. The coupling it removes is the one here:
 adapters agree by consuming a published artifact, not by reading the producer's
 live file.
 
+* Blast radius is not the same as path, and only path is gating
+
+A shared UI package is *effectively a breaking change*: one edit can break five
+consumers at once. ITIL defines a standard change as low-risk, pre-approved,
+repeatable, with a known outcome — and a change that can break five consumers
+simultaneously fails every clause.
+
+*Two of this repo's own mechanisms disagree about exactly that change:*
+
+| mechanism                        | verdict on a shared-surface change | does it gate? |
+|----------------------------------+------------------------------------+---------------|
+| =idp.py change risk=             | =risk=55=, *type=normal*           | *no* — not wired into the pipeline |
+| the labeller (=.github/labeler.yml=) | *=change:standard=*            | *yes* — this is what gates |
+
+The risk scorer already counts blast radius (=multi_app= +15, =per_app= ×n).
+The labeller matches *paths* — =router/=, =gates/=, =change/=, =targets/= — and
+a package at =apps/shared/= or =packages/oneui/= matches none of them.
+
+#+begin_quote
+The mechanism that sees blast radius does not decide, and the mechanism that
+decides is blind to it.
+#+end_quote
+
+** There is already a live instance
+
+PR #5 carries *five* =app:*= labels and is labelled *=change:standard=*:
+pre-authorized, gates as the change authority, no human approval. Its manifest
+covers the entire estate. That is not a hypothetical about OneUI; it is the
+rule mis-classifying a real change today.
+
+** The rule that follows
+
+*Blast radius, not path, should determine the change type.* Concretely, and
+using data the labeller already computes:
+
+: count(app:*) > 1  ->  change:normal
+
+The labeller derives =app:*= from the diff, so the manifest size is already in
+hand at the moment of classification. A change touching one app stays standard;
+a change whose manifest covers several is a coordinated change and should meet
+a change authority.
+
+Note this would also catch =labeler:skip= manifests — deliberately, since a
+hand-built manifest spanning five apps is the clearest case of a change whose
+blast radius a person should have to acknowledge.
+
 * Status — a concern, deliberately not fixed
 
 Not scheduled. Recorded because:
