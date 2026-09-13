@@ -1,5 +1,23 @@
 // IDP release dashboard -- what is on each environment, and what is booked.
 //
+// WHAT THIS IS FOR, AND WHAT IT BECOMES.
+//
+// Right now it drives the grind. A queue you can see is a queue you can stack,
+// expire, reap and re-book, and most of scenarios.org came from watching this
+// board rather than from reading scripts -- the stale reservation, the five
+// UNDEFINED classes, the window that lapsed unreaped, the env column claiming
+// eight changes were on staging when none were.
+//
+// What it simplifies to, in a real pipeline, is narrower: THE SEQUENCING OF
+// CHANGES. Which change holds the path to production, which are behind it, and
+// when. An existing pipeline already has its own build and test reporting; what
+// it usually lacks is one place showing the order, and the order is the part
+// people argue about at 3am.
+//
+// So the estate table is scaffolding for this repo's own testing and the
+// windows table is the durable idea. If this were adopted anywhere, the top
+// half is what would survive.
+//
 // NO DEPENDENCIES. The repo forbids adding any, so the WebSocket is implemented
 // against RFC 6455 directly: the handshake is a SHA-1 of the client key plus
 // the magic GUID, and server->client text frames are unmasked with a 2-, 4- or
@@ -22,7 +40,7 @@ const HOST = process.env.BIND || '0.0.0.0';
 // THE DECLARATION IS THE SOURCE. environments.tsv says what is NAMED; probing
 // says what is RUNNING. Hardcoding the list here would make the dashboard a
 // second, silently-diverging map -- the defect this repo keeps finding.
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 const ENVS = readFileSync(new URL('../environments.tsv', import.meta.url), 'utf8')
   .split('\n')
   .filter((l) => l.trim() && !l.startsWith('#') && !l.startsWith('name\t'))
@@ -36,6 +54,28 @@ const ENVS = readFileSync(new URL('../environments.tsv', import.meta.url), 'utf8
   // reservations and the dev blocks. Reading order matches blast radius.
   .sort((a, b) => b.port - a.port);
 
+// WHEN THE DEPLOYER LAST RAN HERE. targets/node/deploy.sh writes version.json
+// into the deployment worktree, so its mtime is a record of the deploy ACTION,
+// independent of the probe that says what is being served.
+//
+// The two are different facts and are allowed to disagree: the probe answers
+// "what is serving", the mtime answers "when did a deploy happen". Processes
+// restarted by hand move the first and not the second, which is worth seeing
+// rather than hiding.
+//
+// The SHA is NOT read from this file. Reading a manifest for what is running is
+// the defect the banner at the top of this file exists to avoid; reading its
+// mtime for when a deploy ran is a different question the probe cannot answer.
+function deployedAt(env) {
+  for (const dir of [env.name, env.name.replace(/^dev-/, 'dev-')]) {
+    try {
+      return statSync(new URL('../deployments/' + dir + '/version.json',
+                              import.meta.url)).mtimeMs;
+    } catch { /* not deployed from here, or never deployed */ }
+  }
+  return null;
+}
+
 async function probe(env) {
   // A reservation is not expected to answer. Probing it and printing `dark`
   // would report an absence as a fault; `declared` is the true state.
@@ -48,13 +88,14 @@ async function probe(env) {
   try {
     const r = await fetch(url, { signal: ac.signal, redirect: 'manual' });
     return {
-      ...env, up: true, declared: false, status: r.status,
+      ...env, up: true, declared: false, deployed_at: deployedAt(env), status: r.status,
       sha: r.headers.get('x-build-sha') || null,
       app: r.headers.get('x-app') || null,
       colour: r.headers.get('x-colour') || null,
     };
   } catch {
-    return { ...env, up: false, declared: false, status: null, sha: null, app: null, colour: null };
+    return { ...env, up: false, declared: false, deployed_at: deployedAt(env),
+             status: null, sha: null, app: null, colour: null };
   } finally { clearTimeout(t); }
 }
 
@@ -68,12 +109,21 @@ const sh = (cmd, args) => new Promise((res) =>
 const prMeta = new Map();
 async function resolvePr(n) {
   if (prMeta.has(n)) return prMeta.get(n);
-  const out = await sh('gh', ['pr', 'view', String(n), '--json', 'headRefName,title,url']);
-  let v = { branch: null, title: null, url: null };
+  const out = await sh('gh', ['pr', 'view', String(n), '--json', 'headRefName,title,url,labels']);
+  let v = { branch: null, title: null, url: null, cls: null };
   if (out) {
     try {
       const j = JSON.parse(out);
-      v = { branch: j.headRefName, title: j.title, url: j.url };
+      // The CLASS, not the whole label set. preflight branches on it, and an
+      // unclassified change satisfies every rule that branches on it -- so the
+      // absence has to be visible, not blank.
+      const cls = (j.labels || []).map((x) => x.name)
+        .filter((x) => x.startsWith('itil:')).map((x) => x.slice(5));
+      // Carry the LIST, not a verdict. The chip used to collapse any count
+      // above one into the literal string '2 CLASSES', which is a false number
+      // the moment there are three -- a claim written from an assumption about
+      // the data rather than from the data.
+      v = { branch: j.headRefName, title: j.title, url: j.url, cls };
     } catch { /* leave nulls: an unparseable answer is not an answer */ }
   }
   prMeta.set(n, v);
@@ -325,7 +375,7 @@ const PAGE = `<!doctype html><meta charset=utf-8><title>IDP release dashboard</t
 body{background:#0f1117;color:#e6e6e6;font:13px/1.55 ui-monospace,Menlo,monospace;margin:0;padding:26px}
 h1{font-size:15px;margin:0 0 2px}h2{font-size:13px;margin:26px 0 2px;color:#c9d1d9}
 .s{color:#8b93a7;font-size:12px;margin:0 0 14px}
-table{border-collapse:collapse;width:100%;max-width:74rem;margin-bottom:8px}
+table{border-collapse:collapse;width:100%;margin-bottom:8px}
 th{text-align:left;font-weight:600;color:#8b93a7;font-size:11px;text-transform:uppercase;
 letter-spacing:.06em;border-bottom:1px solid #262a35;padding:0 12px 6px 0}
 td{padding:5px 12px 5px 0;border-bottom:1px solid #1a1d26}
@@ -365,6 +415,13 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa;padding-left:12px}
 .age{color:#6b7280;font-size:11px}
 .ver{color:#6b7280;font-size:11px;font-weight:400;margin-left:8px}
 .br{color:#60a5fa;font-size:11px}
+.chip{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;
+font-weight:700;letter-spacing:.05em;margin-right:8px;vertical-align:1px}
+.cls-std{background:#11301c;color:#86efac;border:1px solid #16a34a}
+.cls-nrm{background:#12233d;color:#93c5fd;border:1px solid #2563eb}
+.cls-emg{background:#3b1414;color:#fca5a5;border:1px solid #b91c1c}
+.cls-bad{background:#3a2a08;color:#fde68a;border:1px solid #b45309}
+.cls-none{background:#1f1f24;color:#8b93a7;border:1px dashed #4b5563}
 .prlink{color:#e6e6e6;text-decoration:none}
 .prlink:hover{color:#60a5fa;text-decoration:underline}
 .sub{color:#8b93a7;font-size:11px;margin-top:2px}
@@ -393,7 +450,7 @@ button.on:hover,button.b-freeze.on:hover,button.b-emergency.on:hover{
    largest thing on the page, because every other number here is conditional
    on it. */
 .alarm{margin:0 0 16px;padding:14px 18px;border-radius:4px;font-size:15px;font-weight:700;
-letter-spacing:.04em;max-width:74rem}
+letter-spacing:.04em}
 .alarm .d{font-weight:400;font-size:12px;letter-spacing:0;margin-top:5px;opacity:.85}
 .emg{background:#4a1010;color:#fecaca;border:2px solid #b91c1c}
 .frz{background:#3a2a08;color:#fde68a;border:2px solid #b45309}
@@ -409,7 +466,7 @@ letter-spacing:.04em;max-width:74rem}
 <table><thead><tr><th>change</th><th>groups</th><th>build</th><th>window</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
 
 <h2>environments</h2>
-<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>promotes</th></tr></thead><tbody id=e></tbody></table>
+<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>deployed</th></tr></thead><tbody id=e></tbody></table>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function flagbox(d){
@@ -444,6 +501,61 @@ function when(iso){
   const t=d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   return same?t:d.toLocaleString([], {month:'short', day:'numeric',
                                       hour:'numeric', minute:'2-digit'});
+}
+// ITIL 4 does not mandate a palette. This is the common ITSM-tooling
+// convention: standard green (pre-authorised, routine), normal blue (assessed,
+// needs authorisation), emergency red (expedited). The abbreviation carries the
+// meaning and the colour only reinforces it -- colour alone excludes anyone who
+// cannot distinguish these, and this board is read under pressure.
+//
+// The no-class case is deliberately loud. preflight branches on the class, so
+// a change with no class satisfies every rule that branches on it; blank would
+// read as 'nothing to see'.
+//
+// No backticks anywhere in this page. The whole page is a template literal in
+// server.mjs, so one backtick in a COMMENT ends the literal and the file stops
+// parsing. Third variant of the same trap today, after an escaped newline and a
+// nested quote.
+// promotes was exactly (tier === 'protected') in every row -- a second spelling
+// of a column already on screen, carrying no information. Replaced with the one
+// fact the table could not otherwise show.
+function ago(ms){
+  if(!ms)return '—';
+  const s=Math.round((Date.now()-ms)/1000);
+  if(s<90)return s+'s ago';
+  const m=Math.round(s/60); if(m<90)return m+'m ago';
+  const h=Math.round(m/60); if(h<48)return h+'h ago';
+  return Math.round(h/24)+'d ago';
+}
+function cls_chip(cs){
+  const m={standard:['cls-std','STD','itil:standard — pre-authorised, routine'],
+           normal:['cls-nrm','NRM','itil:normal — assessed, needs authorisation'],
+           emergency:['cls-emg','EMG','itil:emergency — expedited; exempt from freeze and queue']};
+  // MORE THAN ONE: show the highest-precedence class present with a +, so the
+  // reader sees WHICH class would be argued for as well as that it is
+  // ambiguous. Red when emergency is among them, because that is the one whose
+  // presence grants an exemption; amber otherwise, because standard+normal is
+  // a real defect but not a bypass risk. No count in the label -- the count
+  // goes in the title, where it can be right.
+  if (Array.isArray(cs) && cs.length > 1) {
+    const rank=['emergency','normal','standard'];
+    const top=rank.find((r)=>cs.includes(r))||cs[0];
+    const bad=cs.includes('emergency')?'cls-emg':'cls-bad';
+    return '<span class="chip '+bad+'" title="'+esc(cs.length+' itil: labels ('+
+      cs.map((x)=>'itil:'+x).join(', ')+') — the class is undefined; preflight refuses with exit 2')+
+      '">'+esc((m[top]?m[top][1]:top.toUpperCase())+'+')+'</span>';
+  }
+  const c=Array.isArray(cs)?cs[0]:cs;
+  // UND -- three letters, so it sits in the same column as STD / NRM / EMG and
+  // the eye reads the set rather than one odd-width outlier. The word it
+  // abbreviates is 'undefined', which is what gates/preflight.sh already calls
+  // this state -- and it is the accurate word: there is no answer, as opposed
+  // to an answer that happens to be empty. The
+  // distinction matters because every rule below branches on the class, and a
+  // rule branching on an undefined value takes whichever arm it was written to
+  // take -- which is not a decision anybody made.
+  const e=m[c]||['cls-none','UND','no itil: label — the class is undefined, and every rule that branches on it is satisfied by default'];
+  return '<span class="chip '+e[0]+'" title="'+esc(e[2])+'">'+esc(e[1])+'</span>';
 }
 function cls(s){return s<=0?'rem-bad':s<60?'rem-bad':s<150?'rem-warn':'rem-ok';}
 function remain(x){
@@ -526,7 +638,7 @@ function render(d){
     '<td class=sha>'+esc(x.sha)+'</td>'+
     '<td>'+remain(x)+'<div class=sub>'+esc(x.mins)+'m</div></td>'+
     '<td class=n-'+esc(x.env)+'>'+(x.in_env?esc(x.env):'')+'</td>'+
-    '<td class=dim>'+esc(x.id)+
+    '<td class=dim>'+cls_chip(x.cls)+esc(x.id)+
       ' <button class=clr data-clear="'+esc(String(x.pr).replace('#',''))+'" '+
       'title="give this slot back">clear</button></td></tr>').join('')
     // "no open window" and "the berth is free" are not the same claim. This
@@ -563,7 +675,7 @@ function render(d){
         location.hostname+':'+esc(x.port)+'/">'+esc(x.port)+'</a></td>'
       : '<td class=dim>'+esc(x.port)+'</td>')+state+
     '<td class=sha>'+esc(x.sha||'—')+'</td><td class=dim>'+esc(x.app||'—')+'</td>'+
-    col+'<td class=dim>'+esc(x.promotes)+'</td></tr>';}).join('');
+    col+'<td class=dim>'+ago(x.deployed_at)+'</td></tr>';}).join('');
 }
 const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/');
 ws.onopen =()=>{};
@@ -576,6 +688,23 @@ document.addEventListener('click',e=>{
   const c=e.target.closest('button[data-clear]');
   if(c)clearSlot(c.dataset.clear);
 });
+async function toggle(label,action){
+  // RESTORED. This was deleted when the banner, chip row and button row were
+  // collapsed into one estate() function -- the buttons kept rendering and
+  // every click threw ReferenceError: toggle is not defined. Checking that a
+  // control EXISTS is not checking that it WORKS, which is the whole lesson of
+  // this repo applied to its own dashboard.
+  //
+  // Closing the estate asks first: it stops every change in flight. Opening it
+  // does not -- an estate wrongly left closed is visible and annoying, an
+  // estate wrongly opened is a change deployed into a freeze.
+  if(action==='on'&&!confirm('Declare '+label.toUpperCase()+
+    '? This closes the estate to every standard and normal change, '+
+    'including any that is mid-flight right now.'))return;
+  const r=await fetch('/api/estate/'+label+'/'+action,{method:'POST'});
+  render(await (await fetch('/api/status')).json());
+  if(!r.ok)alert('toggle failed - check the dashboard log');
+}
 async function clearSlot(pr){
   // Asks, because giving a slot back is a decision and the next change takes
   // it. Not destructive -- the change stays approved and its observations

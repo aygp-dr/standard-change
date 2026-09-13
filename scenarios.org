@@ -209,6 +209,98 @@ the 60-minute lock rule. Not decided at 0.2 — see =spec.org= §Open items.
 tree the PR no longer contains. The manifest shrank; the environment must
 follow, or staging drifts from the change it claims to be testing.
 
+** D9 — a change deploys outside its release window
+
+Run live 2026-09-13 at 22:37Z against *#44*, whose reservation is
+=CHG-20260914T0900-44.1= — *the following morning at 09:00Z*. Eleven hours out.
+
+*** What refused, and what did not
+
+=gates/preflight.sh 44= refused correctly:
+
+: NO   I am NOT on the calendar. No open window for #44 on staging covers now.
+:                                                            preflight exit=4
+
+*Nothing else on the deploy path checks the window at all.* Grepped:
+
+| script | consults the schedule |
+|--------+-----------------------|
+| =change/queue.sh= | no |
+| =targets/node/deploy.sh= | no |
+| =change/soak.sh= | no |
+| =change/guard4.sh= | no |
+| =change/settle.sh= | yes — at the END, to redline the window |
+
+So guard 3 exists at exactly one site, on an *advisory* path. =preflight= is a
+checklist a person runs; nothing downstream re-asks, and =settle= only reads the
+schedule to close a window it assumes was honoured. A caller who skips
+=preflight= — or whose =preflight= exit code is discarded, which is the shape of
+every =cmd | sed= bug in this repo — deploys outside every window and no guard
+notices.
+
+*** The worse finding: =queue.sh claim= reports success having done nothing
+
+: $ ./change/queue.sh claim 44
+: claimed
+:   exit=0
+
+#44 held no =deploy:staging= label before this and holds none after. The word is
+wrong in a way that matters: *=queue.sh= is a VALIDATOR, not a claimer.* It is
+invoked after something else has added the label, it *removes* the label when
+guard 0 or guard 1 refuses, and it echoes =claimed= when they pass.
+
+Asked to claim a berth for a change that holds no claim, it validated the
+absence of a claim and reported success. A caller reading =claimed= / exit 0
+reasonably believes it holds the berth. It holds nothing, and the next change
+will take staging out from under it.
+
+*** Why #44 was not blocked for a second reason either
+
+#44 still carried =itil:emergency= from the break-glass exercise earlier the
+same session, so guard 0 and guard 1 would have exempted it regardless. *A
+classification outlived the test that set it.* Nothing expires a class, and
+nothing reconciles "this was declared an emergency two hours ago for a
+different purpose" with "this is an ordinary change now".
+
+*** What this is a case of
+
+All three are the same shape as =docs/interfaces.org= §8: a guard that is
+*checked once* rather than *re-derived at reliance*. The window is checked at
+the top of preflight and never again; the class is set once and never expires;
+and =queue.sh= answers about a state it never verified it was asked about.
+
+*** Decision: 1 is DEFERRED. 2 and 3 are defects.
+
+*Deferred — guard 3 on the deploy path.* A person reads the calendar, sees
+their window, and deploys. =preflight= is the checklist they run, and a
+checklist a human follows is a real control; enforcing the window a second time
+inside every target would be a second implementation of guard 3, which is the
+defect this repo has already hit twice (guard 2 in preflight vs activate, the
+calendar in preflight vs =current=). Building it now buys nothing and costs a
+divergence.
+
+*The trigger that forces the revisit:* *the first deployment initiated by
+automation rather than by a person.* At that moment nothing reads the calendar
+at all — there is no checklist, and =preflight='s exit code is advice nobody
+receives. Any of these counts: a workflow that calls a target directly, a
+scheduled job, an agent driving =deploy.sh= unattended, or =change/activate.sh=
+being revived.
+
+Until then this is a *known, accepted gap*, not an open bug, and it is written
+down so nobody rediscovers it and treats it as one.
+
+*Still defects, and small:*
+
+1. =queue.sh claim= must refuse when the PR holds no =deploy:staging=, rather
+   than echoing =claimed=. "Nothing to validate" is not "validated", and the
+   caller cannot tell the difference from the output.
+2. An =itil:*= classification must be re-confirmed when a change is activated,
+   not trusted from whenever it was last written. #44 carried =itil:emergency=
+   for two hours after the exercise that set it, and would have been exempted
+   from guard 0 and guard 1 on that basis.
+
+Nothing was deployed. The berth was not taken; the estate was untouched.
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
