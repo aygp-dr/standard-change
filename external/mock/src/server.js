@@ -48,3 +48,5 @@ if (isMain) createServer((req, res) => {
 }).listen(PORT, BIND, () => {
   console.log(`mock listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });
+
+// feat/mock-catalog-latency: simulated change
