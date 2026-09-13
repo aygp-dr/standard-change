@@ -100,6 +100,106 @@ REMOVALS = [
 ]
 
 
+# ---- the synchronize withdrawal ---------------------------------------------
+#
+# NOTHING IN THIS SUITE COVERED THE WITHDRAWAL. The old L12 grepped the whole
+# workflow file for the string "staging:passed" and called that "the workflow
+# drops stale verdicts on synchronize" -- which is satisfied by the label being
+# mentioned anywhere, in any step, under any condition, with every removal
+# swallowed. On #11 the withdrawal did not happen and this suite was green
+# (issue #16).
+#
+# What the checks below assert is deliberately NOT "the withdrawal works" --
+# no offline test can assert that, and the deeper repair was to stop guard 4
+# depending on it (change/guard4.sh, gates/observation-test.sh). They assert the
+# three properties that made the failure invisible:
+#
+#   it is a step, gated on synchronize, over a list that is actually complete
+#   it can address the repository at all
+#   it cannot report a failed withdrawal as success
+#
+# The instrument/recorder check is the other half: an observation that names
+# no build is the thing #16 was about, so a gate that writes an observation
+# LABEL must also write an observation RECORD.
+OBSERVATIONS = [
+    "staging:passed", "staging:failed",
+    "staging:e2e", "staging:e2e-failed",
+    "staging:smoke", "staging:smoke-failed",
+    "staging:uat",
+    "production:healthy",
+    "production:e2e", "production:e2e-failed",
+    "production:smoke", "production:smoke-failed",
+]
+RECORDERS = {"gates/e2e.sh": "e2e", "gates/smoke.sh": "smoke",
+             "gates/health.sh": "healthy"}
+WITHDRAWAL_IDS = ["W1", "W2", "W3", "W4", "W5", "W6"]
+
+
+def withdrawal_step():
+    """The text of the 'withdraw ... on a new push' step, and nothing else.
+
+    Scoped on purpose: the previous check searched the whole file, so a
+    mention in a comment satisfied it.
+    """
+    text = WORKFLOW.read_text()
+    m = re.search(r"^      - name: withdraw[^\n]*\n(.*?)(?=^      - |\Z)",
+                  text, re.S | re.M)
+    return m.group(1) if m else None
+
+
+def withdrawal_checks():
+    fails = []
+    step = withdrawal_step()
+
+    # W1 -- the step exists and only runs on a push to the head.
+    if step is None:
+        return [f"{sid}: there is no 'withdraw ... on a new push' step in "
+                f".github/workflows/labeller.yml" for sid in WITHDRAWAL_IDS]
+    if "github.event.action == 'synchronize'" not in step:
+        fails.append("W1: the withdrawal step is not gated on synchronize")
+
+    # W2 -- it withdraws every observation, not a subset. production:healthy
+    # was missing while gates/production-first.sh asserted in prose that this
+    # step withdrew it on every push.
+    missing = [l for l in OBSERVATIONS if l not in step]
+    if missing:
+        fails.append(f"W2: the withdrawal misses {' '.join(missing)}. A guard "
+                     f"reading one of those reads a fact about an older build")
+
+    # W3 -- a removal that fails must not report success. `|| true` on a label
+    # removal turns "I could not withdraw a stale verdict" into a green step;
+    # the same defect as merge-on-healthy recording unreachable as false.
+    if re.search(r"--remove-label[^\n]*\|\|\s*true", step):
+        fails.append("W3: a removal in the withdrawal step is swallowed by "
+                     "`|| true`. An unwithdrawn stale verdict must be loud")
+
+    # W4 -- this job never checks out, so `gh pr edit` has no repository to
+    # resolve from git. Without --repo every removal fails, and with W3's
+    # `|| true` it failed silently.
+    if not re.search(r"gh pr edit[^\n]*--repo", step):
+        fails.append("W4: `gh pr edit` in the withdrawal step has no --repo, "
+                     "and this job has no checkout to infer one from")
+
+    # W5 -- the step's exit status must depend on the removals.
+    if not re.search(r"exit \$?\{?rc", step):
+        fails.append("W5: the withdrawal step cannot fail; its exit status "
+                     "does not depend on whether the removals succeeded")
+
+    # W6 -- an instrument that writes an observation label must also write the
+    # record that names the build it measured.
+    for path, inst in RECORDERS.items():
+        src = (ROOT / path).read_text()
+        if "--add-label" not in src:
+            continue
+        if not re.search(r"evidence\.sh\"?\s+record\b", src):
+            fails.append(f"W6: {path} writes an observation label but records "
+                         f"no observation naming the build it measured")
+        elif re.search(r"evidence\.sh\"?\s+record[^\n]*\|\|\s*true", src):
+            fails.append(f"W6: {path} swallows a failure to record its "
+                         f"observation. An unrecorded measurement is not one")
+    return fails
+
+
 def main():
     rules = load_rules()
     fails = []
@@ -120,13 +220,13 @@ def main():
     if not sync_labels_enabled():
         fails.append("L13: sync-labels is not true; the labeller cannot own "
                      "app:* and L9/L10/L11 are unenforceable")
-    if "staging:passed" not in WORKFLOW.read_text():
-        fails.append("L12: workflow does not drop staging:passed on synchronize; "
-                     "a stale staging verdict could authorize production")
+
+    fails += withdrawal_checks()
 
     for f in fails:
         print(f"FAIL {f}")
-    print(f"{len(SCENARIOS) + len(REMOVALS) + 2 - len(fails)} passed, {len(fails)} failed")
+    print(f"{len(SCENARIOS) + len(REMOVALS) + 1 + len(WITHDRAWAL_IDS) - len(fails)} "
+          f"passed, {len(fails)} failed")
     return 1 if fails else 0
 
 

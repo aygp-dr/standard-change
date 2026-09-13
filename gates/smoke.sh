@@ -161,10 +161,18 @@ if [ -n "$PR" ]; then
       *)       ENV_=unknown ;;
     esac
   fi
-  if [ "$rc" = 0 ]; then add="$ENV_:smoke"; rm_="$ENV_:smoke-failed"
-  else                   add="$ENV_:smoke-failed"; rm_="$ENV_:smoke"; fi
+  if [ "$rc" = 0 ]; then add="$ENV_:smoke"; rm_="$ENV_:smoke-failed"; verdict=pass
+  else                   add="$ENV_:smoke-failed"; rm_="$ENV_:smoke"; verdict=fail; fi
+
+  # THE RECORD, and it names the build -- see gates/e2e.sh and change/evidence.sh.
+  # The label says smoke passed; only this says on what. Not swallowed: a
+  # measurement nobody could record is not a measurement.
+  ./change/evidence.sh record "$PR" "$ENV_" smoke "$verdict" "${sha:-unknown}" "$base" \
+    || { echo "  FAIL could not record the $ENV_:smoke observation for #$PR"; rc=1; }
+
   gh pr edit "$PR" --repo "$repo" --add-label "$add" --remove-label "$rm_" >/dev/null 2>&1 \
-    || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 || true
+    || gh pr edit "$PR" --repo "$repo" --add-label "$add" >/dev/null 2>&1 \
+    || echo "  WARNING could not set $add on #$PR -- the record above still stands"
   echo "  #$PR <- $add  (observed on $base at build ${sha:-unknown})"
 fi
 exit "$rc"

@@ -1,0 +1,26 @@
+[
+  {
+    "user": {
+      "login": "aygp-dr"
+    },
+    "body": "looks reasonable to me"
+  },
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "**`staging:e2e` PASSED on `9d85a33`**\n\nsome prose a person reads\n\n<!-- observation v1 env=staging instrument=e2e verdict=pass sha=9d85a33 -->"
+  },
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "**`staging:smoke` PASSED on `9d85a33`**\n\nsome prose a person reads\n\n<!-- observation v1 env=staging instrument=smoke verdict=pass sha=9d85a33 -->"
+  },
+  {
+    "user": {
+      "login": "aygp-dr"
+    },
+    "body": "**`staging:uat` PASSED on `9d85a33`**\n\nsome prose a person reads\n\n<!-- observation v1 env=staging instrument=uat verdict=pass sha=9d85a33 -->"
+  }
+]

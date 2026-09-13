@@ -1,0 +1,26 @@
+[
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "**`staging:e2e` PASSED on `baed821`**\n\nsome prose a person reads\n\n<!-- observation v1 env=staging instrument=e2e verdict=pass sha=baed821 -->"
+  },
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "**`staging:smoke` PASSED on `baed821`**\n\nsome prose a person reads\n\n<!-- observation v1 env=staging instrument=smoke verdict=pass sha=baed821 -->"
+  },
+  {
+    "user": {
+      "login": "aygp-dr"
+    },
+    "body": "**`staging:uat` PASSED on `baed821`**\n\nsome prose a person reads\n\n<!-- observation v1 env=staging instrument=uat verdict=pass sha=baed821 -->"
+  },
+  {
+    "user": {
+      "login": "github-actions[bot]"
+    },
+    "body": "**`staging:e2e` FAILED on `baed821`**\n\nsome prose a person reads\n\n<!-- observation v1 env=staging instrument=e2e verdict=fail sha=baed821 -->"
+  }
+]

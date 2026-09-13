@@ -13,16 +13,27 @@
 # it: merge-on-healthy.yml TRIGGERS on production:healthy, and a trigger is not
 # a gate. `gh pr merge` walked straight past it.
 #
-# WHAT IT TRUSTS, AND WHY. It reads the production:healthy label rather than
-# probing production, because no GitHub runner can reach any environment here
-# (docs/label-ownership.org, rule 2). The label is a proxy for the check run a
-# reachable environment would have reported. That is weaker than probing and it
-# is stated rather than hidden: the label is written only by gates/health.sh,
-# and labeller.yml withdraws it on every push, so it cannot outlive its build.
+# WHAT IT TRUSTS, AND WHY. It cannot probe production: no GitHub runner can
+# reach any environment here (docs/label-ownership.org, rule 2). So it relies
+# on what gates/health.sh recorded when it ran where production IS visible.
+#
+# It used to rely on the production:healthy LABEL, with the reasoning that
+# "labeller.yml withdraws it on every push, so it cannot outlive its build".
+# That reasoning was load-bearing and it was wrong: on #11 the withdrawal did
+# not fire and observations taken on 9d85a33 sat on a head of baed821 (issue
+# #16). A guard that is sound only while another workflow keeps firing fails
+# OPEN when it stops.
+#
+# It now reads health.sh's observation RECORD, which names the SHA that was
+# sampled, and requires it to name the head being merged. The label is still
+# required alongside it -- a person or a later run may withdraw it, and that
+# withdrawal should still stop a merge -- but the label is no longer what
+# establishes that the measurement is about THIS build.
 set -eu
 cd "$(dirname "$0")/.."
 pr="${1:?usage: production-first.sh <pr>}"
 repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
+EV="./change/evidence.sh"
 
 labels=$(gh pr view "$pr" --repo "$repo" --json labels -q '[.labels[].name]|join(" ")')
 groups=$(./change/groups.sh "$pr" 2>/dev/null || true)
@@ -65,20 +76,39 @@ fi
 groups="$deployable"
 
 echo "  this change deploys: $groups"
+
+head=$(gh pr view "$pr" --repo "$repo" --json headRefOid -q .headRefOid | cut -c1-7)
+why=''
 case " $labels " in
   *" production:healthy "*)
-    echo "  ok    production:healthy is present on the current head"
-    echo "        (written by gates/health.sh; withdrawn by the labeller on every push,"
-    echo "         so it cannot describe a build other than this one)"
-    exit 0 ;;
+    if ev=$("$EV" latest "$pr" production healthy 2>/dev/null); then
+      verdict=${ev%% *}; rest=${ev#* }; evsha=${rest%% *}; who=${rest#* }
+      if [ "$verdict" = pass ] && [ "$evsha" = "$head" ]; then
+        echo "  ok    production:healthy, and gates/health.sh recorded it on $head (by $who)"
+        exit 0
+      elif [ "$verdict" != pass ]; then
+        why="the last production:healthy observation is a FAILURE on \`$evsha\`."
+      else
+        why="production:healthy is on this PR, but the observation behind it names
+        \`$evsha\` and the head is \`$head\`. That measurement is about a
+        different build. This is the #16 shape: the label survived a push the
+        measurement did not."
+      fi
+    else
+      why="production:healthy is on this PR, but no observation record stands
+        behind it. gates/health.sh records the SHA it sampled; a label with no
+        record is a claim nobody can date."
+    fi ;;
+  *) why="production:healthy is absent." ;;
 esac
 
 cat <<MSG
-  FAIL  production:healthy is absent.
+  FAIL  $why
 
         This change redeploys [$groups] and has not been observed running in
-        production. Merging now would put main ahead of the estate: main would
-        assert a change that no production replica is serving.
+        production ON THIS HEAD. Merging now would put main ahead of the
+        estate: main would assert a change that no production replica is
+        serving.
 
         The merge is settlement, not authorization. Deploy to production
         first, let gates/health.sh observe convergence, then merge.
