@@ -25,9 +25,55 @@ PR="${1:?usage: deploy-run <pr>}"
 R=aygp-dr/standard-change
 FRONT_PROD=http://127.0.0.1:9200
 FRONT_STG=http://127.0.0.1:9201
-cd "$(dirname "$0")"
+# Every relative path below (./change/, ./gates/, ./targets/) is written from
+# the REPO ROOT, and this used to cd into change/ instead -- so guard 3's call
+# to ./change/schedule.sh failed with "not found" and the failure was reported
+# as "no open staging window covers now" for a window that was open. A script
+# that could not run its check said the check had failed: unreachable reported
+# as falsified, docs/label-ownership.org rule 2, one level up.
+cd "$(dirname "$0")/.."
+
+# AND THIS SCRIPT IS STALE. It drives targets/bastille/ and calls 9200 the
+# production front with staging on 9201 -- the port scheme from before the
+# 2026-09-13 correction, under which 9200 IS staging and production is blue
+# 9210 / green 9220 behind the front on 9230. Every cycle actually run today
+# went through targets/node/. Fixing the cd above without saying this would
+# turn a script that refused into one that deploys staging over production.
+#
+# So it refuses unless its own target tree is really there. Delete this block
+# when activate.sh is ported to the node path and the ports are corrected.
+if [ ! -x ./targets/bastille/deploy.sh ]; then
+  echo "refused: change/activate.sh drives targets/bastille/, which is not present here." >&2
+  echo "         It also still assumes 9200=production-front and 9201=staging," >&2
+  echo "         which the 2026-09-13 port correction reversed: 9200 is STAGING." >&2
+  echo "         Running it on this host would deploy staging onto a production port." >&2
+  echo "         Use the node path: change/queue.sh, targets/node/deploy.sh," >&2
+  echo "         change/guard4.sh, targets/node/switch.sh, change/settle.sh." >&2
+  exit 6
+fi
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+
+# INDENTING A GATE MUST NOT SWALLOW ITS VERDICT.
+#
+# Every gate here was written as `./gates/x.sh | sed 's/^/   /'`, and a
+# pipeline's exit status is its LAST command's -- sed's, which always succeeds.
+# So `set -e` saw nothing, and even the `|| die` written at guard 5 could never
+# fire, because the `||` bound to the pipeline and not to the gate.
+#
+# On 2026-09-13 this let activate.sh print
+#     UNHEALTHY mock: 5/5 samples not serving 2567015 (saw: 055fd20)
+# and then `converged; deployment -> success`, deploy nothing, write three
+# deployment records, label the PR production:healthy and close the window
+# `passed` -- for a build that was serving on no port in the estate.
+#
+# indent() runs the gate, keeps its output, prints it indented, and returns THE
+# GATE'S code. The formatting happens after the verdict is in hand.
+indent() { # indent <command...>
+  _out=$("$@" 2>&1); _rc=$?
+  printf '%s\n' "$_out" | sed 's/^/   /'
+  return $_rc
+}
 
 # C6 -- the platform-attested deployment record.
 #
@@ -198,8 +244,9 @@ sleep 2
 ok "sc-staging <- $SHA"
 
 step "the authorizing run — e2e against staging"
-ROUTER_URL="$FRONT_STG" ./gates/e2e.sh | tail -1 | sed 's/^/   /' || die "staging e2e failed"
-HEALTH_MODE=manifest HEALTH_SAMPLES=4 ./gates/health.sh "$FRONT_STG" "$SHA" | sed 's/^/   /'
+ROUTER_URL="$FRONT_STG" indent ./gates/e2e.sh || die "staging e2e failed"
+HEALTH_MODE=manifest HEALTH_SAMPLES=4 indent ./gates/health.sh "$FRONT_STG" "$SHA" \
+  || die "staging is not serving $SHA -- the deploy did not take"
 deploy_state success "$FRONT_STG"
 gh pr edit "$PR" --repo "$R" --add-label staging:passed >/dev/null
 ok "staging:passed@$SHA"
@@ -250,7 +297,7 @@ ok "both production replicas <- $SHA"
 
 step "verify the idle colour BEFORE any traffic"
 IDLE_IP=$([ "$IDLE" = blue ] && echo 10.0.0.61 || echo 10.0.0.62)
-ROUTER_URL="http://$IDLE_IP" ./gates/e2e.sh | tail -1 | sed 's/^/   /' || die "idle colour failed e2e"
+ROUTER_URL="http://$IDLE_IP" indent ./gates/e2e.sh || die "idle colour failed e2e"
 ok "$IDLE verified with no traffic on it"
 
 step "atomic cutover"
@@ -258,7 +305,7 @@ step "atomic cutover"
 ok "production -> $IDLE"
 
 step "guard 5 — convergence through the front"
-HEALTH_MODE=manifest HEALTH_SAMPLES=5 ./gates/health.sh "$FRONT_PROD" "$SHA" | sed 's/^/   /' \
+HEALTH_MODE=manifest HEALTH_SAMPLES=5 indent ./gates/health.sh "$FRONT_PROD" "$SHA" \
   || die "production did not converge on $SHA"
 # Only now. production:healthy and the success status are the same assertion
 # told to two audiences, and both are downstream of the health check above.
