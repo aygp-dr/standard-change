@@ -68,9 +68,14 @@ const sh = (cmd, args) => new Promise((res) =>
 const prMeta = new Map();
 async function resolvePr(n) {
   if (prMeta.has(n)) return prMeta.get(n);
-  const out = await sh('gh', ['pr', 'view', String(n), '--json', 'headRefName,title']);
-  let v = { branch: null, title: null };
-  if (out) { try { const j = JSON.parse(out); v = { branch: j.headRefName, title: j.title }; } catch {} }
+  const out = await sh('gh', ['pr', 'view', String(n), '--json', 'headRefName,title,url']);
+  let v = { branch: null, title: null, url: null };
+  if (out) {
+    try {
+      const j = JSON.parse(out);
+      v = { branch: j.headRefName, title: j.title, url: j.url };
+    } catch { /* leave nulls: an unparseable answer is not an answer */ }
+  }
   prMeta.set(n, v);
   return v;
 }
@@ -340,6 +345,8 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 #60a5fa;padding-left:12px}
 .age{color:#6b7280;font-size:11px}
 .ver{color:#6b7280;font-size:11px;font-weight:400;margin-left:8px}
 .br{color:#60a5fa;font-size:11px;margin-left:6px}
+.prlink{color:#e6e6e6;text-decoration:none}
+.prlink:hover{color:#60a5fa;text-decoration:underline}
 .ti{color:#8b93a7;font-size:11px;margin-top:2px}
 .rem-ok{color:#4ade80;font-size:11px;margin-left:8px}
 .rem-warn{color:#fbbf24;font-size:11px;margin-left:8px}
@@ -476,7 +483,12 @@ function render(d){
     // THE ONE THAT IS RUNNING LOOKS DIFFERENT. Eight stacked reservations read
     // as eight equal rows; exactly one of them holds the berth right now, and
     // that is the only row anybody is acting on.
-    '<tr class="'+(x.started&&!x.expired?'active':'')+'"><td><b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
+    // The number is the link. target=_blank because the dashboard is something
+    // you leave open and watch -- following a PR must not take the board with
+    // it. rel=noopener noreferrer: the new tab gets no handle back to this one.
+    '<tr class="'+(x.started&&!x.expired?'active':'')+'"><td>'+
+    (x.url?'<a class=prlink href="'+esc(x.url)+'" target=_blank rel="noopener noreferrer"><b>'+
+      esc(x.pr)+'</b></a>':'<b>'+esc(x.pr)+'</b>')+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
     (x.title?'<div class=ti>'+esc(x.title)+'</div>':'')+'</td>'+
     '<td class=dim>'+esc(x.groups||'—')+'</td>'+
     '<td class=sha>'+esc(x.sha)+'</td>'+
