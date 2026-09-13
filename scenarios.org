@@ -1,0 +1,238 @@
+#+TITLE: standard-change — scenario catalogue
+#+SUBTITLE: The runs that exercise the labeller and the promotion pipeline
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-12
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:2 num:t
+
+* What this is
+
+The executable test plan for =spec.org= §Labels and §Promotion pipeline. Each
+scenario names its setup, the labels and guard outcomes it expects, and the one
+assertion that makes it a test rather than a demonstration.
+
+These are *not* a demo script. Scenario D4 below refuted the pipeline as
+specified at 0.2 and forced an amendment (§The gap D4 found). That is what the
+catalogue is for.
+
+Status: every scenario is [H] — written, none run. Nothing exists to run them
+against yet.
+
+* Part A — labeller scenarios
+
+The labeller runs =sync-labels: true=, so it *owns* =app:*= and
+=change:{standard,normal}=: it adds them and it takes them away. These
+scenarios check both directions, because a labeller that only ever adds is the
+classic checker that cannot fail.
+
+| id  | WIP diff touches                            | expect labels                              | checks                     |
+|-----+---------------------------------------------+--------------------------------------------+----------------------------|
+| L1  | =apps/core/src/pages/index.js=              | =app:core=, =change:standard=              | basic attach               |
+| L2  | =apps/pdp/= and =apps/checkout/=            | =app:pdp=, =app:checkout=, =change:standard= | multi-group attach       |
+| L3  | all four app dirs                           | four =app:*=, =change:standard=            | full fan-out               |
+| L4  | =router/nginx.conf.tmpl= only               | =change:normal=, *no* =app:*=              | normal with no group       |
+| L5  | =apps/plp/= and =.github/workflows/gate.yml= | =app:plp=, =change:normal=                | normal wins over standard  |
+| L6  | =README.org= only                           | none                                       | no-op diff labels nothing  |
+| L7  | =apps/pdp/fixtures/catalog.json=            | =app:pdp=                                  | non-source file still owns |
+| L8  | =gates/e2e.sh=                              | =change:normal=                            | gate change is normal      |
+
+** Removal (the half that proves ownership)
+
+| id  | sequence                                                    | expect                                          |
+|-----+-------------------------------------------------------------+-------------------------------------------------|
+| L9  | L2, then push removing all =apps/checkout/= changes          | =app:checkout= *gone*; =app:pdp= remains         |
+| L10 | L1, then a human hand-adds =app:plp=, then push any commit   | =app:plp= *removed* by the labeller              |
+| L11 | L5, then push removing the =.github/= change                 | =change:normal= gone, =change:standard= attached |
+| L12 | L1 reaching =staging:passed=, then push one more commit      | =staging:passed= *removed* (SHA binding)         |
+
+L10 is the ownership assertion: the =app:*= set is a /derived/ artifact of the
+diff, so a human edit to it must not survive. If it survives, =app:*= cannot be
+trusted as the build manifest and =change/groups.sh= is deploying whatever
+someone typed.
+
+L12 is the SHA-binding assertion and is the cheapest guard-4 test there is.
+
+** Negative fixture
+
+| id  | setup                                                      | expect                                    |
+|-----+------------------------------------------------------------+-------------------------------------------|
+| L13 | =.github/labeler.yml= with =sync-labels: false=             | L9 and L10 *fail*; catalogue rejects run  |
+
+L13 is the labeller's negative test. Per §Verification contract a checker that
+cannot fail is worse than none, and =sync-labels= is the single setting the
+whole ownership claim rests on.
+
+* Part B — deployment sequences
+
+Notation: =PR-A1= is the first PR against app =A=. "holds" means carrying
+=deploy:staging=.
+
+** D1 — several changes to the same app, in sequence
+
+Three PRs, all touching =apps/pdp/=. The point is the queue and the rebase loop.
+
+| step | action                                    | expected                                                            |
+|------+-------------------------------------------+---------------------------------------------------------------------|
+|    1 | PR-P1, PR-P2, PR-P3 opened; gates green   | each gets =app:pdp=, =change:standard=                              |
+|    2 | =deploy:staging= on PR-P1                 | guard 0 pass, guard 1 pass → claims staging                         |
+|    3 | =deploy:staging= on PR-P2 (while P1 holds) | *guard 1 fails*: =blocked:queue=, =deploy:staging= removed, comment naming #P1 |
+|    4 | P1 staging e2e passes                     | =staging:passed= → promote adds =deploy:production=                 |
+|    5 | P1 production healthy                     | =production:healthy=, PIR, merge, =release.sh= frees labels          |
+|    6 | release comments on PR-P2, PR-P3          | both told to rebase                                                 |
+|    7 | =deploy:staging= on PR-P2 *without rebase* | *guard 0 fails* (=BEHIND=): label removed, comment                  |
+|    8 | rebase PR-P2 onto main, re-add label      | claims staging                                                      |
+
+*Assertion:* at no point do two PRs carry =deploy:staging=, and step 7 is
+refused. Step 7 is the whole reason guard 0 exists — without it PR-P2 deploys a
+=apps/pdp/= tree that predates P1 and silently reverts it.
+
+** D2 — mixed apps
+
+| step | action                                              | expected                                       |
+|------+-----------------------------------------------------+------------------------------------------------|
+|    1 | PR-M1 touches =apps/core/= + =apps/plp/=            | =app:core=, =app:plp=                          |
+|    2 | PR-M2 touches =apps/pdp/= only                      | =app:pdp=                                      |
+|    3 | =deploy:staging= on PR-M1                           | claims; =groups.sh= prints exactly =core plp=  |
+|    4 | staging deploys                                     | core + plp from PR SHA; pdp + checkout from production SHA |
+|    5 | e2e runs                                            | core and plp journeys, *plus* =tests/e2e/= cross-app journeys touching them |
+|    6 | =deploy:staging= on PR-M2                           | =blocked:queue= — staging is global, not per-app |
+
+*Assertion:* step 4's untouched groups serve the /production/ SHA, not the PR
+SHA. This is the mixed-app trap: if the deploy script rebuilds all four from
+the PR, staging stops being a test of "this change against current production"
+and the cross-app journeys prove nothing.
+
+*Assertion:* step 6 refuses even though the app sets are disjoint. Staging is a
+singleton by design; disjointness is not a safe exception while the four apps
+share one router and one mock backend.
+
+** D3 — break glass, nothing in progress
+
+| step | action                                              | expected                                              |
+|------+-----------------------------------------------------+-------------------------------------------------------|
+|    1 | PR-E1 opened, =change:emergency= added by a human   | labeller still sets =app:*=                           |
+|    2 | =deploy:production= added directly                  | guard 4: no =staging:passed=, but =change:emergency= present → needs approval |
+|    3 | no approving review yet                             | *refused*, error names the missing approval           |
+|    4 | change authority approves; re-label                 | guard 2 re-checked on head SHA → proceeds             |
+|    5 | =gate-selftest= red on that SHA                     | *refused* — guard 2 has no emergency bypass           |
+|    6 | gates green; freeze event active on the calendar    | proceeds — a FREEZE does not block an emergency       |
+|    7 | production deploy, health check passes              | =production:healthy=, PIR records the staging bypass  |
+|    8 | merge, release                                      | queue untouched (it was never claimed)                |
+
+*Assertion:* step 5. The bypass is of the staging /environment/ only. An
+emergency that ships red unit tests is the failure mode break-glass is blamed
+for, and guard 2 is what makes that structurally impossible rather than
+discouraged.
+
+*Assertion:* step 7's PIR names *why* staging was skipped, who approved, and
+the merge-base divergence from main. An emergency with no PIR is
+indistinguishable from an accident after the fact.
+
+** D4 — emergency interrupts a standard change already in staging
+
+The scenario the catalogue was written for.
+
+| step | action                                                    | expected                                                    |
+|------+-----------------------------------------------------------+-------------------------------------------------------------|
+|    1 | PR-S holds staging, =staging:passed= on SHA =s1=          | =deploy:production= added by promote                        |
+|    2 | Incident. PR-E opened with =change:emergency=             | labeller sets =app:*=; PR-E does *not* request staging      |
+|    3 | =deploy:production= on PR-E                               | guard 1 not consulted — the emergency path never touches the staging queue |
+|    4 | both PRs now hold =deploy:production=                     | =concurrency: production, cancel-in-progress: false= serializes them |
+|    5 | PR-E deploys, healthy, *merges to main*                   | main now contains the hotfix                                |
+|    6 | PR-S is now =BEHIND= main — *but it already passed staging* | ← see below                                               |
+
+*This is where 0.2 as specified was wrong.* Guard 0 runs in =queue.sh claim=,
+at staging-request time. At step 6 PR-S never re-requests staging: it already
+holds =staging:passed= from SHA =s1= and already has =deploy:production=.
+Nothing in the specified pipeline re-examines its relationship to =main= after
+=main= moves. PR-S deploys a tree that predates the hotfix and *silently
+reverts the emergency fix* — while every gate is green, because =s1='s gates
+were green and no push invalidated them.
+
+The SHA binding does not help: it invalidates =staging:passed= when the *PR*
+moves, and here the PR did not move — =main= did.
+
+*Assertion (post-amendment):* at step 5, merging PR-E removes =staging:passed=
+and =deploy:production= from every open PR now behind main, including PR-S, and
+comments telling it to rebase. PR-S must rebase onto main and re-run staging
+before it can reach production.
+
+*Assertion:* the re-run is a real re-run. PR-S rebased onto the hotfix is a
+tree nobody has tested; its previous staging pass describes a tree that no
+longer exists.
+
+** D5 — emergency during another emergency
+
+| step | action                                    | expected                                                 |
+|------+-------------------------------------------+----------------------------------------------------------|
+|    1 | PR-E1 mid production deploy               | holds =concurrency: production=                          |
+|    2 | PR-E2 adds =deploy:production=            | queues behind E1; does *not* cancel it                    |
+|    3 | E1 health check fails, rolls back         | E1 releases; E2 proceeds against the rolled-back baseline |
+
+*Assertion:* =cancel-in-progress: false= on the production group. Cancelling a
+production deploy mid-flight leaves an indeterminate estate, which is worse
+than a queue.
+
+** D6 — health check catches a silent deploy failure
+
+| step | action                                              | expected                          |
+|------+-----------------------------------------------------+-----------------------------------|
+|    1 | target's =deploy.sh= exits 0 but publishes nothing  | old build still serving           |
+|    2 | =gates/health.sh= runs                              | HTTP 200 on every route           |
+|    3 | =x-build-sha= compared to head SHA                  | mismatch → exit 7 → rollback, PIR |
+
+*Assertion:* step 2 alone passes. A health check that only asserts 200 signs
+off on a deploy that never happened — this scenario is the negative test for
+guard 5 and the reason =x-build-sha= is mandatory on both targets.
+
+** D7 — the queue frees on failure
+
+| step | action                                | expected                                        |
+|------+---------------------------------------+-------------------------------------------------|
+|    1 | PR-F holds staging; e2e fails         | =staging:failed=, lock released                 |
+|    2 | PR-F abandoned, never merged          | =deploy:staging= still on PR-F → queue *wedged* |
+
+*Assertion:* step 2 must not happen. A failed change that holds the queue
+indefinitely is a denial of service on the pipeline. Open: whether
+=staging:failed= auto-removes =deploy:staging=, or a stale-claim sweep mirrors
+the 60-minute lock rule. Not decided at 0.2 — see =spec.org= §Open items.
+
+** D8 — labeller and deployment interact
+
+| step | action                                                  | expected                                    |
+|------+---------------------------------------------------------+---------------------------------------------|
+|    1 | PR-X holds staging with =app:core=, =app:plp=           | staging serving core+plp from PR            |
+|    2 | push removing all =apps/plp/= changes                   | labeller removes =app:plp=; =staging:passed= removed |
+|    3 | re-request staging                                      | =groups.sh= now prints =core= only          |
+
+*Assertion:* staging is redeployed rather than left serving a plp build from a
+tree the PR no longer contains. The manifest shrank; the environment must
+follow, or staging drifts from the change it claims to be testing.
+
+* The gap D4 found
+
+Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
+and amended there rather than left as a note:
+
+- *Observation.* Guard 0 is evaluated once, at staging-claim time. =staging:passed=
+  is invalidated by pushes to the PR but not by movement of =main=.
+- *Consequence.* Any merge to =main= while another PR holds a staging pass
+  leaves that pass describing a tree that no longer composes with main. The
+  emergency path makes this routine rather than rare, because an emergency is
+  precisely a merge to main that jumps the queue.
+- *Amendment.* A =main=-push workflow invalidates =staging:passed= and
+  =deploy:production= on every open PR that is now behind, and guard 4
+  re-checks =mergeStateStatus= at production time. See =spec.org=
+  §Promotion pipeline §Guard 4b.
+- *Generalization.* Guards evaluated at request time expire. Any guard whose
+  subject can change after it is checked must be re-checked at the moment it is
+  relied on — guard 0 at claim time is a convenience, guard 4b is the real one.
+
+* Running
+
+[H] — none of this runs yet. When it does, these belong in
+=experiments/002-pipeline-scenarios/= as a harness driving a scratch repo with
+the workflows installed, one scenario per numbered run, with the observed label
+timeline recorded per step. The labeller scenarios (Part A) are cheap enough to
+run on every change to =.github/labeler.yml=; Part B needs a disposable repo
+and is a promotion-time check.
