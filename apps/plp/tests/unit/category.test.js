@@ -143,12 +143,17 @@ test('a category slug cannot inject markup', () => {
 
 // ---- everything that is not a category page ---------------------------------
 
-test('/search is untouched by the catalogue', () => {
+// Was "/search is untouched by the catalogue", and it asserted
+// `results === undefined` to say so. /search now reads the catalogue, so that
+// assertion had to change -- but the CLAIM it was making did not: a broken
+// catalogue must not take the search page down with it. That is what is
+// asserted here. See STACK.md: search cannot yet tell "nothing matched" from
+// "we could not look", which is the next thing this route owes an operator.
+test('a broken catalogue does not take /search down with it', () => {
   for (const c of [loadCatalogue(MISSING), loadCatalogue(fixture('malformed.json'))]) {
     const d = render('/search?q=ping', c);
     assert.equal(d.found, true, 'a bad catalogue took /search down with it');
-    assert.equal(d.results, undefined, '/search is not a category page');
-    assert.equal(d.catalogue, undefined);
+    assert.deepEqual(d.results, [], 'a search we cannot answer has no results');
     assert.equal(status(d), 200);
   }
 });

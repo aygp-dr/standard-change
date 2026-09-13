@@ -6,7 +6,7 @@
 // been asked for.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { render, panel, renderHtml } from '../../src/server.js';
+import { render, panel, renderHtml, status } from '../../src/server.js';
 
 // ---- step 1: the term comes off the URL -------------------------------------
 
@@ -36,8 +36,7 @@ test('a page that is not a search carries no term at all', () => {
 // /search answers 200 whether or not anything matched. A search that finds
 // nothing is a successful answer to a valid request; 404 would tell a crawler
 // the search page does not exist.
-test('a search is a 200, matched or not', async () => {
-  const { status } = await import('../../src/server.js');
+test('a search is a 200, matched or not', () => {
   assert.equal(status(render('/search?q=boots')), 200);
   assert.equal(status(render('/search?q=zzzznothing')), 200);
 });
@@ -71,4 +70,35 @@ test('quotes and ampersands in the term are escaped too', () => {
   const html = renderHtml('/search?q=%22a%26b%27');
   assert.doesNotMatch(html, /Results for <code>"a&b'/);
   assert.match(html, /&quot;a&amp;b&#39;/);
+});
+
+// ---- step 3: the term is matched against the catalogue ----------------------
+
+test('a search finds the SKUs of the categories it matches', () => {
+  const d = render('/search?q=shoes');
+  assert.deepEqual(d.results, ['SKU123', 'SKU124', 'SKU125']);
+});
+
+test('matching is on the title as well as the slug, and case-insensitive', () => {
+  assert.deepEqual(render('/search?q=SHIRTS').results, render('/search?q=shirts').results);
+  assert.ok(render('/search?q=Hats').results.length > 0);
+});
+
+test('a term nothing carries is an empty result set, not an error', () => {
+  const d = render('/search?q=zzzznothing');
+  assert.deepEqual(d.results, []);
+  assert.equal(status(d), 200);
+});
+
+// The empty box must not return the whole estate. `includes('')` is true for
+// every string, so the natural implementation matches everything -- which
+// renders a "results" page for a search nobody performed.
+test('an empty term matches nothing, not everything', () => {
+  assert.deepEqual(render('/search').results, []);
+  assert.deepEqual(render('/search?q=').results, []);
+});
+
+test('a category page keeps its own results; search did not take them over', () => {
+  assert.deepEqual(render('/c/hats').results, ['SKU301']);
+  assert.equal(render('/c/hats').query, undefined);
 });

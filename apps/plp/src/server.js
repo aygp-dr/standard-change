@@ -110,6 +110,10 @@ export function render(path, catalogue = loadCatalogue()) {
   // search page nobody has searched from yet, not "this is not a search".
   const [p, qs] = path.split('?');
   if (p === '/search') d.query = new URLSearchParams(qs || '').get('q') ?? '';
+  // A match is a category whose slug or title contains the term; '' matches nothing.
+  if (d.query !== undefined) d.results = !d.query ? [] : catalogue.categories
+    .filter((c) => `${c.slug} ${c.title || ''}`.toLowerCase().includes(d.query.toLowerCase()))
+    .flatMap((c) => c.skus);
   const slug = categoryOf(path);
   if (slug === null) return d;   // /search, and anything else: unchanged
 
