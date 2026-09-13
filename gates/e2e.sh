@@ -7,6 +7,9 @@
 # Asserts three things a per-app unit test cannot:
 #   1. ROUTE OWNERSHIP -- each path is served by the app that declares it in
 #      routes.json. A router that sends /search to core returns 200 and is wrong.
+#      One app may declare `fallthrough`: it is the default location, and an
+#      unclaimed path reaches it rather than 404ing at the router. Ownership is
+#      still asserted -- the 404 must carry that app's name.
 #   2. CROSS-APP JOURNEYS -- add-to-cart starts on pdp and asserts on /cart,
 #      which no single app's tests can cover.
 #   3. ONE ESTATE -- every app behind this router reports the same x-build-sha.
@@ -23,6 +26,8 @@ get()      { curl -s --max-time 5 "$base$1"; }
 code()     { curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$base$1"; }
 owner()    { get "$1" | jq -r '.app // "-"' 2>/dev/null || echo -; }
 buildsha() { curl -sI --max-time 5 "$base$1" | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}'; }
+routedto() { curl -sI --max-time 5 "$base$1" | tr -d '\r' | awk 'tolower($1)=="x-routed-to:"{print $2}'; }
+ctype()    { curl -sI --max-time 5 "$base$1" | tr -d '\r' | awk 'tolower($1)=="content-type:"{print $2}'; }
 
 # 1. route ownership, straight from routes.json -- the source of truth
 for app in $(jq -r '.[].app' router/routes.json); do
@@ -41,10 +46,36 @@ for app in $(jq -r '.[].app' router/routes.json); do
   done
 done
 
-# 2. an unrouted path must 404 at the router, not fall through to an app
+# 2. an unrouted path must 404 -- and the 404 must come from the app that
+# declares fallthrough, not from the router. The router's default location
+# proxies to core (nginx: location / { proxy_pass http://core; }), so core is
+# what decides a path does not exist. Asserting only the status code would
+# pass even if the router had quietly gone back to answering 404 itself, which
+# is a different estate: it would mean core is NOT on the default path.
+fbapp=$(jq -r '.[]|select(.fallthrough)|.app' router/routes.json)
 c=$(code /definitely-not-a-route)
-[ "$c" = "404" ] && { say "/definitely-not-a-route" "404 (correct)"; pass=$((pass+1)); } \
-                 || fail "unrouted path returned $c, expected 404"
+who=$(routedto /definitely-not-a-route)
+[ "$c" = "404" ] && [ "$who" = "$fbapp" ] \
+  && { say "/definitely-not-a-route" "404 from $who (correct)"; pass=$((pass+1)); } \
+  || fail "unrouted path returned $c from '${who:--}', expected 404 from $fbapp"
+
+# 2b. the fallthrough app serves its statics, and refuses what is not there.
+# Same handler decides both, so this pins that 'default location' did not
+# become 'core answers 200 for anything'.
+c=$(code /statics/oneui.css); m=$(ctype /statics/oneui.css)
+[ "$c" = "200" ] && [ "${m%%;*}" = "text/css" ] \
+  && { say "/statics/oneui.css" "200 text/css"; pass=$((pass+1)); } \
+  || fail "/statics/oneui.css returned $c $m, expected 200 text/css"
+
+c=$(code /statics/not-a-file.css)
+[ "$c" = "404" ] && { say "/statics/not-a-file.css" "404 (correct)"; pass=$((pass+1)); } \
+                 || fail "missing static returned $c, expected 404"
+
+# 2c. the statics root must not be an escape hatch out of the app.
+c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --path-as-is \
+      "$base/statics/../../../../etc/passwd")
+[ "$c" = "404" ] && { say "/statics/ traversal" "404 (correct)"; pass=$((pass+1)); } \
+                 || fail "statics traversal returned $c, expected 404"
 
 # 3. cross-app journey: add-to-cart starts on pdp, asserts on cart (core)
 sku=$(get /p/SKU123 | jq -r '.app' 2>/dev/null)

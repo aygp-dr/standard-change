@@ -169,6 +169,53 @@ only *sooner*.
 *Take this option if you can. The rest of this document is what to do when you
 cannot.*
 
+*** Problem — core is the default location, so core is on every request
+
+Added 2026-09-13, on the same reasoning as =shared/= above: correct semantics,
+worse fit for this decision, and named rather than hidden.
+
+The estate now mirrors the nginx shape it is standing in for. An unclaimed path
+is not a router-level 404 — it goes to whichever app declares =fallthrough= in
+its =routes.json= (core), and *that app* decides the path does not exist:
+
+: location /statics/  { proxy_pass http://core; }
+: location /          { proxy_pass http://core; }   # was: return 404
+
+*What it costs.* Two things, and the second is the one that matters here.
+
+1. *Core is now in the blast radius of every request in the estate*, not just
+   of =/=, =/login=, =/account=, =/cart= and the shared surface. A core that is
+   down no longer degrades four journeys — it turns every unmatched path in the
+   estate into a 502. Core has become infrastructure while still being labelled
+   =app:core=, exactly the mismatch =shared/= introduced on the library side.
+   The manifest still reports a single-app change.
+
+2. *The gate that caught mis-routing could have been destroyed by this.* The
+   e2e gate asserted "an unrouted path must 404 at the router". A default
+   location makes that assertion impossible to satisfy, and the cheap move —
+   delete the check — would have removed the only thing standing between us and
+   a router that answers 200 for everything. It was rewritten instead to assert
+   the *attribution*: 404, and =x-routed-to= names the fallthrough app. That is
+   a strictly stronger check than the one it replaced, because it now also
+   proves core is on the default path.
+
+*It was nearly worse — and this one actually fired.* The first implementation
+had core own any path matching the declared =/statics/= prefix. =/statics/=
+being declared made =/statics/anything= return *200*. The default location had
+silently become "core claims everything", which is the precise failure the
+rewritten gate exists to catch — and the gate caught it, on the first run,
+before commit. Ownership under =/statics/= is now decided by the file on disk,
+not the prefix, and both halves are pinned: core answers for what it has, and
+*refuses what it does not*. An app that cannot say no cannot be a default
+location.
+
+*Why do it anyway.* Because it is what the system being replicated does, and a
+model of change control that only holds while every path is explicitly claimed
+has not met a real storefront. The cost is that =app:core= now understates its
+own blast radius twice over — once through =shared/=, once through the default
+location. See the blast-radius follow-up below: this is the second independent
+argument for =count(app:*) > 1= not being the right measure of radius.
+
 *** Problem — shared/ makes automatic promotion less safe, and we did it anyway
 
 Extracting =shared/= (OneUI, issue #10) and =external/= is *correct semantics*

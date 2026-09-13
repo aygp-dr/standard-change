@@ -22,8 +22,10 @@
       "/cart",
       "/about",
       "/contact",
-      "/jobs"
+      "/jobs",
+      "/statics/"
     ],
+    "fallthrough": true,
     "health": "/",
     "journeys": [
       "home",

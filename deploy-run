@@ -13,9 +13,55 @@ FRONT_STG=http://127.0.0.1:9201
 cd "$(dirname "$0")"
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+
+# C6 -- the platform-attested deployment record.
+#
+# Until now nothing here told GitHub anything, which is why an approved PR
+# reads "This branch has not been deployed" while the estate is serving its
+# build. The record is not decoration: it is the only place the platform can
+# answer "what is running in production" without trusting a human's summary.
+#
+# Two rules it has to obey, or it is worse than no record at all:
+#   - OPEN BEFORE, RESOLVE AFTER. The deployment is created in_progress before
+#     the deploy and only moves to success once gates/health.sh has actually
+#     observed convergence. A record written from intent attests to nothing.
+#   - THE REF IS THE PR'S HEAD. Keyed to the branch, so the panel on the PR is
+#     about THIS change. auto_merge=false and required_contexts=[] because
+#     guards 0 and 2 already ran above -- letting the API re-decide would put a
+#     second, weaker gate in the path.
+DEPLOY_ID=''
+deploy_open() {  # deploy_open <environment> <description>
+  PROD=$([ "$1" = production ] && echo true || echo false)
+  DEPLOY_ID=$(jq -nc --arg ref "$HEAD" --arg env "$1" --arg d "$2" --arg sha "$SHA" \
+        --argjson pr "$PR" --argjson prod "$PROD" \
+        '{ref:$ref,environment:$env,description:$d,auto_merge:false,
+          required_contexts:[],production_environment:$prod,
+          payload:{pr:$pr,sha:$sha}}' \
+      | gh api "repos/$R/deployments" -X POST --input - 2>/dev/null \
+      | jq -r '.id // empty')
+  if [ -n "$DEPLOY_ID" ]; then
+    deploy_state in_progress ''
+    ok "deployment $DEPLOY_ID opened on $1 (in_progress)"
+  else
+    echo "   warn no deployment record on $1 (API refused) — C6 unattested"
+  fi
+}
+deploy_state() {  # deploy_state <state> [environment_url]
+  [ -n "$DEPLOY_ID" ] || return 0
+  gh api "repos/$R/deployments/$DEPLOY_ID/statuses" -X POST \
+    -f state="$1" -f description="observed by gates/health.sh" \
+    ${2:+-f environment_url="$2"} >/dev/null 2>&1 || true
+  # A resolved record is no longer this run's to fail. Without this, dying
+  # after staging succeeded would rewrite staging's success as a failure --
+  # the record would then describe the run, not the environment.
+  case "$1" in success|failure|error) DEPLOY_ID='' ;; esac
+}
+# Any exit before convergence leaves a truthful record, not a dangling one.
+trap 'deploy_state failure' EXIT
 ok()   { printf '   ok   %s\n' "$*"; }
 die()  { printf '   FAIL %s\n' "$*"; exit 1; }
 
+HEAD=$(gh pr view "$PR" --repo "$R" --json headRefName -q '.headRefName')
 SHA=$(gh pr view "$PR" --repo "$R" --json headRefOid -q '.headRefOid' | cut -c1-7)
 LABELS=$(gh pr view "$PR" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')
 GROUPS=$(echo "$LABELS" | tr ' ' '\n' | sed -n 's/^app://p' | tr '\n' ' ')
@@ -50,6 +96,7 @@ gh pr edit "$PR" --repo "$R" --add-label deploy:staging >/dev/null
 ok "berth claimed"
 
 step "deploy to staging"
+deploy_open staging "standard change #$PR -> staging"
 ./targets/bastille/deploy.sh staging "$SHA" | sed 's/^/   /'
 sleep 2
 ok "sc-staging <- $SHA"
@@ -57,6 +104,7 @@ ok "sc-staging <- $SHA"
 step "the authorizing run — e2e against staging"
 ROUTER_URL="$FRONT_STG" ./gates/e2e.sh | tail -1 | sed 's/^/   /' || die "staging e2e failed"
 HEALTH_MODE=manifest HEALTH_SAMPLES=4 ./gates/health.sh "$FRONT_STG" "$SHA" | sed 's/^/   /'
+deploy_state success "$FRONT_STG"
 gh pr edit "$PR" --repo "$R" --add-label staging:passed >/dev/null
 ok "staging:passed@$SHA"
 
@@ -64,6 +112,7 @@ step "deploy to the IDLE colour"
 CUR=$(./targets/bastille/front/switch.sh status | grep -o 'production = [a-z]*' | awk '{print $3}')
 IDLE=$([ "$CUR" = blue ] && echo green || echo blue)
 echo "   live=$CUR  idle=$IDLE"
+deploy_open production "standard change #$PR -> production ($IDLE)"
 ./targets/bastille/deploy.sh production "$SHA" | sed 's/^/   /'
 sleep 2
 ok "both production replicas <- $SHA"
@@ -80,8 +129,12 @@ ok "production -> $IDLE"
 step "guard 5 — convergence through the front"
 HEALTH_MODE=manifest HEALTH_SAMPLES=5 ./gates/health.sh "$FRONT_PROD" "$SHA" | sed 's/^/   /' \
   || die "production did not converge on $SHA"
+# Only now. production:healthy and the success status are the same assertion
+# told to two audiences, and both are downstream of the health check above.
+deploy_state success "$FRONT_PROD"
+trap - EXIT
 gh pr edit "$PR" --repo "$R" --add-label production:healthy >/dev/null
-ok "converged"
+ok "converged; deployment $DEPLOY_ID -> success"
 
 step "settle — release the berth"
 gh pr edit "$PR" --repo "$R" \
