@@ -22,7 +22,7 @@ const HOST = process.env.BIND || '0.0.0.0';
 // THE DECLARATION IS THE SOURCE. environments.tsv says what is NAMED; probing
 // says what is RUNNING. Hardcoding the list here would make the dashboard a
 // second, silently-diverging map -- the defect this repo keeps finding.
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 const ENVS = readFileSync(new URL('../environments.tsv', import.meta.url), 'utf8')
   .split('\n')
   .filter((l) => l.trim() && !l.startsWith('#') && !l.startsWith('name\t'))
@@ -36,6 +36,28 @@ const ENVS = readFileSync(new URL('../environments.tsv', import.meta.url), 'utf8
   // reservations and the dev blocks. Reading order matches blast radius.
   .sort((a, b) => b.port - a.port);
 
+// WHEN THE DEPLOYER LAST RAN HERE. targets/node/deploy.sh writes version.json
+// into the deployment worktree, so its mtime is a record of the deploy ACTION,
+// independent of the probe that says what is being served.
+//
+// The two are different facts and are allowed to disagree: the probe answers
+// "what is serving", the mtime answers "when did a deploy happen". Processes
+// restarted by hand move the first and not the second, which is worth seeing
+// rather than hiding.
+//
+// The SHA is NOT read from this file. Reading a manifest for what is running is
+// the defect the banner at the top of this file exists to avoid; reading its
+// mtime for when a deploy ran is a different question the probe cannot answer.
+function deployedAt(env) {
+  for (const dir of [env.name, env.name.replace(/^dev-/, 'dev-')]) {
+    try {
+      return statSync(new URL('../deployments/' + dir + '/version.json',
+                              import.meta.url)).mtimeMs;
+    } catch { /* not deployed from here, or never deployed */ }
+  }
+  return null;
+}
+
 async function probe(env) {
   // A reservation is not expected to answer. Probing it and printing `dark`
   // would report an absence as a fault; `declared` is the true state.
@@ -48,13 +70,14 @@ async function probe(env) {
   try {
     const r = await fetch(url, { signal: ac.signal, redirect: 'manual' });
     return {
-      ...env, up: true, declared: false, status: r.status,
+      ...env, up: true, declared: false, deployed_at: deployedAt(env), status: r.status,
       sha: r.headers.get('x-build-sha') || null,
       app: r.headers.get('x-app') || null,
       colour: r.headers.get('x-colour') || null,
     };
   } catch {
-    return { ...env, up: false, declared: false, status: null, sha: null, app: null, colour: null };
+    return { ...env, up: false, declared: false, deployed_at: deployedAt(env),
+             status: null, sha: null, app: null, colour: null };
   } finally { clearTimeout(t); }
 }
 
@@ -425,7 +448,7 @@ letter-spacing:.04em;max-width:74rem}
 <table><thead><tr><th>change</th><th>groups</th><th>build</th><th>window</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
 
 <h2>environments</h2>
-<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>promotes</th></tr></thead><tbody id=e></tbody></table>
+<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>deployed</th></tr></thead><tbody id=e></tbody></table>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function flagbox(d){
@@ -475,6 +498,17 @@ function when(iso){
 // server.mjs, so one backtick in a COMMENT ends the literal and the file stops
 // parsing. Third variant of the same trap today, after an escaped newline and a
 // nested quote.
+// promotes was exactly (tier === 'protected') in every row -- a second spelling
+// of a column already on screen, carrying no information. Replaced with the one
+// fact the table could not otherwise show.
+function ago(ms){
+  if(!ms)return '—';
+  const s=Math.round((Date.now()-ms)/1000);
+  if(s<90)return s+'s ago';
+  const m=Math.round(s/60); if(m<90)return m+'m ago';
+  const h=Math.round(m/60); if(h<48)return h+'h ago';
+  return Math.round(h/24)+'d ago';
+}
 function cls_chip(cs){
   const m={standard:['cls-std','STD','itil:standard — pre-authorised, routine'],
            normal:['cls-nrm','NRM','itil:normal — assessed, needs authorisation'],
@@ -623,7 +657,7 @@ function render(d){
         location.hostname+':'+esc(x.port)+'/">'+esc(x.port)+'</a></td>'
       : '<td class=dim>'+esc(x.port)+'</td>')+state+
     '<td class=sha>'+esc(x.sha||'—')+'</td><td class=dim>'+esc(x.app||'—')+'</td>'+
-    col+'<td class=dim>'+esc(x.promotes)+'</td></tr>';}).join('');
+    col+'<td class=dim>'+ago(x.deployed_at)+'</td></tr>';}).join('');
 }
 const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/');
 ws.onopen =()=>{};
@@ -636,6 +670,23 @@ document.addEventListener('click',e=>{
   const c=e.target.closest('button[data-clear]');
   if(c)clearSlot(c.dataset.clear);
 });
+async function toggle(label,action){
+  // RESTORED. This was deleted when the banner, chip row and button row were
+  // collapsed into one estate() function -- the buttons kept rendering and
+  // every click threw ReferenceError: toggle is not defined. Checking that a
+  // control EXISTS is not checking that it WORKS, which is the whole lesson of
+  // this repo applied to its own dashboard.
+  //
+  // Closing the estate asks first: it stops every change in flight. Opening it
+  // does not -- an estate wrongly left closed is visible and annoying, an
+  // estate wrongly opened is a change deployed into a freeze.
+  if(action==='on'&&!confirm('Declare '+label.toUpperCase()+
+    '? This closes the estate to every standard and normal change, '+
+    'including any that is mid-flight right now.'))return;
+  const r=await fetch('/api/estate/'+label+'/'+action,{method:'POST'});
+  render(await (await fetch('/api/status')).json());
+  if(!r.ok)alert('toggle failed - check the dashboard log');
+}
 async function clearSlot(pr){
   // Asks, because giving a slot back is a decision and the next change takes
   // it. Not destructive -- the change stays approved and its observations
