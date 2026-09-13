@@ -91,8 +91,22 @@ review=$(gh pr view "$pr" --repo "$repo" --json reviewDecision -q '.reviewDecisi
 #
 # What it does NOT do is lower the bar: an unapproved, unrecorded PR still
 # fails, and a proxy record for a different SHA still fails.
+# NAME THE APPROVER; DO NOT ASSERT PERSONHOOD FROM A STATE THAT CANNOT SHOW IT.
+# This printed "APPROVED by a person" for any APPROVED review. Once a reviewer
+# identity exists (docs/reviewer-identity.org) that became false the first time
+# it was true: #42 was approved by a TOKEN authenticating as jwalsh, and the
+# line claimed a person. reviewDecision cannot tell a human from a second
+# credential, so it must not be read as if it could. Print who, and whether the
+# approval names THIS build -- the reviewDecision alone does not.
 if [ "$review" = "APPROVED" ]; then
-  printf '  ok    %-16s %s\n' "review" "APPROVED by a person"
+  who=$(gh api "repos/$repo/pulls/$pr/reviews" \
+    --jq "[.[]|select(.state==\"APPROVED\")|select(.commit_id==\"$head\")|.user.login]|unique|join(\", \")" \
+    2>/dev/null || echo '')
+  if [ -n "$who" ]; then
+    printf '  ok    %-16s %s\n' "review" "APPROVED on $short by $who"
+  else
+    printf '  FAIL  %-16s %s\n' "review" "APPROVED, but not of $short -- the head moved"; rc=1
+  fi
 elif ./change/evidence.sh latest "$pr" review proxy 2>/dev/null | grep -q "$short"; then
   printf '  ok    %-16s %s\n' "review" "review:proxy on $short (a proxy, NOT a person)"
 else
