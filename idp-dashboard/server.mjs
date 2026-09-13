@@ -184,6 +184,22 @@ letter-spacing:.06em;border-bottom:1px solid #262a35;padding:0 12px 6px 0}
 td{padding:5px 12px 5px 0;border-bottom:1px solid #1a1d26}
 .up{color:#4ade80}.down{color:#f87171}.dim{color:#6b7280}.decl{color:#7c6f9e}
 .sha{color:#fbbf24}.prot{color:#f87171;font-size:11px}.dev{color:#6b7280;font-size:11px}
+/* THE COLOUR IS THE ENVIRONMENT'S IDENTITY, not decoration. staging is orange
+   because it is the one protected environment that is NOT production and the
+   distinction has been mistaken before (this repo shipped a port map calling
+   9200 production). front is red because it is the only thing a customer
+   actually reaches, and it is never deployed to directly -- it reads the live
+   colour per request. blue and green are named for their colour, so they wear
+   it: a row whose name and swatch disagree is a bug you can see. */
+.n-staging{color:#fb923c;font-weight:600}
+.n-production-blue{color:#60a5fa;font-weight:600}
+.n-production-green{color:#4ade80;font-weight:600}
+.n-front{color:#f87171;font-weight:700}
+.swatch{display:inline-block;padding:2px 9px;border-radius:3px;font-size:11px;
+font-weight:700;letter-spacing:.05em}
+.sw-blue{background:#12233d;color:#93c5fd;border:1px solid #2563eb}
+.sw-green{background:#11301c;color:#86efac;border:1px solid #16a34a}
+.sw-none{color:#6b7280}
 .team{color:#a78bfa;font-size:11px}.live{background:#16201380}
 .bar{display:flex;gap:10px;align-items:center;margin:0 0 16px;flex-wrap:wrap}
 .f{padding:5px 12px;border-radius:3px;font-weight:600;font-size:12px;letter-spacing:.03em}
@@ -260,11 +276,21 @@ function render(d){
   document.getElementById('e').innerHTML=d.envs.map(x=>{
     const state=x.declared?'<td class=decl>declared</td>'
       :'<td class='+(x.up?'up':'down')+'>'+(x.up?'up '+esc(x.status):'dark')+'</td>';
+    // The colour cell means two different things and must not pretend
+    // otherwise. On the FRONT it is the ACTIVATED colour -- which replica is
+    // serving customers right now. On blue or green it is only that replica
+    // naming itself, which tells you nothing about what is live.
+    let col='<td class=sw-none>—</td>';
+    if(x.name==='front'&&x.colour)
+      col='<td><span class="swatch sw-'+esc(x.colour)+'">'+esc(x.colour).toUpperCase()+
+          ' LIVE</span></td>';
+    else if(x.colour)
+      col='<td class=dim>'+esc(x.colour)+'</td>';
     return '<tr class="'+(x.sha&&x.sha===d.live_sha&&x.tier==='protected'?'live':'')+'">'+
-    '<td>'+esc(x.name)+'</td><td class='+esc(x.tier)+'>'+esc(x.tier)+'</td>'+
+    '<td class="n-'+esc(x.name)+'">'+esc(x.name)+'</td><td class='+esc(x.tier)+'>'+esc(x.tier)+'</td>'+
     '<td class=dim>'+esc(x.port)+'</td>'+state+
     '<td class=sha>'+esc(x.sha||'—')+'</td><td class=dim>'+esc(x.app||'—')+'</td>'+
-    '<td>'+esc(x.colour||'—')+'</td><td class=dim>'+esc(x.promotes)+'</td></tr>';}).join('');
+    col+'<td class=dim>'+esc(x.promotes)+'</td></tr>';}).join('');
 }
 const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/');
 ws.onopen =()=>document.getElementById('ws').textContent='live (websocket)';
