@@ -1,0 +1,23 @@
+Timeline
+- Found while assessing what enforcement survives without GitHub rulesets:
+  tracing which workflow actually evaluates each guard.
+- Verified independently before acting: grep showed check-runs present only
+  in promote.yml, and promote.yml's 'if:' is the staging:passed label.
+- The interesting part is the direction of the drift. spec.org and the TLA+
+  model both said guard 2 has no bypass, and the model enforced it on both
+  transitions. Only the YAML disagreed. Design-level verification does not
+  transfer to the implementation for free.
+
+Reproduction
+  grep -n 'check-runs' .github/workflows/*.yml
+    -> promote.yml only (before)
+    -> promote.yml + deploy-production.yml (after)
+  grep -n 'if:' .github/workflows/promote.yml
+    -> if: github.event.label.name == 'staging:passed'
+Cell: FreeBSD 14.4 amd64
+
+Gitea survey (experiments/002), same session
+  gitea 1.26.1 live on :3000, pid 1744; act_runner absent (no PATH entry,
+  no process, no rc.d script). swagger.v1.json has 300 paths including
+  repos/{o}/{r}/branch_protections, actions/runners, actions/variables.
+  No environments endpoint and no required-deployments rule.
