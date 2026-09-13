@@ -1,0 +1,165 @@
+#+TITLE: A reviewer with an identity of its own
+#+PROPERTY: header-args :mkdirp t
+
+* Why
+
+Guard 4's first rung is a review by someone who is not the author. Today the
+proxy reviewer runs as the author's own token, so it cannot post an =APPROVED=
+review -- GitHub refuses to let an author approve their own pull request -- and
+it writes a =review:proxy= record instead, a comment saying in as many words
+"a proxy, NOT a person, accepted this".
+
+That refusal is currently the *only* thing keeping author and reviewer apart,
+and it is doing it by accident. The separation is a property of GitHub's
+validation, not of anything this repo asserts. Give the reviewer a login of its
+own and the separation becomes real: a distinct actor, a real review event, and
+a call the forge itself rejects if the two identities ever collapse.
+
+This file specifies that. *It is not built.* =REVIEWER_GH_TOKEN= is empty in
+=.env.template= and =change/guard4.sh= still falls back to the record.
+
+* The rule that shapes everything else
+
+*Do not shadow the default =gh= auth.*
+
+=gh= reads =GH_TOKEN= from the environment and it takes precedence over
+=gh auth=. A second identity stored under that name silently replaces the
+operator for every =gh= call in any shell that sourced =.env= -- including the
+calls that merge, label, close windows and deploy. The reviewer would then be
+the thing driving production.
+
+So the credential is named =REVIEWER_GH_TOKEN=, it is *never exported*, and it
+becomes =GH_TOKEN= for exactly one command:
+
+#+begin_src sh :eval no
+GH_TOKEN="$REVIEWER_GH_TOKEN" gh pr review "$PR" --approve --body "$BODY"
+#+end_src
+
+One line, one call, visible at the call site. Anything that exports it is the
+bug.
+
+** A second rule: the reviewer must not be able to merge
+
+Scope is =repo= and nothing more. No =workflow=, no admin, and the identity is
+not added to any team that can push to =main=. A reviewer that can merge what it
+approves has undone the separation one call later. If the token can merge, the
+gate is decorative.
+
+* The call, speculatively
+
+Two ways to post it. Both need the reviewer identity; they differ in what they
+leave behind.
+
+** The CLI
+
+#+begin_src sh :eval no
+GH_TOKEN="$REVIEWER_GH_TOKEN" gh pr review "$PR" --repo "$R" \
+  --approve --body "$BODY"
+#+end_src
+
+Simple, and it is the call GitHub validates: if =REVIEWER_GH_TOKEN= resolves to
+the PR's author it fails with =Can not approve your own pull request=. *That
+failure is the feature.* It is the only place in this pipeline where the forge,
+not a script of ours, enforces separation of duties -- so guard 4 should treat
+that specific error as a hard refusal and never fall back to the record on it.
+
+** The API
+
+#+begin_src sh :eval no
+GH_TOKEN="$REVIEWER_GH_TOKEN" gh api \
+  "repos/$R/pulls/$PR/reviews" -X POST \
+  -f commit_id="$HEAD" \
+  -f event=APPROVE \
+  -f body="$BODY"
+#+end_src
+
+Worth preferring for one reason: =commit_id=. The CLI approves whatever the head
+is *at the moment the call lands*; the API pins the approval to the SHA the
+agent actually analysed. Issue #16's rule -- an observation must name the build
+it is about -- applies to a review exactly as it applies to e2e, and this is the
+only form that can express it. If the head moved between analysis and approval,
+the API call is refused and should be.
+
+** Reading it back
+
+Guard 4 must verify by *asking the forge who approved*, never by trusting the
+exit code of the command it just ran:
+
+#+begin_src sh :eval no
+gh api "repos/$R/pulls/$PR/reviews" \
+  --jq '[.[]|select(.state=="APPROVED")
+          |select(.commit_id==$head)
+          |select(.user.login!=$author)] | length'
+#+end_src
+
+Three conditions, and the third is the point: an approval by the author counts
+for nothing even if GitHub somehow let it through. *Prefer a fact the system
+reports about itself over a fact the caller supplies about it.*
+
+* What the agent returns
+
+The agent does the analysis. It does *not* hold the credential and it does not
+post anything -- it returns a verdict, and a separate, dumb step decides whether
+that verdict becomes a call. Splitting them means the thing that can write to
+the forge has no judgement, and the thing with judgement cannot write.
+
+Structured reply, exactly:
+
+#+begin_src json :eval no
+{
+  "approve": false,
+  "pr": 38,
+  "head": "266c3a0",
+  "reasons": [
+    "three comments assert routes.json health = /search?q=ping; at this head it is /__health/plp",
+    "category title and href in catRows have no failing test"
+  ],
+  "checked": ["diff", "tests", "mutations", "escaping"],
+  "not_checked": ["staging behaviour -- 9200-9205 were down"]
+}
+#+end_src
+
+=approve= is the boolean the wrapper branches on. Everything else exists so a
+refusal is actionable and an approval is auditable.
+
+Two constraints on it:
+
+- *=approve: true= with a non-empty =not_checked= is not an approval.* The
+  wrapper must refuse to post it. An agent that could not observe the thing it
+  is approving should say so and return false; if it says so and returns true,
+  the wrapper catches the contradiction rather than the reader.
+- *=head= is compared against the live head before the call.* Same reason the
+  API form is preferred. A verdict is about a build.
+
+* The wrapper
+
+#+begin_src sh :eval no
+# 1. analyse -- no credential in this process
+verdict=$(claude -p "$(cat .claude/agents/reviewer-prompt.md)" --output-format json)
+
+# 2. decide -- no judgement in this process
+[ "$(echo "$verdict" | jq -r .approve)" = true ]      || exit 3
+[ "$(echo "$verdict" | jq -r '.not_checked|length')" -eq 0 ] || exit 4
+[ "$(echo "$verdict" | jq -r .head)" = "$HEAD" ]      || exit 5
+
+# 3. post -- no analysis in this process
+GH_TOKEN="$REVIEWER_GH_TOKEN" gh api "repos/$R/pulls/$PR/reviews" \
+  -X POST -f commit_id="$HEAD" -f event=APPROVE -f body="$(echo "$verdict" | jq -r .body)"
+#+end_src
+
+For now this wraps Claude Code, because that is what is running the grind.
+Later the diff could go to a local model (ollama) instead -- the contract above
+is deliberately model-agnostic: it is a JSON object with a boolean, and nothing
+in steps 2 or 3 knows or cares what produced it. Swapping the analyser must not
+require touching the thing that holds the credential.
+
+* What this does not fix
+
+An agent reviewing an agent's code is still one system checking itself. A
+second login makes the *mechanism* honest -- the forge now enforces what it
+previously only happened to prevent -- but it does not make the review
+independent in the sense that matters. It buys a real audit trail and a real
+refusal on self-approval. It does not buy a second opinion.
+
+Recorded so nobody later reads =APPROVED= by =standard-change-reviewer= and
+concludes a person looked at it.

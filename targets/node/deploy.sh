@@ -77,20 +77,44 @@ else
   git -C "$root" worktree add -q --detach "$wt" "$full"
 fi
 
+# AN ENVIRONMENT MUST OUTLIVE THE SHELL THAT DEPLOYED IT.
+#
+# These were started with `nohup node ... &`, and nohup only ignores SIGHUP. It
+# does NOT leave the process group or start a new session, so anything that
+# signals the caller's process group takes the whole estate with it. On
+# 2026-09-13 staging came up on 266c3a0, served correctly, and went dark the
+# moment the backgrounded deploy command was reaped -- ports 9200-9205 all
+# refused, zero processes, while the worktree sat there fully checked out
+# looking deployed. The deploy had already reported success, and was right to:
+# it HAD deployed. The environment then died with its parent.
+#
+# daemon(8) is the FreeBSD answer (setsid is util-linux and is not here): -f
+# redirects stdio, and it forks into a session of its own so the process is
+# reparented to init and survives the caller entirely.
+# The variables are EXPORTED inside the subshell rather than written as
+# assignment-prefixes on the call. A prefix in front of a shell FUNCTION does
+# not reliably survive into what that function execs, and daemon(8) execs: the
+# first attempt logged `core listening on 0 (block ?, sha dev)` and the router
+# died on a missing BASE_PORT. Export, then daemon inherits.
+spawn() { # spawn <logfile> <command...>
+  _log="$1"; shift
+  daemon -f -o "$_log" "$@"
+}
+
 printf '{"sha":"%s","env":"%s","block":%d}\n' "$short" "$env" "$block" > "$wt/version.json"
 ( cd "$wt" && sh router/generate.sh >/dev/null 2>&1 || true )
 
 n=1
 for app in core plp pdp checkout; do
-  ( cd "$wt" && BUILD_SHA="$short" BLOCK="$env" PORT=$((base + n)) BIND=0.0.0.0 \
-      nohup node "apps/$app/src/server.js" > "$wt/.$app.log" 2>&1 & )
+  ( cd "$wt" && export BUILD_SHA="$short" BLOCK="$env" PORT=$((base + n)) BIND=0.0.0.0
+    spawn "$wt/.$app.log" node "apps/$app/src/server.js" )
   n=$((n + 1))
 done
-( cd "$wt" && BUILD_SHA="$short" BLOCK="$env" PORT=$((base + 5)) BIND=0.0.0.0 \
-    nohup node external/mock/src/server.js > "$wt/.mock.log" 2>&1 & )
+( cd "$wt" && export BUILD_SHA="$short" BLOCK="$env" PORT=$((base + 5)) BIND=0.0.0.0
+  spawn "$wt/.mock.log" node external/mock/src/server.js )
 sleep 1
-( cd "$wt" && BUILD_SHA="$short" BLOCK="$env" BASE_PORT="$base" BIND=0.0.0.0 \
-    nohup node router/server.js > "$wt/.router.log" 2>&1 & )
+( cd "$wt" && export BUILD_SHA="$short" BLOCK="$env" BASE_PORT="$base" BIND=0.0.0.0
+  spawn "$wt/.router.log" node router/server.js )
 # Register the block. ports.sh allocates by editing a file and never asks what
 # is bound, so a block whose process died stayed "held" forever and a block
 # started outside the registry was invisible. Deploying IS the allocation:
@@ -102,7 +126,14 @@ if [ "$block" -lt 10 ]; then
 import sys, pathlib, datetime
 f, blk, wt, br = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
 rows = [l for l in f.read_text().split("\n") if l.strip()] if f.exists() else ["block\tworktree\tbranch\tallocated_at"]
-hdr, body = rows[0], [r for r in rows[1:] if r.split("\t")[0] != blk]
+# TWO invariants, and only the first was enforced: a block is held by at most
+# one worktree, AND a worktree holds at most one block. Dropping rows by block
+# alone let this worktree accumulate rows for blocks 0 and 6, after which
+# change/ports.sh's `b=$(awk ...)` returned the two-line string "0\n6" and
+# `$((BASE0 + 10 * b))` died with "variable conversion error" -- gmake .env
+# broken by a registry that two writers disagreed about.
+hdr, body = rows[0], [r for r in rows[1:]
+                      if r.split("\t")[0] != blk and r.split("\t")[1] != wt]
 body.append("\t".join([blk, wt, br, datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")]))
 f.write_text("\n".join([hdr] + body) + "\n")
 PORTS

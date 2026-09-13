@@ -25,7 +25,17 @@ next_block() {
 case "${1:-}" in
   alloc)
     if grep -q "	$WT	" "$REG" 2>/dev/null; then
-      b=$(awk -F'\t' -v w="$WT" '$2==w {print $1}' "$REG")
+      # ONE row per worktree, and say so loudly if that is not true. This
+      # printed every matching row, so a registry with two rows for this
+      # worktree made b the two-line string "0\n6" and every later $((...))
+      # failed with "variable conversion error" -- a corrupt CMDB surfacing as
+      # an arithmetic error three lines away from the cause.
+      dupes=$(awk -F'\t' -v w="$WT" '$2==w {print $1}' "$REG" | wc -l | tr -d ' ')
+      b=$(awk -F'\t' -v w="$WT" '$2==w {print $1; exit}' "$REG")
+      if [ "$dupes" -gt 1 ]; then
+        echo "warn: ports.tsv holds $dupes rows for this worktree; using block $b." >&2
+        echo "  A worktree holds at most one block. Reconcile with: ./change/ports.sh list" >&2
+      fi
       echo "already allocated: block $b"
     else
       b=$(next_block)
