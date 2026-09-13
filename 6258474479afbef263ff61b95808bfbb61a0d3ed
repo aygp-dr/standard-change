@@ -1,0 +1,30 @@
+Timeline
+  - gate-selftest was run green on origin/main before any of this, per the
+    repo invariant, and again after the Makefile change.
+  - cross_check.py first run: NoUndefinedClassMoves DISAGREED (sim VIOL, tla
+    holds). Traced to the harness mutating from all-repairs-on. Fixed to mutate
+    from as-is, matching the simulator.
+  - Second run: EmergencyNeverWaits DISAGREED (sim holds, tla VIOL) after the
+    deadlock invariant was added. Traced to Stuck being looser than the
+    simulator's exit-code-5 test. Fixed in Labels.tla.
+  - Third run: all nine properties agree in both directions.
+
+Reproduction
+  $ ./sim/cross_check.py
+    property                       AS-IS (sim / tla)      REPAIRED (sim / tla)
+    ClassAtMostOne                 VIOL      VIOL         holds     holds  agree
+    NoUndefinedClassMoves          holds     holds        VIOL      VIOL   agree
+    LifecycleAtMostOneActive       VIOL      VIOL         holds     holds  agree
+    ClassifiedBeforeDeploy         VIOL      VIOL         holds     holds  agree
+    BerthSingleton                 holds     holds        VIOL      VIOL   agree
+    OrdinaryChangeWaits            holds     holds        VIOL      VIOL   agree
+    DeclaringABlockDoesNotExempt   VIOL      VIOL         holds     holds  agree
+    EmergencyNeverWaits            VIOL      VIOL         holds     holds  agree
+    ControlPlaneSoaks              VIOL      VIOL         holds     holds  agree
+  4m05s, 18 TLC runs plus 9 exhaustive sweeps.
+
+  $ gmake -s gate-selftest
+  ... audit-controls: both directions confirmed
+  ... pbt-pipeline: both directions confirmed
+  ... label_sim: both directions confirmed
+  exit 0, 6m02s
