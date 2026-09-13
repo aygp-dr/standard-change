@@ -196,6 +196,10 @@ const AVAILABILITY = {
   'low-stock': 'Low stock — only a few left',
   'out-of-stock': 'Out of stock',
   'preorder': 'Available to pre-order',
+  // loadCatalogue only checks that availability is a STRING, so '' is a value a
+  // deployed file can carry -- and '' is falsy, so the raw-value fallback below
+  // cannot catch it. Without this row the page renders a bare separator dot.
+  '': 'Availability unknown',
 };
 
 // The product panel: the product, or the reason there is not one.
@@ -219,7 +223,7 @@ This product has not gone away; try again shortly.</p>
 <p class=v>catalogue: ok — this product is not in it</p>`;
   const p = d.product;
   return `<h2>${esc(p.name)}</h2>
-<p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability || 'Availability unknown')}</p>
+<p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability)}</p>
 <p>SKU <code>${sku}</code></p>`;
 }
 
