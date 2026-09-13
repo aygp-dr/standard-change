@@ -1,0 +1,6 @@
+environments.log
+.env.ports
+.nginx.conf
+.slot-url
+.change-event-id
+node_modules/
