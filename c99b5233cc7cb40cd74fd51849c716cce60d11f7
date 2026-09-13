@@ -1,0 +1,68 @@
+Timeline
+
+  1. Read the review on #27 before touching anything. Five of its six findings
+     are about a claim being stronger than its evidence, which is the same
+     defect the change itself is about, one level up.
+
+  2. Rebased onto origin/main FIRST, before any new work, because two of the
+     conflicts delete live guards and resolving them afterwards would have
+     meant re-testing everything. Makefile: kept main's observation-selftest
+     AND added marker-selftest. change/activate.sh: took main's side whole
+     (git checkout --ours), then re-added only the marker call, addressed
+     through ./change/marker.sh because main's cd already lands at the repo
+     root. The $HERE workaround and the "found, not fixed" claim about
+     activate.sh are gone -- both were written against a tree 58 commits old.
+
+  3. FAILED FIRST, and this is the one worth keeping. The mutation harness's
+     `dev-label-reaches-the-forge` mutation SURVIVED: zero cases failed. The
+     health-test case meant to cover it ran health.sh without --pr, so the
+     label block never executed and its `!dev-4:healthy` assertion was
+     satisfied by output that could not have contained the string under any
+     circumstances. A passing test asserting nothing, in the change that
+     argues against exactly that, found only because the mutation was run.
+     Fixed with --pr against a shimmed gh; second run killed it, 1 case.
+
+  4. Second failure, smaller: the first `mixed.tsv` fixture held one matched
+     and one unobserved sample and was asserted to derive `diverged`. It
+     derives `unreachable`, correctly -- nothing in it positively saw another
+     build. The fixture was wrong, not the precedence rule. Caught by the
+     suite on its first run.
+
+  5. shellcheck found two real things in the new code: SC2125 on an unquoted
+     `?x=1` in a test env-var assignment (a glob, not a query string, to the
+     shell) and SC1007 on `VAR= \` before a line continuation.
+
+  6. NOT OBSERVED, marked [H]: the live beacon GET. It fires only after a
+     marker is delivered to a reachable sink, and the brief forbids a real
+     request to the example host, so URL construction, validation and encoding
+     are tested offline and the curl line itself is reviewed, not run.
+     Also not observed: deploy.started from activate.sh, which exits 6 on this
+     host before reaching it; and any real staging or production estate.
+
+Reproduction
+
+  command   ./change/marker.sh --selftest
+  output    31/31, "marker.sh: both directions confirmed"
+
+  command   ./gates/health-test.sh
+  output    6/6, "health.sh: three values, both directions confirmed"
+  cell      hydra, FreeBSD 14.4, curl shimmed onto PATH, no socket opened
+
+  command   MARKERS=1 HEALTH_SAMPLES=2 ./gates/health.sh http://127.0.0.1:9141 <sha>
+  output    UNREACHABLE x5, marker deploy.unreachable, kind "abstention",
+            samples_taken 10 / matched 0 / diverged 0 / unobserved 10,
+            builds_seen [], beacon MOCK, GATE EXIT 7
+  cell      hydra, nothing listening on 9141
+
+  command   ./experiments/015-marker-mutation/mutate.sh
+  output    13 mutations, 13 killed, 0 survived (after finding 3 above)
+
+  command   ./gates/shellcheck.sh ; python3 gates/label-audit.py ;
+            gmake -s gate-selftest ; gmake -s lint ; gmake -s test
+  output    shellcheck 36 scripts 0 findings; label-audit 16 findings, the
+            same SET as origin/main (sorted diff empty -- the totals matching
+            was coincidence in the previous review and is not here);
+            gate-selftest exit 0 with tla/ clean; lint and test green
+
+  not run   any request to wal.sh, any deploy, any label change, any port in
+            9000-9130 / 9200 / 9210 / 9220 / 9230 / 9999
