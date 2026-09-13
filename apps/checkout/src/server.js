@@ -62,9 +62,12 @@ ${SHIP.map(field).join('\n')}
 </form>` + (filled ? '<p><b>Ready to continue to payment.</b></p>' : '');
 }
 
+export const paymentPanel = (q) =>
+  `<h2>Payment</h2><p>You are about to pay <b>${DUE}</b>. Nothing is charged until you confirm.</p>`;
+
 export function renderHtml(path, port) {
   const q = new URL(path, 'http://x').searchParams;
-  const extra = path.split('?')[0] === '/checkout' ? shippingForm(q) : '';
+  const extra = { '/checkout': shippingForm, '/checkout/payment': paymentPanel }[path.split('?')[0]]?.(q) ?? '';
   return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND, extra);
 }
 
