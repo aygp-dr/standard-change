@@ -4,7 +4,7 @@
 APPS := $(notdir $(wildcard apps/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
-        audit audit-selftest simulate port-alloc port-free ports clean
+        audit audit-selftest simulate simulate-gates port-alloc port-free ports clean
 
 help:
 	@echo "env / env-check   .env from .env.template (warns if stale)"
@@ -54,7 +54,9 @@ audit-selftest:
 	@./gates/audit-controls.py --repo o/r --fixture gates/fixtures/audit/fail >/dev/null \
 	  && { echo "audit passes a non-compliant fixture"; exit 1; } || true
 	@echo "audit-controls: both directions confirmed"
+	@./gates/simulate-gates.py --check
 audit:           ; @./gates/audit-controls.py
+simulate-gates:  ; @./gates/simulate-gates.py
 simulate:        ; @./change/simulate.sh $(app)
 port-alloc:      ; @./change/ports.sh alloc
 port-free:       ; @./change/ports.sh free
