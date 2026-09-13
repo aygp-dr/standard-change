@@ -25,13 +25,15 @@ export function render(path) {
 // the gates assert on; HTML is only served when the client asks for it.
 // Issue #8 -- the checkout surface renders pink.
 export const BACKGROUND = '#ffd7e6';
+// Static copy, so no esc(): nothing in it comes from the request.
+export const ASSURANCE = '<p class=g style="margin:14px 0 6px">Your order is not charged until you confirm.</p>';
 
 // `port` is the port this process is ACTUALLY answering on: the caller takes it
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
 // it, and a tier derived from something the deployer exported would be the
 // estate reporting what it was told (issue #15).
 export function renderHtml(path, port) {
-  return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND);
+  return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND, ASSURANCE);
 }
 
 // Only listen when run directly. Importing this module (as the unit tests do)
