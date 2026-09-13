@@ -122,6 +122,25 @@ So there is no "promote" button, and adding =deploy:production= by hand is not
 one either — it is an *action* label, and asserting it claims the workflow is
 deploying right now.
 
+*** Two namespaces: annotations, and the record
+
+| namespace                    | what it is                                | lifetime                        |
+|------------------------------+-------------------------------------------+---------------------------------|
+| =staging:*=, =production:*=  | build/deploy *annotations* — a fact about a BUILD in an ENVIRONMENT | ephemeral; cleared per change   |
+| =change:*=                   | the *record* — a fact about the CHANGE    | durable; never cleared          |
+
+=change:requested= → =change:scheduled= → *=change:complete=*. That is the state
+machine, and =change:complete= is the *terminal state*.
+
+=production:healthy= is not terminal, and neither is =staging:uat=. Neither is
+about the change; both are about a build that happens to be the change's head
+at this moment. Push once and both are lies — which is why the labeller
+withdraws every one of them on =synchronize=.
+
+It also settles what may be cleared at completion. Annotations are cleared,
+because the record summarises them and the PR timeline keeps every add and
+remove with actor and timestamp. The record is not.
+
 *** Adding a label and removing it are different acts
 
 Who may *add* a label is not the same question as who may *remove* one, and

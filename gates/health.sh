@@ -13,7 +13,25 @@
 #
 # So: N samples per route, every one must report the expected build. This is
 # still only evidence, not proof -- see spec.org, What completes a deployment.
+#
+# --pr <n> [--env <name>] records the verdict as <env>:healthy. The gate records
+# its own result because the gate is the instrument. Without this flag the label
+# had to be typed by hand, which is asserting a measurement you did not take --
+# and it is exactly what happened on PR #9 (docs/label-ownership.org).
+#
+# It matters more here than for e2e or smoke: no GitHub runner can reach any
+# environment in this repository, so this label is the ONLY evidence the forge
+# will ever have that production converged. It is a proxy for the check run a
+# reachable environment would have reported.
 set -eu
+PR=''; ENV_=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --pr)  PR="${2:?--pr needs a number}"; shift 2 ;;
+    --env) ENV_="${2:?--env needs a name}"; shift 2 ;;
+    *)     break ;;
+  esac
+done
 base="$1"; want="$2"; samples="${3:-${HEALTH_SAMPLES:-5}}"; rc=0
 MODE="${HEALTH_MODE:-header}"   # header | manifest (static targets)
 
@@ -56,4 +74,24 @@ for app in $(jq -r '.[].app' router/routes.json); do
     echo "ok $app $path ($samples/$samples on $want)"
   fi
 done
+
+if [ -n "$PR" ]; then
+  repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
+  if [ -z "$ENV_" ]; then
+    case "$base" in
+      *:9200*) ENV_=staging ;; *:9230*) ENV_=production ;;
+      *:9210*) ENV_=production-blue ;; *:9220*) ENV_=production-green ;;
+      *)       ENV_=unknown ;;
+    esac
+  fi
+  # "sampled", never "attested": we probed N times and saw one build. Nothing
+  # enumerated the instances, because no platform runs this estate.
+  if [ "$rc" = 0 ]; then
+    gh pr edit "$PR" --repo "$repo" --add-label "$ENV_:healthy" >/dev/null 2>&1 || true
+    echo "  #$PR <- $ENV_:healthy  (sampled $samples/$samples on $want at $base)"
+  else
+    gh pr edit "$PR" --repo "$repo" --remove-label "$ENV_:healthy" >/dev/null 2>&1 || true
+    echo "  #$PR: $ENV_:healthy withdrawn -- this instrument observed a failure"
+  fi
+fi
 exit $rc

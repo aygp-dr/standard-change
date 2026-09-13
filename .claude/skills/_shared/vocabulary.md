@@ -40,6 +40,30 @@ and name which one.
 **`change:requested` is the only label a person adds to start a change.**
 Everything after is the system acting or observing.
 
+### Two namespaces: annotations, and the record
+
+The sharper cut, and the one that says which labels may be cleared:
+
+| namespace | what it is | lifetime |
+|---|---|---|
+| `staging:*`, `production:*` | **build/deploy annotations.** Facts about a BUILD in an ENVIRONMENT | ephemeral — they expire when the head moves, and are cleared per change |
+| `change:*` | **the record.** Facts about the CHANGE | durable — it is the thing being recorded |
+
+`change:requested` → `change:scheduled` → **`change:complete`**. That is the
+state machine, and `change:complete` is the terminal state.
+
+`production:healthy` is not terminal and neither is `staging:uat`, because
+neither is about the change — they are about a build that happens to be the
+change's head right now. Push once and both are lies, which is why
+`labeller.yml` withdraws every one of them on `synchronize`.
+
+This also settles what may be cleared. Annotations are cleared at completion
+because the record summarises them and the PR timeline retains every add and
+remove with actor and timestamp — 25 events on #9, checked, so clearing
+destroys nothing. `change:*` is never cleared, because it *is* the record.
+
+`app:*` and `change:standard` also survive: they describe what the change was.
+
 ### Adding and removing are different acts, with different owners
 
 The table above says who may *add* a label. It is not the same question as who
