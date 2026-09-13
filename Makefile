@@ -96,3 +96,6 @@ ports:  ## show the port registry
 ports: ; @./change/ports.sh list
 clean:  ## remove generated files
 clean: ; @rm -rf .run .env .env.ports
+
+dashboard:  ## the estate: queue, protected, team
+	@./dashboard

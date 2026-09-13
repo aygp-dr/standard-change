@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""dashboard -- the estate, as much of it as is worth watching.
+
+Deliberately NOT a per-service grid. A monorepo ships apps/** as one unit, so
+a services x environments matrix would show identical rows in every cell --
+which is what MonoWatch renders, correctly, for an architecture where services
+deploy independently. That is ADR 0002's Option A world, not this one.
+
+What is worth watching here is much smaller: which change holds the berth,
+which build is in staging, and which colour is live in production.
+
+    ./dashboard            -> dashboard.html
+    ./dashboard --text     -> the same, to stdout
+"""
+import datetime as dt
+import json
+import subprocess
+import sys
+
+REPO = "aygp-dr/standard-change"
+PROD, STG = "http://127.0.0.1:9200", "http://127.0.0.1:9201"
+JAILS = [("sc-staging", "10.0.0.60", "staging"),
+         ("sc-prod-1", "10.0.0.61", "production"),
+         ("sc-prod-2", "10.0.0.62", "production")]
+TEAM = [("env/checkout-team", "9100"), ("env/search-team", "9110"),
+        ("env/pdp-team", "9120")]
+
+
+def sh(*a, **k):
+    try:
+        return subprocess.run(a, capture_output=True, text=True, timeout=k.get("t", 8)).stdout.strip()
+    except Exception:
+        return ""
+
+
+def probe(base):
+    out = sh("curl", "-s", "--max-time", "3", f"{base}/version.json")
+    try:
+        return json.loads(out)
+    except Exception:
+        return None
+
+
+def jail_state():
+    rows = []
+    for name, ip, env in JAILS:
+        up = sh("jls", "-j", name) != "" or sh("sudo", "-n", "jls", "-j", name) != ""
+        v = probe(f"http://{ip}") if up else None
+        rows.append({"name": name, "ip": ip, "env": env, "up": up, "v": v})
+    return rows
+
+
+def live_colour():
+    out = sh("sh", "targets/bastille/front/switch.sh", "status")
+    if "MISMATCH" in out:
+        return "mismatch", out.splitlines()[0]
+    if "= green" in out:
+        return "green", out
+    if "= blue" in out:
+        return "blue", out
+    return "unknown", out or "front router down"
+
+
+def prs():
+    out = sh("gh", "pr", "list", "--repo", REPO, "--state", "open",
+             "--json", "number,title,labels,headRefName", t=20)
+    try:
+        return json.loads(out or "[]")
+    except Exception:
+        return []
+
+
+def collect():
+    p = prs()
+    def lab(x): return [l["name"] for l in x.get("labels", [])]
+    holder = next((x for x in p if "deploy:staging" in lab(x)), None)
+    queued = [x for x in p if "change:requested" in lab(x) and x is not holder]
+    waiting = [x for x in p if "blocked:queue" in lab(x)]
+    colour, cline = live_colour()
+    return {
+        "at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ"),
+        "holder": holder, "queued": queued, "waiting": waiting, "prs": p,
+        "jails": jail_state(), "colour": colour, "cline": cline,
+        "stg": probe(STG), "prod": probe(PROD), "lab": lab,
+    }
+
+
+def text(d):
+    L = []
+    L.append(f"CHANGE SCHEDULE / QUEUE                      {d['at']}")
+    L.append(f"  berth     {'HELD by #%d' % d['holder']['number'] if d['holder'] else 'FREE'}")
+    L.append(f"  requested {', '.join('#%d' % x['number'] for x in d['queued']) or '(none)'}")
+    L.append(f"  blocked   {', '.join('#%d' % x['number'] for x in d['waiting']) or '(none)'}")
+    L.append("")
+    L.append("PROTECTED — the path to production")
+    s = d["stg"]
+    L.append(f"  staging    :9201  {s['sha'] if s else 'unreachable'}"
+             f"   {'change #%d active' % d['holder']['number'] if d['holder'] else 'no change active'}")
+    for j in d["jails"]:
+        if j["env"] != "production":
+            continue
+        rep = (j["v"] or {}).get("replica")
+        col = "blue" if rep == 1 else "green"
+        mark = "*" if col == d["colour"] else " "
+        role = "ACTIVE" if col == d["colour"] else "idle — rollback target"
+        L.append(f"  {mark} production :9200  {col:<5} {j['name']:<11} "
+                 f"{(j['v'] or {}).get('sha','unreachable'):<9} {role}")
+    L.append("")
+    L.append("TEAM — real environments that CANNOT promote  (not exercised)")
+    for name, port in TEAM:
+        L.append(f"    {name:<20} :{port}   not provisioned")
+    L.append("")
+    L.append(f"OPEN CHANGES ({len(d['prs'])})")
+    for x in d["prs"]:
+        L.append(f"  #{x['number']:<3} {x['title'][:44]:<46} {', '.join(d['lab'](x))}")
+    return "\n".join(L)
+
+
+HTML = """<!doctype html><meta charset=utf-8><title>standard-change</title>
+<style>
+ body{{font:13px/1.5 ui-monospace,Menlo,monospace;background:#0f1115;color:#d7dae0;margin:0;padding:24px}}
+ h1{{font-size:15px;margin:0 0 18px;color:#8fa1b3;font-weight:600;letter-spacing:.04em}}
+ .p{{background:#161a21;border:1px solid #232833;border-radius:6px;padding:14px 16px;margin:0 0 14px}}
+ .t{{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:#6b7688;margin:0 0 10px}}
+ table{{border-collapse:collapse;width:100%}} td{{padding:3px 10px 3px 0;vertical-align:top}}
+ .ok{{color:#7fd18b}} .idle{{color:#6b7688}} .warn{{color:#e0a44b}} .bad{{color:#e06c75}}
+ .sha{{color:#7aa2f7}} .lab{{color:#8fa1b3;font-size:11px}}
+ .dot{{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px}}
+ .on{{background:#7fd18b}} .off{{background:#3a404d}}
+ .ft{{color:#4d5666;font-size:11px;margin-top:16px}}
+</style>
+<h1>standard-change — {at}</h1>
+{body}
+<div class=ft>Generated by ./dashboard from live state: jls, the running front router, and gh.
+No per-service grid: apps/** ships as one unit, so a services×environments matrix
+would show identical rows in every cell (ADR 0002).</div>
+"""
+
+
+def html(d):
+    def panel(t, inner):
+        return f'<div class=p><div class=t>{t}</div>{inner}</div>'
+    berth = (f'<span class=warn>HELD by #{d["holder"]["number"]}</span>'
+             if d["holder"] else '<span class=ok>FREE</span>')
+    q = ", ".join(f'#{x["number"]}' for x in d["queued"]) or '<span class=idle>none</span>'
+    b = ", ".join(f'#{x["number"]}' for x in d["waiting"]) or '<span class=idle>none</span>'
+    top = panel("change schedule / queue",
+                f"<table><tr><td>berth</td><td>{berth}</td></tr>"
+                f"<tr><td>requested</td><td>{q}</td></tr>"
+                f"<tr><td>blocked</td><td>{b}</td></tr></table>")
+    s = d["stg"]
+    rows = [f'<tr><td><span class="dot on"></span>staging</td><td>:9201</td>'
+            f'<td class=sha>{s["sha"] if s else "—"}</td>'
+            f'<td>{"change #%d active" % d["holder"]["number"] if d["holder"] else "<span class=idle>no change active</span>"}</td></tr>']
+    for j in d["jails"]:
+        if j["env"] != "production":
+            continue
+        rep = (j["v"] or {}).get("replica"); col = "blue" if rep == 1 else "green"
+        on = col == d["colour"]
+        rows.append(f'<tr><td><span class="dot {"on" if on else "off"}"></span>{col}</td>'
+                    f'<td>{":9200" if on else ""}</td>'
+                    f'<td class=sha>{(j["v"] or {}).get("sha","—")}</td>'
+                    f'<td>{"<span class=ok>ACTIVE</span>" if on else "<span class=idle>idle — rollback target</span>"}</td></tr>')
+    prot = panel("protected — the path to production", f"<table>{''.join(rows)}</table>")
+    team = panel("team — real, and cannot promote (not exercised)",
+                 "<table>" + "".join(
+                     f'<tr><td><span class="dot off"></span>{n}</td><td>:{p}</td>'
+                     f'<td class=idle>not provisioned</td></tr>' for n, p in TEAM) + "</table>")
+    chg = panel(f"open changes ({len(d['prs'])})", "<table>" + "".join(
+        f'<tr><td>#{x["number"]}</td><td>{x["title"][:48]}</td>'
+        f'<td class=lab>{", ".join(d["lab"](x))}</td></tr>' for x in d["prs"]) + "</table>")
+    return HTML.format(at=d["at"], body=top + prot + team + chg)
+
+
+if __name__ == "__main__":
+    d = collect()
+    if "--text" in sys.argv:
+        print(text(d))
+    else:
+        open("dashboard.html", "w").write(html(d))
+        print("  wrote dashboard.html")
+        print(text(d))

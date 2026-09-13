@@ -19,3 +19,4 @@ sim/.hypothesis/
 !.env.template
 targets/bastille/front/nginx.conf
 targets/bastille/front/tmp/
+dashboard.html
