@@ -77,6 +77,26 @@ c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --path-as-is \
 [ "$c" = "404" ] && { say "/statics/ traversal" "404 (correct)"; pass=$((pass+1)); } \
                  || fail "statics traversal returned $c, expected 404"
 
+# 2d. a browser must get a page, not a payload.
+#
+# Added after :9200 returned application/json to `Accept: text/html`. The estate
+# is clickable when the node apps serve it and is not when the jails do, because
+# targets/bastille/app.py does not content-negotiate -- so the thing a person
+# opens in a browser has never been the thing any gate looked at.
+#
+# This check is expected to FAIL against the bastille jails today. That is the
+# point: it is the difference between "the tests pass" and "the tests pass on
+# what we deploy", and the gate should be the thing that says so.
+htmltype() { curl -sI --max-time 5 -H 'Accept: text/html,application/xhtml+xml' "$base$1" \
+               | tr -d '\r' | awk 'tolower($1)=="content-type:"{print $2}'; }
+for path in / /checkout /search; do
+  m=$(htmltype "$path")
+  case "${m%%;*}" in
+    text/html) say "browser GET $path" "text/html"; pass=$((pass+1)) ;;
+    *)         fail "browser GET $path returned '${m:-none}', expected text/html" ;;
+  esac
+done
+
 # 3. cross-app journey: add-to-cart starts on pdp, asserts on cart (core)
 sku=$(get /p/SKU123 | jq -r '.app' 2>/dev/null)
 cart=$(get /cart    | jq -r '.app' 2>/dev/null)

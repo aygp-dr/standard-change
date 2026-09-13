@@ -96,6 +96,7 @@ which:
 | shape                | kind        | example               | added by hand? |
 |----------------------+-------------+-----------------------+----------------|
 | =change:requested=   | request     | someone asked         | *yes*          |
+| =release=            | *request*   | someone said go now   | *yes*          |
 | =hold:<env>=         | *hold*      | someone said not yet  | *yes*          |
 | =deploy:<env>=       | action      | work is in flight     | no             |
 | =<subject>:<state>=  | observation | *a check came back*   | no             |
@@ -120,6 +121,24 @@ enough to promote on is a report, not a gate.
 So there is no "promote" button, and adding =deploy:production= by hand is not
 one either — it is an *action* label, and asserting it claims the workflow is
 deploying right now.
+
+*** Adding a label and removing it are different acts
+
+Who may *add* a label is not the same question as who may *remove* one, and
+the two labels a person adds are opposites in both directions:
+
+| label | added by | removed by |
+|----------------+---------------------------+--------------------------------|
+| =release=      | *a person only* — intent  | *automation* — the scheduler consumes it |
+| =hold:staging= | *a person only*           | *a person only*                |
+
+A person must add =release= because it is the intent to ship and no machine
+may infer it. Automation must remove it because a trigger that stays on
+re-fires, and the second firing deploys a change that is already live.
+
+=hold:staging= is the mirror. A person must lift it, because the entire
+content of a hold is that a human has not looked yet — and only that human
+knows when they have. A hold a machine can clear is not a hold, it is a delay.
 
 *** The one way to stop it: =hold:staging=
 

@@ -154,6 +154,74 @@ and stays on the reachable part of the curve.
 
 * Options considered
 
+** Option 0 — automation blocks on facts; a human checks judgment  ← strongest after 2026-09-13
+
+*A person still starts the deployment, and still confirms they are inside the
+window they asked for. CI/CD does not verify that; it blocks on the handful of
+things a machine can actually observe.*
+
+The split is by *what is mechanically checkable*, not by what is important:
+
+| CI/CD blocks on (observable facts)        | a human confirms (judgment)              |
+|-------------------------------------------+------------------------------------------|
+| the environment is already held — a deployment is in progress | *am I in the window I requested?* |
+| an emergency is in flight                 | *should this go now, given what I know?* |
+| a change freeze covers this moment        | *is the thing in staging the thing I meant?* |
+| the branch is behind =main=               | *did I actually look at it?*             |
+
+Each left-hand item is a query with an unambiguous answer: a label exists or it
+does not, a window overlaps or it does not, a merge state is =BEHIND= or it is
+not. None of them requires the pipeline to know what the change *is*.
+
+*Why this rose to the top today.* Three findings on 2026-09-13, in one hour of
+walking a one-line change through the pipeline:
+
+1. *Guard 5 is tautological in manifest mode.* =deploy.sh staging deadbee=
+   followed by =health.sh= in manifest mode reports =5/5 on deadbee= and exits
+   0. =deadbee= is not a commit in this repository. The deployer writes
+   =/var/run/version.json= from the SHA it is handed and the guard reads it
+   back — it verifies the deployer's own assertion against itself. This is the
+   guard whose row in the vocabulary reads *"no bypass, ever"*.
+
+2. *The authorizing gate cannot run in the environment that authorizes.* The
+   e2e gate asserts =x-routed-to=, a header only the node stand-in router
+   emits. nginx does not set it, so the gate fails in staging and production
+   for a reason unrelated to the change.
+
+3. *The deployed thing is not the tested thing.* The jails run
+   =targets/bastille/app.py=, a Python stand-in. =apps/*/src/server.js= — what
+   every unit test, lint rule and local e2e run exercises — is never installed
+   in any environment.
+
+Any one of these is enough to refuse automatic promotion. Together they say
+something sharper: *the pipeline's confidence was not coming from its
+verification.* It was coming from the fact that nobody had checked the
+verification. An automation that claims to have verified and has not is
+strictly worse than one that blocks on four facts and says so, because the
+first spends the trust the second never asks for.
+
+*What it costs.* It is not automatic promotion, so it does not get the
+latency. It keeps a person in the loop for every production change, which is
+the cost Options A–E were all trying to remove.
+
+*What it buys.* Every claim the system makes is one it can actually support.
+The four blocking checks are cheap, observable, and not fakeable by the thing
+they constrain — which is precisely the property guard 5 turned out to lack.
+
+*It is not a retreat to Option E.* Doing nothing leaves the tautological guard
+in place and still calls it a guard. Option 0 deletes the claim and keeps the
+mechanism: the pipeline still refuses a held berth, a freeze, an emergency and
+a stale branch, automatically and without argument. It simply stops asserting
+that it has verified the change is good.
+
+*Route back to automatic promotion.* Option 0 is not permanent. It becomes
+Option B or A the moment the verification is worth trusting, and there is a
+concrete test for that: *a guard that cannot be made to fail by breaking the
+thing it guards is not a guard.* Guard 5 must reject a fabricated SHA. The e2e
+gate must run against nginx. The jails must run the apps the tests exercise.
+Until then, the honest position is that a human is doing the verifying, and
+the pipeline should say so rather than imply otherwise.
+
 ** Option A — do not build this; split the apps now  ← recommended if available
 
 If the four apps can be given hard contracts at the router and a path to
