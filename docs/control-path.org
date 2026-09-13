@@ -1,0 +1,96 @@
+#+TITLE: The control path — every human decision, and what is delegated
+#+DATE: 2026-09-13
+
+* Why this document
+
+On 2026-09-13 the repository owner delegated *two* of their decisions to a
+machine proxy for ten pull requests. A delegation that is not written down is
+indistinguishable from the machine having taken the decision on its own, which
+is the forged-observation defect at a larger scale. This is the record.
+
+* The four human decisions
+
+A change cannot reach production without a person, four separate times. They
+are different *kinds* of act and only two were delegated.
+
+| # | decision            | the act                         | label / mechanism         | delegated? |
+|---+---------------------+---------------------------------+---------------------------+------------|
+| 1 | *ask*               | I want this change to go        | =change:requested=, =release= | *no*   |
+| 2 | *take a slot*       | book me a window / put me in the queue | =schedule.sh block= (the scheduler books; the person asks) | *no* |
+| 3 | *approve*           | this code is fit to ship        | PR review =APPROVED=      | *yes* — proxy |
+| 4 | *accept*            | I used it and it is right       | =staging:uat=             | *yes* — proxy |
+
+** Why 1 and 2 stay with the person
+
+*Asking is intent, and no machine may infer it.* =release= is the label whose
+whole content is "a person wants this now". A proxy that adds it is not
+representing a decision, it is making one.
+
+*Taking a slot is a claim on a shared resource.* The scheduler books the window
+— a person hand-booking asserts an action nobody took (=change-request= skill)
+— but the *request* for a slot is the person's, because a window is a position
+in a queue that other changes are also waiting in. Delegating it would let a
+proxy displace work it cannot see.
+
+** Why 3 and 4 could be delegated
+
+Both are *judgements about an artifact that already exists*, not claims on a
+shared resource and not statements of intent. They can be given evidence-based
+decision rules, and the owner gave them:
+
+- *approve*: the seven checks in =.claude/agents/jwalsh.md=. Any one failing is
+  a refusal.
+- *accept*: =staging:uat= is granted *iff =gates/smoke.sh= exits 0* against the
+  environment serving that PR's head.
+
+* What the delegation changes, and what it must never hide
+
+=staging:uat= means *a person used it and accepted it*. Under the proxy it means
+*a smoke run exited 0*. Those are different facts, and the ADR is explicit that
+for acceptance "the person IS the instrument".
+
+*So the instrument changed, and the record says so every time.* The proxy:
+
+- opens every review with "Approved by the =jwalsh= review proxy, not by a
+  person", naming the delegation and its bound
+- after =observe.sh=, comments that acceptance was *machine-derived from smoke
+  exit 0*, not a human using the site, naming URL, build and check count
+
+The label is unchanged because the label cannot carry this. The *record* can,
+and the PR timeline keeps it — which is the same reason #22 moved repeatable
+observations from labels to records.
+
+** The honest cost
+
+A smoke run asserts that the journey is reachable, the links resolve, a browser
+gets HTML, and the journey crosses apps. It does *not* assert that the change is
+**right**. Smoke would have passed a checkout page that turned the wrong colour,
+or a price that rendered as =$NaN=.
+
+So under delegation, acceptance is *weaker than it was*, in a way the label does
+not show. That is the trade the owner made knowingly, bounded to ten PRs. It is
+recorded here rather than discovered later.
+
+* The bound
+
+*Ten pull requests from 2026-09-13.* After that the delegation lapses and both
+decisions return to the person, unless renewed explicitly.
+
+A delegation without a bound is a permanent change to who owns the decision,
+made without anyone deciding to make it.
+
+* What is still not delegated to anything
+
+- *merge* — =change/settle.sh=, and only after production converges
+- *deploy to production* — =targets/node/deploy.sh=, gated by guard 4
+- *cutover* — =targets/node/switch.sh=, which refuses a colour that is not
+  answering
+- *emergency* — =change:emergency= is a person's declaration, always
+
+* See also
+
+- =.claude/agents/jwalsh.md= — the proxy's rules and refusal conditions
+- =change/label-owners.tsv= — one declared writer per label
+- =docs/label-ownership.org= — why adding and removing are different acts
+- =docs/adr/0001-automatic-promotion.org=, "The human is the serialization
+  point" — why acceptance is the resource with no second copy
