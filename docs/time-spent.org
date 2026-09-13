@@ -1,0 +1,103 @@
+#+TITLE: What the invariants actually cost
+#+DATE: 2026-09-13
+
+* Why measure this
+
+The repo argues, repeatedly, that certain invariants are worth their cost. This
+is the cost, measured rather than asserted: *105 commits to =main= between
+06:19 and 14:41 local*, one working day, classified by which invariant the
+commit was serving.
+
+Commit counts are a proxy and a poor one — a one-line fix and a subsystem both
+count once. Treat the *shape* as the finding, not the arithmetic.
+
+* The distribution
+
+| invariant                        | commits | share | first | last  |
+|----------------------------------+---------+-------+-------+-------|
+| one writer per fact              |      20 |   19% | 08:46 | 13:58 |
+| observation is not intent        |      12 |   11% | 08:00 | 14:08 |
+| reserve is not deploy            |       8 |    8% | 06:36 | 14:06 |
+| the merge is settlement          |       7 |    7% | 06:19 | 13:57 |
+| a gate that cannot fail          |       3 |    3% | 07:44 | 14:41 |
+| unreachable is not falsified     |       2 |    2% | 08:22 | 14:34 |
+| blast radius is declared         |       2 |    2% | 06:22 | 10:36 |
+| the oracle must be independent   |       1 |    1% | 09:18 | 09:18 |
+| everything else                  |      50 |   48% |       |       |
+
+* What the numbers say, and what they do not
+
+** The expensive one is naming, not mechanism
+
+*"One writer per fact" cost the most — 19%, five hours* — and almost none of it
+was building anything. It was:
+
+- =staging:passed= naming no environment, so a pass from one estate satisfied a
+  guard about another
+- =production:healthy= flipping five times between a person and a workflow
+- =change:*= holding both classification and lifecycle, so "a PR has at most one
+  =change:*=" could not be stated
+- renaming to =itil:*= across nine files and sixteen live labels
+- =hold:staging= being rejected once =freeze= and precedence existed
+
+*Every one was a name that meant two things.* The mechanism was rarely wrong;
+the vocabulary was, and the vocabulary is what every guard branches on.
+
+** The cheap-looking ones are cheap because they fired early
+
+"Blast radius is declared" cost 2% and stopped at 10:36 — not because it
+stopped mattering, but because =shared/**= marking every app was settled once
+and then simply worked. Same for "the oracle must be independent": one commit,
+09:18, and it has been load-bearing ever since.
+
+*A low number here means the invariant was decided once and held.* That is the
+best possible outcome and it is indistinguishable, in this table, from an
+invariant nobody worked on.
+
+** The ones that span the whole day are the ones still not finished
+
+"Observation is not intent" runs 08:00 to 14:08. "Unreachable is not falsified"
+runs 08:22 to 14:34 on *two* commits — one in the morning, one six hours later,
+because the same defect reappeared in a different place: first
+=merge-on-healthy= recording unreachable-as-unhealthy, then =preflight= reading
+nineteen never-started check runs as red.
+
+*A wide span with few commits is a defect class, not a task.* It keeps coming
+back somewhere new.
+
+** Half the work is not classifiable as an invariant at all
+
+48% is apps, docs, deployment mechanics, and repairs to things I had broken an
+hour earlier. That is the honest denominator: *the invariants cost about half a
+day out of a day*, and the other half was the ordinary work they were protecting.
+
+* The cost nobody counts
+
+None of the above includes the time spent *finding* the defects, which was
+mostly not spent committing. Of the sixteen issues filed today, the expensive
+ones were found by:
+
+- running a deployment and reading the output (guard 5 on =deadbee=)
+- a subagent reading a diff (=mktemp -t=, which would have silently reduced e2e
+  from 27 checks to 0 on CI)
+- an agent doing something unrelated (the XSS, found while editing OneUI for a
+  footer)
+- *thirty minutes chasing a CI/local divergence that did not exist*, because
+  GitHub had stopped scheduling jobs and a never-started check reports the same
+  =failure= as a real one
+
+That last is the sharpest number in this document. *One defect class —
+unreachable collapsed into false — cost more wall-clock time in a single
+episode than most invariants cost all day*, and it cost it by making a correct
+system look broken.
+
+* What I would tell someone starting this
+
+1. *Spend the time on names first.* It was the largest cost and the one that
+   propagated — every guard reads the vocabulary, so an ambiguous label is a
+   bug in everything downstream of it.
+2. *Budget for the same defect arriving three times.* Unreachable-is-not-false
+   appeared in the merge workflow, in a marker script, and in preflight. Fixing
+   it once taught nothing to the other two.
+3. *The invariants are not the expensive part.* Half the day was ordinary work.
+   The invariants made that half safe; they did not replace it.
