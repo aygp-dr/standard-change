@@ -43,8 +43,16 @@ dev: ; @./change/ports.sh run-apps
 stop:  ## stop this worktree block
 stop: ; @./change/ports.sh stop
 
-test:  ## unit tests, every app
-test: ; @for a in $(APPS); do $(MAKE) -s -C apps/$$a test || exit 1; done
+test:  ## unit tests, every app plus the shared surface
+# shared/ is tested FIRST: every app imports it, so a failure there is a
+# failure in all of them and there is no point running four app suites to
+# learn it four times.
+# Name the FILES. `node --test <dir>` hands the directory to the CJS loader and
+# dies with MODULE_NOT_FOUND -- the same trap the per-app suites hit, which is
+# why they run bare `node --test` from inside the app directory.
+test: ; @node --test shared/tests/*.test.mjs >/dev/null 2>&1 || { node --test shared/tests/*.test.mjs; exit 1; }; \
+	  echo "  shared/oneui: ok"; \
+	  for a in $(APPS); do $(MAKE) -s -C apps/$$a test || exit 1; done
 lint:  ## lint every app plus the labeller oracle
 lint: ; @./router/generate.sh >/dev/null && \
 	  for a in $(APPS); do $(MAKE) -s -C apps/$$a lint || exit 1; done && \
