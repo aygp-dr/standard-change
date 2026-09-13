@@ -303,8 +303,14 @@ button.b-freeze{border-color:#2563eb;color:#93c5fd}
 button.b-freeze:hover{background:#12233d}
 button.b-emergency{border-color:#b91c1c;color:#fca5a5}
 button.b-emergency:hover{background:#3b1414}
-/* Already on: the button now LIFTS, so it stops advertising the declaration. */
-button.on{border-color:#30363d;color:#c9d1d9}
+/* LIFTING IS ITS OWN COLOUR. Once declared, the button no longer declares --
+   it undoes. Leaving it blue or red made the control that REMOVES a freeze look
+   identical to the one that IMPOSES it, which is the one confusion here with a
+   real cost. White, and it wins over the label colour. */
+button.on,button.b-freeze.on,button.b-emergency.on{
+  background:#f3f4f6;color:#0f1117;border-color:#f3f4f6;font-weight:600}
+button.on:hover,button.b-freeze.on:hover,button.b-emergency.on:hover{
+  background:#ffffff;border-color:#ffffff}
 /* An emergency or a freeze is a property of the WORLD. It does not sit in a
    row of chips beside "no emergency" -- when it is true it is the first and
    largest thing on the page, because every other number here is conditional
