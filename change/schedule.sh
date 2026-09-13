@@ -77,6 +77,7 @@ case "${1:-}" in
     groups="${3:-}"; mins="${4:-$QUANTUM}"
     [ -n "$groups" ] || { echo "refused: no groups — nothing to deploy" >&2; exit 2; }
 
+    # shellcheck disable=SC2046  # the split IS the point: slot() prints two fields
     set -- $(slot "$mins"); start="$1"; end="$2"
     env="${CHANGE_ENV:-staging}"
     sha=$(gh pr view "$pr" --repo "$repo" --json headRefOid -q '.headRefOid' | cut -c1-7)

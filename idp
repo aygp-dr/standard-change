@@ -60,6 +60,7 @@ case "${1:-show}" in
     pr="${2:?usage: idp schedule <pr>}"
     r=$(row "$pr"); [ -n "$r" ] || { echo "  #$pr has not requested a slot" >&2; exit 2; }
     mins=$(printf '%s' "$r" | cut -f3); [ "$mins" = - ] && mins=30
+    # shellcheck disable=SC2046  # the split IS the point: slot() prints two fields
     set -- $(slot "$mins"); s="$1"; e="$2"
     # One slot at a time, like the berth. A calendar that double-books is a
     # calendar that cannot be relied on -- last-write-wins is what made a shared
