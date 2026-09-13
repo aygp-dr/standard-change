@@ -8,5 +8,6 @@ main { max-width: 40rem }
 code { background: #fff; padding: 2px 6px; border-radius: 3px }
 a    { margin-right: 10px; display: inline-block }
 h1   { margin: 0 0 4px }
+h2   { margin: 22px 0 2px; font-size: 17px }
 .g   { margin: 2px 0; font-size: 13px }
 .v   { color: #999; font-size: 11px; margin-top: 22px }
