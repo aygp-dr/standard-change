@@ -1,0 +1,309 @@
+#+TITLE: standard-change — how this was reasoned about
+#+SUBTITLE: From system overview to a full mock run, and what each layer caught
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-13
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:2 num:t
+
+* What this document is
+
+The reasoning trail, in the order it happened. =spec.org= says what the system
+/is/; this says how it came to say that, and — more usefully — *which layer
+caught which defect*. Each verification layer is here because an earlier one
+could not have found what it found.
+
+Read it as evidence for a claim in =.meta/methodology.org=: cheap generation
+makes verification the scarce discipline. Five layers were built. Four of them
+found something the others could not.
+
+* The ladder, and what each rung caught
+
+| # | Layer                  | Question it answers                       | What it actually caught                                      |
+|---+------------------------+-------------------------------------------+--------------------------------------------------------------|
+| 1 | System overview        | what are we even protecting?               | the objective is production; the queue is an instrument       |
+| 2 | Control-flow diagrams  | where does a change physically go?         | staging is a singleton, not per-group slots                   |
+| 3 | Scenario catalogue      | what sequences are possible?               | *scenario D4* — an emergency strands another PR's staging pass |
+| 4 | TLA+                    | is D4 real, and does the fix work?         | confirmed D4 in 11 states; proved the fix at 830              |
+| 5 | PBT / exhaustive model  | does the implementation agree?             | why sampling fails here; D4 again, against the impl model     |
+| 6 | Live run                | does any of it run?                        | two shell defects no reading found                            |
+| 7 | Controls audit          | is any of it enforced?                     | *none of it is* — rulesets 403 on this plan                   |
+
+* 1. System overview — what is actually being protected
+
+The first useful move was refusing the obvious framing. "Protect the
+deployment pipeline" is not a goal; it is a category. The goal is:
+
+#+begin_quote
+No unsafe or unauthorized change reaches production.
+#+end_quote
+
+Everything else — the queue, the berth, the change calendar, the freeze
+windows — is an /instrument/. That hierarchy is not decoration, because it
+decides what may be traded away. See =spec.org= §The balance.
+
+The sharp consequence, and the reason this section exists at all:
+=change:emergency= is the *one* label that bypasses staging. So queue friction
+does not buy safety at the cost of speed — it *converts into traffic on the
+path with fewer checks*. =gates/simulate-gates.py= puts numbers on it: at a
+two-hour mean berth wait roughly a sixth of changes route to emergency; past
+four hours it is the majority. Over-protect the queue and you have optimised
+your way to less production safety, through the only door you left open.
+
+The second refusal was equally important: *this architecture is bad, on
+purpose*. Four apps share one router and one mock backend with no enforced
+contract between them, so any change might break any other, and the only
+remedy available is to serialize. The pipeline is the cost of a missing
+contract. Hard contracts at the router plus a path to production per team
+would dissolve the queue and make D4 /unstateable/ rather than defended
+against. That is in =spec.org= §What this model gets wrong, on purpose, so a
+reader cannot take the machinery home without the warning attached.
+
+* 2. Control flow — where a change physically goes
+
+#+begin_src mermaid :eval never-export
+flowchart TB
+    PR["PR opened"] --> L["labeller: app:*, change:*<br/>sync-labels: true"]
+    L --> G["gate.yml<br/>selftest -> lint, test, e2e"]
+    G --> C{"deploy:staging<br/>requested"}
+    C -->|"guard 0: behind main?"| R1["refused: rebase"]
+    C -->|"guard 1: berth held?"| R2["blocked:queue"]
+    C -->|"clear"| B["BERTHED<br/>deploy + authorizing e2e"]
+    B -->|"fail"| R3["staging:failed<br/>berth released"]
+    B -->|"pass"| V["VERIFIED<br/>staging:passed@sha"]
+    V -->|"guard 2: gates green on THIS sha"| P["CLEARED<br/>deploy:production"]
+    E["change:emergency<br/>+ approval"] -.->|"bypasses staging ONLY"| P
+    P -->|"guard 4b: main moved?"| W["pass withdrawn<br/>berth KEPT + extended"]
+    P --> D["production deploy"]
+    D -->|"guard 5: x-build-sha"| H{"healthy?"}
+    H -->|"no"| RB["rollback + PIR"]
+    H -->|"yes"| M["PIR, merge, release<br/>queue freed"]
+    W --> B
+
+    style B fill:#fde68a,stroke:#a16207,color:#000
+    style V fill:#fde68a,stroke:#a16207,color:#000
+    style D fill:#bbf7d0,stroke:#15803d,color:#000
+    style E fill:#fecaca,stroke:#b91c1c,color:#000
+#+end_src
+
+Drawing this is what killed the per-group staging slots. The 0.1 model had
+=staging-<group>-<n>=, which forced every guard to be parameterized by group
+and made =required_deployments= in a GitHub ruleset inexpressible. Collapsing
+staging to a singleton made the diagram legible and the ruleset rule exact —
+=required_deployment_environments: ["staging"]=. *The limitation we had blamed
+on GitHub was our own.*
+
+Guards 2 and 5 have no bypass at all, emergency included. An emergency may skip
+the staging /environment/; it may never ship red unit gates or leave an
+unhealthy production deploy standing.
+
+* 3. Scenarios — the catalogue found the defect
+
+=scenarios.org=: 13 labeller scenarios and 8 deployment sequences. Part A
+deliberately includes the *removal* half (L9–L12), because a labeller that only
+ever adds labels is the classic checker that cannot fail; and L13 asserts the
+catalogue itself breaks if =sync-labels= is off.
+
+Writing D4 by hand is what surfaced the central defect, before any formalism:
+
+#+begin_quote
+PR-S holds staging with =staging:passed=. An emergency PR-E jumps the queue,
+deploys, and merges to =main=. PR-S never pushed, so the SHA binding does not
+fire; guard 0 already ran at claim time. PR-S deploys to production with every
+gate green and *silently reverts the hotfix*.
+#+end_quote
+
+Worth recording plainly: *the catalogue found it, not the model checker.* The
+formalism came second, to decide whether the hand-argument was right.
+
+* 4. TLA+ — confirm the defect, prove the fix
+
+=tla/StandardChange.tla=. =Guard4b= is a CONSTANT precisely so the model /can
+fail/; =tla/check.sh= runs both directions and fails if either outcome inverts.
+
+| Run                | Result                                                     |
+|--------------------+------------------------------------------------------------|
+| =Guard4b = FALSE=  | =Invariant Safety violated=, =regressed = TRUE=, 11 states  |
+| =Guard4b = TRUE=   | no error; 3781 generated, 830 distinct, depth 16, queue empty |
+
+Queue empty matters: the pass is /exhaustive at that bound/, not truncated.
+
+Two failures before any finding, both mine, both kept in
+=experiments/001-d4-staging-regression/notes.org= because they resembled
+results: an unbounded =CHOOSE= for =NoPR= (fixed by making it a model value),
+and =Deadlock reached= on the positive run — not a violation, just the terminal
+state where every PR has merged. *A tooling error that looks like a result is
+the most expensive kind.*
+
+The lesson generalized past the instance, which is the real output:
+
+#+begin_quote
+A guard whose subject can change after it is checked must be re-checked at the
+moment it is relied on.
+#+end_quote
+
+Guard 0 at claim time is a convenience giving fast feedback. Guard 4b is the
+load-bearing one. No ruleset rule can replace it, because the window it closes
+opens *after* every ruleset check has passed.
+
+* 5. PBT — and an honest negative result
+
+=gates/pbt-pipeline.py=, two modes.
+
+** Sampling did not work, and why
+
+Hypothesis stateful testing, up to 3 PRs and 40 steps, could not find D4 —
+not at 300 examples, 2000, or with =target()= steering on the immediate
+precondition. Measured over 4000 random plays:
+
+| state reached                         | frequency |
+|---------------------------------------+-----------|
+| berth claimed                         |     37.6% |
+| staging pass held                     |     17.5% |
+| a hotfix merged                       |     13.6% |
+| *stale pass* (the D4 precondition)    |      1.1% |
+| *regression*                          |      0.0% |
+
+The reason is structural: the shortest path is *ten ordered operations with no
+interfering push or rebase*. Uniform rule sampling essentially never produces
+it. This is recorded rather than hidden, because "we ran property tests and
+they passed" would have been a false assurance — the suite could not have
+failed.
+
+** Exhaustive enumeration, which did work
+
+For "every permutation" at a small bound, enumerate instead of sample: BFS over
+reachable states of the implementation model.
+
+| Run               | Result                                                      |
+|-------------------+-------------------------------------------------------------|
+| =GUARD_4B=0=      | counterexample in 9378 transitions / 596 states              |
+| =GUARD_4B=1=      | 13176 transitions / 788 states, no violation                 |
+
+The shortest counterexample is D4 verbatim:
+
+#+begin_example
+ 1. gates_pass(PR1)        6. staging_passed(PR2)
+ 2. gates_pass(PR2)        7. promote(PR1)
+ 3. mark_emergency(PR1)    8. promote(PR2)
+ 4. approve(PR1)           9. deploy_and_merge(PR1)   <- main moves
+ 5. claim_staging(PR2)    10. deploy_and_merge(PR2)   <- ships a stale tree
+#+end_example
+
+This is not TLA+ repeated. TLA+ checks the *design*; this checks an executable
+model of the *implementation*, including the divergence classification
+(=inert= / =pipeline= / =artifact= / =hotfix=) that TLA+ abstracts away.
+
+* 6. Running it — what only execution found
+
+Bare metal by choice: FreeBSD is a poor docker/podman host and this is a
+pipeline simulator, so apps are dependency-free node processes on port blocks.
+=nginx= is not installed, so =router/server.js= stands in with the same
+longest-prefix contract driven by =router/routes.json=.
+
+Verified live: three blocks (main + two worktrees), 18/18 ports answering,
+routing isolated (=:10010/search= → =block 1=, =:10020/search= → =block 2=),
+and =x-build-sha= present on all three — the precondition guard 5 needs.
+
+Four defects that *no amount of reading would have found*:
+
+1. =ports.tsv= tangled with *zero tab characters* despite the name.
+2. =ports.tsv= was both a =:tangle= target and mutable state. The predicted
+   trigger fired exactly on cue: creating the second worktree, a re-tangle
+   restored a stale row and displaced both worktrees by one block.
+3. =ports.sh= resolved the registry relative to its own directory, so every
+   worktree kept a private =ports.tsv= and all allocated block 0.
+4. In =change/state.sh=: POSIX =sh= has no locals, so =write_state= clobbered
+   the caller's =$new=; and =extend= computed its deadline from /now/, so
+   extending a 30-minute hold by 20 minutes *shortened* it. An extension that
+   silently shortens a lease is exactly the class of defect this whole pipeline
+   exists to prevent.
+
+* 7. Mock run — labels, config, and the full trace
+
+The end-to-end shape the workflows implement, with every label transition.
+
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    autonumber
+    actor Dev
+    participant GH as GitHub
+    participant IDP as change control
+    participant Stg as staging
+    participant Prod as production
+
+    Dev->>GH: push -> PR #101 touching apps/pdp
+    GH->>GH: labeller: +app:pdp +change:standard
+    GH->>IDP: change submit --pr 101 --groups pdp
+    IDP-->>GH: CHG-20260913-0001 risk=8 type=standard
+    GH->>GH: gate-selftest -> lint, test, e2e (green @sha1)
+    Dev->>GH: +deploy:staging
+    GH->>IDP: queue.sh claim 101 (guard 0, guard 1)
+    IDP-->>GH: claimed; berth held 30m
+    GH->>Stg: deploy pdp@sha1, core/plp/checkout@prod
+    Stg-->>GH: authorizing e2e green -> +staging:passed@sha1
+    GH->>GH: promote.yml guard 2 -> +deploy:production
+    Note over GH,Prod: emergency #202 merges here in scenario D4
+    GH->>GH: main-moved.yml: divergence=hotfix -> -staging:passed<br/>berth KEPT, deadline extended
+    Dev->>GH: rebase onto main, re-add deploy:staging
+    Stg-->>GH: re-verified -> +staging:passed@sha2
+    GH->>Prod: deploy same digests
+    Prod-->>GH: health.sh x-build-sha == sha2 -> +production:healthy
+    GH->>GH: pir.sh comment, merge, release.sh
+    GH-->>Dev: labels cleared; queue freed; waiters told to rebase
+#+end_src
+
+** Configuration the run depends on
+
+| Kind      | Name                             | Purpose                                  |
+|-----------+----------------------------------+------------------------------------------|
+| variable  | =DEPLOY_TARGET=                  | =github= or =cloudflare=                 |
+| variable  | =EMERGENCY_CHANGE=               | freeze fallback when the calendar is down |
+| variable  | =PRODUCTION_URL=                 | guard 5 target                            |
+| env       | =staging=                        | branch policy restricted                  |
+| env       | =production=                     | required reviewer, =wait_timer= 0         |
+| ruleset   | on =~DEFAULT_BRANCH=             | PR + 4 status checks + strict + linear    |
+
+** What is verified, and what is not
+
+Verified: the labeller oracle (12 checks, negative-tested 3 ways), the TLA+
+model (both directions), the exhaustive implementation model (both directions),
+the gate simulation against its closed form, the controls audit against
+recorded fixtures (both directions), and 18 live ports across three blocks.
+
+*Not verified*: any of it against real GitHub Actions. No workflow has ever
+run. Every support-matrix cell in =spec.org= is =[H]=.
+
+* 7b. The audit's verdict: none of this is enforced
+
+=gates/audit-controls.py= — four reads, no UI visit. Against the live repo:
+
+#+begin_example
+4 ok, 0 findings, 4 absent, 8 unreadable
+#+end_example
+
+The eight unreadable are the entire ruleset table: both =repos/{r}/rulesets=
+and the classic =branches/main/protection= return
+=403 Upgrade to GitHub Pro or make this repository public=.
+
+*On a private repo on this plan the ruleset controls are unenforceable, not
+merely unconfigured.* That is the most important thing the audit has said, and
+it is why the tool keeps four outcomes instead of two. An audit that reported
+"no findings" because it could not read anything would have laundered an
+unknown as a pass — the precise failure =spec.org= §Verification contract
+exists to prevent. Unreadable exits 2; findings exit 1; clean exits 0.
+
+* The through-line
+
+Each layer earned its place by catching something the layer below could not:
+
+- prose found the *objective* (production, not the queue);
+- diagrams found the *shape* (singleton staging);
+- scenarios found the *defect* (D4);
+- TLA+ found the *proof*, and generalized it into a rule about guards expiring;
+- the exhaustive model found the *sampling blind spot*, and D4 again against
+  the implementation;
+- running it found *four defects no reading would have*;
+- the audit found that *none of it is enforced*.
+
+The last one outranks the rest. A pipeline whose controls are advisory is a
+description of a pipeline. Everything above is [H] until a workflow runs.

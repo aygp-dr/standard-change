@@ -219,6 +219,7 @@ everyone; the label governs one change.
 |-----------------+---------------------------------------------------------------|
 | =spec.org=      | canonical governing document                                   |
 | =scenarios.org= | labeller and deployment scenarios; the test plan               |
+| =WALKTHROUGH.org= | how this was reasoned about, and which layer caught what     |
 | =tla/=          | formal model of the promotion guards + =check.sh=              |
 | =CLAUDE.md=     | derived operational contract for agents                        |
 | =.meta/=        | operating disciplines and vocabulary                           |
