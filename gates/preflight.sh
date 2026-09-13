@@ -215,15 +215,28 @@ fi
 # flag. Excluding self would mean the PR you hung the estate flag on is the
 # one change the estate does not stop, which is the exact defect the split
 # was made to remove, surviving one level down.
-emg=$(gh pr list --repo "$R" --state open --label emergency \
+# SAME HOLDER AS THE FREEZE. This read open PRs only, while `frozen` had
+# already moved to issue #$ESTATE_ISSUE -- so a freeze declared on the holder
+# blocked correctly and an emergency declared on the same holder was invisible.
+# Two halves of one rule reading two different places is the defect this file
+# keeps finding elsewhere; it does not get an exemption for being ours.
+_emgheld=$(echo "$_held" | tr ' ' '\n' | grep -cx emergency || true)
+_emgstray=$(gh pr list --repo "$R" --state open --label emergency \
        --json number -q "[.[].number]|join(\", #\")" 2>/dev/null || echo "?")
+if [ "$_held" = "?" ] || [ "$_emgstray" = "?" ]; then
+  emg="?"
+elif [ "$_emgheld" -gt 0 ]; then
+  emg="the estate holder, issue #$ESTATE_ISSUE${_emgstray:+; also #$_emgstray}"
+else
+  emg="$_emgstray"
+fi
 
 if [ "$frozen" = "?" ] || [ "$emg" = "?" ]; then
   no "I could not check whether the estate is open." 4
 elif [ "$is_emg" -gt 0 ]; then
   yes "this is itil:emergency -- the freeze and queue rules do not apply to it"
   [ -n "$frozen" ] && note "freeze in force ($frozen); an emergency is what a freeze is FOR."
-  [ -n "$emg" ]    && note "an emergency is in flight on the estate (#$emg)"
+  [ -n "$emg" ]    && note "an emergency is in flight on the estate ($emg)"
   note "this will be in the PIR, and guard 2 and guard 5 still have no bypass."
 elif [ -n "$frozen" ]; then
   no "a DEPLOYMENT FREEZE is in force" 3
@@ -232,12 +245,12 @@ elif [ -n "$frozen" ]; then
   note "recovery: wait for the label to come off, or have a person declare"
   note "this itil:emergency -- their call, never yours."
 elif [ -n "$emg" ]; then
-  no "an EMERGENCY is in flight on the estate (#$emg)" 2
+  no "an EMERGENCY is in flight on the estate ($emg)" 2
   note "standard and normal changes do not progress while one is running."
   note "it will land under you and invalidate your staging pass (guard 4b),"
   note "so stopping now costs you a wait; proceeding costs you the berth,"
   note "the window and the revalidation as well."
-  note "recovery: wait for #$emg to settle, then re-request."
+  note "recovery: wait for it to settle ($emg), then re-request."
 else
   yes "the estate is open -- no freeze, no emergency in flight"
 fi

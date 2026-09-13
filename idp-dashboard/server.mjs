@@ -378,8 +378,19 @@ async function toggle(label,action){
   // Closing the estate stops every change in flight, so it asks first. Opening
   // it does not: an estate wrongly left closed is visible and annoying, an
   // estate wrongly opened is a change deployed into a freeze.
+  // No escaped newlines in this string. The page is itself a JS template
+  // literal in server.mjs, so an escaped newline written here arrives as a REAL
+  // one inside a single-quoted client string: unterminated literal, SyntaxError,
+  // and a page that returns 200 and renders nothing. The server was healthy and
+  // the thing a reader checks said so.
+  //
+  // This comment also cannot spell the escape out. The first version did, while
+  // explaining the problem, and the escape broke the comment across two lines so
+  // only the first was commented. Same shape as a shellcheck note that begins
+  // with the tool's own name, and as the label-audit comment that named the
+  // label prefix it was explaining. Three times today.
   if(action==='on'&&!confirm('Declare '+label.toUpperCase()+
-    '?\n\nThis closes the estate to every standard and normal change, '+
+    '? This closes the estate to every standard and normal change, '+
     'including any that is mid-flight right now.'))return;
   const r=await fetch('/api/estate/'+label+'/'+action,{method:'POST'});
   render(await (await fetch('/api/status')).json());
@@ -388,9 +399,14 @@ async function toggle(label,action){
 function togglebar(d){
   const f=d.flags||{};
   if(f.unknown)return '<span class=age>cannot toggle — the forge is unreachable</span>';
-  const b=(label,on)=>'<button class="'+(on?'dis':'arm')+'" '+
-    'onclick="toggle(\''+label+'\',\''+(on?'off':'on')+'\')">'+
-    (on?'lift ':'declare ')+label+'</button>';
+  // DATA ATTRIBUTES, NOT AN INLINE onclick. The inline version needed a quote
+  // inside a quote inside a template literal inside a template literal, and the
+  // escapes collapsed: the emitted HTML read onclick="toggle(''+label+''" and
+  // the whole script died with a SyntaxError. The page still returned 200 and
+  // rendered an empty body, which is the worst shape of failure -- the server
+  // was healthy and the thing a reader checks said so.
+  const b=(label,on)=>'<button class="'+(on?'dis':'arm')+'" data-label="'+label+
+    '" data-action="'+(on?'off':'on')+'">'+(on?'lift ':'declare ')+label+'</button>';
   return b('freeze',f.freeze)+b('emergency',f.emergency)+
     '<span class=age>writes to issue #'+esc(f.holder)+', the estate state holder — '+
     'an issue, not a PR, because an issue cannot be deployed and so cannot be '+
@@ -433,6 +449,10 @@ ws.onopen =()=>document.getElementById('ws').textContent='live (websocket)';
 ws.onclose=()=>{document.getElementById('ws').textContent='disconnected — polling every 10s';
   if(!window.__poll)window.__poll=setInterval(()=>fetch('/api/status').then(r=>r.json()).then(render),10000);};
 ws.onmessage=e=>render(JSON.parse(e.data));
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button[data-label]');
+  if(b)toggle(b.dataset.label,b.dataset.action);
+});
 fetch('/api/status').then(r=>r.json()).then(render);
 </script>`;
 
