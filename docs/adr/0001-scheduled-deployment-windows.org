@@ -4,7 +4,10 @@
 
 * Status
 
-Proposed. Scope is the *workflow* — change enablement and the scheduling of
+Proposed, and *B is the fallback* — four cheaper options beat it on the number
+that matters (§Decision rule). Recorded that way on purpose: an ADR that
+presents its own decision as the answer, when the measurement says otherwise,
+is advocacy rather than a record. Scope is the *workflow* — change enablement and the scheduling of
 deployment windows. It is deliberately *not* about the activated deployment
 itself: what a deployment does once it starts is deployment management's
 concern and belongs in a separate decision.
@@ -129,6 +132,62 @@ only *sooner*.
 *Take this option if you can. The rest of this document is what to do when you
 cannot.*
 
+** Option A2 — split the deployment out of the monorepo
+
+Distinct from A, and cheaper. A says give each app a contract and its own path
+to production; *A2 says only move the deployable surface out*, leaving the code
+where it is. One repo per deployable, or a deployment repo that consumes built
+artifacts, so a change to =pdp= cannot invalidate a change to =plp= because
+they no longer share a trunk.
+
+That is the whole of the contention: §The finding that decides this ADR
+measured 10–20 validation runs per shipped change, and *every one of them is
+caused by changes sharing a trunk they do not share a surface with*. Splitting
+the trunk removes the invalidation without requiring the full contract work.
+
+Cost: artifact promotion between repos, and a version-pinning problem where
+there was none. Cheaper than A, and it does not fix cross-app journeys — those
+still need somewhere to run, which is what staging remains for.
+
+** Option A3 — release trains
+
+Batch whatever is ready on a cadence and validate the batch once.
+=docs/release-strategies.org= measured it: *0.58 validations per shipped change
+against 13.63*, a 23× reduction, at 2.6 h mean latency against 12.5 h.
+
+It attacks the ratio directly rather than the capacity, which makes it the only
+option here that improves the number Option C cannot touch. Two findings that
+came with it and should not be lost:
+
+- the *throughput-optimal* train is red more often than green (P(green)
+  0.41–0.53) — you batch until the batch usually fails, and staff for
+  diagnosis;
+- the analytic optimum sits at a *92–99% predicted emergency share* on this
+  repo's own balance curve, i.e. unreachable. A short (≈1 h) train captures
+  ~98% of the amortisation and stays on the reachable part.
+
+*This is what the volume argument forces.* At Yegge's ~175 commits/day against
+a 30-minute build, our own =capacity_report= gives 48 slots/day/berth — 3.6×
+oversubscribed before a single gate fails. A train is not an optimisation
+there; it is the only shape that fits.
+
+** Option A4 — deploy main, not branches
+
+Every deployment is a deployment *of main*; features are independently tested,
+merged, and then main is what ships. Guard 0 becomes *unstateable* — there is
+no branch to be behind — and the berth stops needing to bind a branch.
+
+What it costs is what =docs/release-strategies.org= names: *"on main" becomes
+intent, not evidence.* The merge happens before the production evidence exists,
+so the thing that says a change is good is a merge rather than an observation.
+It also leaves guard 4b's predicate merely relocated from a branch to a SHA,
+not removed.
+
+Pairs naturally with a *merge queue*, which builds each candidate against
+current main and is guard 0 plus the merge-time half of guard 4b done natively
+(§A merge queue is most of this model, natively). Unavailable on this plan; on
+an enterprise account it is a switch.
+
 ** Option B — reservation + activation split (this decision)
 
 Accepts the shared surface and manages the contention honestly: plans capacity,
@@ -163,9 +222,21 @@ Leaves the change schedule as a record rather than a control, and leaves guard
 
 * Decision rule
 
-Choose *A* if the apps can be split within the horizon you care about; the
-scheduler is then wasted work. Choose *B* if they cannot, and treat B's
-measured ceiling as the standing argument for eventually doing A.
+In order of preference, and all of them beat B on the number that matters:
+
+1. *A* — contracts plus a path to production per team. Removes the contention.
+2. *A2* — split only the deployable surface out of the monorepo. Removes the
+   shared trunk, which is what actually causes the invalidation, without the
+   full contract work.
+3. *A4 + merge queue* — deploy main, let the forge build each candidate against
+   current main. Most of the front half of this model, natively, on enterprise.
+4. *A3* — release trains. The only option that improves *validations per ship*
+   (23×) rather than capacity. Mandatory at high commit volume.
+5. *B* — this decision. Correct only when none of the above is reachable.
+
+*B is the fallback, not the recommendation.* Choose it when the surface cannot
+be split in the horizon you care about, and treat its measured ceiling as the
+standing argument for eventually doing 1–4.
 
 Do not choose B expecting throughput. B buys *predictability, legibility and a
 correct place for the guards*. It does not buy capacity, and this ADR would
