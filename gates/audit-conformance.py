@@ -108,6 +108,22 @@ def audit(repo):
                  "action labels without observation labels — transitions are "
                  "driven by commands, not evidence"))
 
+    # -- every app directory needs a labeller rule, or its changes deploy
+    #    unlabelled. PR #7 touched apps/mock and got change:standard with no
+    #    app:mock, because the rule was never added when the app was.
+    apps, e1 = gh(f"repos/{repo}/contents/apps", ".[].name")
+    cfg, e2 = gh(f"repos/{repo}/contents/.github/labeler.yml", ".content")
+    if e1 or e2:
+        add((UNAVAIL, "labeller covers every app", e1 or e2))
+    else:
+        import base64
+        text = base64.b64decode(cfg).decode("utf-8", "replace")
+        uncovered = [a for a in apps.splitlines() if f"app:{a}:" not in text]
+        add((OK, "labeller covers every app", f"{len(apps.splitlines())} apps")
+            if not uncovered else
+            (FINDING, "labeller covers every app",
+             f"no rule for {', '.join(uncovered)} — their changes deploy unlabelled"))
+
     # -- enforced controls (may legitimately be unreadable)
     rs, err = gh(f"repos/{repo}/rulesets", "length")
     add((UNAVAIL, "ruleset enforcement", err) if err else

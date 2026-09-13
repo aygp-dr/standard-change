@@ -10,6 +10,9 @@ app:pdp:
 app:checkout:
   - changed-files:
       - any-glob-to-any-file: apps/checkout/**
+app:mock:
+  - changed-files:
+      - any-glob-to-any-file: apps/mock/**
 change:normal:
   - changed-files:
       - any-glob-to-any-file:
