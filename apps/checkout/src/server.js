@@ -18,7 +18,8 @@ export function render(path) {
 
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
-export const BACKGROUND = '#f4f4f5';
+// Issue #8 -- the checkout surface renders pink.
+export const BACKGROUND = '#ffd7e6';
 
 export function renderHtml(path) {
   const d = render(path);
