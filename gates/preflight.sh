@@ -34,7 +34,19 @@ if win=$(./change/schedule.sh current "$pr" "$env" 2>/dev/null); then
 else
   if ./change/schedule.sh list >/dev/null 2>&1; then
     no "I am NOT on the calendar. No open window for #$pr on $env covers now." 4
-    note "book one:  ./change/schedule.sh block $pr \"$groups\" 30"
+    # DO NOT PRINT A COMMAND THAT CANNOT RUN. With no app:* label $groups is
+    # empty and `block` refuses ("no groups -- nothing to deploy"), so the
+    # recovery line sent the reader to a second, unrelated failure. Observed on
+    # #40, whose app:* was never derived because the labeller has not run all
+    # session (GitHub not scheduling jobs, issue #34).
+    if [ -n "$groups" ]; then
+      note "book one:  ./change/schedule.sh block $pr \"$groups\" 30"
+    else
+      note "this change has no app:* label, so there is nothing to book yet."
+      note "the labeller owns app:* and derives it from the diff; if it has not"
+      note "run, that is the thing to fix -- booking a window for a change that"
+      note "deploys nothing would reserve the path to production for a no-op."
+    fi
   else
     no "I could not READ the calendar, which is not the same as it being clear." 4
     note "exit 4 blocks. An unreadable schedule is an unknown, not a yes."

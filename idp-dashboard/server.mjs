@@ -97,6 +97,11 @@ async function schedule() {
              groups: f.slice(6, -1).join(' '), sha: f.at(-1),
              closes_in_s: left, soak_fits: left > SOAK_S, expired: left <= 0 };
   });
+  // SORT ON THE PARSED INSTANT, NOT THE STRING. These happen to be RFC 3339 in
+  // UTC with a fixed Z, so lexical order matches chronological order today --
+  // which is exactly the kind of coincidence that stops being true the moment
+  // an offset or a different precision appears, and then sorts silently wrong.
+  rows.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   return Promise.all(rows.map(async (r) => ({
     ...r, ...(await resolvePr(Number(String(r.pr).replace('#', '')))),
   })));
@@ -191,6 +196,12 @@ async function estateFlags() {
 }
 
 async function snapshot() {
+  // A BOOKING NAMES A TARGET; IT IS NOT A STATEMENT THAT THE CHANGE IS THERE.
+  // The env column read straight off the reservation, so eight waiting changes
+  // all claimed `staging` while exactly none of them were on it. Ask the estate
+  // instead: the change is IN an environment when that environment is serving
+  // its build. Same rule as everywhere else here -- prefer the fact the system
+  // reports about itself over the one the caller supplied.
   const [envs, windows, flags] = await Promise.all([
     Promise.all(ENVS.map(probe)), schedule().catch(() => []),
     estateFlags().catch(() => ({ freeze: null, emergency: null, unknown: true,
@@ -200,6 +211,10 @@ async function snapshot() {
   // with what the front is serving. Disagreement is not an error -- mid-cutover
   // it is the expected state -- so it is reported, not flagged.
   const front = envs.find((e) => e.name === 'front');
+  for (const w of windows) {
+    const e = envs.find((x) => x.name === w.env);
+    w.in_env = !!(e && e.up && e.sha && w.sha && e.sha === w.sha);
+  }
   return {
     at: new Date().toISOString(),
     dashboard: { version: VERSION, build: BUILD },
@@ -466,7 +481,7 @@ function render(d){
     '<td class=dim>'+esc(x.groups||'—')+'</td>'+
     '<td class=sha>'+esc(x.sha)+'</td>'+
     '<td>'+remain(x)+'</td>'+
-    '<td class=n-'+esc(x.env)+'>'+esc(x.env)+'</td>'+
+    '<td class=n-'+esc(x.env)+'>'+(x.in_env?esc(x.env):'')+'</td>'+
     '<td class=dim>'+esc(x.id)+'</td></tr>').join('')
     // "no open window" and "the berth is free" are not the same claim. This
     // lists UNRESOLVED reservations -- a window whose end has passed but which
