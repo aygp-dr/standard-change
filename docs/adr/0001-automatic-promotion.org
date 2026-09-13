@@ -554,6 +554,78 @@ caller supplies, which is guard 5's problem in a second place.
 
 Covered below as an open question rather than a decision.
 
+* The human is the serialization point
+
+Added 2026-09-13, when four subagents were dispatched at once to "grind through
+the list and validate fast deployments" and the repo owner observed: *your
+human is single threaded.*
+
+That is not an aside. It is the constraint the rest of this ADR has been
+circling without naming.
+
+** Why parallelism stops mattering where it does
+
+Every guard in this pipeline is machine-checkable except one. =staging:uat= is
+recorded by =change/observe.sh=, and the declaration in
+=change/label-owners.tsv= gives its owner as *human* — the only observation
+label a person may write, because *for user acceptance the person is the
+instrument*.
+
+A repeatable measurement can be re-run by anything, anywhere, any number of
+times. =staging:e2e= is a marker at a point in time and a machine can take it
+again. *Acceptance is not repeatable.* A person looked at a page and formed a
+judgement, and no amount of capacity re-creates that.
+
+So the pipeline has two distinct scarce resources and only one of them was
+modelled:
+
+| resource         | scarcity                      | modelled as    |
+|------------------+-------------------------------+----------------|
+| path to production | one at a time               | the berth, guard 1 |
+| *human attention*  | *one at a time*             | *nothing*      |
+
+Four agents can produce four green PRs in parallel. They cannot produce four
+acceptances, and the fourth PR waits on a person exactly as long as if the
+other three had been built serially.
+
+** What this does to the measured numbers
+
+The finding above — ten to twenty validation runs per shipped change — is about
+*machine* work, and adding berths parallelizes it. This is the other half, and
+it does not parallelize at all.
+
+It also sharpens why release trains win by so much (0.58 validations per ship
+against 13.63, =docs/release-strategies.org=). A train does not merely amortize
+gate runs. *It amortizes the human*: one acceptance covers the batch, and
+acceptance is the resource that has no second copy.
+
+** The failure mode this creates
+
+Queueing work faster than it can be accepted does not make it ship faster. It
+makes the acceptance perfunctory, which is worse than slow, because
+=staging:uat= then asserts a judgement nobody really formed — the same defect
+as forging any other observation, arrived at through workload rather than
+dishonesty.
+
+A reviewer who accepts the fourth of four PRs in five minutes has not done four
+acceptances. The label says they did.
+
+** What follows
+
+1. *Do not dispatch parallel work whose bottleneck is acceptance.* Work that
+   needs no UAT — pipeline changes, gate fixes, anything with no =app:*= label
+   and therefore exempt from =gates/production-first.sh= — parallelizes freely.
+   Work that redeploys an app does not.
+2. *The berth should arguably be a lease on the person, not on staging.* Guard
+   1 asks whether staging is free. The scarcer question is whether the reviewer
+   is.
+3. *This is the strongest argument for a train* on this repo, stronger than the
+   validation-count argument, because it is about a resource that cannot be
+   bought.
+
+Recorded as an observation rather than a decision. The decision it points at —
+batch acceptance — is Option A3, already on the table.
+
 * Open — what happens when a change lands outside its window
 
 Left open deliberately on 2026-09-13, after PR #9 shipped to production outside
