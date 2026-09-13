@@ -1,0 +1,103 @@
+#+TITLE: 002 — can the pipeline run on the local Gitea?
+#+DATE: 2026-09-13
+#+OPTIONS: toc:nil num:nil
+
+* Hypothesis
+
+#+begin_quote
+The workflow set (=labeller.yml=, =gate.yml=, =deploy-*.yml=) runs on
+=hydra-gitea= with only small changes, and the controls audit has a Gitea
+equivalent read, so the model is not GitHub-specific.
+#+end_quote
+
+Motivated by =spec.org= §Availability is itself a finding: on GitHub the
+ruleset controls are unreadable on a private repo on this plan. A self-hosted
+forge has no such gate, so this is also a test of whether the /enforcement/
+story survives a move.
+
+* Success criterion
+
+A PR on =hydra-gitea= that acquires =app:*= from a labeller run, reaches a
+=staging:passed= status check, and is refused production when that check is
+absent. Falsified if any guard has no Gitea expression at all.
+
+* What could go wrong
+
+- *No runner.* Gitea Actions needs a registered =act_runner=. Confirmed absent
+  (below), so nothing can execute until one is installed.
+- *Host mode only.* On FreeBSD =act_runner= runs with label =host=, executing
+  steps in the local shell. Steps declaring =container:= or =services:= will
+  not run, and there is no container runtime on hydra (=podman= also absent on
+  nexus). Any workflow depending on service containers must be rewritten.
+- *No Environments.* Gitea has no GitHub-style environments and no "require
+  deployments to succeed" rule, so guard 4's staging prerequisite has to be a
+  *status check* emitted by =deploy-staging.yml= rather than a deployment
+  record. That weakens the audit: a status check is self-reported by the
+  workflow, whereas a deployment record is written by the forge.
+- Marketplace actions must resolve. =actions/checkout=, =actions/labeler= and
+  =actions/setup-node= are expected to work in host mode; unverified here.
+
+* Survey of record — 2026-09-13, hydra
+
+| Fact                  | Observed                                                       |
+|-----------------------+----------------------------------------------------------------|
+| Gitea                 | 1.26.1, =/usr/local/sbin/gitea web=, pid 1744, port 3000 [E]    |
+| HTTP                  | =GET /= → 200; =/api/v1/version= → ={"version":"1.26.1"}= [E]   |
+| Config                | =/usr/local/etc/gitea/conf/app.ini=, *no =[actions]= section* [E] |
+| =act_runner=          | *not installed* — not on PATH, no process, no rc.d script [E]   |
+| rc.d scripts          | =gitea= only [E]                                                |
+| Container runtime     | none on hydra; =podman= "Does not exist" on nexus [E, reported]  |
+| Repos visible         | 7 unauthenticated, all =public_html=-style scratch [E]          |
+| API surface           | 300 paths in =swagger.v1.json= [E]                              |
+
+Because =app.ini= has no =[actions]= block, Actions runs on whatever the 1.26
+default is. Gitea enabled Actions by default from 1.21, so it is /probably/ on
+— but that is [H] until read from the running config with an admin token, and
+it does not matter yet because there is no runner.
+
+* The audit read has a Gitea equivalent
+
+Confirmed present in this build's swagger:
+
+| Control                  | GitHub                          | Gitea                                              |
+|--------------------------+---------------------------------+----------------------------------------------------|
+| branch rules             | =repos/{r}/rulesets=            | =repos/{o}/{r}/branch_protections= [E]             |
+| runner presence          | (hosted)                        | =repos/{o}/{r}/actions/runners= [E]                |
+| variables                | =repos/{r}/actions/variables=   | =repos/{o}/{r}/actions/variables= [E]              |
+| secrets                  | =repos/{r}/actions/secrets=     | =repos/{o}/{r}/actions/secrets= [E]                |
+| runs / jobs / workflows  | =actions/runs=, =/jobs=         | same shapes present [E]                            |
+| environments             | =repos/{r}/environments=        | *none* — no equivalent [E]                         |
+| required deployments     | ruleset rule                    | *none* — must become a status check                |
+
+Gitea branch protection covers required PR, required approvals, required
+status-check contexts, block force push, block deletion, and a bypass
+whitelist. That is most of the =spec.org= §Controls audit top table. The two it
+cannot express are environments and required-deployments — precisely the two
+that GitHub /can/ express but which this account cannot read on a private repo.
+*The two forges fail in different places*, which is the interesting result: on
+GitHub the controls exist and are unreadable; on Gitea they are readable and
+partly absent.
+
+* Running
+
+Blocked. Prerequisites, in order:
+
+1. Confirm =[actions] ENABLED= from the running config (admin token).
+2. Install and register an =act_runner= with label =host=. Needs root, and
+   =pkg= on hydra currently fails with "Repository FreeBSD cannot be opened.
+   'pkg update' required".
+3. Create a repo, push the workflow set, adjust =actions/*= versions.
+4. Re-point =gates/audit-controls.py= at =branch_protections= behind a
+   =--forge gitea= flag.
+
+* Promotion checklist
+
+- [X] Forge identified and reachable
+- [X] Audit read identified and confirmed present in the API
+- [X] Blockers named rather than discovered later
+- [ ] Runner installed and registered
+- [ ] Workflow set runs
+- [ ] A guard observed to refuse something
+
+Nothing here is promoted. This is a survey, and every pipeline claim about
+Gitea remains [H].

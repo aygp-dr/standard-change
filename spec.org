@@ -403,6 +403,14 @@ only thing that can state it is =change:emergency=.
 /environment/; it may not ship code whose unit and lint gates are red, and it
 may not leave an unhealthy production deploy standing.
 
+*Guard 2 is therefore evaluated twice*, in =promote.yml= and again in
+=deploy-production.yml=. This is not belt-and-braces: =promote.yml= is gated on
+the =staging:passed= label, so the emergency path never reaches it. A single
+evaluation there would have given guard 2 precisely the bypass this paragraph
+denies. [E — the omission was real and shipped; see §Open items.] Note the TLA+
+model had it right all along: =Promote= and =DeployAndMerge= both require
+=gated[p]=. The workflow, not the model, had drifted.
+
 ** Guard 0 — up to date with main
 
 A standard or normal change must contain the current tip of =main= before it
@@ -760,6 +768,21 @@ jobs:
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
       - uses: actions/checkout@v4
+      # Guard 2 AGAIN, here and not only in promote.yml. promote.yml is gated on
+      # the staging:passed label, so the emergency path never reaches it; without
+      # this step guard 2 has exactly the bypass the spec says it does not have.
+      - name: require gates green on head SHA
+        run: |
+          sha="${{ github.event.pull_request.head.sha }}"
+          runs=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs")
+          bad=$(echo "$runs" | jq '[.check_runs[]
+                 | select(.name|test("^(gate-selftest|lint|test|e2e)"))
+                 | select(.conclusion != "success")] | length')
+          self=$(echo "$runs" | jq '[.check_runs[]
+                 | select(.name|test("^gate-selftest$"))
+                 | select(.conclusion == "success")] | length')
+          [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha"; exit 1; }
+          [ "$self" -ge 1 ] || { echo "::error::gate-selftest did not pass on $sha; gate results are void"; exit 1; }
       # Guard 4: no production without a staging pass on THIS SHA, unless emergency.
       - name: require staging pass or emergency
         run: |
@@ -1200,6 +1223,12 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
   currently lives in a directory named =slipway=. Declared deviation, review
   ledger. Trigger to resolve: before the first commit that creates a GitHub
   remote.
+- *Guard 2 was unimplemented on the emergency path* — *fixed*. The check-run
+  query lived only in =promote.yml=, which is gated on =staging:passed=, so an
+  emergency reaching production never evaluated it. Found by auditing the
+  workflows against the spec's own claims rather than by any test, because no
+  test exercises real workflows yet. Trigger for re-check: the first live
+  emergency run.
 - *Ruleset enforcement is unavailable* on a private repo on the current plan
   (403 on both the rulesets and branch-protection APIs) [E]. Until resolved,
   every ruleset control is advisory and only the workflow-level guards are
