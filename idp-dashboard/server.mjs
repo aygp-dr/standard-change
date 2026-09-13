@@ -195,6 +195,12 @@ td{padding:5px 12px 5px 0;border-bottom:1px solid #1a1d26}
 .n-production-blue{color:#60a5fa;font-weight:600}
 .n-production-green{color:#4ade80;font-weight:600}
 .n-front{color:#f87171;font-weight:700}
+/* Dev blocks grey: present, disposable, and deliberately not competing with
+   the protected rows for attention. Team placeholders stay default -- they are
+   reservations, and greying them would read as "running but unimportant"
+   rather than "declared, nothing there". */
+.n-dev-0,.n-dev-1,.n-dev-2,.n-dev-3,.n-dev-4,
+.n-dev-5,.n-dev-6,.n-dev-7,.n-dev-8,.n-dev-9{color:#6b7280}
 .swatch{display:inline-block;padding:2px 9px;border-radius:3px;font-size:11px;
 font-weight:700;letter-spacing:.05em}
 .sw-blue{background:#12233d;color:#93c5fd;border:1px solid #2563eb}
