@@ -1,0 +1,387 @@
+#+TITLE: The label state machine, as it actually is
+#+DATE: 2026-09-13
+
+* What this is
+
+The label semantics of this repository, transcribed from the scripts that run
+rather than from the documents that describe them, and then thrashed against a
+TLA+ model until one of them broke. Both broke. Every disagreement is recorded
+below, including the ones that turned out to be defects in the checkers.
+
+Three artifacts:
+
+| =sim/label_sim.py=   | explicit-state checker over the label namespace; exhaustive to a bound, property-based past it |
+| =tla/Labels.tla=     | the same properties as a TLA+ module, checked by TLC through =tla/check.sh= |
+| =sim/cross_check.py= | asks both the same question under the same assumptions and requires the same answer |
+
+Run them:
+
+#+begin_src sh :eval no
+./sim/label_sim.py                      # what is true of the repo today
+./sim/label_sim.py --selftest           # the negative test, BOTH directions
+./sim/label_sim.py --question emergency # the decision this was built for
+./sim/cross_check.py                    # simulator vs model, property by property
+./tla/check.sh                          # TLC, every constant in both directions
+#+end_src
+
+* The machine
+
+Three axes of the *change*, and a fourth thing that is not about the change at
+all. Conflating any two of them is the defect this repository keeps finding,
+and the fourth is the one with no namespace.
+
+| axis | labels | cardinality | written by |
+|------+--------+-------------+------------|
+| *class* | =itil:standard= =itil:normal= =itil:emergency= | exactly one, once classified | labeller derives standard/normal; a *person* declares emergency |
+| *lifecycle* | =change:requested= → =change:scheduled= → =change:complete= | at most one active | human, then scheduler, then =settle.sh= |
+| *scope* | =app:*= =control-plane= | derived from the diff | labeller |
+| *estate* | =freeze=, a berth held, an emergency in flight | — | a person, the workflow, and *nothing* |
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction LR
+    [*] --> requested: a person asks
+    requested --> scheduled: scheduler books a window
+    scheduled --> berthed: preflight 0, queue.sh claims deploy:staging
+    berthed --> observed: e2e, smoke, then a person accepts
+    observed --> inprod: guard 4 authorizes on the RECORD
+    inprod --> complete: settle.sh sets change:complete
+    complete --> merged: the merge follows completion
+    merged --> [*]: cleanup clears change:complete
+#+end_src
+
+The estate is orthogonal to all of it and gates the =scheduled -> berthed= and
+=observed -> inprod= edges:
+
+#+begin_src mermaid :eval never-export
+flowchart TD
+    A["preflight asks: is the estate open?"] --> B{"freeze on any open PR?"}
+    B -->|yes| C["exit 3"]
+    B -->|no| D{"itil:emergency on any OTHER open PR?"}
+    D -->|yes| E["exit 2"]
+    D -->|no| F["exit 0"]
+    C --> G{"am I itil:emergency?"}
+    E --> G
+    G -->|yes| F
+    G -->|no| H["do not proceed"]
+#+end_src
+
+That last diamond is the whole subject of the verdict below. *The label that
+answers "is an emergency in flight" and the label that answers "am I exempt"
+are the same label.*
+
+* The verdict on a bare =emergency=
+
+*A bare =emergency= label IS necessary.* Not because the two readings are
+confusable — because *the write that closes the estate is the write that
+exempts its own carrier from the closure.*
+
+** The state that decides it
+
+Found by =./sim/label_sim.py --question emergency=, reproduced by TLC as
+=tla/check.sh='s =NoSplitEmergency= negative. It is one step from the initial
+state, which is as concrete as a counterexample gets:
+
+#+begin_example
+  human/itil:emergency pr0
+
+  one human write closed the estate to every other change AND moved pr0 from
+  blocked to exempt. The carrier of the declaration is the remedy for it by
+  construction, whatever the change actually contains.
+#+end_example
+
+Adding =itil:emergency= to a PR does two things at once, to two different
+subjects, and they point in opposite directions:
+
+| for every OTHER open PR | the estate is closed — =preflight= exit 2 |
+| for THIS PR | "the freeze and queue rules do not apply to it" — exit 0 |
+
+** Why no amount of query-scoping fixes it
+
+The obvious rescue is to narrow the blocker query: read "in flight" as
+=itil:emergency= *and* still deploying, or *and not* =change:complete=. Every
+version fails, and for the same reason: *both readings read the same PR's own
+label set.* The exemption must be read off the class — that is what the
+exemption is about — so anything that makes the class true makes the exemption
+true, and the declaration is the class.
+
+The consequence is sharpest in the case the rule is actually written for: *an
+emergency being handled outside the pipeline.* A person is fixing production by
+hand. There is no PR to classify. To declare the estate closed you must hang
+=itil:emergency= on some open PR — and doing so hands that PR a bypass of every
+blocker in =preflight=. *The one change that must not proceed becomes the only
+one that may.*
+
+** The shape of the fix, and why it is already half-built
+
+=freeze= already has exactly the shape required: a bare, estate-level label, on
+any open PR, blocking everyone and classifying nobody. =preflight='s own
+comment says freeze and emergency are *one rule with two causes* — and then
+gives one cause an estate label and reads the other off a classification.
+
+So the split is not new machinery. It is making =preflight='s own sentence
+true:
+
+| label | axis | says |
+|-------+------+------|
+| =itil:emergency= | class | this change is an emergency change. Grants the exemption. Persistent — it stays true after the change ships |
+| =emergency= | estate | an emergency is in flight. Blocks every ordinary change. Transient — a person adds it and a person removes it, exactly like =freeze= |
+
+With the split, =./sim/label_sim.py --repair estate-emergency= and TLC's
+positive run both report the property holding, and the selftest confirms the
+repair is what moved it.
+
+* The disagreements
+
+** Between the checkers
+
+Three, and each one was a defect in a checker rather than in the pipeline.
+Recording them because a cross-check that never disagrees is a cross-check
+nobody has tested.
+
+*** 1. =ClassAtMostOne= — stated over two different things
+
+The TLA+ module stated the declared cardinality over the *label set* and found
+it violated. The simulator stated it over =preflight='s *verdict* and found it
+holding, because =preflight= refuses a two-class PR.
+
+Both were true, of different properties, and the simulator's was too weak — it
+was hiding #2. Split into two properties in both encodings: =ClassAtMostOne=
+(the declaration, *violated today*) and =NoUndefinedClassMoves= (=preflight='s
+refusal, which holds and is what stops the violation changing any verdict).
+
+*** 2. The self-grading oracle — in BOTH encodings
+
+=OrdinaryChangeWaits= asks whether an ordinary change moved while the estate
+was closed. Both encodings originally computed "is the estate closed" through
+the same switch that turns the *rule* on and off. So switching the rule off
+switched off the ability to notice it had been switched off, and both negative
+runs passed while proving nothing.
+
+This is =docs/changing-the-pipeline.org='s guard 5 defect, in a model: *if the
+thing being checked supplies the evidence, there is no check.* It was found in
+the simulator by its own selftest, then looked for — and found — in the TLA+.
+Both now evaluate the estate through an oracle independent of the rule under
+test.
+
+*** 3. The constants are not independent
+
+=tla/check.sh= already carries this lesson at the top of the file, about
+=Guard4b= and =ProdFirst=. It recurred twice more here:
+
+- =ClassConflictRefused='s negative run passes for the wrong reason unless
+  =ClassExclusive= is FALSE too — with the group enforced, no PR can carry two
+  classes, so =preflight='s refusal has nothing to refuse.
+- =cross_check.py= manufactured a disagreement by mutating from the
+  all-repairs-on baseline while the simulator mutated from as-is.
+
+*Third and fourth instances of one rule*: a negative run that does not say
+*which* defect it reproduced has not been shown to reproduce that defect.
+
+** Between the checkers and the running scripts
+
+These are findings about the pipeline. All are reachable states with traces;
+none is hypothetical.
+
+*** F1 — =freeze= has no owner, and =blocked:freeze= has no writer
+
+=gates/preflight.sh= blocks on ~gh pr list --state open --label freeze~.
+=freeze= has *no row in =change/label-owners.tsv=* — it is the exact condition
+=docs/label-ownership.org= was written for, sitting in the file that enforces
+the rule. Meanwhile =blocked:freeze= *is* declared, owned by =preflight=, and
+nothing writes it anywhere in the tree.
+
+=gates/label-audit.py= cannot see this: it audits every label *write* against
+the declaration, and =freeze= is only ever *read*. *A label that is read and
+never written is invisible to an audit built around writers.*
+
+Also note =preflight='s freeze query does not exclude self, unlike its
+emergency query.
+
+*** F2 — the class cardinality is declared and enforced nowhere
+
+The labeller derives =itil:standard= or =itil:normal= from the diff; a person
+declares =itil:emergency=. Nothing reconciles them, so a PR carries both — #2
+did. =preflight= refuses such a PR, which is a mitigation, not enforcement, and
+the declaration's own "who resolves a violation" column says *a person*.
+
+Reachable in one step from a derived class. The fix that makes it enforcement:
+declaring an emergency *retires* the labeller's derived class, and the labeller
+stands off a class a person has declared.
+
+*** F3 — a change with NO class satisfies every rule that branches on the class
+
+The group's cardinality is =<=1=, which permits *zero*. The labeller's classify
+step matches neither branch on an inert diff and *leaves the class alone*, so
+such a change carries no class at all. Every rule in =preflight= branches on
+the class, and an unclassified change falls through all of them and reaches
+production.
+
+Worse, the four definitions of "pipeline" in this repository do not agree, so
+which diffs land in that hole is itself unclear:
+
+| source | what counts |
+|--------+-------------|
+| =.github/labeler.yml= =control-plane= | =gates/= =change/= =.github/= |
+| =.github/labeler.yml= =itil:normal= | =router/= =gates/= =change/= =targets/= =.github/= |
+| =labeller.yml= classify step | ~^(router\|gates\|change\|targets)/~ or ~^\.github/~ |
+| =change/divergence.sh= | =targets/= =gates/= =change/= =.github/= =Makefile= |
+
+A =Makefile=-only change is =pipeline= to =divergence.sh= and *unclassified* to
+the labeller.
+
+*** F4 — the lifecycle accumulates; the group says at most one is active
+
+Nothing clears =change:requested=. The declaration says "the pipeline clears
+it"; the only thing that does is =settle.sh='s cleanup, at the very end. So a
+booked change carries =change:requested= *and* =change:scheduled=, and after
+=settle.sh= it carries =change:complete= as well — because =settle.sh= adds the
+terminal state without removing =change:scheduled=.
+
+*Two* accumulation sites, not one. The first repair attempt only fixed the
+booking and the simulator's selftest caught that the finding was misdiagnosed.
+
+*** F5 — an emergency waits for the berth, and the berth waits for the emergency
+
+=gates/preflight.sh= checks the berth *before* it checks the estate, and the
+berth check carries no exemption. So:
+
+#+begin_example
+  pr1 is an emergency refused with exit 5 for pr0's berth, and pr0 is refused
+  with exit 2 because pr1 is an emergency in flight. Neither can move and
+  nothing else clears deploy:staging.
+#+end_example
+
+Nothing releases the berth. =deploy:staging= is owned by the workflow and
+cleared by =change/settle.sh=, which =pr0= can never reach. ADR 0001 S8 says
+"an emergency is what a freeze is FOR; blocking it would mean the freeze
+prevents its own remedy" — and this blocks it, through a check that runs
+earlier than the one the exemption was written for.
+
+The repair is preemption, and *preemption must be eviction, not sharing*: the
+first attempt let the emergency claim a berth somebody else held and
+=BerthSingleton= went red. The evicted change must be told, which is what
+=blocked:queue= exists for.
+
+*** F6 — =change:complete=: the declaration contradicts itself and the code
+
+=change/label-owners.tsv= gives =change:complete= =persistent yes= and the note
+"TERMINAL, and the record. Never cleared". The *exclusion group note in the
+same file* says it "is cleared at cleanup". =change/settle.sh= clears it.
+=gates/label-audit.py= already reports this as a failure.
+
+The code is right — see the commit "change:complete is set before the merge,
+cleared by cleanup". *The row is the bug.*
+
+*** F7 — the control-plane soak is documented and unbuilt
+
+=docs/changing-the-pipeline.org= says a pipeline change is proven by *use*,
+across N subsequent deployments, and that such a change "must not auto-merge:
+it is not proven until later changes have shipped through it". Nothing
+implements it: a =control-plane= change is counted proven at its own merge.
+
+*** F8 — =change/settle.sh= aborts before it can complete anything
+
+Not found by the simulator — found by reading the script while transcribing it,
+and confirmed at a shell:
+
+#+begin_example
+  $ sh -c 'set -eu; R=good; echo "${repo}" 2>/dev/null || true; echo AFTER'
+  sh: repo: parameter not set
+  exit=2
+#+end_example
+
+=settle.sh= runs under =set -eu= and uses =$R= throughout, except for one line:
+
+#+begin_example
+  gh pr edit "$pr" --repo "$repo" --add-label change:complete >/dev/null 2>&1 || true
+#+end_example
+
+=$repo= is never assigned. Under =set -u= an unbound expansion exits the shell
+*before* the =|| true= can catch it. So =settle.sh= dies at that line every
+time: =change:complete= is never set, the merge never runs, the PIR is never
+posted, the window is never redlined and the berth is never released.
+
+*This is the highest-severity item here and it is a one-word fix.* It is also a
+neat illustration of the repository's own thesis: it sits immediately after the
+comment explaining why the terminal state is set before the merge, it is
+covered by no test, and nothing in four encodings of the state machine can see
+it, because the state machine is not where it lives.
+
+** Between the model and the documents
+
+- Both existing specs model =emergency= as a *break-glass bypass only*. Neither
+  can express an emergency that *blocks* anything, because neither has a
+  variable that is not indexed by a PR. The estate is inexpressible in
+  =StandardChange.tla= and =Concurrent.tla=, which is why the question could
+  not be settled from the model before =Labels.tla=.
+- =Concurrent.tla= names the class label =change:emergency=. The namespace
+  split of 2026-09-13 renamed it =itil:emergency=. =docs/control-path.org=
+  still says =change:emergency= in "What is still not delegated to anything",
+  and ADR 0001 S8's table says it too.
+
+* The negative test
+
+A checker that cannot fail verifies nothing — the =gate-selftest= rule applied
+to a model. Both checkers run in *both* directions, and both fail loudly if a
+rule turns out to be unbreakable.
+
+=./sim/label_sim.py --selftest= asserts:
+
+- *forwards*: seven MUTATIONS, each removing a rule the scripts have. The
+  invariant that implements it must go from holding to violated.
+- *backwards*: seven REPAIRS, each adding a rule the scripts lack. The
+  invariant must go from violated to holding. *A finding whose proposed fix
+  changes nothing is a finding that was misdiagnosed* — this caught F4.
+- the baseline violation set must equal =KNOWN= exactly. A new violation is a
+  regression; a missing one is a fix, and should shrink the list.
+
+=./tla/check.sh= does the same with TLC: nine switchable constants in
+=Labels.cfg=, every one of them FALSE in the repository today, and a negative
+run for each requiring TLC to violate the named invariant.
+
+Both were caught by their own negative tests during construction. The TLA+
+module's history variables were written =x' = a \/ b=, which TLA+ precedence
+parses as =(x' = a) \/ b= — the assignment vanishes. The positive run passed
+anyway, vacuously; the negative run is what found it.
+
+* Bounds, stated
+
+Neither checker proves anything about states outside its bound, and the bound
+is printed with every result.
+
+- =label_sim.py= is exhaustive over 2 PRs *up to K human interventions*
+  (default 3). Machine actions are free; declare/withdraw, freeze/thaw,
+  hold/release and push cost budget, because every one of them is reversible
+  and the reachable set is otherwise unbounded. Every finding here is reachable
+  within 2. Past that it is property-based: =--prs 3 --random N=.
+- =Labels.tla= is bounded by =MaxMerges = 2= and =PRs = {p1, p2}=, and its
+  positive run is 49,184 distinct states at depth 24.
+- *Neither runs a single line of the shell scripts.* They are transcriptions,
+  and =docs/changing-the-pipeline.org= is right that a transcription drifts.
+  =cross_check.py= removes one of the four ways they can drift from each other;
+  it removes none of the ways they can drift from =change/=. F8 is what that
+  gap looks like.
+
+* Found and not fixed
+
+- *F8*, =settle.sh='s =$repo=. A one-word fix, deliberately not made here: this
+  branch changes no control-plane script, so that the soak argument in
+  =docs/changing-the-pipeline.org= is not tested by the same change that
+  documents it.
+- The stale =change:emergency= references in =docs/control-path.org= and ADR
+  0001 S8.
+- =gates/label-audit.py= reports 29 findings on =main= today, including F6.
+- The four disagreeing definitions of "pipeline" in F3.
+- =preflight='s exit code 2 means three different things: lock held, emergency
+  in flight, =hold:staging=, and a two-class refusal. A caller cannot tell them
+  apart.
+
+* See also
+
+- =change/label-owners.tsv= — the declaration
+- =docs/label-ownership.org= — rules 1 to 5
+- =docs/control-path.org= — the four human decisions
+- =docs/concurrent-change.org= — the four kinds of overlap
+- =docs/changing-the-pipeline.org= — why four encodings drift, and the soak
+- =docs/adr/0001-automatic-promotion.org= — S1..S8
