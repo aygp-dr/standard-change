@@ -1,0 +1,61 @@
+Timeline
+
+  1. Read the beacon OpenAPI at /spec.json BEFORE writing any code. /webhook
+     names exactly two properties (source, event), sets no
+     additionalProperties:false, and documents 202 and 429 only. Extra fields
+     are therefore permitted by the OpenAPI default but NOT documented as
+     retained; the payload rides in source/event where it can and the
+     structured detail is [H], stated as such in the doc.
+  2. wal.sh probed and rejected as a sink: bare and ?deployment= return a
+     byte-identical 24586-byte text/html 200. Cannot distinguish stored from
+     discarded.
+  3. Prior art: docs.datadoghq.com is NULL-ROUTED from hydra (resolves to ::
+     and 0.0.0.0, curl (7) on 443) -- recovered from Datadog's own
+     GitHub-published OpenAPI. help.bluetriangle.com serves a Cloudflare JS
+     challenge -- recovered through the Zendesk Help Center API. The Elastic
+     route named in the brief, POST /api/observability/annotations, does not
+     exist; the real one is POST /api/apm/services/{serviceName}/annotation,
+     confirmed against elastic/kibana source. That one is observed to be
+     false, not merely unobserved.
+  4. FAILED FIRST: the unreachable-sink run reported "HTTP 000000" and took
+     the wrong branch of the case, diagnosing a rejection where there was an
+     unreachable host. Cause: code=$(curl ... || echo 000) concatenates
+     curl's own "000" with the fallback. Fixed to code=$(curl ...) || code=000.
+     Found by RUNNING the path, not by reading the line -- which is the point.
+  5. FOUND, NOT FIXED: change/activate.sh line 28 cds into change/ while every
+     relative path below it is written from the repo root, so the file cannot
+     run from anywhere. Pre-existing, and the arithmetic consequence of
+     docs/changing-the-pipeline.org measuring zero invocations of that file.
+     The marker call is addressed through an absolute $HERE captured before
+     the cd so it does not inherit the defect.
+
+Reproduction
+
+  command   ./change/marker.sh --selftest
+  output    10/10, "marker.sh: both directions confirmed"
+
+  command   MARKERS=1 HEALTH_SAMPLES=3 ./gates/health.sh http://127.0.0.1:9070 780ce0a
+  output    5 routes ok 3/3, marker deploy.converged rendered, "DRY RUN --
+            nothing was sent", exit 0
+  cell      hydra, FreeBSD, dev block 7, router :9070, apps :9071-:9075
+
+  command   MARKERS=1 HEALTH_SAMPLES=2 ./gates/health.sh http://127.0.0.1:9070 1aab79f
+  output    UNHEALTHY x5, marker deploy.unconverged, gate exit 7
+
+  command   MARKERS=1 MARKER_SEND=1 MARKER_SINK=http://127.0.0.1:1/webhook \
+              MARKER_HEALTH=http://127.0.0.1:1/health.json \
+              ./gates/health.sh http://127.0.0.1:9070 780ce0a
+  output    "MARKER UNDELIVERED: sink unreachable ... Could not observe -- NOT
+            observed to have failed", spooled to
+            .run/markers-undelivered.jsonl, marker exit 75, GATE EXIT 0
+
+  command   MARKERS=1 MARKER_SEND=1 HEALTH_SAMPLES=3 \
+              ./gates/health.sh http://127.0.0.1:9070 780ce0a
+  output    "HTTP 202   webhooks_today 1 -> 2 / RECEIPT WITNESSED"
+  cell      beacon.termbox.org 0.3.1, one live request, sent after the shape
+            was confirmed from /spec.json
+
+  command   gmake -s gate-selftest ; gmake -s lint ; gmake -s test ;
+            ./gates/docs-lint.py ; ./gates/label-audit.py
+  output    all green; label-audit 29 findings, identical to the count on
+            origin/main -- this change writes no labels at all
