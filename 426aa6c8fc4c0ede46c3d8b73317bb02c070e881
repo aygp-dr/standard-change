@@ -1,0 +1,23 @@
+Timeline
+- Prior art read before designing: dsp-dr/guile-changeflow docs/workshops/
+  02-itil-deep-dive. Took its state machine, CHG id format, weighted risk
+  scoring and <30/30-70/>70 thresholds.
+- Deliberate divergence: guile-changeflow treats 'emergency' as the >70 risk
+  band. Here emergency is a human authorization to bypass staging. Deriving
+  it from risk would let a change skip staging BECAUSE it is risky, which is
+  backwards. risk_score therefore returns only standard|normal, and >70
+  demands CAB review rather than granting a bypass.
+- This also resolves the preflight exit-4 open item: with change control in
+  the IDP, freeze state lives where the pipeline already looks and the
+  calendar demotes from control to record.
+
+Reproduction (scratch dir, IDP_CHANGES/IDP_REGISTRY defaulted)
+  idp.py change risk --groups pdp --paths apps/pdp/src/x.js -> risk=8  standard
+  idp.py change risk --groups pdp --paths 'gates/e2e.sh ...'  -> risk=38 normal
+  idp.py change risk --groups 'core plp pdp checkout' ...     -> risk=97 + CAB
+  idp.py change submit --pr 42 ...            -> CHG-20260913-0001
+  idp.py change submit --pr 42 (again)        -> refused, exit 1
+  idp.py change state <chg> implementing      -> refused (submitted -> assessing|cancelled)
+  idp.py checkout staging                     -> refused with the queue explanation
+  idp.py checkout <env> twice                 -> second refused, exit 1
+Cell: FreeBSD 14.4 amd64, Python 3.11.15
