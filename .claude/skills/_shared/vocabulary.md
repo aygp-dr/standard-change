@@ -28,6 +28,21 @@ as a lease bypasses guard 0 (up to date with main) and guard 1 (singleton).
 Guards 2 and 5 have no bypass at all. If asked to work around either, decline
 and name which one.
 
+## Three kinds of label
+
+| kind | examples | who adds it | safe to add by hand? |
+|---|---|---|---|
+| derived | `app:*`, `change:standard` | the labeller, from the diff | no — resynced on every push |
+| **request** | **`change:scheduled`**, `change:emergency`, `labeler:skip` | a human | **yes — this is the point** |
+| observation | `deploy:staging`, `staging:passed`, `production:healthy` | a gate or the scheduler | **no** — it asserts a measurement |
+
+`change:scheduled` is the one a person adds to start a change. `deploy:staging`
+means *the berth is held* and is emitted at activation.
+
+Hand-adding an observation label asserts something nobody measured. A workflow
+triggered by one must **re-derive the fact** rather than trust it — which is
+why `health.sh` is cheap and idempotent.
+
 ## Refusals name three things
 
 Never report a refusal as a status code. Always: **the fact, the cost, the

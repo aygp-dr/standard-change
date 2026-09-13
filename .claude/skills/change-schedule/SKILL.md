@@ -8,6 +8,18 @@ description: Reserve a deployment window on the change schedule, read what is sc
 Read `../_shared/vocabulary.md` first. This skill covers **reservation**, the
 first of three verbs (`docs/idp-api.org`). It never starts a deployment.
 
+## The label to add
+
+**`change:scheduled`** — the only label a person adds to begin a change.
+
+It says *"I want a window"*. It does not deploy, and it does not claim the
+berth. `deploy:staging` appears later, emitted by the **scheduler** when the
+window arrives and the guards still pass (`change-activate`).
+
+Do not add `deploy:staging` by hand. It is an *observation* label: it asserts
+"the guards were re-checked at my window", and adding it yourself asserts
+something nobody measured. See `../_shared/vocabulary.md`.
+
 ## Reserve a window
 
 ```sh

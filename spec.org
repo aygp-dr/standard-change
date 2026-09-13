@@ -416,7 +416,8 @@ PR that holds it. Slots may return later as an optimization; they are not in
 | =change:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
 | =change:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
 | =change:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
-| =deploy:staging=       | human       | promote / release | Requests the staging lock. At most one open PR may carry it   |
+| =change:scheduled=     | *human*     | scheduler / push  | *Requests a window.* Reserving is not deploying — this is the only label a person adds to start a change |
+| =deploy:staging=       | *scheduler* | promote / release | *The berth is held.* Emitted at activation, after the guards were re-checked. At most one open PR may carry it |
 | =staging:in-progress=  | workflow    | workflow          | Staging deploy or its e2e run is live                        |
 | =staging:passed=       | workflow    | push to PR        | Authorizing e2e passed *on the current head SHA*              |
 | =staging:failed=       | workflow    | push to PR        | Staging deploy or e2e failed; fix and re-request              |
@@ -735,6 +736,19 @@ change after it is checked must be re-checked at the moment it is relied on.
 Guard 0 at claim time is a convenience that gives fast feedback; guard 4b is
 the one that is load-bearing. Note the amendment also drops =deploy:staging=,
 which frees the queue — an expired claimant must not keep holding it.
+
+** Reserving is not starting
+
+=change:scheduled= is the *only* label a person adds to begin a change. It says
+"I want a window"; it does not deploy. =deploy:staging= is then emitted *by the
+scheduler* when the window arrives and the guards still pass — which is what
+makes the re-check unavoidable rather than a convention (ADR 0001).
+
+The earlier vocabulary had =deploy:staging= as a human request label, which
+conflated the two acts and put an *observation* in the *request* column of the
+taxonomy above. A person adding =deploy:staging= by hand was, under that
+reading, asserting "the guards were re-checked at my window" — which is exactly
+the forgeable-observation hole.
 
 ** The berth, and four ways to lose it
 
@@ -1691,8 +1705,8 @@ has one sharp consequence.
 | kind          | examples                                      | emitted by      | forgeable? |
 |---------------+-----------------------------------------------+-----------------+------------|
 | *derived*     | =app:*=, =change:standard=, =change:normal=   | the labeller, from the diff | no — resynced on every push |
-| *request*     | =deploy:staging=, =change:emergency=, =labeler:skip= | a human    | yes, and that is the point  |
-| *observation* | =staging:passed=, =production:healthy=, =blocked:*= | a gate    | *yes, and that is a hole*   |
+| *request*     | =change:scheduled=, =change:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
+| *observation* | =deploy:staging=, =staging:passed=, =production:healthy=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
 
 A request label is meant to be added by hand. An observation label is a
 *claim that something was measured*, and GitHub does not distinguish a label
