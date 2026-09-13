@@ -211,7 +211,7 @@ export function panel(d) {
   if (d.catalogue === 'unavailable')
     return `<h2>Product unavailable</h2>
 <p>We cannot show <code>${sku}</code> right now — the catalogue is unavailable.
-This product has not gone away; try again shortly.</p>
+This product has not gone away; please try again in a few minutes.</p>
 <p class=v>catalogue: unavailable (${esc(d.reason)})</p>`;
   if (!d.found)
     return `<h2>Product not found</h2>
