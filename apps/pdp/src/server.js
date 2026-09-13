@@ -330,3 +330,5 @@ if (isMain) createServer((req, res) => {
 }).listen(PORT, BIND, () => {
   console.log(`pdp listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });
+
+// feat/pdp-price: simulated change
