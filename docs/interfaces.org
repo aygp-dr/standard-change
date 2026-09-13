@@ -337,6 +337,123 @@ support one. Booking, rescheduling and cancelling are acts by a named actor;
 =reap.sh= is the one automation that touches a window, it produces exactly one
 outcome (=expired=), and it does not rebook.
 
+* 8. Responsibilities, with no eventing system
+
+There is no event bus. Nothing is published, nothing subscribes, and there are
+no retries or dead letters. Every reaction in this pipeline is one of three
+things, and *which one it is* is the contract:
+
+| kind | what it means | what happens if it does not run |
+|------+---------------+---------------------------------|
+| =forge-triggered= | GitHub fires a workflow | the reaction silently does not happen |
+| =polled= | somebody runs a command | it does not happen until they do |
+| =unowned= | nothing watches for it | it never happens |
+
+*=unowned= is a legitimate entry.* Writing "nobody does this" is the point of
+the table — an unowned transition that everyone assumes is handled is how a
+guard ends up trusting state nothing maintains.
+
+** The contract for each event
+
+Each row names the OBSERVER (what notices), the ACTOR (what changes state), and
+— the column that matters — WHAT IS TRUE IF NOBODY ACTS.
+
+*** A head moves (author pushes)
+
+- Observer: =.github/workflows/labeller.yml= on =synchronize=. *forge-triggered*
+- Actor: same; withdraws =staging:*= observations.
+- If it does not run: *the change keeps observations measured on a different
+  build.* Guard 4 is the backstop and holds, because it re-derives from the
+  evidence record's SHA rather than from label presence — the withdrawal is
+  hygiene, not the guard. This is why issue #16 moved authorization off labels.
+
+*** A window's end passes
+
+- Observer: nothing. *unowned until somebody runs =change/reap.sh=* — polled.
+- Actor: =reap.sh=; closes =expired=, clears =change:scheduled=, releases the
+  berth if the lapsed window still held it.
+- If nobody runs it: the window stays unresolved, =schedule.sh current= keeps
+  answering "yes you have a window" past the end, =block= queues everything
+  behind a reservation nobody is using, and the PR claims =change:scheduled=
+  against a slot that is gone. *Four separate wrong answers from one missing
+  poll.* Observed today, repeatedly.
+
+*** =main= moves under an in-flight change
+
+- Observer: =.github/workflows/main-moved.yml=. *forge-triggered*
+- Actor: guard 0 refuses at the next claim; =change/divergence.sh= classifies
+  whether it matters (=inert= / =pipeline= / =artifact= / =hotfix=).
+- If it does not run: guard 0 still refuses at claim time, because it compares
+  merge-base at the moment of reliance rather than trusting a label. Correct by
+  construction, not by notification.
+
+*** A freeze is declared while a change is mid-flight
+
+- Observer: *nobody.* =unowned.=
+- Actor: none. =gates/preflight.sh= checks the estate at *entry*, and
+  =change/uat.sh= re-checks the *window* before and after the walk — but
+  nothing re-reads the freeze between the staging deploy and the cutover.
+- If nobody acts: *a change that entered a legally open estate keeps going into
+  a closed one.* This is R4 in =docs/grind-plan.org= and it is honestly
+  unfixed. The guard exists and is checked once; the law says a guard whose
+  subject can change must be re-checked at reliance, and here it is not.
+
+*** Production converges on a new build
+
+- Observer: =gates/health.sh= when somebody runs it. *polled*
+- Actor: =change/settle.sh= — writes the PIR, sets =change:complete=, merges,
+  redlines the window, clears the validation labels.
+- If nobody runs it: *production serves a change that =main= does not contain
+  and no window covers.* The state with no name; see =grind-plan.org=. The next
+  change branches from a =main= without it and silently reverts it on promotion.
+
+*** A change fails, or is abandoned
+
+- Observer: a person. *polled*
+- Actor: =change/abort.sh= — closure code, record, berth released, annotations
+  cleared.
+- If nobody runs it: the berth stays claimed by a change nobody is driving, and
+  guard 1 blocks everyone with no declared cause. =reap.sh= releases the berth
+  as a side effect only when a *window* lapsed; a change that failed inside its
+  window and was walked away from holds it indefinitely.
+
+*** An observation instrument fails to record
+
+- Observer: guard 4, at the moment of reliance. *polled, and this is correct*
+- Actor: guard 4 refuses.
+- If nobody acts: nothing ships. *This is the one event whose failure mode is
+  safe*, and it is safe because the reader re-derives rather than waiting to be
+  told.
+
+** The rule that makes the absence of eventing survivable
+
+Every guard above that is *correct by construction* is correct for the same
+reason: **it re-derives its answer at the moment it is relied on, from the
+system, rather than caching what it was told.** Guard 0 compares merge-base at
+claim. Guard 4 reads the evidence record's SHA. Guard 5 asks the front what it
+is serving.
+
+Every guard that is *wrong or unowned* is wrong for the mirror reason: it was
+checked once and the subject moved. The freeze case is exactly this.
+
+So the contract for adding any new reaction is not "publish an event". It is:
+
+1. Can the reader *re-derive* the fact at the moment it matters? Then no event
+   is needed and none should be added.
+2. If not — if the fact is only observable at the instant it happens — then it
+   must be *recorded*, with the build it is about, and the reader re-derives
+   from the record.
+3. If neither, it is =unowned=, and that belongs in this table rather than in
+   somebody's head.
+
+** What an event system would have to add to earn its place
+
+Not delivery. *Accountability*: a subscriber that did not run must be
+distinguishable from one that ran and decided nothing was needed. An at-least-
+once bus with no such distinction turns every one of the =unowned= rows above
+into an =unknown= row, which is strictly worse — the pipeline would stop being
+able to tell "nobody watches this" from "something watched it and said no".
+
 * Status
 
 Specification only. The shell implementations named above exist and run; none
