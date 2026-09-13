@@ -375,7 +375,7 @@ const PAGE = `<!doctype html><meta charset=utf-8><title>IDP release dashboard</t
 body{background:#0f1117;color:#e6e6e6;font:13px/1.55 ui-monospace,Menlo,monospace;margin:0;padding:26px}
 h1{font-size:15px;margin:0 0 2px}h2{font-size:13px;margin:26px 0 2px;color:#c9d1d9}
 .s{color:#8b93a7;font-size:12px;margin:0 0 14px}
-table{border-collapse:collapse;width:100%;max-width:74rem;margin-bottom:8px}
+table{border-collapse:collapse;width:100%;margin-bottom:8px}
 th{text-align:left;font-weight:600;color:#8b93a7;font-size:11px;text-transform:uppercase;
 letter-spacing:.06em;border-bottom:1px solid #262a35;padding:0 12px 6px 0}
 td{padding:5px 12px 5px 0;border-bottom:1px solid #1a1d26}
@@ -450,7 +450,7 @@ button.on:hover,button.b-freeze.on:hover,button.b-emergency.on:hover{
    largest thing on the page, because every other number here is conditional
    on it. */
 .alarm{margin:0 0 16px;padding:14px 18px;border-radius:4px;font-size:15px;font-weight:700;
-letter-spacing:.04em;max-width:74rem}
+letter-spacing:.04em}
 .alarm .d{font-weight:400;font-size:12px;letter-spacing:0;margin-top:5px;opacity:.85}
 .emg{background:#4a1010;color:#fecaca;border:2px solid #b91c1c}
 .frz{background:#3a2a08;color:#fde68a;border:2px solid #b45309}
