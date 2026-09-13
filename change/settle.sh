@@ -102,7 +102,7 @@ esac
 # COMPLETE, and that is a fact about the change rather than about the forge.
 # Set before the merge, because the merge is what follows completion, not what
 # constitutes it. Cleanup clears it once the forge records the merge.
-gh pr edit "$pr" --repo "$repo" --add-label change:complete >/dev/null 2>&1 || true
+gh pr edit "$pr" --repo "$R" --add-label change:complete >/dev/null 2>&1 || true
 ok "change:complete -- validation done, merging"
 
 if [ "$state" = "MERGED" ]; then ok "already merged"
