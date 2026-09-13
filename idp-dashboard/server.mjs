@@ -286,7 +286,7 @@ font-weight:700;letter-spacing:.05em}
 .sw-none{color:#6b7280}
 .team{color:#a78bfa;font-size:11px}.live{background:#16201380}
 .bar{display:flex;gap:10px;align-items:center;margin:0 0 16px;flex-wrap:wrap}
-.f{padding:5px 12px;border-radius:3px;font-weight:600;font-size:12px;letter-spacing:.03em}
+.st{padding:5px 13px;border-radius:3px;font-weight:700;font-size:12px;letter-spacing:.05em}
 .ok{background:#14301c;color:#4ade80;border:1px solid #1f5130}
 .no{background:#3b1414;color:#fca5a5;border:1px solid #6b1f1f}
 .unk{background:#312a14;color:#fbbf24;border:1px solid #5c4a1f}
@@ -299,8 +299,12 @@ font-weight:700;letter-spacing:.05em}
 button{font:inherit;font-size:12px;padding:5px 12px;border-radius:3px;cursor:pointer;
 background:#1a1d26;color:#c9d1d9;border:1px solid #30363d}
 button:hover{background:#232733}
-button.arm{border-color:#b91c1c;color:#fca5a5}
-button.dis{border-color:#b45309;color:#fde68a}
+button.b-freeze{border-color:#2563eb;color:#93c5fd}
+button.b-freeze:hover{background:#12233d}
+button.b-emergency{border-color:#b91c1c;color:#fca5a5}
+button.b-emergency:hover{background:#3b1414}
+/* Already on: the button now LIFTS, so it stops advertising the declaration. */
+button.on{border-color:#30363d;color:#c9d1d9}
 /* An emergency or a freeze is a property of the WORLD. It does not sit in a
    row of chips beside "no emergency" -- when it is true it is the first and
    largest thing on the page, because every other number here is conditional
@@ -318,7 +322,6 @@ letter-spacing:.04em;max-width:74rem}
 
 <div id=alarm></div>
 <div class=bar id=flags></div>
-<div class=bar id=toggles></div>
 
 <h2>booked windows</h2>
 <p class=s>the change schedule — this and the estate below are what an audit compares</p>
@@ -355,67 +358,52 @@ function hms(s){const m=Math.floor(Math.abs(s)/60),r=Math.abs(s)%60;
 function remain(x){
   if(x.expired)return '<span class=rem-bad>EXPIRED '+esc(hms(x.closes_in_s))+' ago</span>';
   if(!x.soak_fits)return '<span class=rem-warn>'+esc(hms(x.closes_in_s))+
-    ' left — shorter than one soak + walk ('+esc(hms(360))+'), this leg cannot finish</span>';
+    ' left — under one soak + walk, this leg cannot finish</span>';
   return '<span class=rem-ok>'+esc(hms(x.closes_in_s))+' left</span>';
 }
-function alarms(d){
-  const f=d.flags||{};const out=[];
-  if(f.emergency)out.push('<div class="alarm emg">EMERGENCY IN FLIGHT'+
-    '<div class=d>Declared on #'+esc(f.emergency_prs.join(', #'))+
-    '. Standard and normal changes do not progress. Every window below is blocked '+
-    'unless its change is classified itil:emergency.</div></div>');
-  if(f.freeze)out.push('<div class="alarm frz">DEPLOYMENT FREEZE IN FORCE'+
-    '<div class=d>Declared on #'+esc(f.freeze_prs.join(', #'))+
-    '. One rule, two causes: a freeze blocks everyone including the PR carrying '+
-    'the label. Only an emergency is exempt.</div></div>');
-  if(f.unknown)out.push('<div class="alarm unkn">ESTATE STATE UNKNOWN'+
-    '<div class=d>The forge could not be asked whether a freeze or emergency is '+
-    'declared. This is NOT "no freeze" — unreachable is not falsified. Treat the '+
-    'estate as closed until this clears.</div></div>');
-  return out.join('');
+// A BANNER ONLY WHEN THERE IS SOMETHING TO SAY. The previous version printed a
+// banner, a chip and a button for the same fact, and the banner's "Declared on
+// #" was left over from when the holder was a PR -- the issue holds it now, so
+// the PR list is empty and it rendered a bare hash. A banner that is always
+// there is furniture; one that appears only when the estate is shut is a signal.
+function banner(d){
+  const f=d.flags||{};const o=[];
+  if(f.unknown)o.push(['unkn','ESTATE UNKNOWN',
+    'Issue #'+f.holder+' could not be read. This is NOT "open" — treat the estate '+
+    'as shut until it clears.']);
+  if(f.emergency)o.push(['emg','EMERGENCY IN FLIGHT',
+    'Every window below is blocked unless its change is classified itil:emergency.']);
+  if(f.freeze)o.push(['frz','DEPLOYMENT FREEZE IN FORCE',
+    'Blocks everyone, including whoever declared it. Only itil:emergency passes.']);
+  return o.map(([c,t,d2])=>'<div class="alarm '+c+'">'+esc(t)+
+    '<div class=d>'+esc(d2)+'</div></div>').join('');
 }
-async function toggle(label,action){
-  // Closing the estate stops every change in flight, so it asks first. Opening
-  // it does not: an estate wrongly left closed is visible and annoying, an
-  // estate wrongly opened is a change deployed into a freeze.
-  // No escaped newlines in this string. The page is itself a JS template
-  // literal in server.mjs, so an escaped newline written here arrives as a REAL
-  // one inside a single-quoted client string: unterminated literal, SyntaxError,
-  // and a page that returns 200 and renders nothing. The server was healthy and
-  // the thing a reader checks said so.
-  //
-  // This comment also cannot spell the escape out. The first version did, while
-  // explaining the problem, and the escape broke the comment across two lines so
-  // only the first was commented. Same shape as a shellcheck note that begins
-  // with the tool's own name, and as the label-audit comment that named the
-  // label prefix it was explaining. Three times today.
-  if(action==='on'&&!confirm('Declare '+label.toUpperCase()+
-    '? This closes the estate to every standard and normal change, '+
-    'including any that is mid-flight right now.'))return;
-  const r=await fetch('/api/estate/'+label+'/'+action,{method:'POST'});
-  render(await (await fetch('/api/status')).json());
-  if(!r.ok)alert('toggle failed — check the dashboard log');
-}
-function togglebar(d){
+function estate(d){
   const f=d.flags||{};
-  if(f.unknown)return '<span class=age>cannot toggle — the forge is unreachable</span>';
-  // DATA ATTRIBUTES, NOT AN INLINE onclick. The inline version needed a quote
-  // inside a quote inside a template literal inside a template literal, and the
-  // escapes collapsed: the emitted HTML read onclick="toggle(''+label+''" and
-  // the whole script died with a SyntaxError. The page still returned 200 and
-  // rendered an empty body, which is the worst shape of failure -- the server
-  // was healthy and the thing a reader checks said so.
-  const b=(label,on)=>'<button class="'+(on?'dis':'arm')+'" data-label="'+label+
-    '" data-action="'+(on?'off':'on')+'">'+(on?'lift ':'declare ')+label+'</button>';
-  return b('freeze',f.freeze)+b('emergency',f.emergency)+
-    '<span class=age>writes to issue #'+esc(f.holder)+', the estate state holder — '+
-    'an issue, not a PR, because an issue cannot be deployed and so cannot be '+
-    'handed the exemption it declares</span>';
+  if(f.unknown)return '<span class="st unk">ESTATE UNKNOWN</span>'+
+    '<span class=age>could not read issue #'+esc(f.holder)+' — this is not "open"</span>';
+  const on=[];
+  if(f.freeze)on.push('<span class="st no">FREEZE</span>');
+  if(f.emergency)on.push('<span class="st no">EMERGENCY</span>');
+  if(!on.length)on.push('<span class="st ok">ESTATE OPEN</span>');
+  // THE COLOUR IS THE LABEL'S, NOT THE STATE'S. Freeze is blue: it is a
+  // planned, reversible gate -- a maintenance slot, a release embargo -- and
+  // nothing is on fire. Emergency is red: something is wrong in the world right
+  // now. Colouring both by whether they are currently on made the two look like
+  // the same control in two states, and they are not the same decision.
+  const btn=(l,v)=>'<button class="b-'+l+(v?' on':'')+'" data-label="'+l+
+    '" data-action="'+(v?'off':'on')+'">'+(v?'lift ':'declare ')+l+'</button>';
+  const age=f.read_at?Math.round((Date.now()-Date.parse(f.read_at))/1000):0;
+  const stray=[...(f.freeze_prs||[]),...(f.emergency_prs||[])];
+  return on.join('')+btn('freeze',f.freeze)+btn('emergency',f.emergency)+
+    '<span class=age>issue #'+esc(f.holder)+' · read '+esc(age)+'s ago'+
+    (f.freeze||f.emergency?' · only itil:emergency passes':'')+'</span>'+
+    (stray.length?'<span class="st unk">stray labels on #'+esc(stray.join(', #'))+
+      '</span><span class=age>on PRs, not counted — clean up</span>':'');
 }
 function render(d){
-  document.getElementById('alarm').innerHTML=alarms(d);
-  document.getElementById('toggles').innerHTML=togglebar(d);
-  document.getElementById('flags').innerHTML=flagbox(d);
+  document.getElementById('alarm').innerHTML=banner(d);
+  document.getElementById('flags').innerHTML=estate(d);
   document.getElementById('w').innerHTML=d.windows.length?d.windows.map(x=>
     '<tr><td><b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
     (x.title?'<div class=ti>'+esc(x.title)+'</div>':'')+'</td>'+
