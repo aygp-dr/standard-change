@@ -138,6 +138,11 @@ else
 fi
 
 # --- is a person holding this deliberately? ------------------------------
+#
+# REJECTED SEMANTICS (2026-09-13). hold:staging is superseded by `freeze` for
+# the estate and by simply not approving for one change. The check stays so a
+# label left over from before still stops a deploy rather than being silently
+# ignored -- removing the check would be more dangerous than keeping it.
 case " $labels " in
   *" hold:staging "*)
     no "a person put hold:staging on this — they want to look before it promotes" 2

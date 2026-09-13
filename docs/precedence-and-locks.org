@@ -95,6 +95,40 @@ wait politely.
 They block for different reasons and the recovery is different: one is "wait",
 the other is "wait and then re-verify".
 
+* Rejected: =hold:staging=
+
+A per-change hold — *"keep this in staging, I want to look"* — shipped as guard
+4c and is *rejected as of 2026-09-13*. Recorded rather than deleted, because
+the reasoning is the useful part.
+
+*Why it looked necessary.* It was the only human stop the pipeline modelled.
+Everything else was derived or automated, so a person who wanted to interrupt a
+promotion had nowhere to say so.
+
+*Why it is not.* The human stops were always there and they are *earlier*:
+
+| to stop a change | use | scope |
+|------------------+-----+-------|
+| it should not go at all | *do not add =change:requested=* | that change |
+| it is not fit to ship | *do not approve* | that change |
+| nothing should go right now | *=freeze=* | the estate |
+| this outranks everything | *=itil:emergency=* | the estate's ordering |
+
+A change nobody wants promoted is simply *not requested and not approved*.
+=hold:staging= added a fourth way to stop a deploy, with a fifth scope, and no
+rule saying which applied when two were present.
+
+*The specific hazard it left.* =freeze= and =hold:staging= both mean "do not
+promote" and are owned by different writers at different scopes, so a change
+could be frozen, held, both, or neither, and the four states had no ordering.
+That is the two-writers-one-fact defect in a new place, and it is exactly what
+=itil:*= and =change:*= were split to stop.
+
+*What is lost.* The narrow case =hold:staging= served — *"I approve this, and
+I want to look at staging before it promotes"* — is now expressed by not
+approving until after looking. That is strictly slower and it is honest: the
+approval then means what it says.
+
 * Not decided here
 
 Whether =lock= is worth adding, or whether scanning for =deploy:*= is enough,

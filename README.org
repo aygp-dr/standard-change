@@ -211,7 +211,32 @@ re-fires, and the second firing deploys a change that is already live.
 content of a hold is that a human has not looked yet — and only that human
 knows when they have. A hold a machine can clear is not a hold, it is a delay.
 
-*** The one way to stop it: =hold:staging=
+*** How to stop a change
+
+*=hold:staging= is rejected semantics* as of 2026-09-13
+(=docs/precedence-and-locks.org=). It was a per-change hold and the only human
+stop the pipeline modelled, which made it look necessary. The human stops were
+always there and they are earlier:
+
+| to stop                   | do this                        | scope |
+|---------------------------+--------------------------------+-------|
+| it should not go at all   | *do not add =change:requested=* | that change |
+| it is not fit to ship     | *do not approve*                | that change |
+| nothing should go now     | *=freeze=*                      | the estate |
+| this outranks everything  | *=itil:emergency=*              | the estate's ordering |
+
+A change nobody wants promoted is simply not requested and not approved.
+=hold:staging= added a fourth way to stop a deploy at a fifth scope, with no
+rule for which applied when two were present — the two-writers-one-fact defect
+that =itil:*= and =change:*= were split to remove.
+
+What is lost: *"I approve this, and I want to look at staging first"* is now
+expressed by not approving until after looking. Strictly slower, and honest —
+the approval then means what it says.
+
+*** Superseded: the old text on =hold:staging=
+
+[The original description follows, kept because the reasoning it records is still worth reading.]
 
 Sometimes you want to look at staging yourself. =hold:staging= is how, and it
 is the only human stop in the pipeline:
