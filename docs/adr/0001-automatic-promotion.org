@@ -511,8 +511,35 @@ blocked it: =merge-on-healthy.yml= *triggers* on =production:healthy=, and a
 trigger is not a gate.
 
 *Decides*: the ordering needed a control, not a convention.
-=gates/production-first.sh= now refuses a merge when a PR carries =app:*= and
-lacks =production:healthy=, runs as a check, and is in the required list. The
+=gates/production-first.sh= refuses a merge when a PR carries =app:*= and lacks
+=production:healthy=, runs as a check, and is in the required list.
+
+*CORRECTION, same day (issue #29).* The sentence above overstated what was
+fixed, and the overstatement survived three shipped changes before anything
+caught it.
+
+*The check cannot block a new PR.* It runs on =pull_request/opened=, which fires
+*before* the labeller has applied any =app:*= label, so it takes the "no app:*
+labels — nothing deploys" branch and reports success. It declares
+=types: [... labeled, unlabeled]= so it should re-run once the labels land, and
+it never has: =actions/labeler= writes with =GITHUB_TOKEN=, and events produced
+by =GITHUB_TOKEN= do not trigger further workflow runs. Thirty runs, every one
+=event=pull_request=, not one =labeled=.
+
+So it evaluates exactly once, in the only window where the labels are
+guaranteed absent, and then never again. #28 — a single-line change to
+=apps/core=, never deployed anywhere — is green.
+
+*What is actually true*: the ordering is enforced by =change/settle.sh= and by a
+person running =gates/production-first.sh= by hand, both of which run where the
+estate is visible. The CI check is decoration. The distinction matters because
+S3's whole lesson was that *a trigger is not a gate* — and the fix for it turned
+out to be a check that is not a gate either, for a different reason.
+
+*The irony worth recording*: =.github/workflows/labeller.yml= carries a comment
+warning about exactly this trap — "Derive from the DIFF, not from the labels
+actions/labeler just wrote" — written after an earlier race in this same
+project. The lesson was available, in the adjacent file, and was not applied. The
 TLA+ spec could not express the defect at all — it modelled deploy and merge as
 one atomic step — so =NoMergeBeforeProduction= was added with =ProdFirst= as a
 switchable constant.
