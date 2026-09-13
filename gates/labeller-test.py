@@ -68,11 +68,21 @@ SCENARIOS = [
     ("L3",  ["apps/core/a", "apps/plp/a", "apps/pdp/a", "apps/checkout/a"],
              {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
     ("L4",  ["router/nginx.conf.tmpl"], {"change:normal"}),
+    # An app change that also touches the control plane is BOTH: it deploys,
+    # and it alters how future changes are verified. Neither fact excuses the
+    # other, and the soak applies to the control-plane half.
     ("L5",  ["apps/plp/x.js", ".github/workflows/gate.yml"],
-             {"app:plp", "change:normal"}),
+             {"app:plp", "change:normal", "control-plane"}),
     ("L6",  ["README.org"], set()),
     ("L7",  ["apps/pdp/fixtures/catalog.json"], {"app:pdp", "change:standard"}),
-    ("L8",  ["gates/e2e.sh"], {"change:normal"}),
+    ("L8",  ["gates/e2e.sh"], {"change:normal", "control-plane"}),
+    # control-plane is NARROWER than change:normal. targets/ and router/ change
+    # how a thing ships and are verified the ordinary way -- deploy, observe.
+    # They are change:normal and NOT control-plane.
+    ("L16", ["targets/node/deploy.sh"], {"change:normal"}),
+    ("L17", ["router/server.js"], {"change:normal"}),
+    ("L18", ["change/guard4.sh"], {"change:normal", "control-plane"}),
+    ("L19", [".github/workflows/gate.yml"], {"change:normal", "control-plane"}),
     # shared/ is imported by every app we deploy, so a change there is a change
     # to all of them and the manifest must say so. Before this rule existed,
     # editing shared/oneui.js produced NO app:* label -- the highest-blast-radius

@@ -188,6 +188,78 @@ In order, cheapest first:
 
 Items 1–3 are not tests. They are the precondition for tests to mean anything.
 
+* The practice that answers this: a pipeline change is proven by USE
+
+Standing practice from the repo owner, recorded 2026-09-13: *pipeline changes
+need multiple deployments.*
+
+This is the answer to the problem stated above, and it is better than the five
+items in the list before it, because it does not require the pipeline to be able
+to verify itself. It sidesteps that entirely.
+
+** Two classes of change, two definitions of done
+
+| | proven by | how many |
+|------------------+----------------------------------------+----------|
+| *artifact* (=apps/=, =shared/=) | its own deployment          | one      |
+| *pipeline* (=gates/=, =change/=, =.github/=) | *subsequent deployments that used it* | *N*  |
+
+An artifact change is proven when the thing it changes is observed running. A
+pipeline change changes *how future changes are verified*, so the only evidence
+that it works is future changes being verified by it. One green run of the
+changed gate against one change proves the gate can run. It does not prove the
+gate still catches what it caught before.
+
+** Why merge is not the end of a pipeline change
+
+=change:complete= currently means the same thing for both classes: merged,
+production observed, annotations cleared. For a pipeline change that is the
+*start* of the evidence, not the end of it.
+
+A worked case from today. #22 rewrote how =change/guard4.sh= reads evidence —
+repeatable observations moved from labels to point-in-time records. It merged
+with:
+
+- its own tests green (10/10 in a new hermetic suite)
+- a frozen copy of the old guard, proving the defect reproduced
+- =gate-selftest= green, both directions
+
+All of which proves the *new* behaviour is present. None of which proves the
+guard still refuses everything it used to refuse, in every combination real
+changes will present. That evidence can only come from changes #23, #24, #25…
+actually passing through it.
+
+** What this implies that the repo does not yet do
+
+1. *A pipeline change should not be counted proven at settlement.* It needs a
+   soak, and the soak is counted in *deployments*, not hours. "Three changes
+   have shipped through the new guard" is evidence; "it merged on Tuesday" is
+   not.
+2. *The soak needs somewhere to live.* Nothing records that a given deployment
+   exercised a given pipeline change. The deployment records name a build; they
+   do not name which version of the control plane verified it.
+3. *Auto-merge for =pipeline= is refused by this practice*, independently of the
+   risk argument. A change that is not proven until N deployments later cannot
+   be merged unattended by the very mechanism it alters.
+4. *Rollback is harder and nobody has asked.* Rolling back an artifact change is
+   a colour switch. Rolling back a pipeline change after three changes have
+   shipped through it means deciding what those three changes were verified by.
+
+** The shape of the mechanism, if it is built
+
+A pipeline change carries a counter rather than a completion:
+
+: change:complete            artifact -- production observed, done
+: change:soaking (2/3)       pipeline -- merged, 2 of 3 changes have shipped through it
+
+and =settle.sh=, on any change, increments the soak of every pipeline change
+merged since the last settlement. At N the label flips. Before N, the pipeline
+change is revertable as a unit and is the first suspect for anything odd.
+
+Not built. Recorded because it changes what *done* means for a whole class of
+change, and because it is the only proposal so far that does not require
+solving "the pipeline cannot test itself".
+
 * The conclusion, stated plainly
 
 The instinct that a pipeline is "write once, then nearly impossible to change"
