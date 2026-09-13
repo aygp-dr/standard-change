@@ -31,7 +31,13 @@ jobs:
           R=${{ github.repository }}
           N=${{ github.event.number }}
           files=$(gh pr diff "$N" --repo "$R" --name-only)
-          has_app=$(echo "$files" | grep -c '^apps/' || true)
+          # DEPLOYABLE SURFACE, not just apps/. shared/ is pinned by every app
+          # and external/ carries app:mock, so a change to either is a change to
+          # something deployable and must be classified. Grepping only ^apps/
+          # left a shared/ change with five app:* labels and NO change:* class
+          # at all -- unclassified, and therefore matching no guard's idea of
+          # what it was looking at.
+          has_app=$(echo "$files" | grep -cE '^(apps|shared|external)/' || true)
           is_normal=$(echo "$files" | grep -cE '^(router|gates|change|targets)/|^\.github/' || true)
           echo "changed=$(echo "$files" | wc -l) apps=$has_app normal=$is_normal"
           if [ "$is_normal" -gt 0 ]; then
