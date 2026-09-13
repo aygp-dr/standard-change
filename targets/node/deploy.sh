@@ -60,6 +60,18 @@ done
 sleep 1
 
 if [ -d "$wt" ]; then
+  # A DEPLOYMENT WORKTREE IS NOT A WORKING COPY. This script generates
+  # router/routes.json into it (below) and git then sees a tracked file as
+  # locally modified, so the NEXT deploy's checkout aborts with "your local
+  # changes would be overwritten" -- the deployer blocking itself with its own
+  # output. Hit on 2026-09-13 deploying #38 to staging.
+  #
+  # Discarding is right here and nowhere else: nothing in a deployment worktree
+  # is authored, every tracked file comes from the SHA being deployed, and
+  # anything that differs is this script's own leftovers. Untracked files (the
+  # per-app logs, version.json) are deliberately left alone -- they are the
+  # record of the run that just happened, and -d would delete them.
+  git -C "$wt" checkout -q --force -- . 2>/dev/null || true
   git -C "$wt" checkout -q --detach "$full"
 else
   git -C "$root" worktree add -q --detach "$wt" "$full"
