@@ -950,12 +950,41 @@ ship an image missing a hotfix"/ are different facts, and treating them alike
 fails in both directions — a README merge forcing a full re-verify teaches
 people the guard is noise, and a hotfix merge not forcing one is scenario D4.
 
+*=apps/**= is the deployable entity.* In a container world the deployable is an
+image and =apps/<x>/= maps to one; in a monorepo the directory is the closest
+honest approximation. So *any* change to =apps/**= landing on main while a
+change is on the deploy path is a blocker — not "a change to the same app", but
+any of them, because the monorepo ships them together.
+
+=targets/**= is deliberately *not* artifact. It is the deployment /mechanism/:
+changing =deploy.sh= changes how a thing ships, not what ships, so it demands
+re-verification rather than a revert.
+
 | Class      | What landed                                | Berth | Staging pass | Message                                    |
 |------------+--------------------------------------------+-------+--------------+--------------------------------------------|
 | =inert=    | docs, =.meta=, =scenarios=, =experiments=, =tla= | kept  | *kept*       | informational only                         |
-| =pipeline= | =gates/=, =change/=, =.github/=, =Makefile= | kept  | kept, re-run gates | "how you are verified changed"        |
+| =pipeline= | =targets/=, =gates/=, =change/=, =.github/=, =Makefile= | kept  | kept, re-run gates | "how you are verified or shipped changed" |
 | =artifact= | =apps/=, =router/=, =targets/=             | kept + extended | *withdrawn* | "rebase and re-run staging"       |
 | =hotfix=   | any merge carrying =Change-Type: emergency= | kept + extended | *withdrawn* | "you would ship without the fix"    |
+
+*** This granularity belongs to the model we support
+
+The rule is *"any =apps/**= change blocks"*, which is right for Option B — the
+monorepo with one berth, the thing this spec actually implements. It is
+deliberately coarser than the truth, and the ADR options are what make it
+finer:
+
+| if we took...                    | the rule becomes                          |
+|----------------------------------+-------------------------------------------|
+| *B* (this spec)                  | any =apps/**= change blocks — one trunk, one deployable |
+| *A2* split the deployable out    | only an *overlapping app* blocks; =pdp= and =plp= stop invalidating each other |
+| *A* contracts + path per team    | nothing cross-app blocks; the class stops mattering |
+| *A4* deploy main                 | guard 0 is unstateable, so the class only governs guard 4b |
+
+So the coarseness is a *property of the monorepo*, not a defect in the
+classifier — and it is the same coarseness §The finding that decides this ADR
+measures as 10–20 validations per shipped change. Refining it without splitting
+the trunk would be optimising a symptom.
 
 *The berth is never taken away by someone else's merge.* This is the correction
 scenario D4's first fix got wrong: withdrawing =deploy:staging= freed the queue,
