@@ -1427,6 +1427,60 @@ So the honest answer: *a deployment completes when the platform says every
 serving instance runs the new build, and in the absence of such a platform we
 substitute repeated sampling and record that we have done so.*
 
+* C6, and the one platform that can meet it
+
+=docs/release-standards.org= found capability C6 — a *platform-attested*
+deployment record — unmet on GitHub and unstandardised generally. Cloudflare
+Workers *versions* appear to meet it [E from docs, [H] until run]:
+
+| requirement                              | Workers versions                                   |
+|------------------------------------------+----------------------------------------------------|
+| promote the artifact staging tested      | upload and deploy are decoupled; deploy a version *by ID* |
+| immutable artifact identity              | each version has a unique ID with creation metadata |
+| a record written by the platform         | =wrangler deployments list= — Cloudflare's own      |
+| rollback to a known previous artifact    | revert to a previously deployed version             |
+| the served build is identifiable         | a Worker can set =x-build-sha= directly             |
+
+Contrast =wrangler environments=, which are the *wrong primitive for a path to
+production*: =[env.staging]= and =[env.production]= create *separate Worker
+scripts* named =<worker>-<env>=, each deployed from source with =--env=. There
+is no promotion between them, so production would run a script staging never
+tested — the precise failure §Cloud mirror forbids. Environments separate
+config; versions carry artifacts.
+
+** Why GitHub cannot meet C6 and Cloudflare can
+
+The difference is not API quality, and stating it properly generalises:
+
+#+begin_quote
+*A platform can attest to what is running only if it runs it.*
+#+end_quote
+
+GitHub's Deployments API records a claim about *someone else's* estate —
+GitHub never contacts the target, so its record is a self-report with good
+provenance about who claimed it. Cloudflare runs the Workers, so its record of
+which version serves is a statement about its own estate. That is what makes
+one attestation and the other bookkeeping, and it is the test to apply to any
+future target: *does the recorder run the code?*
+
+** Gradual deployment makes guard 5 ambiguous [P]
+
+A Workers deployment may reference *two versions at once*, splitting traffic.
+So a mixed fleet becomes an *intended state*, and guard 5 as written
+(§What completes a deployment) reports =UNCONVERGED= for it — correctly by its
+own definition and uselessly in context.
+
+Guard 5 therefore needs an expected shape rather than a single expected build:
+converged on X, or split between X and Y at a declared ratio. *Sampling cannot
+supply that* — it cannot distinguish an intended 10% canary from an accidental
+90%-stale estate without being told which to expect. Which is the argument for
+C6 again from the other side: the platform's record says what the split is
+*meant* to be, and sampling can then check the estate against it rather than
+guessing.
+
+Not implemented. Recorded because it falsifies the current guard 5 for any
+canary or gradual rollout, which is the normal case for services.
+
 * The balance
 
 *The objective is protecting production. The queue and the calendar are
