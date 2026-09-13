@@ -9,11 +9,14 @@
 // change here is a change to all of them.
 import { readFileSync } from 'node:fs';
 
-// 1.1.0 -- page() gained an optional `extra` slot. A MINOR on top of the 1.0.1
-// security patch, not a replacement for it: 1.0.1 escaped what page()
-// interpolates and that escaping is inherited here unchanged. This release adds
-// to the surface, which is why it is not a patch.
-export const VERSION = '1.1.0';
+// 1.1.1 -- the estate nav no longer invents an instance of a parameterised
+// route; it reads the one the app declares (`probes`, see below), and it
+// escapes the href and the app name it interpolates, which 1.0.1 missed
+// because those values come from config rather than from the request line.
+// A PATCH: nothing was added to or removed from the surface, page() still
+// takes (d, estate, background, extra?), and every caller is unchanged. What
+// changed is which URL the nav points at, which is a defect fix.
+export const VERSION = '1.1.1';
 
 // d.path is whatever the client put in the request line, and it went straight
 // into the document: GET /<script>alert(1)</script> came back as live markup
@@ -30,7 +33,23 @@ export function esc(s) {
 }
 
 const SHARED_ROUTES = ['/about', '/contact', '/jobs'];
-const probe = (r) => r.replace(':sku', 'SKU1').replace(':category', 'shoes');
+
+// A parameterised route has no universally valid instance, and this function
+// used to invent one: ':sku' -> 'SKU1'. That was invisible for as long as pdp
+// echoed back whatever it was handed with a 200. The moment pdp started
+// checking the SKU against a catalogue (#17), every page of every app in every
+// environment carried a link to a product that does not exist -- and
+// gates/smoke.sh, which is the only gate that follows links, went red on the
+// estate nav rather than on anything pdp serves.
+//
+// The app is the only thing that knows a real instance, and it already
+// declares one: `probes` in routes.json, which gates/e2e.sh fetches for its
+// ownership check and gates/lint-app.mjs validates lies inside the route it
+// names. Read the same declaration here, so the nav and the gate cannot
+// disagree about what a working instance of a route looks like. Substitution
+// stays the fallback for routes whose parameters are still free.
+const probe = (app, r) => (app.probes && app.probes[r])
+  || r.replace(':sku', 'SKU1').replace(':category', 'shoes');
 
 export function loadEstate(routesJsonPath, fallback) {
   try {
@@ -48,9 +67,10 @@ export function loadEstate(routesJsonPath, fallback) {
 // same chrome is how the two drift apart.
 export function page(d, estate, background, extra = '') {
   const own = estate.map((a) =>
-    `<div class=g><b>${a.app === d.app ? '▸ ' : ''}${a.app}</b> ` +
+    `<div class=g><b>${a.app === d.app ? '▸ ' : ''}${esc(a.app)}</b> ` +
     a.routes.filter((r) => !SHARED_ROUTES.includes(r))
-            .map((r) => `<a href="${probe(r)}">${probe(r)}</a>`).join(' ') + '</div>').join('');
+            .map((r) => probe(a, r))
+            .map((p) => `<a href="${esc(p)}">${esc(p)}</a>`).join(' ') + '</div>').join('');
   const shared = SHARED_ROUTES.map((r) => `<a href="${r}">${r}</a>`).join(' ');
   return `<!doctype html><meta charset=utf-8><title>${esc(d.app)}</title>
 <style>body{background:${background};font:14px/1.6 system-ui;margin:0;padding:40px}
