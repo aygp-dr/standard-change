@@ -84,6 +84,10 @@ SCENARIOS = [
     # external/, not something we deploy, so it does not pin our shared surface.
     ("L13", ["shared/oneui.js", "apps/core/x.js"],
              {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
+    # A shared/ change and an all-four-apps change carry the SAME labels, on
+    # purpose. The label says what CI will do, not why it decided to.
+    ("L15", ["apps/core/a", "apps/plp/a", "apps/pdp/a", "apps/checkout/a"],
+             {"app:core", "app:plp", "app:pdp", "app:checkout", "change:standard"}),
     # external/ is somebody else's service. Touching the stub is not a change to
     # any app of ours.
     ("L14", ["external/mock/src/server.js"], {"app:mock", "change:standard"}),

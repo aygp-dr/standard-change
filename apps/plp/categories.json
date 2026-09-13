@@ -1,0 +1,7 @@
+{
+  "categories": [
+    { "slug": "shoes",  "title": "Shoes",  "skus": ["SKU123", "SKU124", "SKU125"] },
+    { "slug": "shirts", "title": "Shirts", "skus": ["SKU201", "SKU202"] },
+    { "slug": "hats",   "title": "Hats",   "skus": ["SKU301"] }
+  ]
+}

@@ -39,6 +39,29 @@ test('every declared route is servable', () => {
   }
 });
 
+// gates/e2e.sh asserts route ownership by fetching a concrete path per route.
+// It used to build one by substitution, which assumed every parameter value
+// exists -- false since plp started checking the category against its
+// catalogue. So plp declares a real instance, and that instance is part of the
+// contract: the gate will fetch it and expect 200, so it must actually resolve
+// to a category we have. An unknown category here turns the ownership check
+// into a check of the 404 path, silently.
+const EXPECTED_PROBES = { '/c/:category': '/c/shoes' };
+
+test('routes.json declares the probe the e2e gate will use', () => {
+  assert.deepEqual(meta.probes, EXPECTED_PROBES);
+});
+
+test('every declared probe names a declared route and really exists', () => {
+  for (const [route, probe] of Object.entries(meta.probes)) {
+    assert.ok(meta.routes.includes(route), `probe for undeclared route ${route}`);
+    assert.ok(probe.startsWith(route.replace(/:[^/]*$/, '')),
+      `probe ${probe} is outside route ${route}`);
+    assert.equal(render(probe).found, true,
+      `the e2e gate will fetch ${probe} and expect 200, but plp does not have it`);
+  }
+});
+
 test('the health path is one of the declared routes', () => {
   const hp = meta.health.split('?')[0];
   const covered = meta.routes.some((x) => {
