@@ -74,9 +74,22 @@ review=$(gh pr view "$pr" --repo "$repo" --json reviewDecision -q '.reviewDecisi
 if [ "$review" = "APPROVED" ]; then printf '  ok    %-16s %s\n' "review" "APPROVED"
 else printf '  FAIL  %-16s %s\n' "review" "$review"; rc=1; fi
 
+# LOCAL GATE REPORTS, same as gates/preflight.sh. gates/report.sh runs the
+# suite where it can run and posts commit statuses under local/. They are a real
+# measurement of this SHA -- the gates ran and each status was gated on an exit
+# code -- and they are prefixed so a reader can tell a host run from a CI run.
+lok=$(gh api "repos/$repo/commits/$head/status" \
+  --jq '[.statuses[]|select(.context|startswith("local/"))|select(.state=="success")]|length' 2>/dev/null || echo 0)
+lbad=$(gh api "repos/$repo/commits/$head/status" \
+  --jq '[.statuses[]|select(.context|startswith("local/"))|select(.state!="success")]|length' 2>/dev/null || echo 0)
+lself=$(gh api "repos/$repo/commits/$head/status" \
+  --jq '[.statuses[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
+
 bad=$(gh api "repos/$repo/commits/$head/check-runs" \
   --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
-if [ "$bad" -eq 0 ]; then printf '  ok    %-16s %s\n' "check runs" "green on $short"
+if [ "$lbad" -eq 0 ] && [ "$lok" -ge 3 ] && [ "$lself" -ge 1 ]; then
+  printf '  ok    %-16s %s\n' "gates" "$lok local/ contexts green on $short (host run, not CI)"
+elif [ "$bad" -eq 0 ]; then printf '  ok    %-16s %s\n' "check runs" "green on $short"
 else printf '  FAIL  %-16s %s\n' "check runs" "$bad not green on $short"; rc=1; fi
 
 # Each instrument's most recent record must be a pass, and it must name the

@@ -30,6 +30,17 @@ head=$(gh pr view "$pr" --repo "$repo" --json headRefOid -q .headRefOid | cut -c
   echo "refused: $url serves $sha but #$pr is $head -- you accepted a different build" >&2
   exit 4; }
 
+# The RECORD, not just the label. Guard 4 authorizes from an observation record
+# naming the SHA that was measured (#22), and observe.sh was still only writing
+# the label -- so a human acceptance passed the label check and failed the
+# record check, on the same PR, in the same run. Found on #36.
+# Instrument name must be exactly what guard 4 looks for -- ATTESTED_OBSERVATIONS
+# defaults to `uat`. The first version recorded it as "a person
+# (change/observe.sh)", which is more descriptive and matched nothing: the
+# record existed, guard 4 could not find it, and the PR had a label saying a
+# person accepted while the guard said nothing measured this build.
+./change/evidence.sh record "$pr" staging uat pass "$sha" "$url" >/dev/null 2>&1 \
+  || echo "  warn could not record the observation; the label alone will not authorize"
 gh pr edit "$pr" --repo "$repo" --add-label staging:uat >/dev/null
 gh pr comment "$pr" --repo "$repo" --body \
   "\`staging:uat\` — a person used **$url** on build \`$sha\` and accepted it.
