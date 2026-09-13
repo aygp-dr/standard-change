@@ -57,10 +57,17 @@ jobs:
       - name: bring up a block in the runner
         run: |
           ./router/generate.sh
-          ./change/ports.sh alloc
-          ./change/ports.sh run-apps
+          # A fresh registry: the committed ports.tsv claims block 0 for a
+          # developer's path, so alloc would hand this runner block 1 and the
+          # router would not be where the next step looked.
+          echo "PORTS_REGISTRY=$RUNNER_TEMP/ports.tsv" >> "$GITHUB_ENV"
+          PORTS_REGISTRY=$RUNNER_TEMP/ports.tsv ./change/ports.sh alloc
+          PORTS_REGISTRY=$RUNNER_TEMP/ports.tsv ./change/ports.sh run-apps
           sleep 4
       - name: journeys through the router
-        run: ROUTER_URL=http://127.0.0.1:10000 ./gates/e2e.sh
+        run: |
+          . ./.env.ports
+          echo "router on $BASE_PORT"
+          ROUTER_URL="http://127.0.0.1:$BASE_PORT" ./gates/e2e.sh
       - if: always()
-        run: ./change/ports.sh stop || true
+        run: PORTS_REGISTRY=$RUNNER_TEMP/ports.tsv ./change/ports.sh stop || true

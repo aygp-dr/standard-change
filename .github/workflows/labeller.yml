@@ -23,14 +23,15 @@ jobs:
         if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         env: {GH_TOKEN: "${{ github.token }}"}
         run: |
-          labels=$(gh pr view "${{ github.event.number }}" --json labels -q '[.labels[].name]')
+          R=${{ github.repository }}
+          labels=$(gh pr view "${{ github.event.number }}" --repo "$R" --json labels -q '[.labels[].name]')
           has_app=$(echo "$labels" | jq 'map(select(startswith("app:")))|length')
           is_normal=$(echo "$labels" | jq 'index("change:normal")//empty')
           if [ "$has_app" -gt 0 ] && [ -z "$is_normal" ]; then
             gh pr edit "${{ github.event.number }}" --add-label change:standard \
               --remove-label change:normal || true
           elif [ -n "$is_normal" ]; then
-            gh pr edit "${{ github.event.number }}" --remove-label change:standard || true
+            gh pr edit "${{ github.event.number }}" --repo "$R" --remove-label change:standard || true
           fi
 
       - name: drop stale staging verdicts on a new push
