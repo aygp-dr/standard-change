@@ -1,0 +1,188 @@
+#+TITLE: Minimal IDP API — schedule, queue, and settlement
+#+SUBTITLE: Three verbs, and the one that must not exist
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:t
+
+* The short answer
+
+Three write verbs and two reads:
+
+#+begin_example
+POST   /changes/{id}/reservation     reserve a window        -> window | refusal
+POST   /changes/{id}/activation      scheduler activates     -> lease   | forfeit
+POST   /changes/{id}/settlement      close with EVIDENCE     -> settled | unconverged
+
+GET    /schedule?from=&to=           windows, freezes, emergencies
+GET    /changes/{id}                 current state and why
+#+end_example
+
+Everything else in an IDP is a read, a projection, or a convenience.
+
+* The verb that must not exist
+
+A deployer must not be able to *claim* completion.
+
+That is the one operation the naive design always includes and the one this
+model cannot afford. "Claiming complete" is a *self-report*, and the whole of
+=spec.org= §Domain model turns on the difference between a self-report and an
+attestation: a job that claims its own success is not evidence, and scenario D6
+is the negative test — =deploy.sh= exits 0, publishes nothing, and every
+liveness check passes.
+
+So =settlement= does not take a verdict. *It takes evidence and returns a
+verdict.*
+
+#+begin_example
+POST /changes/CHG-20260913-0001/settlement
+{ "lease": "brth_7f3a",
+  "claimed_build": "9e10de0",
+  "observations": [
+    {"probe": "https://…/version.json", "at": "…:04Z", "build": "9e10de0"},
+    {"probe": "https://…/version.json", "at": "…:07Z", "build": "9e10de0"},
+    {"probe": "https://…/version.json", "at": "…:10Z", "build": "9e10de0"}
+  ] }
+
+202 { "state": "settled", "attested_by": "convergence-probe",
+      "confidence": "sampled", "samples": 3, "distinct_builds": 1 }
+
+409 { "state": "unconverged", "distinct_builds": 2,
+      "seen": ["9e10de0", "445d69c"],
+      "detail": "the estate is serving two builds; this is not a retryable
+                 condition and re-running will not change it" }
+#+end_example
+
+=confidence= is part of the response on purpose. =sampled= is the honest word
+when the platform cannot enumerate its own replicas (=spec.org= §What completes
+a deployment). A platform that *can* returns =attested=, and the field is how a
+reader tells which kind of claim they are holding. Never omit it and never
+default it to the stronger value.
+
+* Why reservation and activation are separate
+
+=ADR 0001=. Reserving is not deploying. The guards evaluated when a window is
+booked are *stale by the time the window arrives*, which is the repo's central
+law:
+
+#+begin_quote
+A guard whose subject can change after it is checked must be re-checked at the
+moment it is relied on.
+#+end_quote
+
+So =activation= is called *by the scheduler*, not by the change. The change has
+no way to activate itself — that is what makes the re-check unavoidable rather
+than a convention someone remembers.
+
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    participant C as change
+    participant I as IDP
+    participant S as scheduler
+    participant P as probe
+    C->>I: POST /reservation
+    I-->>C: 201 window slot=14:00  (guards 0,1,2 checked NOW)
+    Note over I,S: time passes, the world moves
+    S->>I: POST /activation (slot due)
+    I->>I: re-check guards 0,2,4,4b AT RELIANCE
+    alt still eligible
+        I-->>S: 201 lease brth_7f3a
+        S->>P: deploy, then probe
+        P->>I: POST /settlement {observations}
+        I-->>P: 202 settled | 409 unconverged
+    else no longer eligible
+        I-->>S: 409 forfeit {class: "hotfix", berth: "held"}
+    end
+#+end_src
+
+* Refusals are the product
+
+Every refusal names the fact, the cost, and the recovery. A guard that blocks
+without a legible reason is a DX failure regardless of correctness.
+
+#+begin_example
+409 { "refused": "guard-0",
+      "fact":     "your base is 3 commits behind main",
+      "cost":     "deploying it would revert what landed since",
+      "recovery": "rebase onto main, then re-request the window",
+      "berth":    "not held" }
+
+409 { "refused": "guard-4b",
+      "fact":     "main moved during your window and it was a hotfix",
+      "cost":     "deploying your build would revert CHG-20260913-0007",
+      "recovery": "rebase and re-run staging",
+      "berth":    "HELD until 14:35Z" }
+#+end_example
+
+=berth= is in every refusal because *preemption is not staleness*. A change
+that went stale on its own loses its position; a change invalidated by someone
+else's emergency keeps it and gets an extension. A caller cannot tell those
+apart from the status code, so the field is not optional.
+
+* The calendar is a projection, not the store
+
+Two resources that look alike and are governed oppositely:
+
+| resource      | governs        | authority      | blocking? |
+|---------------+----------------+----------------+-----------|
+| *window*      | one change     | the IDP        | no — a record |
+| *freeze*      | the estate     | the calendar   | *yes*     |
+| *emergency*   | the estate     | the calendar   | *yes*     |
+| =change:emergency= | one change | a human        | exempts   |
+
+Windows are *written* to the calendar so humans can see them; they are not
+*read back* to make decisions. Freezes are read and do block. That asymmetry is
+deliberate: =spec.org= §The balance shows that letting a record become a
+control turns a calendar outage into a deployment outage, which is why
+=preflight= exit 4 exists and why =EMERGENCY_CHANGE= is its override.
+
+*So the IDP owns the queue; the calendar owns the freeze.* If the calendar is
+unreachable, reservations still work and freezes fail closed.
+
+* Idempotency and retries
+
+The scheduler will retry. Every write takes an =Idempotency-Key= and is safe to
+repeat:
+
+- =reservation= — same key returns the same window. A *different* key from the
+  same change replaces its window rather than booking a second.
+- =activation= — same key returns the same lease. This matters most: a retried
+  activation must not re-run the guards and get a different answer, or a
+  scheduler hiccup silently becomes a second evaluation at a different moment.
+- =settlement= — same key returns the same verdict. Settlement is the one place
+  where re-running *would* change the answer, because the estate moves, so the
+  verdict is frozen at first settle.
+
+* Minimal data model
+
+#+begin_example
+change   { id, pr, state, kind, risk, manifest[], base, head }
+window   { id, change, slot, berths_at_slot }
+lease    { id, change, activated_at, expires_at, extensions[], revalidate }
+freeze   { window_start, window_end, source, reason }
+#+end_example
+
+=state= is the ITIL 4 set: =submitted assessing scheduled implementing
+completed failed rejected cancelled=. =revalidate= on a lease is what the
+=[hotfix]= refusal sets — the berth survives, the verdict does not.
+
+* What is deliberately absent
+
+- *No =complete()=.* See §1.
+- *No priority field.* Priority invites queue-jumping, and the model already
+  has exactly one legitimate jump — =change:emergency= — which is a human
+  authorization with an audit trail, not a number.
+- *No cancel-other-change.* Nothing may evict a berth holder. Preemption
+  extends the holder; it does not displace it.
+- *No "force" flag.* Guards 2 and 5 have no bypass at all; a flag that appears
+  to offer one is a lie in the API surface.
+- *No deploy verb.* The IDP schedules and adjudicates. It does not deploy —
+  that is deployment management, a separate practice, and keeping it out is
+  what lets the same IDP front GitHub, Gitea or Jenkins.
+
+* Fit with prior art [P]
+
+=POST /settlement= with observations is close to *CDEvents*
+=dev.cdevents.service.deployed= (which requires =artifactId= + =environment=),
+and the =confidence= field is the thing CDEvents lacks — it has no authenticity
+model. =in-toto= has the attestation envelope but no deployment predicate. So
+this shape is not novel, it is the *unbridged gap* between the two, which is
+capability C6 (=docs/release-standards.org=).

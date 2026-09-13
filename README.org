@@ -5,6 +5,15 @@
 #+PROPERTY: header-args :mkdirp t
 #+OPTIONS: toc:2 num:t
 
+#+HTML: <p align="center">
+#+HTML: <img alt="spec 0.4" src="https://img.shields.io/badge/spec-0.4_establishing-blue">
+#+HTML: <img alt="ITIL 4" src="https://img.shields.io/badge/ITIL_4-change_enablement-5b2d8e">
+#+HTML: <img alt="TLA+ verified" src="https://img.shields.io/badge/TLA%2B-5_checks_both_directions-2e7d32">
+#+HTML: <img alt="gates" src="https://img.shields.io/badge/gate--selftest-negative_tested-2e7d32">
+#+HTML: <img alt="support matrix" src="https://img.shields.io/badge/support_matrix-no_cell_supported-b71c1c">
+#+HTML: <img alt="platform" src="https://img.shields.io/badge/built_on-FreeBSD_14.4-ab2b28">
+#+HTML: </p>
+
 * What this is
 
 Change enablement and deployment management, demonstrated end to end. Four mock
@@ -17,6 +26,63 @@ convention.
 =spec.org= governs. This file is derived and orients; where they disagree,
 =spec.org= wins. =scenarios.org= is the test plan, =tla/= the formal model of
 the promotion guards.
+
+* The flow, for a standard change
+
+The ordinary path, end to end. Emergencies, forfeited windows and what happens
+when =main= moves underneath you are all real and all deliberately absent here
+— see =docs/adr/0001-scheduled-deployment-windows.org= and =scenarios.org=.
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction TB
+    [*] --> Submitted: PR opened
+    Submitted --> Assessing: labeller sets app:*, change:standard
+    Assessing --> Scheduled: gates green -> window reserved
+    Scheduled --> Implementing: slot arrives, scheduler activates
+    Implementing --> Verified: staging deploy + authorizing e2e
+    Verified --> Live: production deploy
+    Live --> Completed: estate converged on the new build
+    Completed --> [*]: PIR posted, merged, berth freed
+
+    note right of Scheduled
+        reserving is not deploying
+    end note
+    note right of Live
+        guard 5 asserts the SERVED build,
+        not that something answered
+    end note
+#+end_src
+
+And the same path as a sequence, showing who does what:
+
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    autonumber
+    actor Dev
+    participant GH as forge
+    participant IDP as change control
+    participant Stg as staging
+    participant Prod as production
+
+    Dev->>GH: push -> PR
+    GH->>GH: labeller: app:*, change:standard
+    GH->>GH: gate-selftest -> lint, test, e2e (green @sha)
+    Dev->>IDP: request a window
+    IDP-->>Dev: window reserved
+    IDP->>Stg: slot arrives -> activate, deploy changed apps
+    Stg-->>IDP: authorizing e2e green
+    IDP->>Prod: deploy the same digests
+    Prod-->>IDP: N probes, one build -> converged
+    IDP->>GH: PIR, merge, release the berth
+    GH-->>Dev: shipped
+#+end_src
+
+Three things this picture is making claims about, each checked elsewhere:
+*reserving is not deploying* (the guards are re-evaluated when the slot
+arrives), *production promotes the digest staging tested* rather than
+rebuilding, and *converged is not alive* — guard 5 samples until one build
+answers, or refuses.
 
 * Environments
 
@@ -107,19 +173,19 @@ built once, tagged by the *commit SHA*, promoted by digest:
 #+begin_src mermaid :eval never-export
 flowchart LR
     subgraph build["Build once, on the PR head SHA"]
-        SRC["apps/&lt;group&gt;"] --> IMG["ghcr.io/.../&lt;group&gt;:&lt;sha&gt;<br/>digest sha256:..."]
+        SRC["apps/GROUP"] --> IMG["ghcr.io registry<br/>tag = commit sha<br/>digest sha256"]
     end
 
     subgraph stagingenv["staging — the mixed-app property"]
-        R1["router"] --> C1["core :&lt;prod-sha&gt;"]
-        R1 --> C2["plp :&lt;PR-sha&gt;"]
-        R1 --> C3["pdp :&lt;prod-sha&gt;"]
-        R1 --> C4["checkout :&lt;prod-sha&gt;"]
+        R1["router"] --> C1["core at prod sha"]
+        R1 --> C2["plp at PR sha"]
+        R1 --> C3["pdp at prod sha"]
+        R1 --> C4["checkout at prod sha"]
     end
 
     subgraph prodenv["production"]
         R2["router"] --> D1["core"] 
-        R2 --> D2["plp :&lt;PR-sha&gt;"]
+        R2 --> D2["plp at PR sha"]
         R2 --> D3["pdp"]
         R2 --> D4["checkout"]
     end
@@ -149,69 +215,69 @@ The local worktree topology is the same graph with =nginx= and =node= processes
 instead of containers — same router, same ports, same four upstreams. That
 correspondence is the point: what you run at =:10010= is what staging runs.
 
-* ChatOps and the scheduler
+* Interfaces, and the scheduler
 
-The pipeline is driven by labels, so ChatOps is a thin layer that sets labels
-and reads state back. The scheduler is the part that does not exist yet.
+The pipeline is driven by a small set of operations — reserve a window,
+activate when it is due, settle with evidence (=docs/idp-api.org=). *How a
+person reaches those operations is an interface concern and carries no
+semantics.* An API call, an MCP server, the IDP's own UI, a chat command and a
+label added by hand are all the same three verbs with different ergonomics.
+
+Keeping that boundary is what stops the model acquiring a dependency on any one
+of them. The guards live behind the API; a client that could bypass them would
+not be an interface, it would be a second implementation.
 
 #+begin_src mermaid :eval never-export
-sequenceDiagram
-    actor Dev
-    participant Chat as ChatOps
-    participant GH as GitHub
-    participant Cal as Change schedule
-    participant Env as staging
-    participant Prod as production
-
-    Dev->>Chat: /deploy pdp
-    Chat->>GH: add deploy:staging to PR
-    GH->>GH: queue.sh — guard 0 (up to date) + guard 1 (singleton)
-    alt behind main or queue busy
-        GH-->>Chat: refused + reason
-        Chat-->>Dev: "rebase onto main" / "held by #N"
-    else claimed
-        GH->>Cal: schedule.sh block — CHANGE window
-        Cal-->>GH: event id
-        GH->>Env: deploy app:* groups by digest
-        GH->>Env: authorizing e2e
-        Env-->>GH: pass -> staging:passed@sha
-        GH->>GH: promote.yml — guard 2 -> deploy:production
-        GH->>Prod: deploy same digests
-        GH->>Prod: gates/health.sh — x-build-sha
-        Prod-->>GH: healthy
-        GH->>GH: PIR comment, merge, release labels
-        GH->>Cal: schedule.sh close — result
-        GH-->>Chat: released; waiting PRs told to rebase
+flowchart LR
+    subgraph clients["interfaces — interchangeable"]
+        A["API / CLI"]
+        B["MCP server"]
+        C["IDP web UI"]
+        D["chat command"]
+        E["a label added by hand"]
     end
+    A --> API
+    B --> API
+    C --> API
+    D --> API
+    E --> API
+    API["change control API<br/>reserve / activate / settle"] --> G["the guards"]
+    G --> EST["staging, then production"]
+
+    style API fill:#fde68a,stroke:#a16207,color:#000
+    style G fill:#bbf7d0,stroke:#15803d,color:#000
 #+end_src
+
+** The scheduler is not an interface
+
+Activation is the one operation *no client calls*. The scheduler invokes it
+when a window comes due, and it re-evaluates every guard at that moment. That
+is deliberate: if a change could activate itself, the re-check would be a
+convention someone remembers rather than something the system does.
 
 ** What exists, and what is work
 
-| Piece                                   | State                                   |
-|-----------------------------------------+-----------------------------------------|
-| Label vocabulary and guards             | specified (=spec.org=), formally checked |
-| Guard logic in TLA+                     | *verified* — =tla/check.sh=, both directions |
-| =queue.sh=, =health.sh=, =release.sh=   | specified, tangleable, *unwritten*      |
-| Calendar =block= / =check= / =close=    | *unbuilt* — no account, id, or auth decided |
-| ChatOps =/deploy=, =/status=, =/release= | *unbuilt*                              |
-| IDP environment checkout / release      | *unbuilt* — see =.claude/skills/=       |
-| Telemetry redline on completion         | *unbuilt*                               |
+| Piece                                   | State                                    |
+|-----------------------------------------+------------------------------------------|
+| Label vocabulary and guards             | specified, formally checked              |
+| Guard logic in TLA+ and =sim/=          | *verified* — both directions             |
+| =queue.sh=, =health.sh=, =release.sh=   | written, never run against a live forge  |
+| The three-verb API                      | designed (=docs/idp-api.org=), unbuilt   |
+| Change schedule integration             | *unbuilt* — no account or calendar chosen |
+| Any interface at all                    | *unbuilt*                                |
 
-The scheduler work splits in two, and they are genuinely different problems:
+The scheduler work splits in two, and they are different problems:
 
-- *Change windows* (=CHANGE:= events) are a /record/. Writing them is
-  fire-and-forget; nothing blocks on them. Cheap.
-- *Freezes and emergencies* (=FREEZE:=, =EMERGENCY:=) are a /control/. The
-  pipeline blocks on reading them, so the calendar becomes a dependency in the
-  deployment path — and =preflight= exit 4 (unreachable, no override) *blocks*.
-  A read-path outage stops deployments, which is the correct failure direction
-  and still an outage. The =EMERGENCY_CHANGE= repo variable is the break-glass
-  for the break-glass.
+- *Change windows* are a /record/. Writing one is fire-and-forget and nothing
+  blocks on it.
+- *Freezes and emergencies* are a /control/. The pipeline blocks on reading
+  them, which makes that read a dependency in the deployment path — and a read
+  failure must fail closed. That is the correct direction and still an outage,
+  which is why the =EMERGENCY_CHANGE= override exists.
 
-Note the word "emergency" runs in two directions, which is a live source of
-confusion worth stating: an =EMERGENCY:= *calendar event* blocks the estate,
-while a =change:emergency= *label* exempts one PR. The calendar governs
-everyone; the label governs one change.
+One word runs in two directions and is worth stating plainly: an =EMERGENCY:=
+*calendar event* blocks the estate, while a =change:emergency= *label* exempts
+one change. The calendar governs everyone; the label governs one.
 
 * Repository map
 

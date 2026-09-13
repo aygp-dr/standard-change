@@ -231,14 +231,14 @@ sequenceDiagram
     participant Stg as staging
     participant Prod as production
 
-    Dev->>GH: push -> PR #101 touching apps/pdp
+    Dev->>GH: push, opening PR 101 touching apps/pdp
     GH->>GH: labeller: +app:pdp +change:standard
     GH->>IDP: change submit --pr 101 --groups pdp
     IDP-->>GH: CHG-20260913-0001 risk=8 type=standard
     GH->>GH: gate-selftest -> lint, test, e2e (green @sha1)
     Dev->>GH: +deploy:staging
     GH->>IDP: queue.sh claim 101 (guard 0, guard 1)
-    IDP-->>GH: claimed; berth held 30m
+    IDP-->>GH: claimed, berth held 30m
     GH->>Stg: deploy pdp@sha1, core/plp/checkout@prod
     Stg-->>GH: authorizing e2e green -> +staging:passed@sha1
     GH->>GH: promote.yml guard 2 -> +deploy:production
@@ -249,7 +249,7 @@ sequenceDiagram
     GH->>Prod: deploy same digests
     Prod-->>GH: health.sh x-build-sha == sha2 -> +production:healthy
     GH->>GH: pir.sh comment, merge, release.sh
-    GH-->>Dev: labels cleared; queue freed; waiters told to rebase
+    GH-->>Dev: labels cleared, queue freed, waiters told to rebase
 #+end_src
 
 ** Configuration the run depends on
