@@ -71,6 +71,49 @@ So under delegation, acceptance is *weaker than it was*, in a way the label does
 not show. That is the trade the owner made knowingly, bounded to ten PRs. It is
 recorded here rather than discovered later.
 
+* Amendment, same day: the approve half is inert
+
+Discovered on first use (issue #30). *The proxy cannot approve anything in this
+repository.*
+
+: $ gh pr review 22 --approve
+: GraphQL: Review Can not approve your own pull request
+
+The proxy authenticates as =aygp-dr=, which is the author of every pull request
+here. GitHub refuses self-approval, correctly, and there is no PR the proxy can
+act on.
+
+=change/guard4.sh= requires =reviewDecision == APPROVED=, so every PR the proxy
+reviews is refused by guard 4 on the review check *however good the review was*.
+That is the safe direction and it stays.
+
+*So the table above is amended*: decision 3 is **not** delegated in practice.
+
+| # | decision      | delegated? | status |
+|---+---------------+------------+--------|
+| 1 | ask           | no         | owner  |
+| 2 | take a slot   | no         | owner  |
+| 3 | *approve*     | *intended* | *inert — no mechanism (#30)* |
+| 4 | accept        | yes        | works: =observe.sh= + smoke exit 0 |
+
+The proxy *recommends*. It writes its judgement as a labelled PR comment saying
+explicitly that it does not set =APPROVED=. That is honest and it is not a
+review.
+
+*This is not a technicality.* The proxy refused #21 over a =mktemp -t=
+portability bug that would have reduced the e2e gate from 27 checks to *zero* on
+CI while reporting a clean exit — a real defect, found by reading the diff, with
+nowhere to record the verdict that the pipeline reads.
+
+*What it means for the break this afternoon*: the owner remains the
+serialization point for every change, which is exactly what
+=docs/adr/0001-automatic-promotion.org= §The human is the serialization point
+predicts. Delegating the judgement did not delegate the bottleneck, because the
+bottleneck was never the judgement — it was the *authority to record* it.
+
+*Not fixed by relaxing guard 4.* A gate weakened to fit a workaround is what
+=.claude/agents/jwalsh.md= rule 3 refuses PRs for.
+
 * The bound
 
 *Ten pull requests from 2026-09-13.* After that the delegation lapses and both
