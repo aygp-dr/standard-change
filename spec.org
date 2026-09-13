@@ -1568,6 +1568,58 @@ So: specified, understood, and not reachable — the same status as the ruleset
 table, and worth recording at the same fidelity so an enterprise rollout starts
 from "turn the queue on" rather than from "build a berth".
 
+** Approval as a gate, and what an agent review is worth
+
+*Not enabled.* Recorded because the design question is sharper than the switch.
+
+=allow_auto_merge= is =false= on this repo, and requiring an approving review
+needs a ruleset — 403 here (§main is not protected). So this is specification,
+not configuration.
+
+*** An approval is an observation label
+
+By §Labels as state transitions, "approved" is =<subject>:<state>= — a claim
+that someone looked. Which puts it in the forgeable column, and raises the
+question the taxonomy always raises: *does the approver re-derive anything, or
+only assert?*
+
+| review by                       | re-derives? | worth as a gate                     |
+|---------------------------------+-------------+-------------------------------------|
+| a person who read the diff      | yes, weakly | judgement the gates cannot encode   |
+| an agent that ran the gates     | *yes*       | *evidence* — but it duplicates gate.yml |
+| an agent that says "looks good" | no          | *nothing* — an observation nobody made |
+| the author, of their own change | no          | nothing, at any level of effort     |
+
+*An agent review counts exactly insofar as it re-derived something the gates
+did not.* An agent that re-runs =gate.yml= adds no information; an agent that
+reads the change for what the gates /cannot/ check — is this reversible (A5),
+does the rollback target still exist, does the PIR say what it should — is
+supplying evidence nobody else is.
+
+That is the honest brief for an agent reviewer here: *do not review the code
+the gates already judge.* Review the things no gate asks.
+
+*** The single-identity problem
+
+This repo has two collaborators, =jwalsh= and =aygp-dr=, and in practice one
+person behind both. So a required approval is satisfiable but not *meaningful*
+— and =prevent_self_review= would deadlock every change, which is why
+=.github/config/ruleset-main.json= sets it =false= with a note.
+
+Worth stating rather than quietly configuring around: *a required approval on a
+one-maintainer repo is theatre unless the approver is genuinely a second
+party.* An agent is a second party only if it is a second /judgement/, not a
+second click.
+
+*** If it were enabled
+
+: ruleset: pull_request.required_approving_review_count = 1
+: repo:    allow_auto_merge = true
+
+with =change:normal= already requiring it (§Labels) and =change:standard=
+relying on the gates as the change authority — which is the existing split, and
+the reason the split exists.
+
 * Controls audit
 
 Every control the spec claims is auditable as JSON, without a UI visit.
