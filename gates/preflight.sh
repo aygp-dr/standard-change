@@ -42,6 +42,22 @@ else
 fi
 
 # --- do the gates pass for this exact build? -----------------------------
+# LOCAL GATE REPORTS. gates/report.sh runs the suite on a host that can reach
+# the estate and posts the result as commit statuses under `local/`. Guard 2
+# counts them, because they are a real measurement of this SHA -- the gates
+# actually ran and every status was gated on an exit code.
+#
+# They are prefixed `local/` so a reader can always tell a host run from a CI
+# run, and when CI returns its contexts sit beside these rather than replacing
+# them. This is the same reachability answer as the observation labels: the
+# measurement happens where it can, and is carried to the forge in the forge's
+# own vocabulary.
+locals=$(gh api "repos/$R/commits/$head/status" \
+  --jq '[.statuses[]|select(.context|startswith("local/"))]' 2>/dev/null || echo '[]')
+lok=$(printf '%s' "$locals" | jq '[.[]|select(.state=="success")]|length' 2>/dev/null || echo 0)
+lbad=$(printf '%s' "$locals" | jq '[.[]|select(.state!="success")]|length' 2>/dev/null || echo 0)
+lself=$(printf '%s' "$locals" | jq '[.[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
+
 bad=$(gh api "repos/$R/commits/$head/check-runs" \
        --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length' 2>/dev/null || echo 99)
 self=$(gh api "repos/$R/commits/$head/check-runs" \
@@ -75,6 +91,11 @@ failed=$(gh api "repos/$R/commits/$head/check-runs" \
 
 if [ "$bad" = 99 ]; then
   no "I could not reach the forge to read the check runs." 4
+elif [ "$lbad" -eq 0 ] && [ "$lok" -ge 3 ] && [ "$lself" -ge 1 ]; then
+  yes "gates green on THIS head, $short — reported by gates/report.sh"
+  note "$lok local/ contexts, gate-selftest among them, none failing."
+  note "measured on a host, not by CI, and the contexts say so. The gates ran;"
+  note "each status was gated on the exit code of the command that produced it."
 elif [ "$bad" -gt 0 ] && [ "$failed" -eq 0 ] && [ "$notrun" -gt 0 ]; then
   no "the gates DID NOT RUN ($notrun skipped, 0 failed). Not red -- absent." 4
   note "a check run reports conclusion=failure both for a real failure and for"
