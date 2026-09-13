@@ -1,0 +1,98 @@
+#!/bin/sh
+# idp -- the calendar, as a local service. Gitignored on purpose.
+#
+# Three verbs, one resource:
+#
+#   idp request <pr> [minutes]   ask for a slot        -> a pending request
+#   idp schedule <pr>            grant it a window     -> a booked slot
+#   idp clear <pr> <check>       clear a named check   -> that check, done
+#   idp show [pr]                what is booked, and what each PR still owes
+#
+# WHY IT IS GITIGNORED. This is per-host state: which slots THIS machine has
+# granted, and which checks THIS machine has seen clear. Four separate defects
+# came from tracking runtime state in git today -- ports.tsv, front.pid,
+# targets/node/live, and ports.tsv again -- each stale the moment it is
+# committed and each blocking a rebase. A CMDB does not live in the app's repo.
+#
+# WHY IT IS SEPARATE FROM change/schedule.sh. schedule.sh books a WINDOW against
+# a git ref with compare-and-swap, which is the durable, shared record. This is
+# the counter you walk up to: it holds requests that have not been granted yet,
+# and per-PR checks, neither of which belongs in a shared CAS store.
+set -eu
+cd "$(dirname "$0")"
+DB="${IDP_DB:-.idp/calendar.tsv}"
+mkdir -p "$(dirname "$DB")"
+[ -f "$DB" ] || printf 'pr\tstate\tminutes\tstart\tend\tchecks_cleared\tupdated\n' > "$DB"
+now() { date -u +%FT%TZ; }
+
+# Slots quantise to 30 minutes, same as change/schedule.sh, so a window granted
+# here names the same instants a window booked there does.
+slot() {
+  python3 - "$1" <<'PY'
+import datetime, math, sys
+q, mins = 30, int(sys.argv[1])
+n = datetime.datetime.now(datetime.timezone.utc).replace(second=0, microsecond=0)
+s = n.replace(minute=(n.minute // q) * q)
+k = math.ceil(((n - s).total_seconds() / 60 + mins) / q)
+print(s.strftime('%Y-%m-%dT%H:%M:%SZ'))
+print((s + datetime.timedelta(minutes=k * q)).strftime('%Y-%m-%dT%H:%M:%SZ'))
+PY
+}
+
+row()  { awk -F'\t' -v p="$1" '$1==p' "$DB" | tail -1; }
+put()  { # put <pr> <state> <minutes> <start> <end> <checks>
+  tmp="$DB.$$"; awk -F'\t' -v p="$1" '$1!=p' "$DB" > "$tmp"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$(now)" >> "$tmp"
+  mv "$tmp" "$DB"
+}
+
+case "${1:-show}" in
+  request)
+    pr="${2:?usage: idp request <pr> [minutes]}"; mins="${3:-30}"
+    # A REQUEST IS NOT A BOOKING. This is the human act -- asking. Granting is
+    # the scheduler's, and keeping them separate is the whole reservation /
+    # activation split (docs/adr/0001-automatic-promotion.org, Option B).
+    put "$pr" requested "$mins" - - ""
+    echo "  #$pr requested a $mins-minute slot. Not granted -- run: ./idp schedule $pr"
+    ;;
+
+  schedule)
+    pr="${2:?usage: idp schedule <pr>}"
+    r=$(row "$pr"); [ -n "$r" ] || { echo "  #$pr has not requested a slot" >&2; exit 2; }
+    mins=$(printf '%s' "$r" | cut -f3); [ "$mins" = - ] && mins=30
+    set -- $(slot "$mins"); s="$1"; e="$2"
+    # One slot at a time, like the berth. A calendar that double-books is a
+    # calendar that cannot be relied on -- last-write-wins is what made a shared
+    # Google calendar the wrong home for this (change/schedule.sh, header).
+    clash=$(awk -F'\t' -v p="$pr" -v s="$s" -v e="$e" \
+      '$1!=p && $2=="scheduled" && $4<e && $5>s {print $1}' "$DB" | head -1)
+    [ -z "$clash" ] || { echo "  refused: #$clash holds $s..$e" >&2; exit 5; }
+    put "$pr" scheduled "$mins" "$s" "$e" "$(printf '%s' "$r" | cut -f6)"
+    echo "  #$pr scheduled  $s .. $e"
+    ;;
+
+  clear)
+    pr="${2:?usage: idp clear <pr> <check>}"; chk="${3:?}"
+    r=$(row "$pr"); [ -n "$r" ] || { echo "  #$pr is not on the calendar" >&2; exit 2; }
+    had=$(printf '%s' "$r" | cut -f6)
+    case " $had " in *" $chk "*) echo "  #$pr: $chk already cleared"; exit 0 ;; esac
+    put "$pr" "$(printf '%s' "$r" | cut -f2)" "$(printf '%s' "$r" | cut -f3)" \
+        "$(printf '%s' "$r" | cut -f4)" "$(printf '%s' "$r" | cut -f5)" \
+        "$(printf '%s %s' "$had" "$chk" | sed 's/^ //')"
+    echo "  #$pr <- $chk cleared"
+    ;;
+
+  show)
+    if [ -n "${2:-}" ]; then
+      r=$(row "$2"); [ -n "$r" ] || { echo "  #$2 is not on the calendar"; exit 0; }
+      printf '  #%s  %s  %s .. %s\n  cleared: %s\n' \
+        "$2" "$(printf '%s' "$r"|cut -f2)" "$(printf '%s' "$r"|cut -f4)" \
+        "$(printf '%s' "$r"|cut -f5)" "$(printf '%s' "$r"|cut -f6)"
+    else
+      printf '  %-5s %-10s %-21s %-21s %s\n' PR STATE START END CLEARED
+      awk -F'\t' 'NR>1 {printf "  %-5s %-10s %-21s %-21s %s\n", $1,$2,$4,$5,$6}' "$DB"
+    fi
+    ;;
+
+  *) echo "usage: idp {request <pr> [min]|schedule <pr>|clear <pr> <check>|show [pr]}" >&2; exit 2 ;;
+esac

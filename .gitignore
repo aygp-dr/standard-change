@@ -35,3 +35,8 @@ targets/node/live
 # time anything deploys. Fourth instance of this defect today after front.pid,
 # targets/node/live and this file earlier. A CMDB does not live in the app repo.
 ports.tsv
+
+# The local IDP calendar: per-host state, which slots THIS machine granted and
+# which checks it saw clear. Fifth instance of the rule -- a CMDB does not live
+# in the app repo (ports.tsv, front.pid, targets/node/live).
+.idp/
