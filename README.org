@@ -37,7 +37,7 @@ when =main= moves underneath you are all real and all deliberately absent here
 stateDiagram-v2
     direction TB
     [*] --> Submitted: PR opened
-    Submitted --> Assessing: labeller sets app:*, change:standard
+    Submitted --> Assessing: labeller sets app:*, itil:standard
     Assessing --> Scheduled: gates green -> window reserved
     Scheduled --> Implementing: slot arrives, scheduler activates
     Implementing --> Verified: staging deploy + authorizing e2e
@@ -74,7 +74,7 @@ sequenceDiagram
     participant Prod as production
 
     Dev->>GH: push -> PR
-    GH->>GH: labeller: app:*, change:standard
+    GH->>GH: labeller: app:*, itil:standard
     GH->>GH: gate-selftest -> lint, test, e2e (green @sha)
     Dev->>IDP: request a window
     IDP-->>Dev: window reserved
@@ -122,6 +122,38 @@ So there is no "promote" button, and adding =deploy:production= by hand is not
 one either — it is an *action* label, and asserting it claims the workflow is
 deploying right now.
 
+*** Change control owns the cleanup, and the deployment annotation
+
+When a change completes, *change control* — =change/settle.sh= — does three
+things in order, and the order is the content:
+
+1. *sets =change:complete=* — validation is done
+2. *merges*, then *posts the PIR*
+3. *clears the deployment labels and writes the deployment annotation*
+
+Step 3 is the part worth naming. Clearing =deploy:staging= is not tidying: it
+is the *release of the berth*, and a change that completes without clearing it
+holds the path to production forever. Every other =staging:*= and
+=production:*= label goes at the same time, because they described where this
+change sat in the process and it is no longer in the process.
+
+*The deployment annotation is written here too, and only here.* Not when the
+deploy starts. The deployer used to open a record =in_progress= and resolve it
+later — GitHub's own model — and every record it opened resolved to *failure*,
+because =deploy-staging= dies at =queue.sh= before deploying (issue #25). PRs
+read "1 failed deployment" while the estate served that build perfectly: the
+record described the *workflow run*, not the environment.
+
+By settlement, production has been observed serving the build. There is nothing
+left to intend, so the annotation is written from a fact. It is keyed to the
+*SHA*, never the branch, because settlement deletes the branch and a record
+tied to a branch name cannot outlive it.
+
+*What that costs, stated rather than discovered*: the history shows no failed
+deployments, because a failed deploy never reaches settlement. "No failures"
+will read as "nothing ever failed". And "is a deploy in flight right now?"
+cannot be answered from the records — that question belongs to the berth.
+
 *** Two namespaces: annotations, and the record
 
 | namespace                    | what it is                                | lifetime                        |
@@ -129,8 +161,28 @@ deploying right now.
 | =staging:*=, =production:*=  | build/deploy *annotations* — a fact about a BUILD in an ENVIRONMENT | ephemeral; cleared per change   |
 | =change:*=                   | the *record* — a fact about the CHANGE    | durable; never cleared          |
 
-=change:requested= → =change:scheduled= → *=change:complete=*. That is the state
-machine, and =change:complete= is the *terminal state*.
+*Two namespaces, and they are different kinds of fact.* Mixing them is the
+defect that made "a PR has at most one =change:*=" impossible to state, because
+=change:standard= plus =change:complete= was a legitimate pair:
+
+| namespace  | kind             | members                                              | cardinality |
+|------------+------------------+------------------------------------------------------+-------------|
+| =itil:*=   | *classification* | =itil:standard= · =itil:normal= · =itil:emergency=   | exactly one |
+| =change:*= | *lifecycle*      | =change:requested= → =change:scheduled= → =change:complete= | one active |
+
+=itil:*= is the ITIL change type and says *what kind of change this is*.
+=change:*= says *where the change record has got to*. A change is classified
+once and moves through the lifecycle many times.
+
+=change:complete= is the terminal state of *validation*: set when every guard
+has passed and production is observed serving the build, *before* the merge,
+because the merge follows completion rather than constituting it. Cleanup then
+clears it — once the forge records =MERGED=, the label restates a fact the
+platform owns, and two records of one fact can disagree while the platform's
+cannot.
+
+*Neither namespace is a blocker.* A freeze, a held berth and an emergency in
+flight are facts about the *estate*, not about any change — see below.
 
 =production:healthy= is not terminal, and neither is =staging:uat=. Neither is
 about the change; both are about a build that happens to be the change's head
@@ -416,7 +468,7 @@ The scheduler work splits in two, and they are different problems:
   which is why the =EMERGENCY_CHANGE= override exists.
 
 One word runs in two directions and is worth stating plainly: an =EMERGENCY:=
-*calendar event* blocks the estate, while a =change:emergency= *label* exempts
+*calendar event* blocks the estate, while an =itil:emergency= *label* exempts
 one change. The calendar governs everyone; the label governs one.
 
 * Repository map
