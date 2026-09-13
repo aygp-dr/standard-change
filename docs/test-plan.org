@@ -1,0 +1,89 @@
+#+TITLE: Test plan — grinding the scenarios before spending real PRs
+#+SUBTITLE: Generated from a simulated week, so the expensive run can be aimed
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:t
+
+* Why generate it rather than write it
+
+The full PR path is heavyweight: branch, push, labeller, gates, window, deploy,
+verify, settle. Exercising every scenario that way costs hours and most of it
+is waiting. =sim/speedrun.py= drives the same state machine on a simulated
+clock — *a week runs in under a second* — and records which transitions it
+actually reached.
+
+The value is not the pass/fail. It is that the plan below covers *transitions
+the model demonstrably produces*, and names the ones it does not, so a real PR
+is never spent discovering that a case was unreachable.
+
+: ./sim/speedrun.py --days 7 --plan
+
+* A simulated week, one berth
+
+| measure     | value |
+|-------------+-------|
+| arrived     |   125 |
+| shipped     |   110 |
+| forfeits    |    29 |
+| rollbacks   |     4 |
+| gate red    |    15 |
+| emergencies |     5 |
+
+*29 forfeits against 110 ships.* Roughly one change in four reaches its window
+and is refused there — which is guard 4b doing its job under a mix where 55% of
+traffic touches =apps/**=, and the clearest argument in this repo for the ADR
+options that remove the shared trunk.
+
+* The plan
+
+Each row was reached by the model. Run them in this order; the later ones
+depend on state the earlier ones create.
+
+| # | transition            | do this with a real PR                                      | expect |
+|---+-----------------------+-------------------------------------------------------------+--------|
+| 1 | submitted             | open a PR touching =apps/<x>=                                | labeller attaches =app:<x>= and =change:standard= |
+| 2 | gate red              | push a commit failing a unit test                            | =gate.yml= red; =promote.yml= refuses |
+| 3 | activated             | let a reserved window come due with =main= unmoved           | =deploy:staging= appears — added by the scheduler, not a person |
+| 4 | slot forfeited        | merge an =apps/**= change to =main= while a window is reserved | slot forfeited, berth *held*, staging pass withdrawn |
+| 5 | re-requested          | rebase the forfeited change, re-add =change:requested=       | it takes the next free window |
+| 6 | emergency break-glass | =change:emergency= + an approving review, then =deploy:production= | staging skipped; guards 2 and 5 still run |
+| 7 | ROLLBACK              | deploy, then make =/version.json= report the *old* sha        | guard 5 =UNCONVERGED=, revert to the idle colour, PIR records it |
+| 8 | completed             | a clean change end to end                                     | =production:healthy=, merge, berth frees |
+
+** Doc-only changes are the control
+
+Not in the table because they are the *absence* of an event: a change touching
+only =docs/= classifies =inert=, so a merge of one while a window is open must
+*not* forfeit it. Worth running precisely because nothing should happen — it is
+the test that guard 4b is classified rather than paranoid.
+
+* What the run could not reach, and why it matters
+
+=window refused= — *zero occurrences in 336 slots.* Not a gap in the mix; a
+disagreement between the model and the implementation:
+
+| when the berth is busy | behaviour |
+|------------------------+-----------|
+| =sim/pipeline_sim.py=  | books the *next free future slot* — a calendar |
+| =change/queue.sh=      | *refuses*, sets =blocked:queue= — a mutex |
+
+=queue.sh= implements the *pre-ADR* model, where requesting and deploying were
+one act. ADR 0001 split them and the queue never caught up: under the split, a
+busy berth should *defer* a reservation, not reject it, because reserving is
+not deploying.
+
+*This is the seventh model/implementation divergence found in this repo, and
+the first found by a speed run rather than by a live failure* — which is the
+argument for running one before spending PRs. Fixing it is a decision, not a
+patch: either the queue learns to defer, or the ADR's split is narrower than it
+claims.
+
+* Using this against real PRs
+
+1. Run =./sim/speedrun.py --days 7 --plan= and diff its transition list against
+   the last one. A transition that *stops* being reachable is a regression in
+   the model.
+2. Work the table in order, one PR each.
+3. After each, =./status= must show the queue state the plan predicts, and
+   =./envs= the estate.
+4. Anything the plan says is unreachable should stay unreachable. If a real PR
+   produces it, the model is wrong and that is worth more than the PR.
