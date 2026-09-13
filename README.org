@@ -94,20 +94,20 @@ out the same way, and a team environment can never promote.
 #+begin_src mermaid :eval never-export
 flowchart TB
     subgraph local["Local — one port block per git worktree"]
-        W0["main worktree<br/>router :10000<br/>apps :10001-10005"]
-        W1["feat/pdp-price<br/>router :10010<br/>apps :10011-10015"]
-        W2["feat/plp-facets<br/>router :10020<br/>apps :10021-10025"]
+        W0["main worktree<br/>router :9000<br/>apps :9001-9005"]
+        W1["feat/pdp-price<br/>router :9010<br/>apps :9011-9015"]
+        W2["feat/plp-facets<br/>router :9020<br/>apps :9021-9025"]
     end
 
     subgraph team["Team environments — parallel, disposable, NOT on the path"]
-        E1["env/checkout-team<br/>checked out by a team"]
-        E2["env/search-team"]
-        E3["env/pdp-team"]
+        E1["env/checkout-team :9100<br/>cannot promote"]
+        E2["env/search-team :9110<br/>cannot promote"]
+        E3["env/pdp-team :9120<br/>cannot promote"]
     end
 
     subgraph path["Path to production — singleton, queued"]
-        S["staging<br/>held by ONE pr at a time<br/>deploy:staging"]
-        P["production"]
+        S["staging :9201<br/>held by ONE change at a time"]
+        P["production :9200<br/>blue/green"]
     end
 
     W1 --> E1
@@ -124,12 +124,16 @@ flowchart TB
     style X fill:#fecaca,stroke:#b91c1c,color:#000
 #+end_src
 
-| Environment       | Count      | Checked out by     | Promotes? | Freed by                         |
-|-------------------+------------+--------------------+-----------+----------------------------------|
-| worktree block    | per clone  | =make port-alloc=  | no        | =make port-free=                 |
-| =env/<team>-<app>= | many      | IDP checkout       | *no*      | IDP release, or lease expiry     |
-| =staging=         | *exactly 1* | =deploy:staging=  | yes       | merge, failure, or guard 4b      |
-| =production=      | 1          | =deploy:production= | —        | —                                |
+| Environment       | Ports       | Tier        | Count       | Promotes? | Freed by                     |
+|-------------------+-------------+-------------+-------------+-----------+------------------------------|
+| worktree block    | *9000–9099* | *dev*       | per clone   | no        | =gmake port-free=            |
+| =env/<team>-<app>= | *9100–9199* | *team*     | many        | *no*      | IDP release, or lease expiry |
+| =staging=         | *9201*      | *protected* | *exactly 1* | yes       | merge, failure, or guard 4b  |
+| =production=      | *9200*      | *protected* | 1 (+1 idle) | —         | —                            |
+
+*The port number is the tier.* An address below 9100 is disposable, 9100–9199
+is real but cannot promote, and 9200+ is the path to production — so "which
+kind of environment is this?" is answerable from the URL alone.
 
 The asymmetry is deliberate. Team environments are cheap, many, and leased —
 losing one costs a re-checkout. Staging is scarce, singular, and *queued*,
@@ -213,7 +217,7 @@ Three properties fall out, and each is a scenario in =scenarios.org=:
 
 The local worktree topology is the same graph with =nginx= and =node= processes
 instead of containers — same router, same ports, same four upstreams. That
-correspondence is the point: what you run at =:10010= is what staging runs.
+correspondence is the point: what you run at =:9010= is what staging runs at =:9201=.
 
 * Interfaces, and the scheduler
 

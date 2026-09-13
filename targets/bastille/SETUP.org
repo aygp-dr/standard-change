@@ -2,6 +2,15 @@
 #+DATE: 2026-09-13
 #+OPTIONS: toc:2 num:t
 
+*Port tiers.* The number says what an environment is and whether it can
+promote (=spec.org= §The port map):
+
+| range       | tier        | can promote? |
+|-------------+-------------+--------------|
+| 9000–9099   | *dev*       | no — disposable worktree blocks |
+| 9100–9199   | *team*      | *no* — real, and a dead end by construction |
+| 9200–9299   | *protected* | *yes* — the path to production |
+
 * The estate
 
 #+begin_src mermaid :eval never-export
@@ -29,7 +38,7 @@ flowchart TB
 
 *Every jail listens on port 80.* Each has its own IP, so ports cannot collide,
 and the deployed config is byte-identical across environments — there is no
-port number for staging and production to differ in. The =10000 + 10n= blocks
+port number for staging and production to differ in. The =9000 + 10n= blocks
 remain correct for dev worktrees, which share hydra's namespace. Two different
 problems, two different answers.
 

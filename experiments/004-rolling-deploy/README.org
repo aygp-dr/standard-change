@@ -16,6 +16,13 @@ A half-migrated fleet passes the old check about half the time, and the new
 check refuses it every time. Refuted if the old check reliably fails — that
 would mean sampling was sufficient.
 
+* A note on the ports used
+
+This experiment predates the tier scheme and used =19000-19002=, deliberately
+outside every tier — it was a throwaway fleet, not an environment. Under the
+current map (=spec.org= §The port map) a one-off probe like this belongs
+outside =9000-9299= exactly as it was, so nothing here needs changing.
+
 * Method
 
 Two instances of =apps/core= on the same port block, differing only in

@@ -88,8 +88,12 @@ the handful of terms this repo sharpened past their ITIL definitions.
   parameterized by group, which is what lets a PR deploy one app against three
   production peers.
 - *port block* - ten contiguous ports owned by one git worktree: router at
-  =10000 + 10n=, apps at fixed offsets. The local analogue of a staging slot,
-  and the reason parallel worktrees do not collide.
+  =9000 + 10n=, apps at fixed offsets. The reason parallel worktrees do not
+  collide, and needed only because worktrees share one network namespace.
+- *port tier* - the range an address sits in, which says what the environment
+  is: *dev* =9000+= (disposable), *team* =9100+= (real, cannot promote),
+  *protected* =9200+= (the path to production). The tier is a property of the
+  address rather than a rule to remember.
 - *slot* (=staging-<group>-<n>=) - a full four-app topology where the changed
   group is the PR build and the other three resolve to current production. A
   slot is a /cell/ in the sense above: a claim is true at a slot.

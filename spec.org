@@ -350,14 +350,15 @@ apps/<app>/
 
 Each git worktree owns a contiguous block of ten ports. The router (nginx) listens on the block base; apps listen on base + offset.
 
-| Worktree              | Block | nginx | core  | plp   | pdp   | checkout | mock backend |
-|-----------------------+-------+-------+-------+-------+-------+----------+--------------|
-| main (stable)         |     0 | 10000 | 10001 | 10002 | 10003 |    10004 |        10005 |
-| first branch worktree |     1 | 10010 | 10011 | 10012 | 10013 |    10014 |        10015 |
-| second                |     2 | 10020 | 10021 | 10022 | 10023 |    10024 |        10025 |
-| n-th                  |     n | 10000+10n | +1 | +2   | +3    | +4       | +5           |
+| Worktree              | Block | router | core | plp  | pdp  | checkout | mock |
+|-----------------------+-------+--------+------+------+------+----------+------|
+| main (stable)         |     0 |   9000 | 9001 | 9002 | 9003 |     9004 | 9005 |
+| first branch worktree |     1 |   9010 | 9011 | 9012 | 9013 |     9014 | 9015 |
+| second                |     2 |   9020 | 9021 | 9022 | 9023 |     9024 | 9025 |
+| n-th (n ≤ 9)          |     n | 9000+10n | +1 | +2   | +3   | +4       | +5   |
 
-Ports 10006–10009 (and the same offsets in each block) are unallocated.
+Offsets 6–9 in each block are unallocated. *Block 9 is the last*: block 10
+would start at 9100, which is the team tier (§The port map).
 
 ** The port map
 
