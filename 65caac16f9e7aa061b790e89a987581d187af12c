@@ -1,0 +1,19 @@
+Timeline
+- Running it found two bugs that reading it did not:
+  1. POSIX sh has no locals: write_state assigned to $new, clobbering the
+     caller's $new with a blob hash. Symptom was a jq parse error on a
+     40-char hex string, not a wrong hold -- the loud failure was luck.
+  2. extend computed the new deadline from NOW, so extending a 30m hold by
+     20m SHORTENED it to 20m remaining. An extension that shortens a lease
+     is exactly the silent wrongness this pipeline exists to prevent; the
+     first run printed 'extended to' a time earlier than the original.
+     Fixed with plus_from(), which extends from max(current deadline, now).
+- CAS then verified by racing two writers from the same read.
+
+Reproduction (scratch git repo, IDP_BACKEND=ref)
+  state.sh claim 101 30   -> holds until T+30
+  state.sh emergency 404  -> holder keeps position
+  state.sh extend 101 20  -> T+50, not T+20     (regression test for bug 2)
+  two update-ref writes from one old value:
+    second -> 'cannot lock ref: is at <b> but expected <a>', exit 128
+Cell: FreeBSD 14.4 amd64, git 2.53.0, jq 1.8.1

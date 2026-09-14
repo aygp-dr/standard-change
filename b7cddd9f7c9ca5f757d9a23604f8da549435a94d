@@ -1,0 +1,16 @@
+Timeline
+- Built five apps as bare node http servers (no deps, no containers:
+  FreeBSD is a poor docker/podman host and this is a pipeline simulator).
+- nginx is not installed, so router/server.js stands in for it with the
+  same longest-prefix contract driven by router/routes.json.
+- First worktree run exposed both defects above within a minute of each
+  other; neither was visible from reading spec.org.
+
+Reproduction
+  ./change/ports.sh alloc           x3 (main + 2 worktrees) -> blocks 0,1,2
+  ./change/ports.sh run-apps        x3
+  18/18 ports answer 200 (3 blocks x router + 5 apps)
+  routing isolated: :10010/search -> app=plp block=1
+                    :10020/search -> app=plp block=2
+  x-build-sha 445d69c present on all three routers (guard 5 precondition)
+Cell: FreeBSD 14.4 amd64, node v24.14.1

@@ -1,0 +1,45 @@
+Timeline
+--------
+1. Reproduced #14 by reading, not running: gates/e2e.sh line 32 cd's to the
+   SCRIPT's tree, then reads router/routes.json from there while $base points
+   at a deployed estate. Confirmed the two are independent.
+2. Judged PR #21 (fix/e2e-oracle, 113 commits behind, conflicts on
+   gates/e2e.sh). Its CONTENT applies to current main cleanly --
+   `git apply --3way` took all three hunks with no conflict. Restarted the
+   branch from origin/main and kept the content. The branch was the problem,
+   not the design.
+3. FAILED: the ported branch left gates/shellcheck.sh at 2 findings, SC2034 on
+   ORACLE_LIB and ORACLE_ROOT. oracle.sh reads both after being sourced;
+   shellcheck runs each script in isolation (no -x) and cannot see the use.
+   PR #21 would have failed the shellcheck gate on current main. Fixed with
+   two directives carrying the reason.
+4. FAILED: the mutation runner mutated nothing. Mutation specs were fed on
+   stdin while the applier ran as `python3 - <<'PY'`; the interpreter consumes
+   stdin for its own program, sys.stdin.read() returned "", and
+   text.replace("", "", 1) is a no-op. Output read "5 mutations applied,
+   0 killed, 5 survived" -- a runner for class-7 defects exhibiting one.
+   Applier moved to a file; empty search text is now a hard error.
+5. Could not bind a socket on this host, so router/server.js's /__estate.json
+   handler is NOT exercised over HTTP. A7 is a static contract check and M6
+   confirms it can fail. Recorded as [H] in notes.org.
+
+Reproduction
+------------
+  $ ./experiments/017-e2e-oracle/demonstrate.sh
+    8 passed, 0 failed
+
+  $ ./experiments/017-e2e-oracle/mutate.sh
+    7 mutations applied, 7 killed, 0 survived
+
+  $ ./gates/shellcheck.sh
+    shellcheck: 35 scripts, 0 finding(s)
+
+  $ python3 gates/label-audit.py
+    37 labels declared, 19 written in-tree, 16 finding(s)   (baseline)
+
+  $ gmake -s gate-selftest
+    45 org files, 0 findings / 25 passed, 0 failed / both directions confirmed
+    (exit 0; tla/NoProdFirst.{tla,cfg} are scratch output of this target and
+     were removed before staging)
+
+Cell: hydra, FreeBSD 14.3-RELEASE amd64, node 24.14.1, jq 1.8.1, python3.

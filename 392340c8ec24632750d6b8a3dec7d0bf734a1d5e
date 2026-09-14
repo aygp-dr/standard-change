@@ -1,0 +1,84 @@
+Timeline
+--------
+2026-09-13, hydra, dev block 1 (router :9010, apps :9011-9014, mock :9015),
+node 24.14.1, jq 1.8.1.
+
+1. Read #14. Chose option 1 (the estate serves its own route table) with
+   option 3 (refuse) as the fallback when it cannot, rather than option 3
+   alone: a refusal on sha mismatch still leaves the CI case -- runner tree
+   and deployed build routinely differ there by design -- with no way to run
+   the gate at all. Option 1 gives that case a correct oracle; option 3 is
+   what happens when option 1 is unavailable.
+
+2. FAILED, first cut of gates/oracle.sh: it accepted any JSON reply with a
+   non-empty .routes array. Against a router that predates the manifest,
+   /__estate.json falls through to core, whose 404 body is
+   {app,path,found,block,sha,routes:[...]} -- a routes array, of strings,
+   for one app. The gate built an "8 apps" oracle out of a 5-app estate and
+   died in jq instead of refusing. Trusting the shape of a reply without
+   checking who sent it is the same mistake one level down. Now requires
+   served_by=="router" and an array of app objects, and lint-app.mjs reserves
+   /__ so no app can own that path honestly.
+
+3. FAILED, ORACLE_MODE=tree was checked only after the manifest fetch, so the
+   escape hatch silently upgraded itself to the estate's oracle and could not
+   reproduce the behaviour it exists to reproduce. Moved to resolution step 0.
+
+4. FAILED, experiments/014 left its stub listening on :9016: the EXIT trap
+   removed the temp dir before reading the pid file out of it, so the next run
+   died EADDRINUSE. Kill first, then remove.
+
+5. Corrected `[ "$ORACLE_FROM" = estate ] && seen=...` to an if block. As an
+   AND-list with no || tail under set -e it is a portability trap, and
+   gates/e2e.sh runs under dash in CI and sh on hydra.
+
+Reproduction
+------------
+Estate from this worktree on block 1:
+
+  sh router/generate.sh
+  SHA=$(git rev-parse --short HEAD)
+  n=1; for a in core plp pdp checkout; do
+    BUILD_SHA=$SHA BLOCK=1 PORT=$((9010+n)) BIND=0.0.0.0 \
+      node apps/$a/src/server.js & n=$((n+1)); done
+  BUILD_SHA=$SHA BLOCK=1 PORT=9015 BIND=0.0.0.0 node external/mock/src/server.js &
+  BUILD_SHA=$SHA BLOCK=1 BASE_PORT=9010 BIND=0.0.0.0 node router/server.js &
+
+  ./experiments/014-e2e-oracle/demonstrate.sh http://127.0.0.1:9010
+
+Output (verdict block, 2026-09-13):
+
+  PASS the pre-#14 gate reported success
+  PASS it did so with 26 checks where the build needs 27 --
+       1 contract(s) of the deployed build went unprobed
+  PASS the fixed gate probes the build's routes
+  PASS and names the disagreement
+  PASS an unestablishable oracle exits 4
+  PASS and says REFUSED
+  PASS a forced oracle reproduces the blindness
+  PASS and records no verdict
+  014: hypothesis supported
+
+The refusal was also watched against a real estate rather than the script's
+stub: old router (git show HEAD:router/server.js) on :9010 plus core restarted
+with BUILD_SHA=0000000 ->
+
+  REFUSED: this gate cannot establish an oracle for http://127.0.0.1:9010
+    the estate serves no /__estate.json (a build older than issue #14),
+    and it reports build '0000000' while this tree is at '1a97312'.
+  exit 4
+
+and, with the same old router and BUILD_SHA back to the tree's HEAD, the
+fallback engaged instead:
+
+  oracle: tree -- this tree, which IS the deployed build (1a97312);
+          estate serves no /__estate.json
+  27 checks passed                                                 exit 0
+
+Cell
+----
+hydra, FreeBSD 14.3-RELEASE amd64. gate-selftest, lint, test, docs-lint, e2e
+and smoke all watched green on this branch at block 1. Not run in a GitHub
+runner: the configuration #14 names as its trigger -- CI gating a deployed
+environment -- still has no cell in the matrix, so the CI half of this fix is
+[H].

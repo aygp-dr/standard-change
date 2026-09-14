@@ -1,0 +1,40 @@
+Timeline
+  - Labels.tla written against label-owners.tsv, preflight.sh and the labeller.
+  - First TLC run: parse error, a dead `Advance` operator with a precedence
+    conflict between /\ and \/. Removed.
+  - Positive run PASSED. Negative run NoSplitEmergency did NOT fail:
+      Error: Successor state is not completely specified by action
+      DeclareEmergency. The following variable is not defined: selfGranted.
+    `selfGranted' = selfGranted \/ SelfGrant(...)` parses as
+    `(selfGranted' = selfGranted) \/ SelfGrant(...)`. Parenthesised all four
+    history assignments. The positive run had been green on a variable that was
+    never being assigned.
+  - NoEstateBlock still did not fail. EstateClosedFor carried /\ EstateBlocks,
+    so the mutation disabled the rule and its observer together. Moved the
+    constant into Preflight, which is the rule; EstateClosedFor is the world.
+  - Positive run then failed on selfGranted: a freeze declared while every other
+    PR was merged read as newly-closing, because closedBefore quantified over
+    live PRs and closedAfter did not. Made them symmetric.
+  - EmergencyNeverWaits added after sim/ found the mutual block. Positive run
+    failed twice more: Stuck did not know about EmergencyPreempts, and then
+    preemption let two PRs hold the berth at once. Preemption is eviction.
+  - sim/cross_check.py then disagreed on EmergencyNeverWaits: Stuck fired for
+    any refusal, not the berth specifically. Split Preflight into
+    PreflightSansBerth /\ BerthOK.
+
+Reproduction
+  $ cd tla && ./check.sh
+  == labels positive: every repair in force ................... PASS
+  == labels negative: NoSplitEmergency    must violate ... FAIL as required
+  == labels negative: NoClassExclusive    must violate ... FAIL as required
+  == labels negative: NoConflictRefusal   must violate ... FAIL as required
+  == labels negative: NoClassRequired     must violate ... FAIL as required
+  == labels negative: NoLifecycleReplace  must violate ... FAIL as required
+  == labels negative: NoSoak              must violate ... FAIL as required
+  == labels negative: NoPreempt           must violate ... FAIL as required
+  == labels negative: NoBerthMutex        must violate ... FAIL as required
+  == labels negative: NoEstateBlock       must violate ... FAIL as required
+  == both directions confirmed
+
+  Positive run: 49,184 distinct states, depth 24, 3s.
+  TLC 2.20, OpenJDK 21.0.10, FreeBSD 14.4-RELEASE-p6 amd64.

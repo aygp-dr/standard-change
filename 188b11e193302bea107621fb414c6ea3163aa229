@@ -1,0 +1,23 @@
+Timeline
+- Ran the audit against the real repo before writing any fixture. It
+  returned eight UNAVAILABLE: repos/{r}/rulesets and the classic
+  branches/main/protection both answer 403 'Upgrade to GitHub Pro or make
+  this repository public'. On a private repo on this plan the whole ruleset
+  table is unenforceable, not merely unconfigured. That finding is why the
+  unreadable/absent distinction exists rather than being pedantry.
+- Checked deploy-production.yml to settle whether strict_required_status_
+  checks_policy covers the head-SHA checklist item. It does not: the health
+  check runs at the deploy step and release.sh merges afterwards, so
+  production takes the change BEFORE the merge that strict gates. strict is
+  a partial native guard 0, at merge time only; guard 4b is not replaceable
+  by any ruleset rule.
+- The per-group limitation in required_deployments dissolved at spec 0.3:
+  staging became a singleton, so required_deployment_environments:
+  ['staging'] expresses the control exactly.
+
+Reproduction
+  ./gates/audit-controls.py                                   -> 4 ok, 0 findings, 4 absent, 8 unreadable, exit 2
+  ./gates/audit-controls.py --repo o/r --fixture .../pass     -> 20 ok, exit 0
+  ./gates/audit-controls.py --repo o/r --fixture .../fail     -> 6 ok, 8 findings, 6 absent, exit 1
+  gmake gate-selftest                                          -> all three selftests confirmed
+Cell: FreeBSD 14.4 amd64, gh 2.83.2 authenticated as aygp-dr
