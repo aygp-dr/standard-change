@@ -6,7 +6,9 @@ set -eu
 JAR="${TLA2TOOLS:-$HOME/ghq/github.com/aygp-dr/tla-plus-tutorial/tla2tools.jar}"
 [ -f "$JAR" ] || { echo "tla2tools.jar not found; set TLA2TOOLS"; exit 1; }
 cd "$(dirname "$0")"
-run() { java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -cleanup "$1" 2>&1; }
+# Bounded heap: the fourteen-rule label model has 25M states, and an unbounded
+# JVM under a loaded desktop got the whole gate killed for memory (2026-09-14).
+run() { java -Xmx${TLC_HEAP:-3g} -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -workers auto -cleanup "$1" 2>&1; }
 
 # Guard4b's negative run must ALSO disable ProdFirst. The two guards are not
 # independent: MainMoved withdraws inProd when main outruns a change, so with
@@ -60,7 +62,7 @@ if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
 # The LABEL NAMESPACE (Labels.tla): three axes plus the estate, transcribed
-# from the scripts. Twelve constants, one per rule; each negative run flips one
+# from the scripts. Fourteen constants, one per rule; each negative run flips one
 # and TLC must name the invariant that rule protects. sim/cross_check.py runs
 # the same questions against sim/label_sim.py and requires agreement.
 #
@@ -88,8 +90,10 @@ labels_negative SettleClears       CleanIsClean
 labels_negative ReapSparesInFlight NoUnbookedDeploy
 labels_negative RecordOnMerge      MergedHasRecord
 labels_negative EmergencyPreempts  EmergencyNeverWaits
+labels_negative HoldGuard          NoPromoteUnderHold
+labels_negative HealthyBeforeVerdict VerdictOnHealthy
 
-printf '== labels positive: all twelve rules on ..................... '
+printf '== labels positive: all fourteen rules on ................... '
 if run Labels | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; run Labels | grep -E 'Error' | head -5; exit 1; fi
 

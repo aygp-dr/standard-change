@@ -51,16 +51,26 @@ stateDiagram-v2
     [*] --> Opened: PR opened, labeller sets app:* and itil:standard
     Opened --> Requested: a person adds change:requested
     Requested --> Scheduled: window reserved -> change:scheduled
-    Scheduled --> Implementing: window opens, scheduler activates, guards re-run
+    Scheduled --> Implementing: window opens, guards re-run, berth claimed -> deploy:staging
     Scheduled --> Forfeited: window lapses unattempted -> expired
-    Implementing --> Verified: staging deploy + authorizing e2e -> staging:passed
-    Verified --> Live: guards green -> promotes itself
-    Live --> Complete: estate converged on the build -> production:healthy, change:complete
-    Complete --> [*]: merged, PIR posted, berth released
+    Implementing --> Deployed: install finished -> staging:deployed
+    Deployed --> Healthy: guard 5 on staging -> staging:healthy, the trigger
+    Healthy --> Verified: e2e and smoke on the healthy staging -> staging:e2e, staging:smoke
+    Verified --> Held: a person adds staging:hold
+    Held --> Verified: the person lifts it
+    Verified --> Promoted: staging:smoke lands deploy:production (promote.yml), unless held
+    Promoted --> Live: install finished -> production:deployed, then guard 5 -> production:healthy
+    Live --> Complete: settle -> change:complete, merge, PIR, cleanup
+    Complete --> [*]
     Forfeited --> Requested: re-request
 
     note right of Scheduled
         reserving is not deploying
+    end note
+    note right of Healthy
+        the next step keys on the OBSERVATION
+        (<env>:healthy), not on the action
+        (<env>:deployed)
     end note
     note right of Live
         guard 5 asserts the SERVED build,
@@ -205,7 +215,34 @@ flight are facts about the *estate*, not about any change — see below.
 =production:healthy= is not terminal, and neither is =staging:uat=. Neither is
 about the change; both are about a build that happens to be the change's head
 at this moment. Push once and both are lies — which is why the labeller
-withdraws every one of them on =synchronize=.
+withdraws every one of them on =synchronize=, and =staging:deployed=,
+=staging:healthy= and =production:deployed= with them.
+
+*The next step keys on the observation, not the action.* =<env>:deployed= is
+the deployer saying the install finished; =<env>:healthy= is guard 5's
+instrument saying the environment serves this head. e2e and smoke run on
+staging only once =staging:healthy= is recorded (rule =HealthyBeforeVerdict=:
+a verdict on an environment not known to serve the head is a verdict about
+nothing), and =staging:smoke= is what lands =deploy:production=. On the
+production side, =production:healthy= after =production:deployed= is what
+=merge-on-healthy= keys on. What a label *says happened* never triggers
+anything; what an instrument *measured* does.
+
+*** States the model reaches that the diagram above does not draw
+
+=sim/label_sim.py --census= lists every per-change label shape the machine
+reaches. Within depth 12 there are 173, and three are worth naming because
+they are reachable today and the diagram does not show them:
+
+| shape | how it is reached | status |
+|-------+-------------------+--------|
+| =deploy:production= beside a later =staging:fail= | promoted on a pass; an instrument re-runs on staging and fails; nothing withdraws the intent | *open* — should a failing verdict after promotion withdraw =deploy:production=? |
+| =deploy:staging= and =deploy:production= with no =*:deployed=, no =*:healthy=, no verdict | a push: the labeller withdraws every observation and every deployed/healthy fact, and leaves the action labels | *open* — the intent was for a build that no longer exists |
+| a change with no lifecycle label and a staging verdict still on it | the reaper: it removes =change:scheduled= and =deploy:staging= and leaves the observations | documented; the observations are about a head that has not changed, on an environment that is gone |
+
+A fourth — =change:failed= beside =deploy:production= — was reachable because
+=abort.sh= cleared =deploy:staging= and not =deploy:production=; it clears
+both now.
 
 It also settles what may be cleared at completion. Annotations are cleared,
 because the record summarises them and the PR timeline keeps every add and
@@ -219,6 +256,7 @@ the two labels a person adds are opposites in both directions:
 | label | added by | removed by |
 |----------------+---------------------------+--------------------------------|
 | =release=      | *a person only* — intent  | *automation* — the scheduler consumes it |
+| =staging:hold= | *a person only* — "not to production yet" | *a person only*; cleanup at settlement |
 | =hold:staging= (superseded) | *a person only* | *a person only*             |
 
 A person must add =release= because it is the intent to ship and no machine
@@ -228,6 +266,18 @@ re-fires, and the second firing deploys a change that is already live.
 =hold:staging= is the mirror. A person must lift it, because the entire
 content of a hold is that a human has not looked yet — and only that human
 knows when they have. A hold a machine can clear is not a hold, it is a delay.
+
+*** =staging:hold= — the one human stop, re-introduced at one scope
+
+=hold:staging= was rejected on 2026-09-13 because it was a third way to stop
+a deploy at a third scope with no rule for which applied. =staging:hold= is
+the same human intent — /I want to look before this goes to production/ —
+with exactly one reader and one scope: =promote.yml= reads it at the moment
+it would land =deploy:production=, and lands nothing while it is present.
+Nothing else reads it; the berth is not released; the gates keep running;
+only the person lifts it. The rule is =HoldGuard= in =tla/Labels.tla=, and
+the negative run shows =deploy:production= landing under a hold when it is
+off.
 
 *** How to stop a change
 

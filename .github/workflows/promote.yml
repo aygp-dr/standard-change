@@ -37,6 +37,12 @@ jobs:
           [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha ($names)"; exit 1; }
           case " $names " in *" gate-selftest "*) ;; *) echo "::error::gate-selftest never ran on $sha; gate results are void"; exit 1 ;; esac
           echo "gates green on $sha: $names"
+      - name: a person's staging:hold stops this, here, at the moment of promoting
+        run: |
+          labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]|join(" ")')
+          case " $labels " in
+            *" staging:hold "*) echo "::notice::staging:hold is on #$PR -- a person said not yet; deploy:production not landed"; exit 78 ;;
+          esac
       - name: require staging:e2e on the same change
         run: |
           labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]|join(" ")')

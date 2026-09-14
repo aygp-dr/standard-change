@@ -105,6 +105,7 @@ fi
 for l in staging:e2e staging:e2e-failed staging:smoke staging:smoke-failed \
          staging:uat staging:in-progress production:e2e production:e2e-failed \
          production:smoke production:smoke-failed production:healthy \
+         staging:deployed staging:healthy production:deployed \
          release release:start deploy:staging deploy:production \
          change:complete change:scheduled; do
   gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true

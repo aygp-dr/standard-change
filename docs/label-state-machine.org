@@ -22,10 +22,10 @@ made to agree.
 
 | question | answer |
 |----------+--------|
-| Does the machine the scripts implement satisfy the twelve rules? | *Yes, with three exceptions the model had to be told about* (§Disagreements 1–3). With the rules as stated, TLC finds no violation over the full reachable space. |
-| Can each rule fail? | *Yes, twelve of twelve.* Flipping any one constant makes TLC name the invariant it protects; the simulator names the same one. |
-| Do the two transcriptions agree? | *Yes, 13/13*: same verdict on every rule, and the same number of distinct states — 2,336,400 — when every rule is on. |
-| Is the space finite and exhausted? | *Yes.* Two PRs, depth 26, 2,336,400 distinct states; both checkers exhaust it. |
+| Does the machine the scripts implement satisfy the fourteen rules? | *Yes, with three exceptions the model had to be told about* (§Disagreements 1–3). With the rules as stated, TLC finds no violation over the full reachable space. |
+| Can each rule fail? | *Yes, fourteen of fourteen.* Flipping any one constant makes TLC name the invariant it protects; the simulator names the same one. |
+| Do the two transcriptions agree? | *Yes, 15/15* on the verdicts. The state count agreed at 2,336,400 while the simulator could exhaust; the fourteen-rule machine has 25,066,512 states and only TLC exhausts it. |
+| Is the space finite and exhausted? | *Yes, by TLC.* Two PRs, depth 37, 25,066,512 distinct states. The simulator covers a depth-12 slice (1,644,696 states) and random walks past it. |
 | Are the reaper, the merge and the cleanup modelled? | *Now, yes.* The first cut fused completion with cleanup and had no merge. The machine now carries settle.sh's four writes in order, the automatic merge path, and a reaper that reads only the clock — which is what surfaced disagreements 2 and 3. |
 
 * The machine
@@ -44,8 +44,8 @@ One PR is a tuple; two PRs and the estate make a state.
 | settlement | served (a fact), merged, PIR posted, cleaned | health.sh; merge-on-healthy.yml→release.sh or settle.sh:127; settle.sh:150-168; settle.sh:244-252 | served: a push or an abort |
 | estate | freeze, emergency | a person, on issue #1 | a person |
 
-Twenty-six actions, each cited to the line it was read from in
-=tla/Labels.tla= and =sim/label_sim.py=. Three history variables — =badClaim=, =badClass= and =emgWaited= — record a berth claim that a rule would have refused, so that
+Thirty actions, each cited to the line it was read from in
+=tla/Labels.tla= and =sim/label_sim.py=. Five history variables — =badClaim=, =badClass=, =badPromote=, =badVerdict= and =emgWaited= — record a berth claim that a rule would have refused, so that
 the freeze, estate and class rules — whose subject can change *after* the
 claim, since a person can freeze or declare mid-flight — have a state
 predicate to violate.
@@ -59,9 +59,12 @@ stateDiagram-v2
     Opened --> Scheduled: Book
     Scheduled --> Opened: Cancel / Reap
     Scheduled --> Berth: Activate (preflight)
-    Berth --> Berth: Observe / Accept / Push
-    Berth --> Promoted: Promote
-    Promoted --> Healthy: Converge
+    Berth --> StagingDeployed: DeployStaging
+    StagingDeployed --> StagingHealthy: StagingHealthy (guard 5 on staging)
+    StagingHealthy --> StagingHealthy: Observe / Accept / Hold / Push
+    StagingHealthy --> Promoted: Promote (smoke, unless hold)
+    Promoted --> ProdDeployed: DeployProduction
+    ProdDeployed --> Healthy: Converge
     Healthy --> Merged: MergeOnHealthy (release.sh, no record)
     Healthy --> Complete: Complete (settle.sh)
     Complete --> Merged: SettleMerge
@@ -75,7 +78,7 @@ stateDiagram-v2
     Closed --> [*]
 #+end_src
 
-* The twelve rules, and what each protects
+* The fourteen rules, and what each protects
 
 | # | constant | the rule, and where it lives | invariant TLC names when it is off | simulator names |
 |---+----------+------------------------------+------------------------------------+-----------------|
@@ -91,6 +94,8 @@ stateDiagram-v2
 | 10 | =ReapSparesInFlight= | a lapsed window is not reaped while its change carries deploy:production | =NoUnbookedDeploy= | same |
 | 11 | =RecordOnMerge= | the path that merges also records — change:complete and the PIR | =MergedHasRecord= | same |
 | 12 | =EmergencyPreempts= | a declared, booked, ready =itil:emergency= evicts a standard or normal holder of the berth (README §5b); *specified, unbuilt* | =EmergencyNeverWaits= | same |
+| 13 | =HoldGuard= | promote.yml — a person's =staging:hold= stops =deploy:production= landing, at the moment of promoting | =NoPromoteUnderHold= | same |
+| 14 | =HealthyBeforeVerdict= | e2e and smoke measure staging only once =staging:healthy= is recorded; the next step keys on the observation, not the action | =VerdictOnHealthy= | same |
 
 Rule 12 is the one rule here that is *specified and unbuilt*: no script evicts a holder, and the model adds no new states for it — every state an eviction reaches, a reaped window already reached — so it costs nothing to carry until the ADR decides who performs it.
 
@@ -113,6 +118,13 @@ violation; the declaration says "≤1 active" for the same reason.
 :PROPERTIES:
 :CUSTOM_ID: disagreements
 :END:
+
+The frames are generated: every action ends in =/\ FRAME= in the source and
+=tla/frames.py= writes the exact =UNCHANGED= tuple from the =vars= tuple;
+=check.sh= refuses to run on a stale model. Twenty-six variables by hand is
+how the fourteen-rule cut first shipped with duplicated names and a missing
+history variable, which TLC reports as "successor state not completely
+specified" and which took longer to bisect than the generator took to write.
 
 The model was built from the scripts. Twice the positive run failed, and each
 time the trace pointed at a script doing something the declaration's exclusion
@@ -208,12 +220,12 @@ diagram is this.
 
 | checker | what it covers | number |
 |---------+----------------+--------|
-| TLC, all rules on | every reachable state, two PRs | 2,336,400 distinct, depth 26, ~40 s with =-workers auto= |
+| TLC, all rules on | every reachable state, two PRs | 25,066,512 distinct, depth 37, several minutes with =-workers auto= (was 2,336,400 at twelve rules, 616,000 at nine) |
 | TLC, each rule off | to the first violation | 4 to 8 states deep in every case |
 | =label_sim.py --bound 12= | BFS to depth 12 | not exhausted, ~10 s |
-| =label_sim.py --bound 40= | BFS until nothing new | 2,336,400 states, exhausted at depth 26, ~67 s |
+| =label_sim.py --bound 12= | a slice, with =--census= | 1,644,696 states, 173 distinct per-change shapes, ~50 s |
 | =label_sim.py= walks | Hypothesis random walks past the bound | 200 walks of ≤40 steps by default, nothing the BFS had not covered |
-| =cross_check.py= | thirteen questions to both | 13/13 agree, ~5 min with =LABEL_BOUND=40= |
+| =cross_check.py= | fifteen questions to both | 15/15 agree on the verdict; the count is compared only when the simulator exhausts |
 | first cut, before the merge and the reaper were modelled | same two PRs | 616,000 states, depth 22, nine rules |
 
 What the bound does *not* cover: three or more PRs (the estate blockers are
