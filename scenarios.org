@@ -666,6 +666,74 @@ A guard with zero lifetime refusals is a hypothesis, not a control — and the
 question to ask of it is not "is the logic right" but "can the oracle it reads
 ever emit the value it tests for".
 
+** D18 — an approved change is refused on entry to staging by the acceptance it did not update
+
+*Observed 2026-09-14 on the mini, with =gates/uat.sh= on the day it was written.*
+
+The case a change calendar cannot see, and the reason automating one is
+harder than it looks. A change alters the flow or the navigation of the
+storefront — #71 makes "Ready to continue to payment." a link; #40 and #52
+give the cart page a cart. Its unit tests are green, its reviewer approved
+it, its window is booked. On entry to staging the *acceptance* suite — the
+browser journey pinned as it was last accepted — refuses it, because nobody
+told the acceptance that the flow was going to change.
+
+*** What each layer does
+
+| layer | what it says | right? |
+|-------+--------------+--------|
+| gates (lint, test, e2e) | green on the head | yes — nothing it measures changed |
+| review | approved | yes — the change is what was asked for |
+| schedule | window booked, berth claimed at activation | yes — every guard passed at the claim |
+| =gates/uat.sh= on staging | *REFUSED: the journey is not what was accepted* | *yes* — acceptance is a record of what was accepted, and the flow is different |
+| the window | spent; the berth is released; the change goes back to needing a window | correct, and expensive |
+
+The refusal is the pipeline working. The cost is that the window was spent
+discovering something that was knowable at review time, and *no scheduler
+can know it*: the calendar sees a booked change with green gates, and the
+thing that will refuse it runs only against a deployed estate.
+
+*** What was actually observed
+
+PR #71 (=fc2ee1b=) deployed to block 1 and =gmake uat url=http://127.0.0.1:9010=
+refused it in 1.1 s — but at the *category page*, not at the payment link
+the PR changes. The branch predates plp's named product links, so the first
+page that differed from acceptance was one the PR never touched. Two lessons
+in one run:
+
+1. Acceptance refuses on the *first* difference, which is not necessarily the
+   *intended* one. The message names a page; the reader has to work out
+   whether that page is the change or the drift.
+2. This is D17's silent guard 0 seen from the other side. The forge never
+   said BEHIND, =queue.sh= never classified the drift, and the change reached
+   the estate carrying a category page from before the search feature. The
+   acceptance suite caught it by accident of ordering.
+
+*** The rule this suggests
+
+*A change to the flow carries its acceptance.* The PR that changes the
+navigation also changes =gates/uat/journey.spec.mjs=, and the reviewer reads
+the two diffs together: what the code does, and what a person will now
+accept. Then the suite is green on staging for the right reason, and the
+window is spent deploying rather than discovering. This is a review
+convention, not a guard — a guard would need to know which PRs change the
+flow, and the honest answer is "the ones whose acceptance diff is empty and
+should not be", which only a reviewer can judge.
+
+For an automated change calendar the consequence is plain: a booked, green,
+approved change can still forfeit its window on entry to staging, so the
+calendar must model *forfeit on entry* as an ordinary outcome, not an
+incident — which =schedule.sh close <id> failed= and the reaper already do.
+What the calendar cannot do is prevent it; only the PR can.
+
+*** Reproducing
+
+: gmake dev                                      # block 0 on main
+: gmake uat url=http://127.0.0.1:9000            # accepted, as-is journey held
+: git worktree add worktrees/pr71 origin/tiny/checkout-payment-link
+: (cd worktrees/pr71 && gmake port-alloc && gmake dev)      # block 1, :9010
+: gmake uat url=http://127.0.0.1:9010            # REFUSED at the category page
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,

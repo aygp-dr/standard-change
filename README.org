@@ -630,7 +630,7 @@ one change. The calendar governs everyone; the label governs one.
 | =.meta/=        | operating disciplines and vocabulary                           |
 | =apps/=         | the four fixture apps                                          |
 | =router/=       | nginx template, routes, Cloudflare Worker                      |
-| =gates/=        | lint, test, e2e, preflight, health                             |
+| =gates/=        | lint, test, e2e, smoke, uat (Playwright, as-is), preflight, health |
 | =change/=       | queue, schedule, reap, activate, settle (PIR), release         |
 | =targets/=      | =bastille= (jails) and =node= deploy backends                  |
 

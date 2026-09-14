@@ -62,10 +62,17 @@ measurement of the gap between the two on a real build.
 
 * What follows
 
-- A browser journey as an instrument: Playwright against =ROUTER_URL=, one
-  test per row above, asserting the *content* the previous page implied (the
-  item in the cart, the total equal to the price, a link forward, a
-  confirmation). That is what "deployed" should mean for =staging:uat= when
-  a person is not the instrument. Not built here; the four rows are its
-  fixture.
-- Until then, =staging:uat= from the proxy should say what it measured.
+- *Built, same day:* =gates/uat/journey.spec.mjs=, run by =gmake uat
+  url=<base>=. One Playwright test, serial steps, headless Chromium, 567 ms
+  against block 0. It pins the storefront *as-is* — the empty cart page, the
+  $42.00, the text that is not a link — on purpose: a change to the flow must
+  change the acceptance, and until it does the change is refused on entry to
+  staging. =scenarios.org= D18 is the case.
+- *Negative direction, observed:* PR #71's head (=fc2ee1b=) on block 1 was
+  refused — at the *category* page, not at the payment link it changes,
+  because the branch predates plp's named product links. An approved change,
+  behind main in a way guard 0 does not report (D17), refused by acceptance
+  for a page it never touched. The refusal is right; the reason it names is
+  the first page that differs, which is not the page that changed.
+- =staging:uat= from the proxy should say what it measured; now it can say
+  "the as-is journey held" rather than "smoke exited 0".

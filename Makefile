@@ -7,7 +7,7 @@ EXTERNAL := $(notdir $(wildcard external/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
-        simulate-gates smoke \
+        simulate-gates smoke uat \
         forge forge-list forge-pull forge-check \
         port-alloc port-free ports clean
 
@@ -72,6 +72,8 @@ lint: ; @./gates/shellcheck.sh && \
 gate: lint test ; @./gates/e2e.sh $(app) && ./gates/smoke.sh  ## lint, test, e2e and smoke   app=<name>
 smoke:  ## walk the estate as a browser would   url=<base>
 smoke: ; @./gates/smoke.sh $(url)
+uat:  ## the browser journey, AS-IS, in headless Chromium   url=<base>
+uat: ; @./gates/uat.sh $(url)
 gate-selftest: docs-selftest  ## prove every gate can fail, then that it passes  ## prove every gate can fail, then that it passes
 	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s observation-selftest \
 	  && $(MAKE) -s audit-selftest
