@@ -33,6 +33,12 @@ the promotion guards.
 freeze and emergency toggles write to the estate issue that =gates/preflight.sh=
 reads.
 
+The same estate from Emacs, through forge: every PR with its =app:*=,
+=itil:*= and =change:*= labels in one buffer. =gmake forge= pulls and lists;
+=standard-change.el= holds the config.
+
+[[file:docs/screenshots/forge-pullreqs.png]]
+
 * The flow, for a standard change
 
 The ordinary path, end to end. Emergencies, forfeited windows and what happens
