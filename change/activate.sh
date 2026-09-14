@@ -270,9 +270,25 @@ ok "berth claimed"
 
 step "deploy to staging"
 deploy_open staging "standard change #$PR -> staging"
-./targets/bastille/deploy.sh staging "$SHA" | sed 's/^/   /'
+# NOT `| sed`. That pipe discarded the deploy's exit code and the `ok` below
+# it fired unconditionally, so a deploy that placed nothing reported success
+# -- and the next guard is the only thing that would have noticed. It is the
+# D16 shape (guard4.sh | tail -1, which put #54 into production unauthorized)
+# living in the script D16 was written about, three lines from the indent()
+# helper that exists precisely to keep the status. #62 rode this: it printed
+# `ok sc-staging <- 346e236` while staging stayed on 57ec8e9.
+# THE NODE TARGET, NOT BASTILLE. targets/bastille installs app.py, a Python
+# stand-in that is not any of the apps -- its own header says so: "the
+# deployed thing was never the tested thing". The authorizing e2e run three
+# lines below tests the node estate on the declared staging front, so
+# deploying the stand-in meant the gate verified an estate the deploy never
+# touched. staging sat on 57ec8e9 through #62's whole window while the step
+# reported ok. targets/node deploys apps/*/src/server.js -- the code the
+# gates actually ran against.
+indent ./targets/node/deploy.sh staging "$SHA" \
+  || die "the deploy to staging failed -- nothing was placed"
 sleep 2
-ok "sc-staging <- $SHA"
+ok "staging <- $SHA"
 
 step "the authorizing run — e2e against staging"
 ROUTER_URL="$FRONT_STG" indent ./gates/e2e.sh || die "staging e2e failed"
