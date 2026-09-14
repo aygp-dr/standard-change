@@ -60,12 +60,38 @@ else bad "production serves '${served:-nothing}', not $short -- this change is n
 #    record of one somebody else made. Require the label only where the
 #    measurement is NOT repeatable -- staging:uat above all, because a person
 #    used the site and no script can re-run that.
-for o in staging:e2e staging:smoke staging:uat; do
-  case " $labels " in
-    *" $o "*) ok "$o" ;;
-    *)        bad "$o missing -- cannot complete a change whose evidence is gone" ;;
-  esac
+# THE RECORD, NOT THE LABEL, for the instruments. On 2026-09-14 a sweep by a
+# second operator -- reading a different estate than the one these
+# observations were taken on -- withdrew every label from #92 after it had
+# reached production healthy and guard 4 had authorized it; settle then refused
+# for "evidence gone" while the evidence comments were still on the PR, each
+# naming the build and the URL. guard 4 reads those records; settle read the
+# labels. Same subject, two sources, and the weaker one vetoed. e2e and smoke
+# are now checked the way guard 4 checks them: the latest record must be a
+# pass on THIS head. The label stays required for staging:uat alone, because a
+# person's withdrawal of an acceptance must stand and no record can overrule it.
+for inst in e2e smoke; do
+  o="staging:$inst"
+  if ev=$(./change/evidence.sh latest "$pr" staging "$inst" 2>/dev/null); then
+    verdict=${ev%% *}; rest=${ev#* }; evsha=${rest%% *}
+    if [ "$verdict" = pass ] && [ "$evsha" = "$short" ]; then
+      case " $labels " in
+        *" $o "*) ok "$o" ;;
+        *)        ok "$o (label withdrawn; the record on $short stands)" ;;
+      esac
+    elif [ "$evsha" != "$short" ]; then
+      bad "$o observed $evsha, head is $short -- that measurement is about a different build"
+    else
+      bad "$o -- last observation is a FAILURE on $evsha"
+    fi
+  else
+    bad "$o -- no observation recorded; nothing measured this build"
+  fi
 done
+case " $labels " in
+  *" staging:uat "*) ok "staging:uat" ;;
+  *)                 bad "staging:uat missing -- a person's acceptance is not on the change (or was withdrawn); re-accept on staging" ;;
+esac
 
 [ "$rc" = 0 ] || { echo; echo "  NOT settled"; exit 1; }
 
