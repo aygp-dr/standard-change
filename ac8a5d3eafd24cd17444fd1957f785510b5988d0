@@ -1,0 +1,39 @@
+Timeline
+  Grepped every makefile and script for `emacs`: four targets in Makefile
+  (forge-list, forge-pull, forge, forge-check), one dead call in
+  gates/docs-lint.py (_unused_old_tangle_check, not reachable), and the
+  `-Q -nw` validate lines in the standard-change.el header. No target
+  combines `-nw` with `--batch`.
+  Ran all four as they stood. All four exited 0. forge-check and
+  forge-list did what they claim. forge-pull worked here only because the
+  forge answered in under twelve seconds.
+  Probed batch exit semantics: an error at top level exits 255, but an
+  error raised inside a timer prints "Error running timer" and exits 0.
+  That is the shape of an async forge pull's failure path.
+  Reproduced the silent no-op: with the wait cut to 0.3s the pull prints
+  "Pulling..." with no "...done", stores nothing, and exits 0.
+  Fixed, then negative-tested each direction (see the commit message).
+
+Reproduction
+  $ gmake forge-pull          # 4.0s, "forge: pulled", exit 0
+  $ emacs --batch -l standard-change.el \
+      --eval '(setq forge-database-file "/tmp/copy.sqlite" \
+                    standard-change-forge-pull-timeout 0.3)' \
+      -f standard-change-forge-pull
+    forge: pull unfinished after 0.3s -- the database was NOT refreshed
+    exit 1                                      # was: silent, exit 0
+  $ emacs --batch -l standard-change.el --eval '(setq auth-sources nil)' \
+      -f standard-change-forge-check
+    forge-check: FAIL -- api token
+    exit 1                                      # was: "MISSING", exit 0
+  $ emacs --batch -l standard-change.el -f standard-change-status
+    prints the queue                            # was: no output, exit 0
+
+Not changed
+  The `-Q -nw` validate lines in the header are unverified [H]: this host
+  has no pty (script(1): tcgetattr/ioctl not supported), so no interactive
+  emacs could be started to try them.
+  CLAUDE.md still describes spec.org as having :tangle targets and warns
+  that re-tangling clobbers ports.tsv. spec.org tangles nothing today and
+  docs-lint enforces that, so no emacs target in this repo can write over
+  live port state. Left for whoever owns CLAUDE.md.
