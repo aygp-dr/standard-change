@@ -17,15 +17,26 @@ jobs:
       - uses: actions/checkout@v4
       # Guard 2: every gate green on THIS head SHA. No bypass, emergency included.
       - name: require gates green on head SHA
+        # Latest run PER GATE, and a gate still running is "not yet", not
+        # "red": every label event re-triggers gate.yml, and counting an
+        # in-progress duplicate as not green failed promotion on #93 four
+        # seconds after staging:smoke landed (run 34898982935). Wait up to
+        # ten minutes for the latest runs to finish, then require success.
         run: |
           sha="${{ github.event.pull_request.head.sha }}"
-          bad=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
-                 --jq '[.check_runs[] | select(.name|test("^(gate-selftest|lint|test|e2e)")) 
-                        | select(.conclusion != "success")] | length')
-          total=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
-                 --jq '[.check_runs[] | select(.name|test("^gate-selftest$"))] | length')
-          [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha"; exit 1; }
-          [ "$total" -ge 1 ] || { echo "::error::gate-selftest never ran on $sha; gate results are void"; exit 1; }
+          latest() { gh api "repos/${{ github.repository }}/commits/$sha/check-runs?per_page=100" \
+                       --jq '[.check_runs[] | select(.name|test("^(gate-selftest|lint|test|e2e)$"))]
+                             | group_by(.name) | map(max_by(.started_at))'; }
+          for i in $(seq 1 60); do
+            pending=$(latest | jq '[.[] | select(.status != "completed")] | length')
+            [ "$pending" -eq 0 ] && break
+            echo "waiting: $pending gate run(s) still in progress on $sha"; sleep 10
+          done
+          bad=$(latest | jq '[.[] | select(.conclusion != "success")] | length')
+          names=$(latest | jq -r 'map(.name) | join(" ")')
+          [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha ($names)"; exit 1; }
+          case " $names " in *" gate-selftest "*) ;; *) echo "::error::gate-selftest never ran on $sha; gate results are void"; exit 1 ;; esac
+          echo "gates green on $sha: $names"
       - name: require staging:e2e on the same change
         run: |
           labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]|join(" ")')
