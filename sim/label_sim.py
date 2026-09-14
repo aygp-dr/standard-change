@@ -1,202 +1,273 @@
 #!/usr/bin/env python3
-"""label_sim.py -- drive the CURRENT label set and find where the semantics are undecided.
+"""label_sim.py -- the label namespace as an explicit-state machine, checked.
 
-Not a model of what the pipeline should do. A model of what the labels, as they
-are declared today, actually permit -- so that a combination nobody intended
-shows up as a reachable state rather than as an incident.
+The same machine as tla/Labels.tla, transcribed from the scripts rather than
+from the declaration, so that a state the scripts can reach shows up here as
+a reachable state rather than as an incident. Three axes, plus the estate:
 
-Three axes, each a separate fact, which is the lesson this repo keeps relearning:
+  CLASS      itil:standard | itil:normal | itil:emergency
+  LIFECYCLE  change:requested -> change:scheduled -> change:complete
+  ACTION     deploy:staging (the berth) and deploy:production
+  ESTATE     freeze, emergency -- facts about the world, not about any PR
 
-  CLASS    itil:standard | itil:normal | itil:emergency   what kind of change
-  SCOPE    app | shared | pipeline                        what it can break
-  STATE    requested -> scheduled -> deploy:* -> complete  where it has got to
+and, per PR, the head's OBSERVATIONS, the author's READINESS (draft), and how
+the window was BOOKED (none | queued | designated).
 
-and the estate has BLOCKERS that are not properties of the change at all:
-a freeze, somebody else holding a berth, an emergency in flight.
+Two checks, and they are different kinds of evidence:
+
+  exhaustive   breadth-first over every reachable state to a stated depth
+               BOUND. Within the bound this is a proof; the number printed is
+               what was covered.
+  property     random walks PAST the bound with Hypothesis, when it is
+               installed. Finds nothing the exhaustive pass could not, in
+               principle -- it exists so that "the bound was too small" has
+               a cheap check, not so the bound can be skipped.
+
+Nine RULES, each switchable with --disable so the checker can FAIL nine ways.
+sim/cross_check.py flips each one here and in TLC and requires the same
+invariant to be named. This replaces the 216-tuple cross-product of the
+first cut (7220216), which enumerated label COMBINATIONS and could not say
+whether any of them was reachable.
 """
-import itertools, pathlib, sys
+import argparse, collections, itertools, sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-DECL = ROOT / "change" / "label-owners.tsv"
+RULES = ["DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
+         "ClassExclusive", "LifecycleExclusive", "ReapFreesBerth", "SettleClears"]
 
-CLASSES = ["itil:standard", "itil:normal", "itil:emergency"]
-SCOPES  = ["app", "shared", "pipeline"]
-STATES  = ["", "change:requested", "change:scheduled", "deploy:staging",
-           "deploy:production", "change:complete"]
+PRS = ("p1", "p2")
 
-# Estate-level facts. NOT properties of the change being deployed -- properties
-# of the world it would deploy into.
-BLOCKERS = ["none", "freeze", "berth-held", "emergency-in-flight"]
+# ---------------------------------------------------------------------------
+# State. One immutable tuple per PR plus the estate; hashable so BFS can
+# de-duplicate exactly as TLC does.
+PR = collections.namedtuple("PR", "cls life draft release booking berth prod verdict uat healthy closed")
+State = collections.namedtuple("State", "prs freeze emg bad")
 
-# READINESS is a fourth axis, and it belongs to NEITHER of the other three.
-#
-# It is not the class (what kind of change), not the scope (what it can break),
-# not the state (how far it has got) and not a blocker (a fact about the
-# estate). It is the AUTHOR'S OWN STATEMENT that this is not finished, and it is
-# the only input to any guard here that the pipeline does not derive, measure or
-# infer -- it simply believes.
-#
-# It was unmodelled and unread until 2026-09-13: nothing in preflight, guard 4,
-# queue.sh or activate.sh looked at isDraft, so a draft could book a window,
-# take the berth, deploy to staging and collect the observations that authorize
-# production, while its author's marker said do not.
-READY = ["draft", "ready"]
+def fresh(draft):
+    return PR(cls=frozenset(), life=frozenset(), draft=draft, release=False,
+              booking="none", berth=False, prod=False, verdict="none",
+              uat=False, healthy=False, closed=False)
 
-# HOW THE WINDOW WAS OBTAINED. A fifth axis, added 2026-09-13 after the
-# release-coordinator workflow made the distinction load-bearing.
-#
-#   none        no reservation. The change may be perfect and still not deploy.
-#   queued      change/schedule.sh block with no --at: the booking walks to the
-#               back of the queue and takes the first free aligned slot.
-#   designated  block --at <iso>: a NAMED time, the way a release calendar is
-#               actually used ("the Tuesday 19:00 slot").
-#
-# The two booking modes differ ONLY in where they propose to start. Everything
-# after that is identical, and the clash check is the reason:
-#
-#   A DESIGNATED SLOT DOES NOT WIN A CLASH. Wanting a particular hour is not an
-#   argument about who holds the path to production. When 6PM ET collided with
-#   an auto-queued reservation the coordinator CANCELLED the queued one and
-#   re-booked it -- a human decision, recorded as a cancellation, visible in the
-#   schedule. Had --at simply displaced it, the queued change would have lost
-#   its slot with nothing in the record saying why.
-#
-#   DESIGNATED BOOKINGS LEAVE HOLES, and that is correct. A named hour is not a
-#   preference -- it is usually the developer saying "I will be at my desk then
-#   and I want to watch this go out". That is what makes automatic reslotting
-#   the wrong behaviour rather than merely a rude one: moving the change moves
-#   it away from the person who arranged to be present for it, and the whole
-#   value of the slot was the attention, not the minutes.
-#
-#   So the gaps are the point. A scheduler that packed them would be optimising
-#   utilisation of a resource that is not scarce (staging) at the cost of one
-#   that is (a person watching).
-#
-#   NEITHER MODE MAY BOOK INTO THE PAST. A reservation behind the clock is
-#   closed by the next reap, so handing one back is success-shaped and
-#   immediately worthless.
-BOOKING = ["none", "queued", "designated"]
+def inits():
+    for d in itertools.product([False, True], repeat=len(PRS)):
+        yield State(prs=tuple(fresh(x) for x in d), freeze=False, emg=False, bad=False)
 
+def is_open(q):      return not q.closed and "complete" not in q.life
+def is_emg(q):       return "emergency" in q.cls
+def holder(st):      return {i for i, q in enumerate(st.prs) if q.berth}
+def put(st, i, q, **est):
+    prs = list(st.prs); prs[i] = q
+    return st._replace(prs=tuple(prs), **est)
 
-def declared():
-    """Every label the declaration knows, plus its exclusion groups."""
-    labels, groups = {}, {}
-    for line in DECL.read_text().splitlines():
-        f = line.split("\t")
-        if line.startswith("#") or len(f) < 4:
+# ---------------------------------------------------------------------------
+# Actions, one per script or workflow write. Each yields (name, next_state).
+def actions(st, R):
+    for i, q in enumerate(st.prs):
+        p = PRS[i]
+        if not is_open(q):
             continue
-        if f[0] == "exclusive":
-            groups[f[1]] = set(f[2].split())
-        elif len(f) >= 6:
-            labels[f[0]] = {"owner": f[1], "persistent": f[2] == "yes"}
-    return labels, groups
+        # labeller.yml:44-48 -- derive the class. Under ClassExclusive the
+        # labeller leaves a declared emergency alone; the script does not.
+        if not (R["ClassExclusive"] and is_emg(q)):
+            for c in ("standard", "normal"):
+                yield f"Label({p},{c})", put(st, i, q._replace(
+                    cls=(q.cls - {"standard", "normal"}) | {c}))
+        # a person declares an emergency (label-owners.tsv: human)
+        if not is_emg(q):
+            cls = frozenset({"emergency"}) if R["ClassExclusive"] else q.cls | {"emergency"}
+            yield f"DeclareEmergency({p})", put(st, i, q._replace(cls=cls))
+        # gh pr ready
+        if q.draft:
+            yield f"MarkReady({p})", put(st, i, q._replace(draft=False))
+        # a person adds release
+        if not q.release:
+            yield f"AddRelease({p})", put(st, i, q._replace(release=True))
+        # change/watch.sh:37-38 -- consume, then record the ask
+        if q.release:
+            life = q.life if (R["LifecycleExclusive"] and "scheduled" in q.life) else q.life | {"requested"}
+            yield f"Watch({p})", put(st, i, q._replace(release=False, life=life))
+        # a person adds change:requested
+        if "requested" not in q.life and "scheduled" not in q.life:
+            yield f"Request({p})", put(st, i, q._replace(life=q.life | {"requested"}))
+        # change/schedule.sh block:257
+        if "scheduled" not in q.life:
+            life = ((q.life - {"requested"}) | {"scheduled"}) if R["LifecycleExclusive"] else q.life | {"scheduled"}
+            for b in ("queued", "designated"):
+                yield f"Book({p},{b})", put(st, i, q._replace(life=life, booking=b))
+        # change/schedule.sh cancel:303
+        if "scheduled" in q.life and not q.berth:
+            yield f"Cancel({p})", put(st, i, q._replace(life=q.life - {"scheduled"}, booking="none"))
+        # change/reap.sh:74-78
+        if "scheduled" in q.life and not q.prod:
+            berth = False if R["ReapFreesBerth"] else q.berth
+            yield f"Reap({p})", put(st, i, q._replace(life=q.life - {"scheduled"}, booking="none", berth=berth))
+        # gates/preflight.sh then change/activate.sh:265-268
+        if not q.berth:
+            others = holder(st) - {i}
+            refused = (q.draft or q.booking == "none"
+                       or (st.freeze and not is_emg(q))
+                       or (st.emg and not is_emg(q))
+                       or bool(others))
+            permitted = ((not R["DraftGuard"] or not q.draft)
+                         and (not R["WindowGuard"] or q.booking != "none")
+                         and (not R["FreezeGuard"] or not st.freeze or is_emg(q))
+                         and (not R["EstateGuard"] or not st.emg or is_emg(q))
+                         and (not R["BerthGuard"] or not others))
+            if permitted:
+                yield f"Activate({p})", put(st, i, q._replace(berth=True), bad=st.bad or refused)
+        # gates/e2e.sh --pr, gates/smoke.sh --pr
+        if q.berth:
+            for v in ("pass", "fail"):
+                yield f"Observe({p},{v})", put(st, i, q._replace(verdict=v))
+        # change/observe.sh:44
+        if q.berth and q.verdict == "pass" and not q.uat:
+            yield f"Accept({p})", put(st, i, q._replace(uat=True))
+        # promote.yml:26
+        if q.berth and not q.prod and ((q.verdict == "pass" and q.uat) or is_emg(q)):
+            yield f"Promote({p})", put(st, i, q._replace(prod=True))
+        # gates/health.sh --pr:99
+        if q.prod and not q.healthy:
+            yield f"Converge({p})", put(st, i, q._replace(healthy=True))
+        # change/settle.sh:105 then :244-252
+        if q.healthy:
+            if R["SettleClears"]:
+                nq = q._replace(life=frozenset({"complete"}), berth=False, prod=False,
+                                release=False, verdict="none", uat=False, healthy=False,
+                                booking="none")
+            else:
+                nq = q._replace(life=q.life | {"complete"})
+            yield f"Settle({p})", put(st, i, nq)
+        # change/abort.sh:95-114
+        if "scheduled" in q.life or q.berth:
+            yield f"Abort({p})", put(st, i, q._replace(
+                closed=True, life=q.life - {"scheduled"}, berth=False, release=False,
+                verdict="none", uat=False, healthy=False))
+        # labeller.yml:101 on synchronize
+        if q.verdict != "none" or q.uat or q.healthy:
+            yield f"Push({p})", put(st, i, q._replace(verdict="none", uat=False, healthy=False))
+    yield "Freeze", st._replace(freeze=not st.freeze)
+    yield "Estate", st._replace(emg=not st.emg)
 
+# ---------------------------------------------------------------------------
+# Invariants, in the same order as tla/Labels.cfg so the first one violated
+# is the one TLC would name.
+def invariants():
+    yield "OneClass",         lambda st: all(len(q.cls) <= 1 for q in st.prs)
+    yield "CompleteIsClean",  lambda st: all("complete" not in q.life or
+                                            (not q.berth and not q.prod and not q.release
+                                             and q.verdict == "none" and not q.uat
+                                             and not q.healthy and q.booking == "none")
+                                            for q in st.prs)
+    yield "OneLifecycle",     lambda st: all(len(q.life) <= 1 for q in st.prs)
+    yield "NoDraftDeployed",  lambda st: all(not q.draft or (not q.berth and not q.prod) for q in st.prs)
+    yield "NoUnbookedDeploy", lambda st: all(not (q.berth or q.prod) or q.booking != "none" for q in st.prs)
+    yield "BerthHasCause",    lambda st: all(not q.berth or "scheduled" in q.life for q in st.prs)
+    yield "AtMostOneHolder",  lambda st: len(holder(st)) <= 1
+    yield "NoRefusedClaim",   lambda st: not st.bad
 
-def scope_of(cls, scope):
-    """What the labeller would derive, given what the diff touched."""
-    if scope == "app":      return {"app:core"}
-    if scope == "shared":   return {"app:core", "app:plp", "app:pdp", "app:checkout"}
-    if scope == "pipeline": return {"control-plane"}
-    return set()
+def violated(st):
+    for name, inv in invariants():
+        if not inv(st):
+            return name
+    return None
 
+# ---------------------------------------------------------------------------
+def explore(R, bound):
+    """BFS to depth BOUND. Returns (states, depth_reached, violation, trace)."""
+    seen = {}
+    frontier = []
+    for s0 in inits():
+        seen[s0] = None; frontier.append(s0)
+        v = violated(s0)
+        if v: return len(seen), 0, v, [("Init", s0)]
+    depth = 0
+    while frontier and depth < bound:
+        nxt = []
+        for st in frontier:
+            for name, st2 in actions(st, R):
+                if st2 in seen: continue
+                seen[st2] = (st, name)
+                v = violated(st2)
+                if v:
+                    trace = []; cur = st2
+                    while seen[cur] is not None:
+                        prev, act = seen[cur]; trace.append((act, cur)); cur = prev
+                    trace.append(("Init", cur)); trace.reverse()
+                    return len(seen), depth + 1, v, trace
+                nxt.append(st2)
+        frontier = nxt; depth += 1
+    return len(seen), depth, None, [] if not frontier else None
 
-def may_proceed(cls, scope, state, blocker, ready="ready", booking="queued"):
-    """The rules as they stand. Returns (ok, reason)."""
-    # NO WINDOW, NO DEPLOYMENT -- and no exemption, not even for an emergency.
-    # An emergency is exempt from the FREEZE and the QUEUE rules; it is not
-    # exempt from being on the calendar, because the calendar is what tells
-    # everyone else that the one path to production is occupied. An emergency
-    # that skipped it would collide with whatever was already deploying.
-    if booking == "none" and state.startswith("deploy:"):
-        return False, "no window: the change schedule has no reservation for this"
-    # FIRST, AND WITH NO EXEMPTION. A draft is refused before the class is even
-    # consulted, because the class cannot rescue it: itil:emergency is a
-    # statement about the change's URGENCY, and draft is a statement about its
-    # READINESS. An urgent unfinished change is still unfinished, and an
-    # emergency that needs to ship is one `gh pr ready` away -- an act by the
-    # author, which is exactly who should decide.
-    if ready == "draft":
-        return False, "draft: the author says it is not ready"
-    if blocker == "freeze" and cls != "itil:emergency":
-        return False, "freeze: only an emergency proceeds"
-    if blocker == "emergency-in-flight" and cls != "itil:emergency":
-        return False, "an emergency is in flight; ordinary changes wait"
-    if blocker == "berth-held" and state in ("deploy:staging",):
-        return False, "guard 1: one change holds staging"
-    if scope == "pipeline" and state == "change:complete":
-        # docs/changing-the-pipeline.org: proven by USE, not by its own merge.
-        return True, "PROVISIONAL -- a pipeline change is not proven at merge"
-    return True, "proceeds"
+def random_walks(R, bound, walks, length, seed):
+    """Past the bound: Hypothesis-driven walks. Returns (walks_run, violation, trace) or None."""
+    try:
+        from hypothesis import given, settings, strategies as hst, HealthCheck
+    except ImportError:
+        return None
+    found = {}
+    @settings(max_examples=walks, deadline=None, database=None,
+              suppress_health_check=list(HealthCheck), derandomize=seed is None)
+    @given(hst.lists(hst.integers(min_value=0, max_value=10**6), min_size=bound + 1, max_size=length))
+    def walk(choices):
+        st = next(iter(inits()))
+        trace = [("Init", st)]
+        for c in choices:
+            opts = list(actions(st, R))
+            if not opts: break
+            name, st = opts[c % len(opts)]
+            trace.append((name, st))
+            v = violated(st)
+            if v and "hit" not in found:
+                found["hit"] = (v, trace)
+                raise AssertionError(v)
+    try:
+        walk()
+    except AssertionError:
+        pass
+    return walks, found.get("hit", (None, []))[0], found.get("hit", (None, []))[1]
 
+def show(q):
+    return (f"cls={sorted(q.cls)} life={sorted(q.life)} draft={q.draft} rel={q.release} "
+            f"book={q.booking} berth={q.berth} prod={q.prod} v={q.verdict} uat={q.uat} "
+            f"healthy={q.healthy} closed={q.closed}")
 
 def main():
-    labels, groups = declared()
-    print(f"  declaration: {len(labels)} labels, {len(groups)} exclusion groups\n")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--disable", action="append", default=[], choices=RULES,
+                    help="switch a rule off; the checker must then find a violation")
+    ap.add_argument("--bound", type=int, default=12, help="exhaustive BFS depth")
+    ap.add_argument("--walks", type=int, default=200, help="random walks past the bound")
+    ap.add_argument("--length", type=int, default=40, help="max walk length")
+    ap.add_argument("--quiet", action="store_true")
+    a = ap.parse_args()
+    R = {r: r not in a.disable for r in RULES}
+    off = [r for r in RULES if not R[r]]
+    say = (lambda *x: None) if a.quiet else print
 
-    findings, rows = [], 0
-    for cls, scope, state, blocker, ready, booking in itertools.product(
-            CLASSES, SCOPES, STATES, BLOCKERS, READY, BOOKING):
-        rows += 1
-        derived = scope_of(cls, scope) | {cls} | ({state} if state else set())
-        ok, why = may_proceed(cls, scope, state, blocker, ready, booking)
-
-        # 6. A DEPLOYMENT WITHOUT A RESERVATION. The two booking modes must be
-        #    indistinguishable here: if `designated` could reach an environment
-        #    on a path `queued` could not, --at would be a bypass wearing a
-        #    calendar's clothes.
-        if booking == "none" and ok and state.startswith("deploy:"):
-            findings.append(
-                f"UNBOOKED DEPLOY: reached {state} with no window ({cls}/{scope})")
-        if ok and state.startswith("deploy:"):
-            other = "queued" if booking == "designated" else "designated"
-            ok2, _ = may_proceed(cls, scope, state, blocker, ready, other)
-            if not ok2:
-                findings.append(
-                    f"BOOKING MODE IS A BYPASS: {booking} reaches {state} where "
-                    f"{other} does not ({cls}/{scope}) -- naming an hour is not "
-                    f"an argument about who holds the path to production")
-
-        # 5. A DRAFT MUST NOT REACH AN ENVIRONMENT. The states that mean "it is
-        #    out there" are the deploy:* pair; reaching either while the author
-        #    says draft means the pipeline overrode the one signal it does not
-        #    have to interpret.
-        if ready == "draft" and ok and state.startswith("deploy:"):
-            findings.append(
-                f"DRAFT DEPLOYED: a draft reached {state} ({cls}/{scope}) -- the "
-                f"author marked it not ready and nothing downstream re-asks")
-
-        # 1. every derived label must be declared
-        for l in derived:
-            if l in ("app:core", "app:plp", "app:pdp", "app:checkout"):
-                l = "app:*"
-            if l and l not in labels:
-                findings.append(f"undeclared label '{l}' reachable via {cls}/{scope}/{state}")
-
-        # 2. no state may hold two members of an exclusion group
-        for g, members in groups.items():
-            both = members & derived
-            if len(both) > 1:
-                findings.append(f"{cls}/{scope}/{state}: holds {sorted(both)} from group '{g}'")
-
-        # 3. THE ONE THE OWNER ASKED ABOUT. An emergency is BOTH a classification
-        #    of one change and a blocker on every other change. One label is
-        #    carrying two facts, and they are about different subjects.
-        if cls == "itil:emergency" and blocker == "emergency-in-flight":
-            findings.append(
-                f"AMBIGUOUS: itil:emergency on this change, and an emergency in "
-                f"flight elsewhere -- the same label names both, so 'is there an "
-                f"emergency?' cannot distinguish 'am I one' from 'is one running'")
-
-        # 4. a pipeline change that reaches complete is not proven
-        if scope == "pipeline" and state == "change:complete" and "PROVISIONAL" not in why:
-            findings.append(f"pipeline change complete with no soak: {cls}")
-
-    uniq = sorted(set(findings))
-    for f in uniq:
-        print(f"  FINDING  {f}")
-    print(f"\n  {rows} states explored, {len(uniq)} distinct finding(s)")
-    return 1 if uniq else 0
-
+    say(f"  rules off: {off or 'none'}")
+    n, d, v, trace = explore(R, a.bound)
+    if v:
+        say(f"  exhaustive: VIOLATION {v} at depth {d} after {n} states")
+        for act, st in trace[-min(len(trace), 8):]:
+            say(f"    {act:<24} {' | '.join(show(q) for q in st.prs)} freeze={st.freeze} emg={st.emg}")
+        print(f"VERDICT violated {v}")
+        return 1
+    complete = trace == []
+    say(f"  exhaustive: {n} states, depth {d}, "
+        f"{'state space exhausted' if complete else f'bound {a.bound} reached, not exhausted'}, no violation")
+    rw = random_walks(R, a.bound, a.walks, a.length, None) if a.walks > 0 else None
+    if a.walks == 0:
+        say("  property: walks disabled (--walks 0)")
+    elif rw is None:
+        say("  property: hypothesis not installed -- walks past the bound skipped")
+    else:
+        w, hv, htrace = rw
+        if hv:
+            say(f"  property: VIOLATION {hv} on a walk past the bound")
+            print(f"VERDICT violated {hv}")
+            return 1
+        say(f"  property: {w} walks of up to {a.length} steps past depth {a.bound}, no violation")
+    print("VERDICT holds")
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())

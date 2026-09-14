@@ -59,7 +59,37 @@ printf '== concurrent positive: berths=1 (the atomic model case) .... '
 if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
+# The LABEL NAMESPACE (Labels.tla): three axes plus the estate, transcribed
+# from the scripts. Nine constants, one per rule; each negative run flips one
+# and TLC must name the invariant that rule protects. sim/cross_check.py runs
+# the same nine questions against sim/label_sim.py and requires agreement.
+#
+# Two constants name the same invariant on purpose: a claim with no window
+# (WindowGuard) and a berth left behind by a lapsed window (ReapFreesBerth)
+# reach the same state -- deploy:staging with no reservation -- by two roads.
+labels_negative() {  # labels_negative <Constant> <Invariant>
+  sed "s/$1 = TRUE/$1 = FALSE/" Labels.cfg > "No$1.cfg"
+  sed "s/MODULE Labels/MODULE No$1/" Labels.tla > "No$1.tla"
+  printf '== labels negative: %-18s must violate %-18s ' "$1=FALSE" "$2"
+  if run "No$1" | grep -q "Invariant $2 is violated"; then echo 'FAIL as required'
+  else echo "BAD: rule $1 protects nothing the model can see"; exit 1; fi
+  rm -f "No$1.cfg" "No$1.tla"
+}
+labels_negative DraftGuard         NoDraftDeployed
+labels_negative WindowGuard        NoUnbookedDeploy
+labels_negative FreezeGuard        NoRefusedClaim
+labels_negative EstateGuard        NoRefusedClaim
+labels_negative BerthGuard         AtMostOneHolder
+labels_negative ClassExclusive     OneClass
+labels_negative LifecycleExclusive OneLifecycle
+labels_negative ReapFreesBerth     NoUnbookedDeploy
+labels_negative SettleClears       CompleteIsClean
+
+printf '== labels positive: all nine rules on ....................... '
+if run Labels | grep -q 'No error has been found'; then echo 'PASS'
+else echo 'FAIL'; run Labels | grep -E 'Error' | head -5; exit 1; fi
+
 rm -rf Neg.tla Neg.cfg NoProdFirst.tla NoProdFirst.cfg NoMergeGuard.tla NoMergeGuard.cfg One.tla One.cfg \
-       NoOwn.tla NoOwn.cfg \
+       NoOwn.tla NoOwn.cfg No*.tla No*.cfg \
        *_TTrace_*.tla *_TTrace_*.bin states
 echo "== both directions confirmed"
