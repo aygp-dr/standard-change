@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>standard-change — IDP (mock)</title>
+<style>
+  :root { --ink:#1f2937; --mute:#6b7280; --ok:#15803d; --warn:#a16207; --bad:#b91c1c; --line:#e5e7eb; --bg:#fafafa }
+  body { font: 14px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--bg); margin: 0; padding: 16px 18px }
+  h1 { font-size: 18px; margin: 0 0 4px } h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); margin: 18px 0 6px }
+  .mock { font-size: 12px; color: var(--bad); font-weight: 600 }
+  table { border-collapse: collapse; width: 100%; max-width: 980px } td, th { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px }
+  th { color: var(--mute); font-weight: 500 } code { font: 12px/1 ui-monospace, monospace; background: #fff; padding: 1px 4px; border: 1px solid var(--line); border-radius: 3px }
+  button { font: inherit; font-size: 12px; padding: 2px 8px; margin-right: 4px; border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; cursor: pointer }
+  button:hover { background: #f1f5f9 }
+  .open { color: var(--ok) } .frozen { color: var(--warn) } .emergency { color: var(--bad) }
+  #refusal { border-left: 3px solid var(--bad); background: #fff; padding: 8px 12px; margin-top: 12px; max-width: 980px; white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; display: none }
+  #ok { border-left: 3px solid var(--ok); background: #fff; padding: 8px 12px; margin-top: 12px; max-width: 980px; white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; display: none }
+  .lc-implementing { color: var(--warn); font-weight: 600 } .lc-complete { color: var(--ok) } .lc-failed, .lc-backed-out { color: var(--bad) }
+</style>
+<h1>standard-change — change control <span class="mock">MOCK · in-memory · nothing deploys</span></h1>
+<div>contract: <a href="/openapi.yaml">/openapi.yaml</a> · every write needs an <code>Idempotency-Key</code>; the page makes one per click</div>
+
+<h2>Authorization boundary</h2>
+<div id="boundary"></div>
+
+<h2>Changes</h2>
+<table id="changes"><thead><tr><th>#</th><th>class</th><th>lifecycle</th><th>head</th><th>window</th><th>berth</th><th>verbs</th></tr></thead><tbody></tbody></table>
+
+<h2>Schedule</h2>
+<table id="schedule"><thead><tr><th>window</th><th>change</th><th>start</th><th>end</th><th>mode</th><th>result</th></tr></thead><tbody></tbody></table>
+
+<div id="ok"></div>
+<div id="refusal"></div>
+
+<script>
+const key = () => "web-" + Math.random().toString(36).slice(2);
+async function call(method, path, body) {
+  const r = await fetch(path, { method, headers: { "content-type": "application/json", "idempotency-key": key() }, body: body ? JSON.stringify(body) : undefined });
+  const text = await r.text(); let j = null; try { j = JSON.parse(text); } catch {}
+  const box = r.ok ? ok : refusal; (r.ok ? refusal : ok).style.display = "none";
+  box.style.display = "block"; box.textContent = `${method} ${path} -> ${r.status}\n` + (j ? JSON.stringify(j, null, 2) : text);
+  render();
+}
+async function render() {
+  const [cs, sc] = await Promise.all([fetch("/changes").then(r => r.json()), fetch("/schedule").then(r => r.json())]);
+  const b = sc.boundary;
+  boundary.innerHTML = `<b class="${b.state}">${b.state.toUpperCase()}</b>` +
+    (b.freeze ? ` — freeze: ${b.freeze.reason} (since ${b.freeze.since})` : "") +
+    (b.emergency ? ` — emergency for #${b.emergency.change}: ${b.emergency.reason}` : "") +
+    (b.berth ? ` · berth held by #${b.berth.held_by} (${b.berth.lease})` : " · berth free") + "<br>" +
+    `<button onclick="call('PUT','/boundary/freeze',{reason:prompt('reason for the freeze')||'unstated'})">freeze</button>` +
+    `<button onclick="call('DELETE','/boundary/freeze')">lift freeze</button>` +
+    `<button onclick="call('PUT','/boundary/emergency',{change:prompt('the emergency change (PR #)')||'',reason:prompt('reason')||'unstated'})">declare emergency</button>` +
+    `<button onclick="call('DELETE','/boundary/emergency')">emergency over</button>` +
+    `<button onclick="call('POST','/schedule/reap')">reap</button>`;
+  changes.tBodies[0].innerHTML = cs.map(c => `<tr>
+    <td>#${c.pr}</td><td>${c.class}</td><td class="lc-${c.lifecycle}">${c.lifecycle}</td><td><code>${c.head}</code></td>
+    <td>${c.window ? c.window.id : "—"}</td><td>${c.lease ? c.lease.id : "—"}</td>
+    <td><button onclick="call('POST','/changes/${c.pr}/reservation',{groups:${JSON.stringify(c.groups)},minutes:30})">reserve</button>
+        <button onclick="call('DELETE','/changes/${c.pr}/reservation')">cancel</button>
+        <button onclick="call('POST','/changes/${c.pr}/activation')">activate (scheduler)</button>
+        <button onclick="call('POST','/changes/${c.pr}/settlement',{lease:'${c.lease ? c.lease.id : ""}',claimed_build:'${c.head}',observations:[1,2,3].map(i=>({probe:'http://127.0.0.1:9230/version.json',at:new Date().toISOString(),build:'${c.head}'}))})">settle (3 probes)</button>
+        <button onclick="call('POST','/changes/${c.pr}/settlement',{lease:'${c.lease ? c.lease.id : ""}',claimed_build:'${c.head}',observations:[{probe:'p1',at:new Date().toISOString(),build:'${c.head}'},{probe:'p2',at:new Date().toISOString(),build:'0000000'}]})">settle (mixed fleet)</button>
+        <button onclick="call('POST','/changes/${c.pr}/closure',{code:'failed',reason:'from the web mock'})">close failed</button></td></tr>`).join("");
+  schedule.tBodies[0].innerHTML = sc.windows.map(w => `<tr><td>${w.id}</td><td>#${w.change}</td><td>${w.start}</td><td>${w.end}</td><td>${w.mode}</td><td>${w.result ?? "<i>open</i>"}</td></tr>`).join("") || "<tr><td colspan=6><i>nothing booked</i></td></tr>";
+}
+render();
+</script>

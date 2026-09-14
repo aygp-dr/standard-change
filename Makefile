@@ -7,7 +7,7 @@ EXTERNAL := $(notdir $(wildcard external/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
-        simulate-gates smoke uat \
+        simulate-gates smoke uat idp-mock idp-tui idp-org \
         forge forge-list forge-pull forge-check \
         port-alloc port-free ports clean
 
@@ -143,3 +143,9 @@ clean: ; @rm -rf .run .env .env.ports
 
 dashboard:  ## the estate: queue, protected, team
 	@./dashboard
+idp-mock:  ## the IDP contract (idp-api/openapi.yaml) as an in-memory mock on :9998
+idp-mock: ; @node idp-api/mock/server.mjs
+idp-tui:  ## the IDP from a terminal, against the mock   IDP_URL=<base>
+idp-tui: ; @python3 idp-api/mock/tui.py
+idp-org:  ## the IDP with org-mode as the store: tangle and run the eviction demo
+idp-org: ; @cd idp-api && emacs --batch -l org --eval '(org-babel-tangle-file "idp.org")' >/dev/null 2>&1 && cd .. && emacs --batch -l idp-api/idp.el -f idp-org-demo 2>/dev/null

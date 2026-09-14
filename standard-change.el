@@ -393,5 +393,118 @@ cannot be told from a stale one is not evidence of anything."
                              (truncate-string-to-width (format "%s" (nth 1 r)) 46)
                              (nth 2 r)))))))))))
 
+;;;; The IDP, over HTTP ---------------------------------------------------------
+;;
+;; A client for idp-api/openapi.yaml: the three verbs, closure, the boundary,
+;; and the reads. Built against idp-api/mock/server.mjs; the real server is
+;; the dashboard's once it grows the verbs. Every write sends an
+;; Idempotency-Key, and a refusal is shown the way the contract returns it:
+;; fact, cost, recovery, berth -- because the refusal is the product.
+;;
+;;   M-x standard-change-idp            one-key menu over the verbs
+;;   M-x standard-change-idp-status     the boundary, the changes, the schedule
+
+(defvar standard-change-idp-url (or (getenv "IDP_URL") "http://127.0.0.1:9998")
+  "The IDP to talk to. The mock by default.")
+
+(defun standard-change--idp (method path &optional body)
+  "METHOD PATH with optional BODY (an alist) -> (STATUS . PARSED-JSON)."
+  (let* ((url-request-method method)
+         (url-request-extra-headers
+          `(("Content-Type" . "application/json")
+            ("Idempotency-Key" . ,(format "emacs-%x" (random (expt 2 32))))))
+         (url-request-data (and body (encode-coding-string (json-encode body) 'utf-8)))
+         (buf (url-retrieve-synchronously (concat standard-change-idp-url path) t t 5)))
+    (unless buf (standard-change--fail "  idp: %s is not answering\n" standard-change-idp-url))
+    (with-current-buffer buf
+      (goto-char (point-min))
+      (let ((status (and (re-search-forward "^HTTP/[0-9.]+ \\([0-9]+\\)" nil t)
+                         (string-to-number (match-string 1)))))
+        (re-search-forward "^$" nil t)
+        (let ((text (string-trim (buffer-substring-no-properties (point) (point-max)))))
+          (kill-buffer buf)
+          (cons status (and (> (length text) 0)
+                            (ignore-errors (json-parse-string text :object-type 'alist :null-object nil)))))))))
+
+(defun standard-change--idp-show (r)
+  "Print a contract response R legibly; a refusal by its four fields."
+  (let ((status (car r)) (body (cdr r)))
+    (princ (format "  %s %s\n" (if (< status 400) "ok " "REFUSED") status))
+    (if (and (listp body) (assq 'refused body))
+        (dolist (k '(refused fact cost recovery berth))
+          (princ (format "     %-9s %s\n" k (or (alist-get k body) ""))))
+      (when body (princ (format "     %s\n" (json-encode body)))))
+    r))
+
+;;;###autoload
+(defun standard-change-idp-status ()
+  "The boundary, every change, and the schedule, from the IDP."
+  (interactive)
+  (let* ((cs (cdr (standard-change--idp "GET" "/changes")))
+         (sc (cdr (standard-change--idp "GET" "/schedule")))
+         (b (alist-get 'boundary sc))
+         (buf (get-buffer-create "*change: idp*")))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (format "BOUNDARY  %s%s%s\n\n" (upcase (alist-get 'state b))
+                        (if-let* ((e (alist-get 'emergency b)))
+                            (format "  emergency for #%s: %s" (alist-get 'change e) (alist-get 'reason e)) "")
+                        (if-let* ((h (alist-get 'berth b)))
+                            (format "  berth: #%s (%s)" (alist-get 'held_by h) (alist-get 'lease h)) "  berth: free")))
+        (insert (format "%-5s %-10s %-13s %-8s %-26s %s\n" "#" "class" "lifecycle" "head" "window" "lease"))
+        (seq-doseq (c cs)
+          (insert (format "%-5s %-10s %-13s %-8s %-26s %s\n"
+                          (alist-get 'pr c) (alist-get 'class c) (alist-get 'lifecycle c) (alist-get 'head c)
+                          (or (alist-get 'id (alist-get 'window c)) "—")
+                          (or (alist-get 'id (alist-get 'lease c)) "—"))))
+        (insert "\n")
+        (seq-doseq (w (alist-get 'windows sc))
+          (insert (format "%-26s #%-4s %s .. %s  %-10s %s\n" (alist-get 'id w) (alist-get 'change w)
+                          (alist-get 'start w) (alist-get 'end w) (alist-get 'mode w)
+                          (or (alist-get 'result w) "open"))))
+        (goto-char (point-min))
+        (special-mode)))
+    (standard-change--show buf)))
+
+(defun standard-change--idp-pr ()
+  (string-trim-left (read-string "change (PR #): ") "#"))
+
+;;;###autoload
+(defun standard-change-idp ()
+  "One key per verb of the contract. r reserve, a activate, s settle, c cancel,
+f close failed, F freeze, O open the boundary, E declare an emergency, R reap,
+? status."
+  (interactive)
+  (let ((k (read-char "idp: [r]eserve [a]ctivate [s]ettle [c]ancel [f]ail [F]reeze [O]pen [E]mergency [R]eap [?]status ")))
+    (with-output-to-temp-buffer "*change: idp reply*"
+      (pcase k
+        (?r (let* ((pr (standard-change--idp-pr))
+                   (c (cdr (standard-change--idp "GET" (concat "/changes/" pr)))))
+              (standard-change--idp-show
+               (standard-change--idp "POST" (format "/changes/%s/reservation" pr)
+                                     `((groups . ,(alist-get 'groups c)) (minutes . 30))))))
+        (?a (standard-change--idp-show (standard-change--idp "POST" (format "/changes/%s/activation" (standard-change--idp-pr)))))
+        (?s (let* ((pr (standard-change--idp-pr))
+                   (c (cdr (standard-change--idp "GET" (concat "/changes/" pr))))
+                   (h (alist-get 'head c)) (l (alist-get 'id (alist-get 'lease c)))
+                   (at (format-time-string "%FT%TZ" nil t)))
+              (standard-change--idp-show
+               (standard-change--idp "POST" (format "/changes/%s/settlement" pr)
+                                     `((lease . ,(or l "")) (claimed_build . ,h)
+                                       (observations . [((probe . "http://127.0.0.1:9230/version.json") (at . ,at) (build . ,h))
+                                                        ((probe . "http://127.0.0.1:9230/version.json") (at . ,at) (build . ,h))
+                                                        ((probe . "http://127.0.0.1:9230/version.json") (at . ,at) (build . ,h))]))))))
+        (?c (standard-change--idp-show (standard-change--idp "DELETE" (format "/changes/%s/reservation" (standard-change--idp-pr)))))
+        (?f (standard-change--idp-show (standard-change--idp "POST" (format "/changes/%s/closure" (standard-change--idp-pr))
+                                                             '((code . "failed") (reason . "from emacs")))))
+        (?F (standard-change--idp-show (standard-change--idp "PUT" "/boundary/freeze" `((reason . ,(read-string "reason: "))))))
+        (?O (standard-change--idp "DELETE" "/boundary/freeze")
+            (standard-change--idp-show (standard-change--idp "DELETE" "/boundary/emergency")))
+        (?E (standard-change--idp-show (standard-change--idp "PUT" "/boundary/emergency"
+                                                             `((change . ,(standard-change--idp-pr)) (reason . ,(read-string "reason: "))))))
+        (?R (standard-change--idp-show (standard-change--idp "POST" "/schedule/reap")))
+        (_  (standard-change-idp-status))))))
+
 (provide 'standard-change)
 ;;; standard-change.el ends here

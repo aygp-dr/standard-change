@@ -627,6 +627,20 @@ flowchart LR
     style G fill:#bbf7d0,stroke:#15803d,color:#000
 #+end_src
 
+** The contract, and four mock interfaces
+
+=idp-api/openapi.yaml= is the three verbs, closure and the boundary as an
+OpenAPI contract, with every refusal carrying fact, cost, recovery and
+berth. Against it, four thin interfaces, all mock, none deploying:
+
+| interface | run | what it is |
+|-----------+-----+------------|
+| the server | =gmake idp-mock= | in-memory, =:9998=; the label machine of =tla/Labels.tla= in a Map, eviction included |
+| web | =http://127.0.0.1:9998/= | one page: boundary, changes, schedule, a button per verb, the refusal as returned |
+| TUI | =gmake idp-tui= | one key per verb; =--run "r 62; a 62; …"= scripts a walk |
+| Emacs | =M-x standard-change-idp= | the same keys, over HTTP, from =standard-change.el= |
+| org-mode | =gmake idp-org= | *no HTTP*: =idp-api/idp.org= is the store as an org file, the verbs as elisp, =org-agenda= as the calendar. Single-writer by construction; not the store of record |
+
 ** The scheduler is not an interface
 
 Activation is the one operation *no client calls*. The scheduler invokes it
