@@ -58,7 +58,7 @@ export function shippingForm(q) {
 <h2>Shipping address</h2>
 <form method="get" action="/checkout">
 ${SHIP.map(field).join('\n')}
-<p><button type="submit">Continue</button></p>
+<p><button type="submit">Continue ✨</button></p>
 </form>` + (filled ? '<p><b>Ready to continue to payment.</b></p>' : '');
 }
 
