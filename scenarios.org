@@ -835,3 +835,68 @@ reporting the berth as frictionless. Deployments now take time (one slot,
 three for a control-plane change) and the contention appears. A simulation that
 cannot exhibit the constraint it was built to study will report that the
 constraint costs nothing.
+
+** D19 — 80% deploy success, a 1% unhealthy production, and the cost of rolling forward
+
+*Run 2026-09-14, =sim/grind100.py=, 100 changes x 40 seeds, one berth.*
+Deployments succeed 80% of the time; 1% of cutovers are observed unhealthy by
+guard 5. Production is observable throughout. Rollback is assumed always to
+work — it is a front switch, not a deploy.
+
+*** Two failure kinds, and they are not the same event
+
+| kind | rate | who catches it | what production saw |
+|------+------+----------------+---------------------|
+| staging refuses the deploy | 20% | the gate | *nothing* — it never got there |
+| guard 5 observes unhealthy | 1% of cutovers | the estate, after the fact | the bad build |
+
+25 of 100 were caught at staging in a representative run. That is the pipeline
+working, and it is why the production incident rate is 1% of *cutovers* rather
+than 1% of changes. Conflating the two would make the gate look like a failure
+source instead of a filter.
+
+*** Rollback dominates roll-forward
+
+| | rollback | roll forward |
+|-+----------+--------------|
+| incidents | 31 | 37 |
+| slots production unhealthy | 31 | *86* |
+| mean restore per incident | *1.00 slots* | *2.32 slots* |
+| hotfixes built | 0 | 37 (*6 of them failed their own gate*) |
+| other changes' staging passes withdrawn | *0* | *51* |
+| total shipped (40 seeds) | *3032* | 3002 |
+
+Roll forward is 2.3x slower to restore and it is not the main cost. The main
+cost is *collateral*: a hotfix merges as =Divergence.HOTFIX=, which is in
+=WITHDRAWS=, so every other change waiting with a staging pass has that pass
+invalidated and must re-run. 51 passes were withdrawn across 40 seeds, and 30
+fewer changes shipped overall.
+
+And the hotfix is not privileged: 6 of 37 failed their own gate, because
+=itil:emergency= does not bypass guard 2. While that is happening, production
+is still serving the bad build.
+
+*The rule this suggests:* roll forward only when rollback is impossible —
+a schema migration, a consumed message, anything that made the previous build
+un-runnable. "We will just fix it forward" is a choice to keep production
+unhealthy for 2.3x longer and to invalidate everyone else's work.
+
+*** Methodological caveat, stated rather than buried
+
+The two arms are *not seed-matched*: 31 incidents versus 37 on the same 40
+seeds, because the two code paths consume different numbers of random draws and
+the streams diverge. The per-incident figures (1.00 vs 2.32 slots) and the
+collateral (0 vs 51) are the comparable ones; the raw incident counts are not.
+A paired design would fix the arrival and failure draws before branching.
+
+*** The degraded-infrastructure matrix is unchanged by reliability
+
+| component down | spec policy | =release:start= advisory |
+|----------------+-------------+--------------------------|
+| calendar | 0/100 | *73/100* |
+| staging | 74/100 | 74/100 |
+| production unobservable | *0/100* | *0/100* |
+| forge | *0/100* | *0/100* |
+
+Same shape as D18 at lower absolute numbers, because 20% now fail at staging.
+The advisory window still changes exactly one row.
