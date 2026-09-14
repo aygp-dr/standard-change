@@ -514,7 +514,7 @@ letter-spacing:.04em}
 <table><thead><tr><th>change</th><th>groups</th><th>build</th><th>window</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
 
 <h2>environments</h2>
-<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>deployed</th></tr></thead><tbody id=e></tbody></table>
+<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>deployed</th></tr></thead><tbody id=e></tbody></table>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function flagbox(d){
@@ -704,18 +704,19 @@ function render(d){
   document.getElementById('e').innerHTML=d.envs.map(x=>{
     const state=x.declared?'<td class=decl>declared</td>'
       :'<td class='+(x.up?'up':'down')+'>'+(x.up?'up '+esc(x.status):'dark')+'</td>';
-    // The colour cell means two different things and must not pretend
-    // otherwise. On the FRONT it is the ACTIVATED colour -- which replica is
-    // serving customers right now. On blue or green it is only that replica
-    // naming itself, which tells you nothing about what is live.
-    let col='<td class=sw-none>—</td>';
-    if(x.name==='front'&&x.colour)
-      col='<td><span class="swatch sw-'+esc(x.colour)+'">'+esc(x.colour).toUpperCase()+
-          ' LIVE</span></td>';
-    else if(x.colour)
-      col='<td class=dim>'+esc(x.colour)+'</td>';
+    // THE COLOUR COLUMN IS GONE. It was an em-dash on every row but one: blue
+    // and green only ever named themselves, which says nothing about what is
+    // live, and the dev and team rows have no colour at all. A column empty
+    // fourteen times out of eighteen is not a column.
+    //
+    // The one fact it carried -- WHICH REPLICA THE FRONT HAS ACTIVATED -- now
+    // sits on the front's own row beside the name, where a reader is already
+    // looking when they ask what customers are getting.
+    const swatch = (x.name==='front' && x.colour)
+      ? ' <span class="swatch sw-'+esc(x.colour)+'">'+esc(x.colour).toUpperCase()+' LIVE</span>'
+      : '';
     return '<tr class="'+(x.sha&&x.sha===d.live_sha&&x.tier==='protected'?'live':'')+'">'+
-    '<td class="n-'+esc(x.name)+'">'+esc(x.name)+'</td><td class='+esc(x.tier)+'>'+esc(x.tier)+'</td>'+
+    '<td class="n-'+esc(x.name)+'">'+esc(x.name)+swatch+'</td><td class='+esc(x.tier)+'>'+esc(x.tier)+'</td>'+
     // THE LINK HOST IS WHERE YOU ARE, NOT WHERE THE PROBE WENT. The server
     // probes 127.0.0.1 because it is on the box; a reader is on the LAN. Using
     // location.hostname means the link follows whatever address the dashboard
@@ -729,7 +730,7 @@ function render(d){
         location.hostname+':'+esc(x.port)+'/">'+esc(x.port)+'</a></td>'
       : '<td class=dim>'+esc(x.port)+'</td>')+state+
     '<td class=sha>'+esc(x.sha||'—')+'</td><td class=dim>'+esc(x.app||'—')+'</td>'+
-    col+'<td class=dim>'+ago(x.deployed_at)+'</td></tr>';}).join('');
+    '<td class=dim>'+ago(x.deployed_at)+'</td></tr>';}).join('');
 }
 const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/');
 ws.onopen =()=>{};
