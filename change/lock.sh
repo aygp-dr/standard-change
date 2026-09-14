@@ -61,6 +61,15 @@ started_at: $(date -u +%FT%TZ)"
   release)
     l=$(lock)
     [ -n "$l" ] || { echo "  lock: already free"; exit 0; }
+    # ONLY YOUR OWN. deploy-staging.yml's always() step released the lock #95
+    # held (2026-09-14 23:08): that run's acquire had been skipped -- it died at
+    # preflight -- and its release ran anyway, on a lock another holder had
+    # written. In CI, release only the lock this run acquired; a person running
+    # this by hand (no GITHUB_RUN_ID) may release any lock, and says so.
+    if [ -n "${GITHUB_RUN_ID:-}" ] && [ "$(echo "$l" | awk '$1=="run-id:"{print $2}')" != "$GITHUB_RUN_ID" ]; then
+      echo "  lock: held by #$(echo "$l" | awk '$1=="pr:"{print $2}') under run $(echo "$l" | awk '$1=="run-id:"{print $2}'), not this run ($GITHUB_RUN_ID) -- not released"
+      exit 0
+    fi
     write ""
     echo "  lock: released (was #$(echo "$l" | awk '$1=="pr:"{print $2}'))" ;;
   *) echo "usage: lock.sh acquire <pr> <target> | release | status" >&2; exit 2 ;;
