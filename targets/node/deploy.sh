@@ -35,6 +35,14 @@
 set -eu
 env="${1:?usage: deploy.sh <dev-0..dev-9|staging|production-blue|production-green> <sha>}"
 sha="${2:?}"
+ROLLBACK=''
+shift 2
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rollback) ROLLBACK='--rollback'; shift ;;
+    *) echo "usage: deploy.sh <env> <sha> [--rollback]" >&2; exit 2 ;;
+  esac
+done
 root=$(cd "$(dirname "$0")/../.." && pwd)
 case "$env" in
   dev-[0-9])        block=${env#dev-} ;;
@@ -81,6 +89,17 @@ wt="$root/deployments/$env"
 full=$(git -C "$root" rev-parse --verify "${sha}^{commit}" 2>/dev/null) || {
   echo "  refused: $sha is not a commit in this repository" >&2; exit 3; }
 short=$(echo "$full" | cut -c1-7)
+
+# WHICH REAL COMMIT, NOT MERELY A REAL ONE. The check above refuses `deadbee`
+# and has no opinion about main's HEAD, which is as resolvable as any branch
+# head -- so the ordering gates/production-first.sh enforces on the merge side
+# had no counterpart here (issue #26). For production only; dev and staging are
+# waved through inside the guard.
+#
+# BEFORE ANY ESTATE ACTION. The next thing this script does is kill the
+# processes on the block, and a refusal that arrives after that has already
+# taken the environment down. Everything above this line is reads.
+"$root/gates/deploy-provenance.sh" "$env" "$full" $ROLLBACK
 
 for p in $(seq "$base" $((base + 5))); do
   pid=$(sockstat -4l 2>/dev/null | awk -v p=":$p" '$6 ~ p"$" {print $3}' | head -1)
