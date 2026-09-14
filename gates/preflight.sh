@@ -71,10 +71,20 @@ lbad=$(printf '%s' "$locals" | jq '[.[]|select(.state!="success")]|length' 2>/de
 lself=$(printf '%s' "$locals" | jq '[.[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
 
 bad=$(gh api "repos/$R/commits/$head/check-runs" \
-       --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length' 2>/dev/null || echo 99)
+       --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion!="success"))|length' 2>/dev/null || echo 99)
 self=$(gh api "repos/$R/commits/$head/check-runs" \
-       --jq '[.check_runs[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length' 2>/dev/null || echo 0)
+       --jq '[.check_runs[]|select(.name=="gate-selftest")]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion=="success"))|length' 2>/dev/null || echo 0)
 
+# AND SUPERSEDED IS NOT CURRENT. Every query below takes the LATEST check run
+# per name -- group_by(.name)|map(max_by(.started_at)) -- rather than counting
+# all of them.
+#
+# GitHub keeps every run attached to the SHA. When Actions came back on
+# 2026-09-14 the billing-era runs from 23:20 (one failure, three skipped) were
+# still there beside three fresh successes, and guard 2 reported '4 not passing,
+# self-test 3' on a commit whose gates were entirely green. A re-run supersedes;
+# a guard that counts history refuses on evidence that has been replaced.
+#
 # DID NOT RUN IS NOT RED. A check run reports conclusion=failure both when a
 # gate genuinely failed and when the job was never started -- and on
 # 2026-09-13 every workflow on this repo reported failure for over an hour
@@ -95,11 +105,9 @@ self=$(gh api "repos/$R/commits/$head/check-runs" \
 # 2026-09-13 (issue #34) -- the annotations say "the job was not started", but
 # nothing in `gh run view` does and the log is BlobNotFound.
 notrun=$(gh api "repos/$R/commits/$head/check-runs" \
-  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))
-        |select(.conclusion=="skipped" or .conclusion==null)]|length' 2>/dev/null || echo 0)
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion=="skipped" or .conclusion==null))|length' 2>/dev/null || echo 0)
 failed=$(gh api "repos/$R/commits/$head/check-runs" \
-  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))
-        |select(.conclusion=="failure")]|length' 2>/dev/null || echo 0)
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion=="failure"))|length' 2>/dev/null || echo 0)
 
 if [ "$bad" = 99 ]; then
   no "I could not reach the forge to read the check runs." 4
