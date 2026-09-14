@@ -178,10 +178,70 @@ class of a merge.
 | *4*   | =staged(H(c)) ∨ (emergency(c) ∧ approved(c))=                          | at deploy                 |
 | *4b*  | =∀m ∈ merges(B(c), T) : class(m) ∈ {inert, pipeline}=                  | *at reliance*, not request |
 | *5*   | =served_build(production) = H(c)=                                      | after deploy              |
+| *6*   | =deploys(c) = ∅ ∨ served_build(production) = T=                         | at merge                  |
 
 Guard 2 appears twice on purpose (§Emergency — the only bypass). Guard 4b's
 "at reliance" is the whole content of the rule: *a guard whose subject can
 change after it is checked must be re-checked at the moment it is relied on.*
+
+*** Guard 6 (production-first), and why it is stated here rather than assumed
+
+Added 2026-09-14 after it was found missing. Guard 6 — "do not merge something
+new onto a trunk that production is not yet serving" — was implemented in this
+repo and independently in the =000= rebuild, and *is wrong in both*, by the same
+mechanism. It appeared in no predicate here, so both implementations invented it
+and both invented it the same broken way.
+
+The failure is in =deploys(c)=, not in the comparison. Both derived the deploy
+set and then treated an *empty* set as *exempt*:
+
+- here: =groups.sh "$pr" 2>/dev/null || true= — a forge that could not answer
+  produced the empty set, and the guard exempted the change. 484 runs, never
+  once triggered by a label.
+- in =000=: =prodfirst: exempt -- this change deploys nothing (derived from the
+  diff, not from a label)= returned exit 0 for both of the cases the guard exists
+  for, including the one where production could not be reached at all.
+
+*The rule, and it is the whole point of stating the guard:* =deploys(c)= is
+three-valued, never a set that may be empty.
+
+| =deploys(c)= | meaning | guard 6 |
+|--------------+---------+---------|
+| a non-empty set | this change deploys these groups | compare; refuse unless production serves =T= |
+| *provably* empty | the diff was read and touches nothing deployable | exempt, and say which oracle proved it |
+| indeterminate | the diff or the labels could not be read | *abstain* — exit 4, blocks |
+
+/Exempt/ requires positive evidence that the change deploys nothing. The absence
+of evidence that it deploys something is *indeterminate*, and indeterminate is
+not exempt. This is defect class 1 (unreachable is not falsified) and class 8
+(cannot say is not no) applied to the one guard that had no predicate to defend.
+
+A conforming implementation must have a test that fails when the guard is
+removed, for all three rows — =000='s selftest had exactly the right two cases
+and the guard exempted its way past both, which is why the case list matters as
+much as the predicate.
+
+**** What =000= could and could not tell us, stated separately
+
+=000= has no port sweep, no router and no running apps — the 9000-series block
+model is not in it. So only one of the two failures is evidence about the guard:
+
+- *Evidence.* =prodfirst ABSTAINS when production cannot be reached= returned
+  /exempt/ (0) instead of /abstain/ (4). The exempt short-circuit is evaluated
+  BEFORE reachability, so the guard answers "nothing to check" without ever
+  having tried to look. That is an ordering defect in the code path and it does
+  not need an estate to be true. Our =groups.sh ... || true= is the same
+  ordering, reached a different way.
+- *Not evidence.* =prodfirst refuses: production is running another build=
+  cannot be exercised without a production to observe. =000= faked it in
+  process, so what failed there is a fixture's guess, not a measurement. It is
+  recorded as UNDERIVABLE rather than counted against the rebuild.
+
+This is itself a conformance requirement, and it belongs with the guard: *guard
+6 cannot be tested without a real estate.* A pipeline that can only test it
+against an in-process double has not tested it — the same distinction §Targets
+draws between the deployed thing and the tested thing. An implementation without
+the port-block model can state guard 6 and cannot verify it, and must say so.
 
 ** Conformance — what a platform must provide
 
