@@ -60,13 +60,14 @@ if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
 # The LABEL NAMESPACE (Labels.tla): three axes plus the estate, transcribed
-# from the scripts. Nine constants, one per rule; each negative run flips one
+# from the scripts. Eleven constants, one per rule; each negative run flips one
 # and TLC must name the invariant that rule protects. sim/cross_check.py runs
-# the same nine questions against sim/label_sim.py and requires agreement.
+# the same questions against sim/label_sim.py and requires agreement.
 #
-# Two constants name the same invariant on purpose: a claim with no window
-# (WindowGuard) and a berth left behind by a lapsed window (ReapFreesBerth)
-# reach the same state -- deploy:staging with no reservation -- by two roads.
+# Three constants name NoUnbookedDeploy on purpose: a claim with no window
+# (WindowGuard), a berth left behind by a lapsed window (ReapFreesBerth) and a
+# window reaped while its change is deploying (ReapSparesInFlight) all reach
+# the same state -- a deployment with no reservation -- by three roads.
 labels_negative() {  # labels_negative <Constant> <Invariant>
   sed "s/$1 = TRUE/$1 = FALSE/" Labels.cfg > "No$1.cfg"
   sed "s/MODULE Labels/MODULE No$1/" Labels.tla > "No$1.tla"
@@ -80,12 +81,14 @@ labels_negative WindowGuard        NoUnbookedDeploy
 labels_negative FreezeGuard        NoRefusedClaim
 labels_negative EstateGuard        NoRefusedClaim
 labels_negative BerthGuard         AtMostOneHolder
-labels_negative ClassExclusive     OneClass
+labels_negative ClassGuard         NoDeployWithTwoClasses
 labels_negative LifecycleExclusive OneLifecycle
 labels_negative ReapFreesBerth     NoUnbookedDeploy
-labels_negative SettleClears       CompleteIsClean
+labels_negative SettleClears       CleanIsClean
+labels_negative ReapSparesInFlight NoUnbookedDeploy
+labels_negative RecordOnMerge      MergedHasRecord
 
-printf '== labels positive: all nine rules on ....................... '
+printf '== labels positive: all eleven rules on ..................... '
 if run Labels | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; run Labels | grep -E 'Error' | head -5; exit 1; fi
 
