@@ -104,7 +104,7 @@ export function status(d) {
 }
 
 export function render(path, catalogue = loadCatalogue()) {
-  const d = { app: meta.app, path, found: owns(path), block: BLOCK, sha: SHA,
+  const d = { app: 'BROKEN-ON-PURPOSE', path, found: owns(path), block: BLOCK, sha: SHA,
               routes: meta.routes };
   const slug = categoryOf(path);
   if (slug === null) return d;   // /search, and anything else: unchanged
