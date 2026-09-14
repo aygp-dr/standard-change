@@ -182,6 +182,16 @@ defect that made "a PR has at most one =change:*=" impossible to state, because
 =change:*= says *where the change record has got to*. A change is classified
 once and moves through the lifecycle many times.
 
+*=app:*= and =itil:*= are guidance, not permission.* They tell the pipeline
+what a change touches and what kind of change it is — which gates to run,
+which groups to deploy, which rules apply. Neither authorizes anything.
+Permission to deploy is four other things, each from a different source: a
+person's =change:requested=, a reviewer's approval, green gates on the head,
+and an open window. A change with every derived label and none of those four
+does not move. The one derived-looking label that changes *precedence* is
+=itil:emergency=, and it is not derived: a person declares it, and it exempts
+the change from the freeze and the queue, never from the gates.
+
 =change:complete= is the terminal state of *validation*: set when every guard
 has passed and production is observed serving the build, *before* the merge,
 because the merge follows completion rather than constituting it. Cleanup then
