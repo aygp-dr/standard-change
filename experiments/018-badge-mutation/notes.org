@@ -1,0 +1,85 @@
+#+TITLE: 018 -- do the freshness-badge tests test anything?
+#+DATE: 2026-09-13
+#+PROPERTY: header-args :mkdirp t
+
+* Hypothesis
+
+The tests added for issue #18 -- the =New= / =Updated= product badge -- test
+what they claim to test. Falsifiable: break each property one at a time and
+count how many cases notice. A mutation that *survives* names a property with
+no test behind it.
+
+* Why this one needed the instrument more than most
+
+The headline assertion of #18 is that =plp= and =pdp= *agree* about a badge.
+Agreement between two nulls is also agreement. So a badge feature that is wired
+up nowhere at all -- no derivation, no rendering, both apps returning =null=
+forever -- passes a naive agreement test perfectly, every day, and the test
+reports the estate consistent because it is consistently doing nothing.
+
+That is the shape 012-guard-mutation found across the control plane, where
+every mutation survived. The mutation that matters here is
+=badge-never-derived=: make =productBadge()= return =null= unconditionally and
+see whether anything goes red.
+
+* Success criterion
+
+Every mutation killed by at least one case, and =badge-never-derived= killed by
+more than one -- it should be visible from several directions, not only from
+the assertion written for it.
+
+* Run
+
+#+begin_src sh :eval no
+./experiments/018-badge-mutation/mutate.sh
+#+end_src
+
+* Result -- 2026-09-13, hydra, node 24.14.1
+
+| mutation                     | suite  | cases failed | verdict |
+|------------------------------+--------+--------------+---------|
+| badge-never-derived          | all    |            8 | killed  |
+| badge-never-expires          | all    |            8 | killed  |
+| future-date-is-new           | shared |            1 | killed  |
+| updated-outranks-newer-added | shared |            1 | killed  |
+| loose-date-parsing           | shared |            1 | killed  |
+| badge-html-unescaped         | shared |            1 | killed  |
+| pdp-does-not-render          | pdp    |            1 | killed  |
+| pdp-badge-not-in-payload     | pdp    |            2 | killed  |
+| plp-does-not-render          | plp    |            1 | killed  |
+| plp-keeps-its-own-rule       | estate |            3 | killed  |
+| plp-search-drops-the-badge   | plp    |            2 | killed  |
+
+*11 mutations, 11 killed, 0 survived.* The criterion is met: deleting the
+derivation is caught by 8 cases and deleting the expiry by 8, so neither can be
+removed quietly.
+
+=plp-keeps-its-own-rule= is the one worth naming. It does not break either app;
+it gives =plp= a freshness rule 40 days out of step with =pdp='s, which is
+precisely what two copies of the rule would drift into. Both apps' own suites
+stay green and =estate.test.js= fails in 3 places. That is the defect #18 was
+filed about, reproduced on demand.
+
+* Observations, including the one that cost time
+
+Seven of the eleven are killed by exactly *one* case, which by this
+experiment's own rule is one edit from being killed by none. They are the
+narrow date-arithmetic rules (future dates, the =updated= precedence, strict
+parsing) and each has exactly one test because each is exactly one branch.
+Recorded rather than padded: adding a second assertion that restates the first
+would raise the number and establish nothing.
+
+=plp-does-not-render= failed to apply on the first run -- the =sed= delimiter
+was =|= and the line it targets contains =p.name || p.sku=. The harness
+reported it as an error rather than as a kill, which is the behaviour that
+matters: a mutation that does not change the file has run no experiment, and a
+harness that scores it =killed= is the thing this experiment exists to catch,
+one level up. It is now =NOT APPLIED= in =results.tsv= and counted as not
+killed.
+
+* Not established
+
+This says nothing about whether the *rule* is right -- whether 30 days is the
+correct window, or whether =Updated= should outrank =New=. Those are product
+decisions and the tests pin them, which is all a test can do. It also says
+nothing about the badge in a browser: no estate was running.
