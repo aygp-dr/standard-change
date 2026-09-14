@@ -1,0 +1,136 @@
+#+TITLE: 017 -- the e2e oracle comes from the build, not from the runner's tree
+#+DATE: 2026-09-13
+
+* Hypothesis
+
+=gates/e2e.sh= sends its REQUESTS to =$ROUTER_URL= and takes its EXPECTATIONS
+from =router/routes.json= in the tree the script lives in. Therefore the
+*working directory decides the verdict*, and two runs of the identical command
+against the identical estate can disagree.
+
+Falsifiable form: /if the oracle is taken from the estate rather than from the
+tree, then a runner tree that declares fewer routes than the deployed build
+will probe the routes the build added, and a runner that cannot establish which
+build it is looking at will return no verdict at all./
+
+* Success criterion
+
+Eight assertions in =demonstrate.sh=, all of which must hold, and seven
+mutations in =mutate.sh=, all of which must be caught. The load-bearing ones:
+
+- *A2* -- the oracle names a route the BUILD owns and this tree does not have.
+  This is the unsafe direction of #14: before the change that route was never
+  probed and the gate printed =27 checks passed=. Green because it did not look.
+- *A3* -- an estate whose build cannot be established yields *exit 4 and no
+  verdict*, rather than a verdict measured against the wrong contract. Per
+  =docs/exit-codes.org=, 4 is /I could not check/ and it blocks.
+
+* What was run, and what it printed
+
+Run on 2026-09-13 on hydra (FreeBSD 14.3), =jq 1.8.1=, =python3=.
+
+Command:
+
+: ./experiments/017-e2e-oracle/demonstrate.sh
+
+Output:
+
+: == the build under test declares a route this tree does not have
+:   tree  declares 16 routes at 3e18849
+:   build declares 17 routes at bu11d00
+:
+: == assertions
+:   ok    A1   manifest present -> oracle comes from the estate
+:   ok    A2   the oracle names a route absent from this tree
+:   ok    A3   no manifest + sha != HEAD -> exit 4, refused
+:   ok    A4   no manifest + sha == HEAD -> oracle is the tree, allowed
+:   ok    A5   core's 404 body is not mistaken for a manifest
+:   ok    A6   ORACLE_MODE=tree -> tree-forced, never plain tree
+:   ok    A7   router/server.js emits the shape oracle.sh requires (static)
+:   ok    A8   lint rejects an app route under /__
+:
+:   8 passed, 0 failed
+
+Command:
+
+: ./experiments/017-e2e-oracle/mutate.sh
+
+Output:
+
+: == mutating the three files that carry the fix
+:
+:   killed 2  M1   never ask the estate; always use this tree
+:             by A1 A2 (suite exit 1)
+:   killed 1  M2   refuse -> silently fall back to the tree
+:             by A3 (suite exit 1)
+:   killed 1  M3   oracle_same_sha always returns true
+:             by A3 (suite exit 1)
+:   killed 3  M4   accept any JSON carrying a routes key as the manifest
+:             by A3 A4 A5 (suite exit 1)
+:   killed 1  M5   ORACLE_MODE=tree reports itself as a normal tree oracle
+:             by A6 (suite exit 1)
+:   killed 1  M6   router omits served_by from its manifest
+:             by A7 (suite exit 1)
+:   killed 1  M7   an app may claim a route under /__
+:             by A8 (suite exit 1)
+:
+:   7 mutations applied, 7 killed, 0 survived
+
+* What is NOT verified here
+
+=router/server.js= answers =/__estate.json=, and *that handler has never been
+reached over HTTP in this work*. Binding a socket was not available, so A7 is a
+static check that the response literal carries the two keys =oracle.sh='s shape
+predicate requires (=served_by: 'router'= and =routes: apps=), and M6 confirms
+A7 fails when one is removed. The endpoint's live behaviour -- that it is
+reachable, that it precedes routing, that it is not shadowed -- is =[H]=.
+
+The first person to run =gmake dev= on a tree carrying this change should check
+=curl -s $ROUTER_URL/__estate.json | jq .served_by= before trusting a verdict
+from it. Until then the practical effect of this branch on a live estate is the
+REFUSAL path (A3), which is the safe direction.
+
+* Why there is no server in this experiment
+
+The estates under test are ones that *cannot be stood up*: a build older than
+the manifest, a build answering =/__estate.json= with the wrong shape, a build
+on a sha this tree has never contained. Reproducing them with real processes
+means four node servers per case in the protected port tiers.
+
+So =stub/curl= answers from a directory and =gates/oracle.sh= is the real file,
+unmodified. The transport is stubbed; the logic under test is not. This also
+makes the experiment runnable on =ubuntu-latest=, where the previous attempt
+(=experiments/014-e2e-oracle= on the =fix/e2e-oracle= branch) could not run at
+all because it required a live dev block.
+
+* The mutation runner mutated nothing, and reported five holes
+
+Recorded because it is the taxonomy being recursive, which =spec.org= predicts.
+
+First working version of =mutate.sh= passed each mutation spec on =stdin= while
+ALSO running the applier as =python3 - <<'PY'=. The interpreter consumes stdin
+to read its own program, so =sys.stdin.read()= returned =""=; ="" in text= is
+true for every string, and =text.replace("", "", 1)= is a no-op. Every mutation
+applied successfully, changed nothing, and every assertion passed:
+
+: 5 mutations applied, 0 killed, 5 survived
+
+Read at face value that says the suite tests nothing. It was the *runner* that
+tested nothing -- /a check that cannot fail produces no verdict/, class 7, in
+the tool written to enforce class 7.
+
+The applier now lives in a file, and refuses an empty search text and a spec
+with no separator rather than treating either as a successful mutation.
+
+* Status of the previous attempt
+
+=fix/e2e-oracle= (PR #21) carries the same design and is 113 commits behind
+=main=. Its content applies to current =main= cleanly via =git apply --3way=;
+its *branch* does not merge, and the conflict is in =gates/e2e.sh=, the file it
+changes. It also leaves =gates/shellcheck.sh= at two findings (SC2034 on
+=ORACLE_LIB= and =ORACLE_ROOT=, which =oracle.sh= reads after being sourced --
+shellcheck runs each script in isolation and cannot see it), so the gate would
+have failed on a repo whose rule is zero findings or the gate failed.
+
+Restarting from =main= was cheaper than salvaging the branch, and the two
+defects above were found in the process.
