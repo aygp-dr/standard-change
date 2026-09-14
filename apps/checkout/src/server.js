@@ -44,7 +44,7 @@ const SHIP = [
   ['name',    'Full name',    'text'],
   ['line1',   'Address line 1', 'text'],
   ['city',    'City',         'text'],
-  ['postcode','Postcode',     'text'],
+  ['postcode','Postcode / ZIP', 'text'],
 ];
 
 export const DUE = '$42.00';  // static copy: no request value reaches it, so no esc()
