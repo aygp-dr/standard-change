@@ -14,6 +14,20 @@ case "$env" in
   *) echo "usage: deploy.sh {staging|production} [sha]" >&2; exit 2 ;;
 esac
 root=$(cd "$(dirname "$0")/../.." && pwd)
+
+# GUARD THE ACT, NOT ONLY THE DECISION. (issue #32)
+#
+# The same hole as targets/node/deploy.sh, and the reason change/authorize.sh
+# is a script both targets call rather than a block of logic pasted into each:
+# one implementation, two callers, which is the opposite of the divergence
+# scenarios.org D9 warned a window check inside every target would cause.
+#
+# Note this target's environments are `staging` and `production` -- there is
+# no dev block here, so every deploy through it is a protected one.
+#
+# UNPIPEABLE: command substitution and `|| exit $?`, never `authorize.sh | sed`.
+authorisation=$("$root/change/authorize.sh" "$env" "$sha") || exit $?
+
 i=0
 for j in $jail; do
   i=$((i+1))
@@ -24,7 +38,10 @@ for j in $jail; do
   sudo install -m644 "$root/targets/bastille/nginx.conf.tmpl" "$jr/usr/local/etc/nginx/nginx.conf"
 
   # the build this estate serves -- written by the JAIL at deploy, read by guard 5
-  printf '{"sha":"%s","env":"%s","replica":%d}\n' "$sha" "$env" "$i" \
+  # `authorisation` names the entitlement this deploy used, so a break-glass is
+  # visible in the record rather than being an env var nobody sees (issue #32).
+  printf '{"sha":"%s","env":"%s","replica":%d,"authorisation":"%s"}\n' \
+    "$sha" "$env" "$i" "$authorisation" \
     | sudo tee "$jr/var/run/version.json" >/dev/null
 
   sudo jexec "$j" sh -c 'pkill -f "python3.11 app.py" 2>/dev/null; pkill nginx 2>/dev/null; true'
