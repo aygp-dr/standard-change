@@ -202,12 +202,19 @@ does not move. The one derived-looking label that changes *precedence* is
 =itil:emergency=, and it is not derived: a person declares it, and it exempts
 the change from the freeze and the queue, never from the gates.
 
-=change:complete= is the terminal state of *validation*: set when every guard
-has passed and production is observed serving the build, *before* the merge,
-because the merge follows completion rather than constituting it. Cleanup then
+=change:complete= is the pipeline's *outcome*: set when every guard has passed
+and production is observed serving the build, *before* the merge, because the
+merge follows completion rather than constituting it — and it is the label
+that *drives the side effects*: the merge to =main=, the PIR, and whatever
+else must hear that the change shipped (a ticket, a message). Cleanup then
 clears it — once the forge records =MERGED=, the label restates a fact the
 platform owns, and two records of one fact can disagree while the platform's
-cannot.
+cannot — and writes =change:end= as the last act. =change:end= drives
+nothing. It is the tombstone that says the clearing was settlement, since a
+refusal at the lock, the reaper and an eviction also leave a change with no
+labels, and a reader should be able to tell those apart. The person's two
+words are =change:start= and =staging:hold=; =complete= and =end= are the
+pipeline's.
 
 *Neither namespace is a blocker.* A freeze, a held berth and an emergency in
 flight are facts about the *estate*, not about any change — see below.
@@ -266,6 +273,19 @@ re-fires, and the second firing deploys a change that is already live.
 =hold:staging= is the mirror. A person must lift it, because the entire
 content of a hold is that a human has not looked yet — and only that human
 knows when they have. A hold a machine can clear is not a hold, it is a delay.
+
+*** =deploy:staging= is the lock, and a refusal at it resets the change
+
+Decided 2026-09-14. =deploy:staging= is the environment lock: one change
+holds it, guard 1 reads it, nothing else is the lock. A change that asks for
+staging while another holds it is not queued and not annotated. =queue.sh=
+clears *every marker it carries* — the window (closed =cancelled=), the
+lifecycle, the observations, and the human intent (=change:start=,
+=change:requested=, =release=, =staging:hold=) — and leaves one comment
+naming the holder. The person re-states the intent when the lock is free.
+=blocked:queue= is retired: a label left behind by a refusal is a print
+statement that later reads as a claim. Rule =LockResets= in =tla/Labels.tla=;
+the negative run shows the refused change keeping its markers in six states.
 
 *** =staging:hold= — the one human stop, re-introduced at one scope
 

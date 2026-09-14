@@ -62,7 +62,7 @@ if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
 # The LABEL NAMESPACE (Labels.tla): three axes plus the estate, transcribed
-# from the scripts. Fourteen constants, one per rule; each negative run flips one
+# from the scripts. Fifteen constants, one per rule; each negative run flips one
 # and TLC must name the invariant that rule protects. sim/cross_check.py runs
 # the same questions against sim/label_sim.py and requires agreement.
 #
@@ -92,8 +92,9 @@ labels_negative RecordOnMerge      MergedHasRecord
 labels_negative EmergencyPreempts  EmergencyNeverWaits
 labels_negative HoldGuard          NoPromoteUnderHold
 labels_negative HealthyBeforeVerdict VerdictOnHealthy
+labels_negative LockResets         LockRefusalResets
 
-printf '== labels positive: all fourteen rules on ................... '
+printf '== labels positive: all fifteen rules on .................... '
 if run Labels | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; run Labels | grep -E 'Error' | head -5; exit 1; fi
 

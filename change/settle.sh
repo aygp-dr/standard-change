@@ -250,7 +250,12 @@ for l in change:start change:requested change:scheduled change:complete release 
          deployed:production blocked:queue blocked:lock blocked:diverged release; do
   gh pr edit "$pr" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
 done
-ok "berth released; validation labels cleared, change:complete included"
+# THE TOMBSTONE, last. change:end says the clearing above was settlement --
+# a refusal at the lock, the reaper and an eviction also leave a change with
+# no labels, and a reader should be able to tell those apart. It drives
+# nothing; change:complete drove the merge and the PIR before it was cleared.
+gh pr edit "$pr" --repo "$R" --add-label change:end >/dev/null 2>&1 || true
+ok "berth released; validation labels cleared, change:complete included; change:end written"
 
 echo
 echo "  settled: #$pr merged -- the forge is the record now"

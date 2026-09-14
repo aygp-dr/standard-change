@@ -7,7 +7,7 @@ error that makes a bad state unreachable passes every invariant. Two
 independent transcriptions that agree on the size of the reachable space AND
 on which invariant each rule protects are much harder to be wrong together.
 
-For each of the fourteen rules, and for the machine with every rule on:
+For each of the fifteen rules, and for the machine with every rule on:
 
   TLC        flips the constant in Labels.cfg, model-checks, reads the named
              invariant (or "No error") and the distinct-state count.
@@ -25,7 +25,7 @@ TLA = ROOT / "tla"
 RULES = ["DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
          "ClassGuard", "LifecycleExclusive", "ReapFreesBerth", "SettleClears",
          "ReapSparesInFlight", "RecordOnMerge", "EmergencyPreempts",
-         "HoldGuard", "HealthyBeforeVerdict"]
+         "HoldGuard", "HealthyBeforeVerdict", "LockResets"]
 JAR = os.environ.get("TLA2TOOLS",
       str(pathlib.Path.home() / "ghq/github.com/aygp-dr/tla-plus-tutorial/tla2tools.jar"))
 BOUND = int(os.environ.get("LABEL_BOUND", "12"))  # the 14-rule machine has 25M states; a slice by default

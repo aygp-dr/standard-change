@@ -28,8 +28,8 @@ Two checks, and they are different kinds of evidence:
                (lifecycle, action labels, observations, flags) -- so README's
                lifecycle diagram can be checked against what is reachable.
 
-Fourteen RULES, each switchable with --disable so the checker can FAIL
-fourteen ways. sim/cross_check.py flips each one here and in TLC and requires
+Fifteen RULES, each switchable with --disable so the checker can FAIL
+fifteen ways. sim/cross_check.py flips each one here and in TLC and requires
 the same invariant to be named.
 """
 import argparse, collections, itertools, sys
@@ -37,13 +37,13 @@ import argparse, collections, itertools, sys
 RULES = ["DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
          "ClassGuard", "LifecycleExclusive", "ReapFreesBerth", "SettleClears",
          "ReapSparesInFlight", "RecordOnMerge", "EmergencyPreempts",
-         "HoldGuard", "HealthyBeforeVerdict"]
+         "HoldGuard", "HealthyBeforeVerdict", "LockResets"]
 
 PRS = ("p1", "p2")
 
 PR = collections.namedtuple("PR", "cls life draft release booking berth sdep shealthy hold prod pdep "
                                   "verdict uat healthy closed served merged pir cleaned")
-State = collections.namedtuple("State", "prs freeze emg bad badcls badpromote badverdict emgwaited")
+State = collections.namedtuple("State", "prs freeze emg bad badcls badpromote badverdict emgwaited refuseddirty")
 
 def fresh(draft):
     return PR(cls=frozenset(), life=frozenset(), draft=draft, release=False, booking="none",
@@ -54,7 +54,7 @@ def fresh(draft):
 def inits():
     for d in itertools.product([False, True], repeat=len(PRS)):
         yield State(prs=tuple(fresh(x) for x in d), freeze=False, emg=False,
-                    bad=False, badcls=False, badpromote=False, badverdict=False, emgwaited=False)
+                    bad=False, badcls=False, badpromote=False, badverdict=False, emgwaited=False, refuseddirty=False)
 
 def is_open(q):       return not q.closed and not q.merged and "complete" not in q.life
 def active(q):        return q.life - {"complete"}
@@ -129,6 +129,16 @@ def actions(st, R):
             if permitted:
                 yield f"Activate({p})", put(st, i, q._replace(berth=True),
                                             bad=st.bad or refused, badcls=st.badcls or len(q.cls) > 1)
+        # THE LOCK: deploy:staging is the environment lock. Refused while another
+        # holds it, a change loses every marker, human intent included; the
+        # person re-states it (rule LockResets).
+        if not q.berth and "scheduled" in q.life and not q.draft and (holder(st) - {i}):
+            markers = bool(q.life) or q.booking != "none" or q.release or q.hold or q.verdict != "none" or q.uat or q.sdep or q.shealthy
+            if R["LockResets"]:
+                yield f"LockRefusal({p})", put(st, i, q._replace(life=frozenset(), booking="none", release=False, hold=False,
+                                                                 verdict="none", uat=False, sdep=False, shealthy=False))
+            else:
+                yield f"LockRefusal({p})", st._replace(refuseddirty=st.refuseddirty or markers)
         # the install and its health
         if q.berth and not q.sdep:
             yield f"DeployStaging({p})", put(st, i, q._replace(sdep=True))
@@ -194,6 +204,7 @@ def invariants():  # same order as tla/Labels.cfg
     yield "EmergencyNeverWaits", lambda st: not st.emgwaited
     yield "NoPromoteUnderHold", lambda st: not st.badpromote
     yield "VerdictOnHealthy", lambda st: not st.badverdict
+    yield "LockRefusalResets", lambda st: not st.refuseddirty
 
 def violated(st):
     for name, inv in invariants():

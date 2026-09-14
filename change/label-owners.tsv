@@ -29,7 +29,8 @@ control-plane	labeller	yes	no	no	derived from gates/, change/, .github/ -- NARRO
 labeler:skip	human	yes	yes	yes	the opt-out that transfers ownership of the derived labels
 change:requested	human	no	yes	no	the human's part of starting a change; the pipeline clears it
 change:scheduled	scheduler	no	no	no	set when a window is booked
-change:complete	change/settle.sh	yes	no	no	TERMINAL, and the record. Never cleared
+change:complete	change/settle.sh	yes	no	no	The pipeline's OUTCOME: production converged on this head, and it DRIVES the side effects -- the merge to main, the PIR, a ticket, a message. Written by settle.sh before the merge; cleared by the cleanup once the forge records MERGED, because two records of one fact can disagree and the forge's cannot
+change:end	change/settle.sh	yes	no	no	The TOMBSTONE. Written by the cleanup as the last act, after every other label is cleared, and it drives nothing. It says the clearing was settlement -- not a refusal at the lock, not the reaper, not an eviction, all of which also leave a change with no labels. Persistent: it is the one label a shipped change keeps. The person's words are change:start and staging:hold; complete and end are the pipeline's (2026-09-14)
 release:start	the pipeline	no	no	no	ACTION: the release has BEGUN for the booked change request. Written when preflight returns 0 and the first deploy starts; it names which change is in flight. Never written by hand -- adding it claims a deployment is running, which is not something a person can truthfully assert. Cleared by settle.sh or by abort (issue #37, unbuilt)
 release	human	no	yes	no	INTENT. A person adds it; the scheduler consumes it. A trigger that stays on re-fires
 hold:staging	REJECTED	no	no	no	REJECTED SEMANTICS 2026-09-13. Its job is covered by `freeze` (the estate stops, for everyone) and `itil:emergency` (precedence). A per-change hold looked necessary because it was the only human stop modelled; the real human stops turned out to be earlier -- a person owns `change:requested` and the approval, so a change nobody wants promoted simply is not requested or approved. Keeping a third mechanism meant three ways to stop a deploy with three different scopes and no rule for which applied
@@ -50,7 +51,7 @@ production:healthy	gates/health.sh --pr	no	no	no	observation. Typed by hand on #
 staging:passed	RETIRED	no	no	no	named no measurement and no environment; replaced by the staging:* stack
 staging:failed	RETIRED	no	no	no	same
 deployed:production	RETIRED	no	no	no	replaced by change:complete plus the deployment record
-blocked:queue	change/queue.sh	no	no	no	set and cleared by the queue
+blocked:queue	change/queue.sh	no	no	no	RETIRED 2026-09-14. A refusal at the lock now clears every marker instead of leaving this one; a label left behind is a print statement that later reads as a claim. Still cleared wherever it is found
 blocked:lock	change/lock.sh	no	no	no	set and cleared by the lock
 blocked:diverged	workflow	no	no	yes	a human may clear it after rebasing
 blocked:freeze	gates/preflight.sh	no	no	no	set and cleared by preflight
