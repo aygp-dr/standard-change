@@ -1,0 +1,9 @@
+Timeline
+- First run refused at plp: a[href^='/p/SKU'] matched 4, the route table's own /p/SKU123 link included. Pinned the three product links by name instead.
+- PR #71 (fc2ee1b) on block 1: refused at the category page (no 'Trail Runner' link), not at the payment link. Branch behind main; forge never says BEHIND (D17).
+- shellcheck SC2015 on the A && B || C form; rewritten as if/else.
+
+Reproduction
+  gmake dev; gmake uat url=http://127.0.0.1:9000      1 passed (1.1s), accepted
+  worktrees/pr71 on block 1; gmake uat url=http://127.0.0.1:9010   1 failed, REFUSED
+  cell: macOS Darwin 24.1.0, Node v26.2.0, @playwright/test 1.63.0, Chrome Headless Shell 153.0.8010.12
