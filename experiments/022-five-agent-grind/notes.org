@@ -36,9 +36,9 @@ misread, or if a landing needs information that is not on the list.
 | #93 | =f248ba2= | 23:16:59Z | 23:17:29Z | ~3.5 min, two lost races |
 | #96 | =a33338e= | 23:21:35Z | 23:22:02Z | ~13 min, one lost race |
 | #92 | =e32428e= | 23:24:37Z | 23:25:05Z | ~9.5 min over two runs, two lost races; first run swept at production:healthy |
-| #94 | — | — | — | refused at the lock by hydra's #98 at 23:12, reset to =change:start=; still cycling at the time of writing |
+| #94 | =594499a= | 23:31:17Z | 23:31:49Z | ~24 min over five claim rounds: lost to #95, refused by hydra's #98 (reset to =change:start=), lost to #96, backed off a two-holder tie with #100, lost to #93; swept once mid-hold at 23:27:23 |
 
-Four of five through the whole pipeline, promotion automatic every time,
+Five of five through the whole pipeline, promotion automatic every time,
 guard 4 authorized first try every time, settlement wrote =change:complete=,
 merged, posted the PIR, cleared, and wrote =change:end=.
 
@@ -46,7 +46,7 @@ merged, posted the PIR, cleared, and wrote =change:end=.
 from the list — =deploy:staging= → =staging:deployed= → =staging:healthy= →
 =staging:e2e staging:smoke staging:uat= → =deploy:production= →
 =production:deployed production:healthy= → =change:complete= → =change:end=,
-in that order, on each of the four. What a watcher could not tell:
+in that order, on each of the five. What a watcher could not tell:
 
 * What confused, in the order it appeared
 
