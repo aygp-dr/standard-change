@@ -1,0 +1,69 @@
+#+TITLE: 020 — browser UAT: does the curl gate's "deployed" survive a person?
+#+DATE: 2026-09-14
+
+* Hypothesis
+
+The gates say an estate is deployed when every route is served by the app
+that owns it and every app reports one =x-build-sha= (=gates/e2e.sh=, 27
+checks) and every page in the journey returns 200 with a body
+(=gates/smoke.sh=). =docs/control-path.org= delegates *user acceptance* to
+smoke.sh: =staging:uat= is granted iff smoke exits 0. The hypothesis under
+test: *a person walking the same journey in a browser accepts what smoke
+accepted.*
+
+Falsifiable: if the person finds the journey does not hold together on a
+build smoke passed, the proxy is measuring routing and calling it
+acceptance.
+
+* Success criterion
+
+The add-to-cart journey — home → category → product → add to cart → cart →
+checkout → payment → confirmation — completes in a browser with each page
+showing what the previous page implied, on a build for which =gate app=plp=
+and =smoke= exit 0.
+
+* Run
+
+: gmake dev                                   # block 0, :9000, build dff0887
+: ROUTER_URL=http://127.0.0.1:9000 gmake gate app=plp   # 27 checks passed
+: gmake smoke url=http://127.0.0.1:9000       # smoke passed, 15 urls crawled
+: # then the journey by hand in Chrome, recorded
+
+Host: the mini, macOS Darwin 24.1.0, Node v26.2.0, Chrome via the Claude in
+Chrome extension. Recording: =docs/screenshots/uat-block0-dff0887.gif=
+(22 frames).
+
+* Observations, 2026-09-14 [E]
+
+| step | served by | build | what a person sees |
+|------+-----------+-------+--------------------|
+| =/= | core :9001 | dff0887 | route table; fine |
+| =/c/shoes= | plp :9002 | dff0887 | "3 result(s) in shoes", three products; fine |
+| =/p/SKU123= | pdp :9003 | dff0887 | Trail Runner, $89.00, in stock, Add to cart; fine |
+| =/cart?add=SKU123= | core :9001 | dff0887 | *nothing about the cart.* The bare route stub |
+| =/checkout= | checkout :9004 | dff0887 | "Your order comes to *$42.00*" for an $89.00 item; shipping form |
+| =/checkout?name=…= | checkout | dff0887 | form round-trips; "Ready to continue to payment." is *text, not a link* |
+| =/checkout/payment= | checkout | dff0887 | "about to pay $42.00 … until you confirm"; *no confirm control*, only back |
+| =/checkout/confirm= | checkout | dff0887 | *empty* |
+
+Every row passes the gates: right app, right build, 200, html. Four rows
+fail a person. Two of the four have open PRs (#40/#52 for the cart, #71 for
+the link); the $42 total and the empty confirmation are new. Issue #91.
+
+* Result
+
+*Refuted.* Smoke's exit 0 is a statement about routing and liveness, and
+=staging:uat= granted on it is acceptance of routing, not of the storefront.
+The delegation in =docs/control-path.org= is honest about being a proxy; this
+run is the first measurement of how much the proxy misses on a real build:
+half the journey.
+
+* What follows
+
+- A browser journey as an instrument: Playwright against =ROUTER_URL=, one
+  test per row above, asserting the *content* the previous page implied (the
+  item in the cart, the total equal to the price, a link forward, a
+  confirmation). That is what "deployed" should mean for =staging:uat= when
+  a person is not the instrument. Not built here; the four rows are its
+  fixture.
+- Until then, =staging:uat= from the proxy should say what it measured.
