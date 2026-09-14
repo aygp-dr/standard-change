@@ -22,9 +22,9 @@ made to agree.
 
 | question | answer |
 |----------+--------|
-| Does the machine the scripts implement satisfy the eleven rules? | *Yes, with three exceptions the model had to be told about* (§Disagreements 1–3). With the rules as stated, TLC finds no violation over the full reachable space. |
-| Can each rule fail? | *Yes, eleven of eleven.* Flipping any one constant makes TLC name the invariant it protects; the simulator names the same one. |
-| Do the two transcriptions agree? | *Yes, 12/12*: same verdict on every rule, and the same number of distinct states — 2,336,400 — when every rule is on. |
+| Does the machine the scripts implement satisfy the twelve rules? | *Yes, with three exceptions the model had to be told about* (§Disagreements 1–3). With the rules as stated, TLC finds no violation over the full reachable space. |
+| Can each rule fail? | *Yes, twelve of twelve.* Flipping any one constant makes TLC name the invariant it protects; the simulator names the same one. |
+| Do the two transcriptions agree? | *Yes, 13/13*: same verdict on every rule, and the same number of distinct states — 2,336,400 — when every rule is on. |
 | Is the space finite and exhausted? | *Yes.* Two PRs, depth 26, 2,336,400 distinct states; both checkers exhaust it. |
 | Are the reaper, the merge and the cleanup modelled? | *Now, yes.* The first cut fused completion with cleanup and had no merge. The machine now carries settle.sh's four writes in order, the automatic merge path, and a reaper that reads only the clock — which is what surfaced disagreements 2 and 3. |
 
@@ -44,9 +44,8 @@ One PR is a tuple; two PRs and the estate make a state.
 | settlement | served (a fact), merged, PIR posted, cleaned | health.sh; merge-on-healthy.yml→release.sh or settle.sh:127; settle.sh:150-168; settle.sh:244-252 | served: a push or an abort |
 | estate | freeze, emergency | a person, on issue #1 | a person |
 
-Twenty-four actions, each cited to the line it was read from in
-=tla/Labels.tla= and =sim/label_sim.py=. Two history variables, =badClaim=
-and =badClass=, record a berth claim that a rule would have refused, so that
+Twenty-six actions, each cited to the line it was read from in
+=tla/Labels.tla= and =sim/label_sim.py=. Three history variables — =badClaim=, =badClass= and =emgWaited= — record a berth claim that a rule would have refused, so that
 the freeze, estate and class rules — whose subject can change *after* the
 claim, since a person can freeze or declare mid-flight — have a state
 predicate to violate.
@@ -69,13 +68,14 @@ stateDiagram-v2
     Merged --> Complete: Complete (settle.sh on a MERGED change)
     Complete --> Recorded: Pir
     Recorded --> Cleaned: Cleanup
+    Berth --> Opened: Evict (a ready emergency takes the berth)
     Berth --> Closed: Abort
     Scheduled --> Closed: Abort
     Cleaned --> [*]
     Closed --> [*]
 #+end_src
 
-* The eleven rules, and what each protects
+* The twelve rules, and what each protects
 
 | # | constant | the rule, and where it lives | invariant TLC names when it is off | simulator names |
 |---+----------+------------------------------+------------------------------------+-----------------|
@@ -90,6 +90,9 @@ stateDiagram-v2
 | 9 | =SettleClears= | settle.sh:244-252 — cleanup clears every transient label, change:complete included | =CleanIsClean= | same |
 | 10 | =ReapSparesInFlight= | a lapsed window is not reaped while its change carries deploy:production | =NoUnbookedDeploy= | same |
 | 11 | =RecordOnMerge= | the path that merges also records — change:complete and the PIR | =MergedHasRecord= | same |
+| 12 | =EmergencyPreempts= | a declared, booked, ready =itil:emergency= evicts a standard or normal holder of the berth (README §5b); *specified, unbuilt* | =EmergencyNeverWaits= | same |
+
+Rule 12 is the one rule here that is *specified and unbuilt*: no script evicts a holder, and the model adds no new states for it — every state an eviction reaches, a reaped window already reached — so it costs nothing to carry until the ADR decides who performs it.
 
 Two coincidences worth stating so they are not read as gaps. Rules 3 and 4
 share an invariant because they are the same kind of rule — a refusal whose
@@ -210,7 +213,7 @@ diagram is this.
 | =label_sim.py --bound 12= | BFS to depth 12 | not exhausted, ~10 s |
 | =label_sim.py --bound 40= | BFS until nothing new | 2,336,400 states, exhausted at depth 26, ~67 s |
 | =label_sim.py= walks | Hypothesis random walks past the bound | 200 walks of ≤40 steps by default, nothing the BFS had not covered |
-| =cross_check.py= | twelve questions to both | 12/12 agree, ~4 min with =LABEL_BOUND=40= |
+| =cross_check.py= | thirteen questions to both | 13/13 agree, ~5 min with =LABEL_BOUND=40= |
 | first cut, before the merge and the reaper were modelled | same two PRs | 616,000 states, depth 22, nine rules |
 
 What the bound does *not* cover: three or more PRs (the estate blockers are

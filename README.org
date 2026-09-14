@@ -373,6 +373,36 @@ estate flag is a change that the same write both blocks everyone for *and*
 exempts. Toggle from the dashboard or by hand; =gates/preflight.sh= reads the
 same issue.
 
+** 5b. Closing the estate for an emergency — =emergency= on issue #1, and the eviction
+
+An emergency is stated twice, by a person both times: =itil:emergency= on
+the change that is the fix, and =emergency= on the estate issue. The second
+is what closes the estate. Two things follow, and only one is built:
+
+| effect | status | where |
+|--------+--------+-------|
+| *nobody else enters.* Standard and normal changes are refused at preflight while the estate says emergency, the one carrying the flag included | *built* | =gates/preflight.sh= — "an EMERGENCY is in flight on the estate" |
+| *whoever is in staging leaves.* A declared, booked, ready =itil:emergency= takes the berth from a standard or normal holder | *specified, unbuilt* | =tla/Labels.tla= =Evict=, rule =EmergencyPreempts=; today the emergency dies at guard 1, "staging held by #N" |
+
+The eviction is not an abort. The evicted change did nothing wrong, so it is
+not =change:failed=: it loses exactly what was about the staging it is
+losing — the berth, its window (closed =cancelled=), its observations — and
+keeps its class, its approval and its head. It gets no lifecycle label back,
+for the reaper's reason: asking for a new window is a person's act. The
+model says nothing about *who* performs the eviction; that is the next ADR's
+one decision here. Either a person runs it before activating the emergency,
+which is ADR 0003's no-preemption position applied to the berth, or the
+emergency's activation performs it, which would be the first time the
+pipeline moved a change nobody asked it to move.
+
+To grind it: book a standard change and activate it so it holds staging;
+book an =itil:emergency= change; put =emergency= on issue #1; try to
+activate the emergency. Today it is refused by guard 1. With the rule, the
+holder is evicted and the emergency proceeds — and the negative run in
+=tla/check.sh= shows the holder surviving when the rule is off, in eight
+states: Label, DeclareEmergency, Book, Book, Activate, Estate, and the
+emergency waits.
+
 ** 6. Withdrawing acceptance — removing =staging:uat=
 
 Automation may clear a label at settlement. *Only a person may withdraw an

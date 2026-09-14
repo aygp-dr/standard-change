@@ -19,7 +19,7 @@
 (* docs/label-state-machine.org -- a model of the declaration would verify *)
 (* a pipeline nobody runs.                                                  *)
 (*                                                                         *)
-(* Eleven CONSTANTS, one per rule, so the model can FAIL eleven ways. Each *)
+(* Twelve CONSTANTS, one per rule, so the model can FAIL twelve ways. Each *)
 (* is flipped to FALSE by tla/check.sh and TLC must then name the invariant*)
 (* that rule protects. sim/label_sim.py is the same machine in Python and  *)
 (* sim/cross_check.py requires the two to agree, rule by rule.             *)
@@ -38,7 +38,8 @@ CONSTANTS PRs,
           ReapFreesBerth,    \* reap.sh: a lapsed window releases deploy:staging it still held
           SettleClears,      \* settle.sh:244-252: cleanup clears every transient label
           ReapSparesInFlight,\* a lapsed window is not reaped while its change is deploying
-          RecordOnMerge      \* the path that merges also records (complete, PIR)
+          RecordOnMerge,     \* the path that merges also records (complete, PIR)
+          EmergencyPreempts  \* a declared, ready emergency evicts a standard or normal holder
 
 Classes   == {"standard", "normal", "emergency"}
 Lifecycle == {"requested", "scheduled", "complete"}
@@ -64,11 +65,12 @@ VARIABLES
     freeze,       \* ESTATE: the freeze label on the estate issue
     estateEmg,    \* ESTATE: the emergency label on the estate issue
     badClaim,     \* history: a claim that a rule should have refused was made
-    badClass      \* history: a berth was claimed with an undefined class
+    badClass,     \* history: a berth was claimed with an undefined class
+    emgWaited     \* history: a declared, ready emergency was kept out of staging by a holder
 
 vars == <<class, life, draft, release, booking, berth, prodAct,
           verdict, uat, healthy, closed, served, merged, pir, cleaned,
-          freeze, estateEmg, badClaim, badClass>>
+          freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 TypeOK ==
     /\ class     \in [PRs -> SUBSET Classes]
@@ -90,6 +92,7 @@ TypeOK ==
     /\ estateEmg \in BOOLEAN
     /\ badClaim  \in BOOLEAN
     /\ badClass  \in BOOLEAN
+    /\ emgWaited \in BOOLEAN
 
 Init ==
     /\ class     = [p \in PRs |-> {}]
@@ -111,6 +114,7 @@ Init ==
     /\ estateEmg = FALSE
     /\ badClaim  = FALSE
     /\ badClass  = FALSE
+    /\ emgWaited = FALSE
 
 \* Open: still a candidate for the pipeline. A merged change is not, and
 \* neither is one that settle.sh has marked complete.
@@ -133,35 +137,35 @@ Label(p) ==
     /\ \E c \in {"standard", "normal"} :
          class' = [class EXCEPT ![p] = (@ \ {"standard", "normal"}) \cup {c}]
     /\ UNCHANGED <<life, draft, release, booking, berth, prodAct,
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* A person declares an emergency (label-owners.tsv: itil:emergency, human).
 DeclareEmergency(p) ==
     /\ Open(p) /\ ~IsEmergency(p)
     /\ class' = [class EXCEPT ![p] = @ \cup {"emergency"}]
     /\ UNCHANGED <<life, draft, release, booking, berth, prodAct,
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* A person removes the derived class that is wrong (preflight.sh:190).
 ResolveClass(p) ==
     /\ Open(p) /\ IsEmergency(p) /\ Cardinality(class[p]) > 1
     /\ class' = [class EXCEPT ![p] = {"emergency"}]
     /\ UNCHANGED <<life, draft, release, booking, berth, prodAct,
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* gh pr ready -- the author's act, and the only thing that clears draft.
 MarkReady(p) ==
     /\ Open(p) /\ draft[p]
     /\ draft' = [draft EXCEPT ![p] = FALSE]
     /\ UNCHANGED <<class, life, release, booking, berth, prodAct, 
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* A person adds release -- intent (README.org, Adding a label and removing it).
 AddRelease(p) ==
     /\ Open(p) /\ ~release[p]
     /\ release' = [release EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, booking, berth, prodAct, 
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* change/watch.sh:37-38 -- consume the trigger FIRST, then record the ask. *)
@@ -177,14 +181,14 @@ Watch(p) ==
     /\ life'    = [life EXCEPT ![p] =
                      IF LifecycleExclusive /\ "scheduled" \in @ THEN @ ELSE @ \cup {"requested"}]
     /\ UNCHANGED <<class, draft, booking, berth, prodAct, 
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* A person adds change:requested directly (label-owners.tsv: human).
 Request(p) ==
     /\ Open(p) /\ "requested" \notin life[p] /\ "scheduled" \notin life[p]
     /\ life' = [life EXCEPT ![p] = @ \cup {"requested"}]
     /\ UNCHANGED <<class, draft, release, booking, berth, prodAct, 
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* change/schedule.sh block:257 -- book a window, queued or --at.          *)
@@ -197,7 +201,7 @@ Book(p) ==
                   IF LifecycleExclusive THEN (@ \ {"requested"}) \cup {"scheduled"}
                                         ELSE @ \cup {"scheduled"}]
     /\ UNCHANGED <<class, draft, release, berth, prodAct, 
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* change/schedule.sh cancel:303 -- a person un-books. change:scheduled     *)
@@ -208,7 +212,7 @@ Cancel(p) ==
     /\ life'    = [life    EXCEPT ![p] = @ \ {"scheduled"}]
     /\ booking' = [booking EXCEPT ![p] = "none"]
     /\ UNCHANGED <<class, draft, release, berth, prodAct, 
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* change/reap.sh:74-78 -- the window lapsed. change:scheduled removed and  *)
@@ -227,7 +231,7 @@ Reap(p) ==
     /\ booking' = [booking EXCEPT ![p] = "none"]
     /\ berth'   = [berth   EXCEPT ![p] = IF ReapFreesBerth THEN FALSE ELSE @]
     /\ UNCHANGED <<class, draft, release, prodAct, verdict, uat, healthy,
-                   closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* gates/preflight.sh, then change/activate.sh:265-268 -- the window opens, *)
@@ -260,7 +264,51 @@ Activate(p) ==
     /\ badClaim' = (badClaim \/ Refused(p))
     /\ badClass' = (badClass \/ Cardinality(class[p]) > 1)
     /\ UNCHANGED <<class, life, draft, release, booking, prodAct,
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, emgWaited>>
+
+(***************************************************************************)
+(* THE ESTATE CLOSES FOR AN EMERGENCY. `emergency` on the estate issue     *)
+(* already blocks every standard and normal change from ENTERING           *)
+(* (EstateGuard, preflight.sh:298). What it did not do is move the one     *)
+(* already IN: an itil:emergency that is declared, booked and ready died   *)
+(* at guard 1, "staging held by #N", behind a standard change.             *)
+(*                                                                         *)
+(* EmergencyReady(e): the estate says emergency, e is classified as one,   *)
+(* e has a window and is not a draft. Under EmergencyPreempts, Evict(e,h)  *)
+(* takes the berth from a non-emergency holder h: h keeps nothing that     *)
+(* was about the staging it is losing -- berth, window, observations --   *)
+(* and is NOT closed: it did nothing wrong, and asking again is a person's *)
+(* act (the reaper's reason). Whether a person runs the eviction or the    *)
+(* emergency's activation performs it is the ADR's decision; the model     *)
+(* does not distinguish who.                                               *)
+(*                                                                         *)
+(* Without EmergencyPreempts the same situation is recorded by             *)
+(* EmergencyWaits, and EmergencyNeverWaits names it.                       *)
+(***************************************************************************)
+EmergencyReady(e) ==
+    /\ estateEmg /\ Open(e) /\ IsEmergency(e)
+    /\ "scheduled" \in life[e] /\ ~draft[e] /\ ~berth[e]
+
+Evict(e, h) ==
+    /\ EmergencyPreempts
+    /\ EmergencyReady(e) /\ e # h
+    /\ berth[h] /\ ~IsEmergency(h) /\ ~prodAct[h]
+    /\ berth'   = [berth   EXCEPT ![h] = FALSE]
+    /\ life'    = [life    EXCEPT ![h] = @ \ {"scheduled"}]
+    /\ booking' = [booking EXCEPT ![h] = "none"]
+    /\ verdict' = [verdict EXCEPT ![h] = "none"]
+    /\ uat'     = [uat     EXCEPT ![h] = FALSE]
+    /\ UNCHANGED <<class, draft, release, prodAct, healthy, closed, served,
+                   merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
+
+EmergencyWaits(e) ==
+    /\ ~EmergencyPreempts
+    /\ EmergencyReady(e)
+    /\ \E h \in PRs : h # e /\ berth[h] /\ ~IsEmergency(h) /\ ~prodAct[h]
+    /\ emgWaited' = TRUE
+    /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct, verdict,
+                   uat, healthy, closed, served, merged, pir, cleaned, freeze,
+                   estateEmg, badClaim, badClass>>
 
 \* gates/e2e.sh --pr and gates/smoke.sh --pr -- the instrument labels its own
 \* result; a new verdict replaces the old one (exclusion group staging-verdict).
@@ -268,14 +316,14 @@ Observe(p) ==
     /\ Open(p) /\ berth[p]
     /\ \E v \in {"pass", "fail"} : verdict' = [verdict EXCEPT ![p] = v]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct,
-                   uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* change/observe.sh:44 -- a person accepts staging; the person is the instrument.
 Accept(p) ==
     /\ Open(p) /\ berth[p] /\ verdict[p] = "pass" /\ ~uat[p]
     /\ uat' = [uat EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct,
-                   verdict, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* promote.yml:26 -- deploy:production on the staging verdict, or on an     *)
@@ -287,7 +335,7 @@ Promote(p) ==
        \/ IsEmergency(p)
     /\ prodAct' = [prodAct EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, 
-                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* gates/health.sh --pr:99 -- guard 5 converged on this head.
 Converge(p) ==
@@ -295,7 +343,7 @@ Converge(p) ==
     /\ healthy' = [healthy EXCEPT ![p] = TRUE]
     /\ served'  = [served  EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct,
-                   verdict, uat, closed, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   verdict, uat, closed, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* SETTLEMENT is four writes in a stated order, and two paths reach the    *)
@@ -330,14 +378,14 @@ MergeOnHealthy(p) ==
             /\ uat'     = [uat     EXCEPT ![p] = FALSE]
             /\ booking' = [booking EXCEPT ![p] = "none"]
        ELSE UNCHANGED <<life, pir, cleaned, release, verdict, uat, booking>>
-    /\ UNCHANGED <<class, draft, closed, served, freeze, estateEmg, badClaim, badClass>>
+    /\ UNCHANGED <<class, draft, closed, served, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* settle.sh:70 re-measures production against the head; :105 writes complete.
 Complete(p) ==
     /\ ~closed[p] /\ served[p] /\ "complete" \notin life[p] /\ ~pir[p]
     /\ life' = [life EXCEPT ![p] = @ \cup {"complete"}]
     /\ UNCHANGED <<class, draft, release, booking, berth, prodAct, verdict, uat,
-                   healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   healthy, closed, served, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* settle.sh:124-140 -- merge unless the forge already says MERGED; a refused
 \* merge stops settlement (exit 8), which the model expresses by not firing.
@@ -345,14 +393,14 @@ SettleMerge(p) ==
     /\ "complete" \in life[p] /\ ~merged[p]
     /\ merged' = [merged EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct, verdict, uat,
-                   healthy, closed, served, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   healthy, closed, served, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* settle.sh:150-168 -- the PIR, posted while the labels are still there to read.
 Pir(p) ==
     /\ "complete" \in life[p] /\ merged[p] /\ ~pir[p]
     /\ pir' = [pir EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct, verdict, uat,
-                   healthy, closed, served, merged, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   healthy, closed, served, merged, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* settle.sh:244-252 -- cleanup. Every transient label, change:complete included.
 Cleanup(p) ==
@@ -368,7 +416,7 @@ Cleanup(p) ==
             /\ healthy' = [healthy EXCEPT ![p] = FALSE]
             /\ booking' = [booking EXCEPT ![p] = "none"]
        ELSE UNCHANGED <<life, berth, prodAct, release, verdict, uat, healthy, booking>>
-    /\ UNCHANGED <<class, draft, closed, served, merged, pir, freeze, estateEmg, badClaim, badClass>>
+    /\ UNCHANGED <<class, draft, closed, served, merged, pir, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* change/abort.sh:95-114 -- the change did not make it. Observations,      *)
@@ -386,7 +434,7 @@ Abort(p) ==
     /\ uat'     = [uat     EXCEPT ![p] = FALSE]
     /\ healthy' = [healthy EXCEPT ![p] = FALSE]
     /\ served'  = [served  EXCEPT ![p] = FALSE]
-    /\ UNCHANGED <<class, draft, booking, prodAct, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+    /\ UNCHANGED <<class, draft, booking, prodAct, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 (***************************************************************************)
 (* labeller.yml:101 on synchronize -- a push withdraws every observation    *)
@@ -400,15 +448,15 @@ Push(p) ==
     /\ healthy' = [healthy EXCEPT ![p] = FALSE]
     /\ served'  = [served  EXCEPT ![p] = FALSE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct,
-                   closed, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass>>
+                   closed, merged, pir, cleaned, freeze, estateEmg, badClaim, badClass, emgWaited>>
 
 \* The estate: a person toggles freeze and emergency on issue #1.
 Freeze   == /\ freeze' = ~freeze
             /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct,
-                           verdict, uat, healthy, closed, served, merged, pir, cleaned, estateEmg, badClaim, badClass>>
+                           verdict, uat, healthy, closed, served, merged, pir, cleaned, estateEmg, badClaim, badClass, emgWaited>>
 Estate   == /\ estateEmg' = ~estateEmg
             /\ UNCHANGED <<class, life, draft, release, booking, berth, prodAct,
-                           verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, badClaim, badClass>>
+                           verdict, uat, healthy, closed, served, merged, pir, cleaned, freeze, badClaim, badClass, emgWaited>>
 
 Next ==
     \/ \E p \in PRs : Label(p) \/ DeclareEmergency(p) \/ ResolveClass(p) \/ MarkReady(p)
@@ -417,7 +465,8 @@ Next ==
                    \/ Accept(p) \/ Promote(p) \/ Converge(p)
                    \/ MergeOnHealthy(p) \/ Complete(p) \/ SettleMerge(p)
                    \/ Pir(p) \/ Cleanup(p)
-                   \/ Abort(p) \/ Push(p)
+                   \/ Abort(p) \/ Push(p) \/ EmergencyWaits(p)
+    \/ \E e, h \in PRs : Evict(e, h)
     \/ Freeze \/ Estate
 
 Spec == Init /\ [][Next]_vars
@@ -464,8 +513,12 @@ CleanIsClean ==
 \* a merged change that has lost its last lifecycle label has its record [RecordOnMerge]
 MergedHasRecord == \A p \in PRs : (merged[p] /\ life[p] = {}) => pir[p]
 
+\* a declared, ready emergency is never kept out of staging by a
+\* standard or normal holder                                        [EmergencyPreempts]
+EmergencyNeverWaits == emgWaited = FALSE
+
 Safety ==
     /\ TypeOK /\ NoDeployWithTwoClasses /\ OneLifecycle /\ NoDraftDeployed
     /\ NoUnbookedDeploy /\ AtMostOneHolder /\ NoRefusedClaim /\ BerthHasCause
-    /\ CleanIsClean /\ MergedHasRecord
+    /\ CleanIsClean /\ MergedHasRecord /\ EmergencyNeverWaits
 =============================================================================

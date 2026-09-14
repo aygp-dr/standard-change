@@ -26,7 +26,7 @@ Two checks, and they are different kinds of evidence:
                principle -- it exists so that "the bound was too small" has
                a cheap check, not so the bound can be skipped.
 
-Eleven RULES, each switchable with --disable so the checker can FAIL eleven ways.
+Twelve RULES, each switchable with --disable so the checker can FAIL eleven ways.
 sim/cross_check.py flips each one here and in TLC and requires the same
 invariant to be named. This replaces the 216-tuple cross-product of the
 first cut (7220216), which enumerated label COMBINATIONS and could not say
@@ -36,7 +36,7 @@ import argparse, collections, itertools, sys
 
 RULES = ["DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
          "ClassGuard", "LifecycleExclusive", "ReapFreesBerth", "SettleClears",
-         "ReapSparesInFlight", "RecordOnMerge"]
+         "ReapSparesInFlight", "RecordOnMerge", "EmergencyPreempts"]
 
 PRS = ("p1", "p2")
 
@@ -45,7 +45,7 @@ PRS = ("p1", "p2")
 # de-duplicate exactly as TLC does.
 PR = collections.namedtuple("PR", "cls life draft release booking berth prod verdict uat healthy closed "
                                   "served merged pir cleaned")
-State = collections.namedtuple("State", "prs freeze emg bad badcls")
+State = collections.namedtuple("State", "prs freeze emg bad badcls emgwaited")
 
 def fresh(draft):
     return PR(cls=frozenset(), life=frozenset(), draft=draft, release=False,
@@ -55,9 +55,10 @@ def fresh(draft):
 
 def inits():
     for d in itertools.product([False, True], repeat=len(PRS)):
-        yield State(prs=tuple(fresh(x) for x in d), freeze=False, emg=False, bad=False, badcls=False)
+        yield State(prs=tuple(fresh(x) for x in d), freeze=False, emg=False, bad=False, badcls=False, emgwaited=False)
 
 def is_open(q):      return not q.closed and not q.merged and "complete" not in q.life
+def emg_ready(st, q): return st.emg and is_open(q) and is_emg(q) and "scheduled" in q.life and not q.draft and not q.berth
 def active(q):       return q.life - {"complete"}
 def is_emg(q):       return "emergency" in q.cls
 def holder(st):      return {i for i, q in enumerate(st.prs) if q.berth}
@@ -187,6 +188,20 @@ def actions(st, R):
                 nq = nq._replace(life=frozenset(), berth=False, prod=False, release=False,
                                  verdict="none", uat=False, healthy=False, booking="none")
             yield f"Cleanup({p})", put(st, i, nq)
+    # THE ESTATE CLOSES FOR AN EMERGENCY. EstateGuard already blocks entry; this
+    # is the eviction of a standard or normal holder by a declared, ready
+    # emergency (EmergencyPreempts), or the record that one waited.
+    for i, e in enumerate(st.prs):
+        if not emg_ready(st, e):
+            continue
+        for j, h in enumerate(st.prs):
+            if j == i or not h.berth or is_emg(h) or h.prod:
+                continue
+            if R["EmergencyPreempts"]:
+                yield f"Evict({PRS[i]},{PRS[j]})", put(st, j, h._replace(
+                    berth=False, life=h.life - {"scheduled"}, booking="none", verdict="none", uat=False))
+            else:
+                yield f"EmergencyWaits({PRS[i]})", st._replace(emgwaited=True)
     yield "Freeze", st._replace(freeze=not st.freeze)
     yield "Estate", st._replace(emg=not st.emg)
 
@@ -207,6 +222,7 @@ def invariants():
     yield "BerthHasCause",    lambda st: all(not q.berth or "scheduled" in q.life for q in st.prs)
     yield "AtMostOneHolder",  lambda st: len(holder(st)) <= 1
     yield "NoRefusedClaim",   lambda st: not st.bad
+    yield "EmergencyNeverWaits", lambda st: not st.emgwaited
 
 def violated(st):
     for name, inv in invariants():
