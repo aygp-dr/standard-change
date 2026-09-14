@@ -2412,7 +2412,7 @@ does not defend against them will reproduce them.
 Sixteen scenarios in =scenarios.org= are the evidence. This section is the
 pattern behind them.
 
-** The seven classes
+** The eight classes
 
 *** 1. Unreachable is not falsified
 
@@ -2502,6 +2502,64 @@ is a diff the pipeline cannot judge, and every gate will be green.
 
 *The rule:* mutate the thing the check is about and require the check to fail.
 A suite that has never rejected anything is one nobody has tested.
+
+*** 8. Not yet is not no, and cannot say is not either
+
+The third value. Every question a pipeline asks an external system has at least
+three answers — *yes*, *no*, and *I cannot tell you yet* — and every defect in
+this class is the third being folded into one of the first two.
+
+Class 1 (/unreachable is not falsified/) is this one's sibling and is about a
+system that did not answer. This is about a system that DID answer, in its own
+documented vocabulary, to say it has no answer. That is harder, because the
+response looks like data: it parses, it is not an error, and a guard that reads
+it gets a value rather than an exception.
+
+**** What the forge actually returns, and what it does not mean
+
+Every row here was hit while driving changes on 2026-09-13/14. None is a bug in
+GitHub; each is a documented state we had no contract for.
+
+| asked | the answer | what it does NOT mean | what we did |
+|-------+------------+-----------------------+-------------|
+| =mergeStateStatus= | =UNKNOWN= | up to date with main | guard 0 printed =ok mergeStateStatus=UNKNOWN= and proceeded |
+| =mergeStateStatus= | =UNSTABLE= | not mergeable | mergeable, with a non-required check failing — correctly proceeded |
+| a check run | =status=in_progress=, =conclusion=null= | failed | counted as "not green"; it had not finished |
+| a check run | =conclusion=skipped= | failed | counted as "not green"; nothing ran, so nothing failed |
+| a check run | an older run for the same name | a current verdict | counted alongside the run that replaced it (class 2) |
+| a just-written label | absent on the next read | never written | guard 4 refused #57 one minute before reading it as authorized |
+| =schedule.sh current= | exit 1 | no window | also returned for a calendar it could not read |
+| a health probe | HTTP =000= | unhealthy | unreachable; the estate was never observed |
+
+**** Why =UNKNOWN= in particular is the dangerous one
+
+GitHub computes mergeability asynchronously. Ask immediately after a push, or
+after main moves, and =mergeStateStatus= is =UNKNOWN= — not because the branch
+is bad but because nobody has looked yet. It resolves in seconds.
+
+A guard that treats =UNKNOWN= as *pass* deploys a branch nobody has checked is
+up to date. A guard that treats it as *fail* refuses every change for the first
+few seconds after trunk moves, which on a busy queue is every change. Both are
+wrong, and the second is the one that looks careful.
+
+*The rule:* the third value is never a verdict. Poll until the answer is one of
+the two real ones, with a bound; if the bound expires, that is class 1 —
+=indeterminate=, said out loud, not resolved in either direction. A guard whose
+return type is a boolean cannot express this, which is why every verdict enum in
+this spec is three-valued.
+
+**** The read-after-write case is the same defect in time
+
+An observation is recorded, and the guard that requires it reads before the
+write is visible. /Not there/ and /not there YET/ are the same bytes. It is
+class 8 rather than a race condition because the fix is not a lock — it is that
+the reader must be able to say "I cannot tell yet" instead of "no".
+
+Worse, recording the observation can invalidate the authorization it was taken
+for: writing =staging:uat= retriggers the CI suite, so the four gate check runs
+go to =in_progress= and guard 4 — which requires them green — refuses. Driving
+#63 hit exactly this. The measurement and the thing measured are coupled through
+the forge, and nothing in the pipeline declared that edge.
 
 ** Two meta-observations
 

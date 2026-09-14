@@ -196,7 +196,7 @@ revisions is =spec.org= defect class 2 — /superseded is not current/ — the s
 shape as guard 2 counting a superseded check run as a verdict, and it got past
 me into a published document.
 
-*The interesting ratio is tokens per finding.* Sixteen scenarios and seven
+*The interesting ratio is tokens per finding.* Sixteen scenarios and eight
 defect classes came out of this. Most were found by a human watching a board, by
 mutation-testing a check, or by reading an error message instead of a summary —
 none of which are expensive. The expense was the grind that produced the
