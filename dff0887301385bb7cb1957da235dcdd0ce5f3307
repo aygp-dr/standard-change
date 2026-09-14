@@ -1,0 +1,12 @@
+Timeline
+- NoDeployWithTwoClasses as a state predicate failed in 5 states: Label, Book, Activate, DeclareEmergency -- a person declares mid-flight. Moved to a claim-time history flag (badClass), as badClaim already is for freeze and estate.
+- First edit script aborted on a whitespace mismatch in the vars tuple left by the earlier `started` removal; nothing written, TLC ran the old model (616,000 states) -- caught because the count did not move.
+- Reap's `~prodAct` precondition was mine, not reap.sh's; removed and made a rule (ReapSparesInFlight). Script implements it off.
+- MergeOnHealthy modelled from merge-on-healthy.yml + release.sh: no change:complete, no PIR, change:scheduled left on. Reap then erases the last label of a merged, unrecorded change (RecordOnMerge, MergedHasRecord).
+
+Reproduction
+  ./tla/check.sh                                   19 runs, all as required, ~2 min on the mini
+  python3 sim/label_sim.py --bound 40 --walks 0    2336400 states, depth 26, exhausted, VERDICT holds, 67 s
+  LABEL_BOUND=40 python3 sim/cross_check.py        12/12 agree
+  gmake gate-selftest                              exit 0 (python3 = 3.11 with Hypothesis on PATH)
+  cell: macOS Darwin 24.1.0, OpenJDK 21.0.4, Python 3.11.10, Hypothesis 6.111.0
