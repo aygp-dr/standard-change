@@ -900,3 +900,56 @@ A paired design would fix the arrival and failure draws before branching.
 
 Same shape as D18 at lower absolute numbers, because 20% now fail at staging.
 The advisory window still changes exactly one row.
+
+** D20 — the berth label was never written, so guard 1 never enforced anything
+
+*Measured 2026-09-14 against the forge timeline of every change shipped that
+night.* =deploy:staging= label events on #63, #64, #66, #67, #68, #69: *zero*.
+Not added, not removed, never present.
+
+*** What guard 1 is
+
+The berth singleton: at most one change may hold the path to production.
+=change/queue.sh:47= implements it by asking the forge who currently carries
+=deploy:staging=:
+
+: holder=$(gh pr list --state open --label deploy:staging ...)
+
+*** What is missing
+
+Nothing on the driven path ever ADDS that label. =queue.sh= removes it on
+refusal (=:39=, =:50=) and reads it for the holder query (=:47=). The word
+=--add-label deploy:staging= does not appear in the script. The workflow that
+was supposed to set it is =deploy-staging.yml=, which has never successfully
+run: 249 runs, 0 successes, 239 skipped, 10 failed.
+
+So guard 1 asked "who holds the berth" and the answer was *always nobody*.
+
+*** Why it looked like it worked
+
+Because the whole night was driven strictly one change at a time, by hand. The
+constraint was satisfied by the DRIVER's behaviour, not by the guard. A second
+concurrent driver would have been admitted without complaint, and the only
+evidence would have been two changes deploying into staging at once.
+
+The one time a berth DID block anything was PR #92, which carried
+=deploy:staging= — set by a workflow run earlier in the repository's life — and
+went on blocking every other change long after its build stopped serving
+anywhere. So the label's only observed effect was a false positive.
+
+*** The pattern, now with three instances
+
+| guard | lifetime refusals | why |
+|-------+-------------------+-----|
+| 0 — up to date with main | 0 | the forge never returns =BEHIND= here (D17) |
+| 1 — berth singleton | *0* | the label it reads is never written |
+| 6 — production-first | 0 | 484 runs, never triggered by a label |
+
+Three carefully written, ADR-reasoned guards, none of which has ever refused
+anything, each for a different reason and none of them a bug in the guard's
+logic. Reviewing the guard body finds nothing in all three cases.
+
+*The audit question is not "is this guard correct".* It is: /has this guard
+ever refused anything; if not, is its trigger reachable; and what is actually
+maintaining the property in the meantime?/ For guard 1 the answer to the last
+part is "a person being careful", which is not a control.

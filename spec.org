@@ -2855,21 +2855,32 @@ It is a claim about the CHANGE. The bare =emergency= label on the holder issue
 is a claim about the WORLD, and stops everyone including its declarer. Same
 word, different subject, different scope.
 
-*** There is no =change:start=, and the reason is worth keeping
+*** =change:start= is the human intent. =deploy:<env>= is not.
 
-A start signal was proposed. It already exists twice, and naming that is more
-useful than adding a third:
+Corrected 2026-09-14, replacing an earlier reading in this document that made
+=deploy:<env>= the human's signal. It is not, and the distinction is the whole
+entry point of the pipeline:
 
-| label | owner | role | means |
-|-------+-------+------+-------|
-| =change:requested= | human | lifecycle annotation | /I want this change to happen/ |
-| =release= | human | *intent* | /go now/ |
+| label | who | means |
+|-------+-----+-------|
+| =change:start= | *a person* | I am starting this change. It may be acting on an external change-request ticket, or on nothing at all |
+| =deploy:<env>= | *the pipeline* | begin the deploy process into that environment |
+| =<env>:<action>= | an instrument | what happened inside that environment |
 
-Under the grammar, =release= DRIVES and =change:requested= records that a person
-asked. They are genuinely different — a change can be requested for a week
-before anyone says go — so both stay. A =change:start= would be a third
-human-owned label meaning something one of these already means, and two labels
-for one fact is the defect this repository keeps finding.
+A person says /start/. The pipeline decides what that means and sets
+=deploy:staging= itself. A human writing =deploy:staging= by hand is reaching
+past the thing that is supposed to decide whether deploying is allowed — which
+is why =change/label-owners.tsv= gives =deploy:*= =human_add=no=.
+
+=change:start= is deliberately the ONLY thing a person has to say. Whether it
+corresponds to a ticket in some other system is outside this pipeline: the
+label carries the fact that a human started it, and the external reference, if
+there is one, belongs in the change record rather than in the label.
+
+This supersedes =change:requested= and =release= as two separate human signals.
+They said /I want this/ and /go now/, and the split earned nothing: nobody used
+the gap, and two human-owned labels for one fact is the defect this repository
+keeps finding.
 
 ** Why =deploy:<env>= is intent and not state
 
