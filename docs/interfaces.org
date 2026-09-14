@@ -417,6 +417,57 @@ Each row names the OBSERVER (what notices), the ACTOR (what changes state), and
   as a side effect only when a *window* lapsed; a change that failed inside its
   window and was walked away from holds it indefinitely.
 
+**** What abort.sh knows about the estate, and how
+
+It *asks*. Issue #37's shape-of-the-fix listed five things an abort must do and
+the fifth was "state what the estate is now serving"; the first cut of
+=abort.sh= did the other four and ended with the line /"It is not merged and not
+deployed"/ printed unconditionally, having measured neither.
+
+That is the D13 sentence from the other side. There, =settle.sh= reported a
+merge that had not happened while production served the build; an abort that
+asserts *not deployed* over a replica currently serving this SHA is the same
+claim, on the failure path, and it then clears the labels that were the only
+remaining evidence of what is out there.
+
+=change/serving.sh= is the instrument, and it has the three answers this file
+requires of every read — the build, *not answering*, and *answered and named no
+build*. It exists as a file because the =curl -sI | tr | awk= idiom it replaces
+appears eight times in this repository and in all eight the exit status belongs
+to =awk=: curl failing yields an empty string and a zero status, so the front
+being down and the front naming no build are one value.
+
+What abort does with the answer:
+
+| observed | closure |
+|----------+---------|
+| serving some other build | proceeds; the record names what is out there |
+| *serving THIS change* | *refuses.* Neither =failed= nor =backed-out= is true while a replica serves it — the estate must move first |
+| could not be observed | proceeds, and the record says =NOT OBSERVED= with the command to check |
+
+The asymmetry in the last two rows is the rule: it refuses only on a *positive
+contrary observation*. "I could not look" is not evidence, and no runner can
+reach this estate at all — a change that could not be closed out because the
+front was down would hold the berth for nothing, which is the deadlock this
+verb exists to end.
+
+**** Still =unowned=, and named rather than fixed
+
+- *A berth held by a change nobody aborts.* Unchanged by the above: =abort.sh=
+  is polled, and a change abandoned inside its window still holds
+  =deploy:staging= indefinitely. =reap.sh= sweeps the *schedule*, so it cannot
+  see a berth whose window is already closed or was never booked.
+- *The idle colour.* Nothing clears it, ever. After a failed cutover the idle
+  colour holds whatever was there last, which is only "the previous change"
+  while every deploy came from a change — see issue #26.
+- *Guard 5 failing after a successful cutover.* =switch.sh= refuses a colour
+  that is not answering, so the cutover itself fails closed; a cutover that
+  succeeds onto a build that then fails to converge is not rolled back by
+  anything.
+- *=failed → implementing= versus =failed → assessing=.* =docs/idp-service.org=
+  and the guile machine disagree, and the disagreement is reachable only on the
+  failure path.
+
 *** An observation instrument fails to record
 
 - Observer: guard 4, at the moment of reliance. *polled, and this is correct*

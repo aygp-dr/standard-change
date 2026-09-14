@@ -1,0 +1,10 @@
+{
+  "labels": [
+    { "name": "app:plp" },
+    { "name": "itil:standard" },
+    { "name": "deploy:staging" },
+    { "name": "staging:e2e" }
+  ],
+  "headRefOid": "43646f9000000000000000000000000000000abc",
+  "state": "MERGED"
+}

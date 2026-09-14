@@ -1,0 +1,14 @@
+#!/bin/sh
+# A `curl` that answers from a recorded header block, for the same reason
+# gates/fixtures/gh answers from recorded JSON: so the script under test runs
+# unmodified and offline.
+#
+# $FIXTURE/headers.txt is the response. A fixture with NO headers.txt is a front
+# that is not answering -- exit 7 (CURLE_COULDNT_CONNECT), which is the fact the
+# caller has to be able to tell apart from "answered, named no build". A fixture
+# with a headers.txt that omits x-build-sha is the second case, and it is a
+# different file rather than a different stub.
+set -eu
+FIX="${FIXTURE:?curl stub: FIXTURE is not set}"
+[ -f "$FIX/headers.txt" ] || { echo "curl: (7) Failed to connect" >&2; exit 7; }
+cat "$FIX/headers.txt"
