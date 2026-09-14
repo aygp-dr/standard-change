@@ -1,0 +1,45 @@
+#+TITLE: 023 — start only: a person says change:start and the process takes over
+#+DATE: 2026-09-14
+
+* Hypothesis
+
+Five agents each open one single-line PR and do exactly one further thing:
+apply =change:start=. Everything after that is the process: a scheduler on
+the mini (=change/scheduler.sh=) that runs =change/driver.sh= one change at
+a time, and the forge's workflows. The hypothesis: *a change whose owner
+says only start reaches production and settles, and every refusal it meets
+is stated on the PR in words its owner can act on without knowing the
+pipeline.* Falsified if an owner has to do anything but rebase and say start
+again, or if a ticket ends in a state its owner cannot read.
+
+Restarts =experiments/022=, where the same five steps were driven by hand
+and the owner's finding was that the tickets were dirty: five tickets
+(#97–#101, the other operator's) carried verdicts of a release that never
+ended. In this run the driver treats a start on a dirty ticket as paying
+that debt (clears the previous release's markers, says so, keeps the
+person's own words) rather than asking a person to sweep.
+
+* Setup
+
+- Estate: block 1 (=:9010=) as staging and block 2 (=:9020=) as production,
+  redeployed by the driver to the head under release. No windows booked.
+- Intent label: =change:start= (label-owners.tsv: supersedes
+  =change:requested= + =release=). The scheduler runs the oldest PR number
+  first; the label carries no time, so who said start first is not on the
+  list.
+- The driver refuses a head behind =main= (guard 0) and clears every marker
+  including the intent; the owner rebases and says start again. The driver
+  never rebases: a machine rewriting a person's branch is a push on their
+  behalf.
+- The second identity approves under its standing delegation; the review
+  says so. The clearing at end has no identity of its own: it is whoever's
+  =gh= is active on the host (jwalsh here, aygp-dr on hydra, the actions bot
+  in a workflow). See §Findings.
+- Unplanned again: the other operator is live on #97–#101 against the same
+  label lock (scenarios D21).
+- Logs: =scheduler.log= (the driver's own account), =label-timeline.log=
+  (a 20 s poll of every label change on the five PRs).
+
+* Findings
+
+(filled in as the run proceeds)
