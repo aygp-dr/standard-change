@@ -146,9 +146,11 @@ change sat in the process and it is no longer in the process.
 *The deployment annotation is written here too, and only here.* Not when the
 deploy starts. The deployer used to open a record =in_progress= and resolve it
 later — GitHub's own model — and every record it opened resolved to *failure*,
-because =deploy-staging= dies at =queue.sh= before deploying (issue #25). PRs
+because =deploy-staging= died at =queue.sh= before deploying (issue #25). PRs
 read "1 failed deployment" while the estate served that build perfectly: the
-record described the *workflow run*, not the environment.
+record described the *workflow run*, not the environment. That workflow has
+since been removed — it never once deployed anything, in 249 runs — and the
+forge no longer deploys at all (=docs/adr/0004-the-forge-does-not-deploy.org=).
 
 By settlement, production has been observed serving the build. There is nothing
 left to intend, so the annotation is written from a fact. It is keyed to the

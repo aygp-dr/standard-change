@@ -1,7 +1,6 @@
 {
-  "_comment": "Repository-level Actions variables. DEPLOY_TARGET and PRODUCTION_URL are read by .github/workflows/deploy-*.yml; EMERGENCY_CHANGE is the freeze fallback read by gates/preflight.sh when the change calendar is unreachable (spec.org, Change enablement). EMERGENCY_CHANGE=1 blocks the estate; 0 is the normal resting value.",
+  "_comment": "Repository-level Actions variables. PRODUCTION_URL is read by .github/workflows/merge-on-healthy.yml, which uses it to say WHY it cannot re-derive guard 5 from a runner. EMERGENCY_CHANGE is the freeze fallback read by gates/preflight.sh when the change calendar is unreachable (spec.org, Change enablement): EMERGENCY_CHANGE=1 blocks the estate, 0 is the normal resting value. DEPLOY_TARGET was removed with the forge-side deploy workflows (ADR 0004) -- it was set to `github`, there has never been a targets/github/, and nothing else read it. Delete it from the repository with .github/config/apply.sh; a declared variable nothing reads is dead config that reads as coverage.",
   "variables": [
-    { "name": "DEPLOY_TARGET", "value": "github" },
     { "name": "EMERGENCY_CHANGE", "value": "0" },
     { "name": "PRODUCTION_URL", "value": "https://aygp-dr.github.io/standard-change" }
   ]

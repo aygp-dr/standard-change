@@ -1,0 +1,12 @@
+{"id":1,"name":"production","enforcement":"active","bypass_actors":[],
+ "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
+ "rules":[
+  {"type":"pull_request","parameters":{"required_approving_review_count":1}},
+  {"type":"required_status_checks","parameters":{
+     "strict_required_status_checks_policy":true,
+     "required_status_checks":[{"context":"gate-selftest"},{"context":"lint"},
+                               {"context":"test"},{"context":"e2e"}]}},
+  {"type":"required_deployments","parameters":{"required_deployment_environments":["staging"]}},
+  {"type":"required_linear_history"},
+  {"type":"non_fast_forward"},
+  {"type":"deletion"}]}

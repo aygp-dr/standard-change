@@ -1,0 +1,182 @@
+#+TITLE: ADR 0004 — the forge does not deploy
+#+DATE: 2026-09-14
+
+* Status
+
+Accepted. Supersedes the deployment half of =spec.org= §Workflows.
+
+* Context
+
+=.github/workflows/deploy-staging.yml= and =.github/workflows/deploy-production.yml=
+were the repository's evidence that it is a CI/CD pipeline. They were also the
+only two workflows that had never done anything.
+
+** The record, from the Actions API
+
+| workflow            | runs | success | failure | skipped |
+|---------------------+------+---------+---------+---------|
+| =deploy-staging.yml=    |  249 |   *0* |      10 |     239 |
+| =deploy-production.yml= |  249 |   *0* |       0 |     249 |
+
+=deploy-production.yml= has never evaluated a single step. Every run was
+=skipped=: it triggers on =pull_request: labeled= and gates the job on
+=github.event.label.name == 'deploy:production'=, and that label has never been
+applied by anything the forge could see. Four hundred and ninety-eight runs,
+zero deployments.
+
+=deploy-staging.yml='s ten non-skipped runs all died at step 2:
+
+: Run ./change/queue.sh claim "$PR"
+: GraphQL: Resource not accessible by integration (repository.pullRequest)
+
+which is issue #25. It declares no =permissions:= block, so it inherits the
+repository default, and =gh pr view= needs =pull-requests=.
+
+** Five independent defects, and only one of them is the token
+
+An L7 review found the pair broken in ways that do not overlap. Each was
+re-derived here before being written down.
+
+1. *A group list where a SHA is required.* Both pass
+   =$(./change/groups.sh "$PR")= to =deploy.sh= as its second argument.
+   =targets/node/deploy.sh='s second argument is a =<sha>=, and it resolves it
+   with =git rev-parse=; =plp pdp= is not a commit. This is not a typo — it is
+   a divergence between two documents. =spec.org= §Targets says the interface
+   is =deploy.sh <env> <groups...>=, and the implementation is
+   =deploy.sh <env> <sha>=. The workflows match the spec. *Nothing noticed
+   because the line never ran.*
+
+2. *An environment name the deployer rejects.* =deploy-production.yml= passes
+   =production=. =deploy.sh= accepts =staging=, =production-blue=,
+   =production-green= and =dev-0..9=; =production= reaches the =*)= arm.
+
+3. *Three scripts that do not exist.* =change/lock.sh= (four call sites),
+   =change/pir.sh=, and =targets/*/rollback.sh=. None has ever existed in this
+   repository. =lock.sh release= is in =if: always()= steps, so the cleanup
+   path is missing too — issue #37's finding, in the file that would have
+   caused it.
+
+4. *A gate on a retired label.* =deploy-production.yml= requires
+   =staging:passed= on the head SHA. =change/label-owners.tsv= declares that
+   label =RETIRED=, and =gates/label-audit.py= has been reporting the write as
+   a finding. Nothing writes it, so guard 4 in that workflow could only ever
+   refuse — or be waved through by =itil:emergency=, which is the one path that
+   skips it.
+
+5. *A target directory that does not exist.* Both resolve the deploy script
+   through =targets/${{ vars.DEPLOY_TARGET }}/=, and the repository variable is
+   =github=. There is no =targets/github/=. =.env.template= carried the same
+   value for a variable nothing local reads.
+
+** The defect underneath the five
+
+*A workflow that never gets far enough to fail is indistinguishable from one
+that works.* Both are quiet. =deploy-production.yml= reported =skipped= 249
+times, which is the same colour as "nothing to do here", and it sat in the
+repository being counted as the deployment mechanism.
+
+That is the seventh defect class — /a check that cannot fail produces no
+verdict/ — applied to the pipeline's own configuration. The configuration was
+never executed, so it was never judged.
+
+** And the arrangement it assumed was never possible
+
+Even with the token fixed and all five defects repaired, =deploy-staging.yml=
+runs on =ubuntu-latest= and =targets/node/deploy.sh staging= creates a git
+worktree and starts node processes on =:9200= *on the runner*, which is
+destroyed when the job ends. The authorizing e2e would then run against that,
+and the PR would be labelled from it.
+
+=gates/health.sh= already states the constraint: /"no GitHub runner can reach
+any environment in this repository"/. =merge-on-healthy.yml= states it again,
+in a message it posts to PRs. =docs/label-ownership.org= rule 2 is the same
+fact. A deploy workflow on a hosted runner cannot deploy to this estate, and
+what it *can* do is produce an observation about a container that no longer
+exists and attach it to a change — which is the forged-evidence defect this
+repository keeps finding, with a green tick on it.
+
+* Decision
+
+*Remove both workflows.* The forge runs gates and stores state. It does not
+deploy, and it is not asked to.
+
+Add =gates/workflow-refs.py=: every =./path/script= a workflow invokes must
+resolve to a file in the tree, with =${{ vars.X }}= expanded from
+=.github/config/variables.json= rather than skipped — skipping the expression
+is how defect 5 stayed invisible. It has =pass/= and =fail/= fixtures and runs
+in =gate-selftest=. It reports 8 findings against the tree before this change
+and 0 after, and it would have caught defects 3 and 5 on the day they were
+written.
+
+Remove the =DEPLOY_TARGET= variable with them. Nothing else reads it.
+
+* What is lost
+
+Stated plainly, because "it never worked" is not the same as "it was worth
+nothing".
+
+- *The intended design, as executable config.* The two files are the only
+  written-down statement of the deployment sequence — claim the berth, check
+  the calendar, take the lock, book the window, deploy, re-run e2e against the
+  slot, close the window, release the lock. That sequence is real and it is
+  what =change/activate.sh= and =change/settle.sh= implement by hand. It is
+  preserved as a *skeleton* in =spec.org= §Workflows, which is where a
+  reference implementation belongs — the difference is that a skeleton in the
+  spec is read as a design and a file in =.github/workflows/= is read as a
+  thing that runs.
+- *Forge-side serialization.* =concurrency: {group: production,
+  cancel-in-progress: false}= was the only expression anywhere of "one
+  production deploy at a time" that a machine enforced. It enforced nothing,
+  because the job never started — but the *statement* is gone, and what now
+  serializes the path to production is the berth (=change/queue.sh= guard 1,
+  one open PR may hold =deploy:staging=) and the fact that one person is
+  driving. =gates/audit-controls.py= reports this under its own name rather
+  than as a missing key.
+- *A place for GitHub Environments to attach.* =environment: production= in a
+  job is what makes GitHub's required-reviewer and branch-policy rules fire.
+  Those environments still exist and =audit-controls.py= still audits them,
+  but with no job naming them, their protection rules now guard nothing. That
+  is an honest gap and it is recorded here rather than papered over.
+- *The aspiration.* Somebody reading this repository will no longer see two
+  files that look like continuous deployment. That is the point, and it is
+  still a loss: the aspiration was real and it is now only prose.
+
+* What is not lost
+
+Everything that ever ran. =gate.yml=, =labeller.yml=, =promote.yml=,
+=production-first.yml=, =main-moved.yml=, =merge-on-healthy.yml= and
+=trunk-audit.yml= are untouched — those are the workflows that produce check
+runs, derive labels and refuse merges, and all of them work on a hosted runner
+because none of them needs to reach the estate.
+
+Deployment itself is untouched: it is =targets/node/deploy.sh=,
+=targets/node/switch.sh=, =change/activate.sh= and =change/settle.sh=, run from
+a host that can see the estate. That is how all six changes on 2026-09-13
+actually shipped. Deleting the workflows removes nothing from the path any
+change has ever taken.
+
+* Consequences
+
+- *The path to production has no forge-side interlock.* One label and one
+  person. Say so, rather than pointing at a =concurrency:= key in a file that
+  never ran.
+- *=gates/preflight.sh= remains the only window check*, and remains advisory
+  (issue #51, ADR 0003). Unchanged by this.
+- *Issue #25 is resolved by removal, not by a permissions block.* Adding
+  =permissions: {pull-requests: write}= would have made the workflow get
+  *further*: past =queue.sh= — which claims the berth — past
+  =gh pr edit --add-label staging:in-progress=, past
+  =schedule.sh block ... 30= — which books a thirty-minute window — and into
+  =./change/lock.sh acquire=, which does not exist. Its =always()= cleanup
+  calls =lock.sh release=, which also does not exist. So the fix as filed
+  converts a harmless red X into a berth-leaking, calendar-polluting failure on
+  every =deploy:staging= label: issue #37, fired automatically, forever.
+- *Restoring forge-side deployment* means a self-hosted runner on a host that
+  can see the estate, and then the five defects above have to be fixed
+  individually. =gates/workflow-refs.py= catches two of them mechanically;
+  the other three need the spec and the implementation to be reconciled first.
+
+* The trigger that forces a revisit
+
+A runner that can reach the estate. Until there is one, a deploy workflow can
+only manufacture observations about a container that no longer exists.

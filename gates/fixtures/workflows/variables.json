@@ -1,0 +1,7 @@
+{
+  "_comment": "The repository variables the fixtures beside this file are checked against. Deliberately NOT .github/config/variables.json: a gate's negative test must not move when the repository's configuration does, and it did -- removing DEPLOY_TARGET from the real file silently retired one of the three shapes fail/broken.yml exists to exercise.",
+  "variables": [
+    { "name": "DEPLOY_TARGET", "value": "github" },
+    { "name": "REAL_TARGET", "value": "node" }
+  ]
+}

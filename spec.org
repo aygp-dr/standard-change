@@ -229,7 +229,7 @@ predicates — rather than a rewrite.
 | Change schedule               | The Google Calendar used for change windows, freezes, and emergencies                 |
 | Change window                 | A calendar event =CHANGE: <repo>#<pr> <group>= created before staging deployment       |
 | Change authority              | The gate workflow for standard changes; a named reviewer for normal changes           |
-| Deployment                    | One run of =deploy-staging.yml= or =deploy-production.yml=                              |
+| Deployment                    | One run of =targets/<t>/deploy.sh= against an environment, driven by =change/activate.sh= (ADR 0004)   |
 | Release                       | A production deployment whose PIR comment is posted                                   |
 | Service validation and testing| The three gates: lint, unit test, Playwright                                          |
 | Post-implementation review    | Auto-generated PR comment after production deployment with gate results and timings   |
@@ -690,7 +690,7 @@ Three gates run on every PR for every =app:*= group. Each gate exits non-zero on
 | test | =gates/test.sh=  | =node --test= per app                                                         |
 | e2e  | =gates/e2e.sh=   | Playwright: the group's journeys plus every =tests/e2e/= journey that touches it |
 
-The e2e gate runs against a worktree-style router inside the runner (block 0 ports, all four apps built from the PR SHA). The same gate reruns against the staging slot URL after =deploy-staging=; the second run is the one that authorizes production.
+The e2e gate runs against a worktree-style router inside the runner (block 0 ports, all four apps built from the PR SHA). The same gate reruns against the staging slot URL after the staging deploy (=change/activate.sh=, on a host that can see the estate); the second run is the one that authorizes production.
 
 ** Negative tests for the gates
 
@@ -756,8 +756,8 @@ only thing that can state it is =change:emergency=.
 | 1 | Staging held by no other PR | =change/queue.sh=   | =blocked:queue=, label removed      | n/a (skips staging) |
 | 2 | Gates green on head SHA  | =promote.yml=          | refuse to promote                   | *no*             |
 | 3 | No lock, no freeze       | =gates/preflight.sh=   | =blocked:lock= / =blocked:freeze=   | freeze only      |
-| 4 | =staging:passed@head SHA= | =deploy-production.yml= | refuse to deploy                   | yes, with approval |
-| 4b | Head still contains main's tip | =main-moved.yml=, =deploy-production.yml=, =release.sh= | withdraw pass; hold the berth | yes |
+| 4 | The authorization stack on this head | =change/guard4.sh= | refuse to deploy                   | yes, with approval |
+| 4b | Head still contains main's tip | =main-moved.yml=, =change/guard4.sh=, =release.sh= | withdraw pass; hold the berth | yes |
 | 5 | Production health check  | =gates/health.sh=      | roll back, PIR, release             | *no*             |
 
 *Guard 2 and guard 5 have no bypass at all.* An emergency may skip the staging
@@ -765,7 +765,8 @@ only thing that can state it is =change:emergency=.
 may not leave an unhealthy production deploy standing.
 
 *Guard 2 is therefore evaluated twice*, in =promote.yml= and again in
-=deploy-production.yml=. This is not belt-and-braces: =promote.yml= is gated on
+=change/guard4.sh= (it was =deploy-production.yml= until ADR 0004; the
+duplication is the point, not the file). This is not belt-and-braces: =promote.yml= is gated on
 the =staging:passed= label, so the emergency path never reaches it. A single
 evaluation there would have given guard 2 precisely the bypass this paragraph
 denies. [E — the omission was real and shipped; see §Open items.] Note the TLA+
@@ -1316,6 +1317,31 @@ jobs:
       - if: always()
         run: PORTS_REGISTRY=$RUNNER_TEMP/ports.tsv ./change/ports.sh stop || true
 #+end_src
+
+** The deploy workflows are a REFERENCE IMPLEMENTATION, and nothing more
+
+*Both files were removed on 2026-09-14 (=docs/adr/0004-the-forge-does-not-deploy.org=).*
+They are kept below as skeletons because the *sequence* they describe is the
+real one — it is what =change/activate.sh= and =change/settle.sh= do by hand —
+and because the spec is the right place for a design that does not run.
+
+Four hundred and ninety-eight runs between them and *zero deployments*.
+=deploy-production.yml= was =skipped= on all 249 of its runs and never
+evaluated a single step; =deploy-staging.yml= died at step 2 on a token
+permission (#25) in the ten that were not skipped. Neither ever reached the
+three scripts it calls that have never existed (=change/lock.sh=,
+=change/pir.sh=, =targets/*/rollback.sh=), or the =targets/github/= directory
+that has never existed either.
+
+*One divergence below is this document's own and is left visible.* §Targets
+states the target interface as =deploy.sh <env> <groups...>=, and both
+skeletons pass =$(./change/groups.sh "$PR")= accordingly. The implementation is
+=targets/node/deploy.sh <env> <sha>=, which resolves its second argument with
+=git rev-parse=. The spec and the code disagree about the signature of the one
+call that deploys anything, and neither moved for a day, *because the line was
+never executed*. Reconciling them is a precondition for any future forge-side
+deployment; =gates/workflow-refs.py= checks that the scripts exist, and
+deliberately does not pretend to check that the arguments are right.
 
 ** deploy-staging.yml skeleton
 
@@ -2165,9 +2191,7 @@ at once — including the parts not taken:
 #+begin_example
 1 in progress, 3 skipped, 1 successful
   in progress   gate / gate-selftest
-  skipped       deploy-staging / deploy
   skipped       promote / promote
-  skipped       deploy-production / deploy
   successful    labeller / label
 #+end_example
 
@@ -2602,8 +2626,11 @@ gate sequence prevents an unauthorized or unsafe production deployment/:
    =EMERGENCY_CHANGE= variable is set (it must exit 4 and block).
 3. Any gate passes on a =gates/fixtures/<gate>/fail/= input, or fails on the
    matching =pass/= input. Either direction voids the gate.
-4. =deploy-production.yml= deploys a group that has no
-   =deployed:staging-<group>-<n>= label on the head SHA.
+4. A production deployment lands a group that has no
+   =deployed:staging-<group>-<n>= label on the head SHA. (Named for
+   =deploy-production.yml= while that file existed; it was removed in ADR 0004
+   without ever having deployed anything, and the condition is about the
+   deployment, not the workflow.)
 5. A =change:normal= PR reaches production with no approving review.
 6. The rendered nginx config and =router/routes.json= disagree while
    =gates/lint.sh= exits 0.
