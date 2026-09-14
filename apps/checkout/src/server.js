@@ -42,7 +42,7 @@ export const BACKGROUND = '#ffd7e6';
 // page unescaped, and an attribute is a shorter path out than a text node.
 const SHIP = [
   ['name',    'Full name',    'text'],
-  ['line1',   'Address',      'text'],
+  ['line1',   'Address line 1', 'text'],
   ['city',    'City',         'text'],
   ['postcode','Postcode',     'text'],
 ];
