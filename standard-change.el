@@ -125,6 +125,27 @@ token -- a check that cannot fail reports nothing."
                  "found in auth-source")
             (concat "MISSING -- add to ~/.authinfo:\n             "
                     "machine api.github.com login <user>^forge password <token>"))
+      ;; Present is not valid. On 2026-09-14 this reported "found in
+      ;; auth-source" and the pull that followed died with HTTP 401: both
+      ;; tokens in ~/.authinfo had been revoked. A check that inspects the
+      ;; file and not the API is a check on the wrong subject -- the same
+      ;; defect as a health check reading the deployer's own version file. So
+      ;; spend one request on /user, which needs no scope, and report what the
+      ;; API said rather than what the file contains.
+      (need "api probe"
+            (let ((user (magit-get "github.user")))
+              (and user
+                   (condition-case err
+                       (let ((login (cdr (assq 'login
+                                               (ghub-get "/user" nil
+                                                         :username user
+                                                         :auth 'forge)))))
+                         (and login (format "GET /user -> %s" login)))
+                     (error (message "standard-change: api probe: %s"
+                                     (error-message-string err))
+                            nil))))
+            (concat "REJECTED -- the token in ~/.authinfo is not accepted by "
+                    "api.github.com; regenerate it, then git config github.user"))
       ;; ghub needs this even with a token in auth-source; without it every
       ;; pull dies with "Cannot determine username".
       (need "github.user" (magit-get "github.user")
