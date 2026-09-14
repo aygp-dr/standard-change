@@ -558,10 +558,16 @@ Cleanup(p) ==
 
 \* change/abort.sh:95-114 -- the change did not make it. Not the eviction.
 Abort(p) ==
+    \* "the release, even if it fails on staging, should end and clean up":
+    \* the closure code, then every marker gone, then the tombstone (cleaned).
     /\ Open(p) /\ ("scheduled" \in life[p] \/ berth[p])
     /\ closed'  = [closed  EXCEPT ![p] = TRUE]
-    /\ life'    = [life    EXCEPT ![p] = @ \ {"scheduled"}]
+    /\ cleaned' = [cleaned EXCEPT ![p] = TRUE]
+    /\ life'    = [life    EXCEPT ![p] = {}]
+    /\ booking' = [booking EXCEPT ![p] = "none"]
     /\ berth'   = [berth   EXCEPT ![p] = FALSE]
+    /\ prodAct' = [prodAct EXCEPT ![p] = FALSE]
+    /\ hold'    = [hold    EXCEPT ![p] = FALSE]
     /\ release' = [release EXCEPT ![p] = FALSE]
     /\ verdict' = [verdict EXCEPT ![p] = "none"]
     /\ uat'     = [uat     EXCEPT ![p] = FALSE]
@@ -570,9 +576,8 @@ Abort(p) ==
     /\ stgDeployed'  = [stgDeployed  EXCEPT ![p] = FALSE]
     /\ stgHealthy'   = [stgHealthy   EXCEPT ![p] = FALSE]
     /\ prodDeployed' = [prodDeployed EXCEPT ![p] = FALSE]
-    /\ UNCHANGED <<class, draft, booking, hold, prodAct, merged, pir, cleaned, freeze,
-                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
-                   refusedDirty>>
+    /\ UNCHANGED <<class, draft, merged, pir, freeze, estateEmg, badClaim, badClass,
+                   badPromote, badVerdict, emgWaited, refusedDirty>>
 
 \* labeller.yml:101 on synchronize -- a push withdraws every label about the
 \* old head: observations, and the deployed/healthy facts too.
