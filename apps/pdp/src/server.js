@@ -193,7 +193,7 @@ export function money(price, currency) {
 // information, and it is escaped like everything else.
 const AVAILABILITY = {
   'in-stock': 'In stock',
-  'low-stock': 'Low stock — only a few left',
+  'low-stock': 'Low stock — only a few left, grab yours!',
   'out-of-stock': 'Out of stock',
   'preorder': 'Coming soon — pre-order yours today',
   // loadCatalogue only checks that availability is a STRING, so '' is a value a
