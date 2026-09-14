@@ -213,7 +213,7 @@ export function panel(d) {
   if (d.sku === undefined) return '';   // not a product page
   const sku = esc(d.sku || '(none)');
   if (d.catalogue === 'unavailable')
-    return `<h2>Product unavailable</h2>
+    return `<h2>Product unavailable right now</h2>
 <p>We cannot show <code>${sku}</code> right now — the catalogue is unavailable.
 This product has not gone away; try again shortly.</p>
 <p class=v>catalogue: unavailable (${esc(d.reason)})</p>`;
