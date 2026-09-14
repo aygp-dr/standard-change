@@ -1,0 +1,11 @@
+Timeline
+- First positive run: "Successor state not completely specified by action Activate: emgWaited" -- Activate's UNCHANGED tuple ends in freeze, estateEmg (it assigns badClaim and badClass itself) and the blanket replace missed it. Added emgWaited there.
+- Negative trace (EmergencyPreempts=FALSE): Label, DeclareEmergency(p1), Book(p1), Book(p2), Activate(p2), Estate, EmergencyWaits(p1) -- 8 states.
+- Distinct-state count did not move (2,336,400): eviction reaches only states reap already reaches.
+
+Reproduction
+  ./tla/check.sh                                  20 runs, all as required
+  python3 sim/label_sim.py --bound 40 --walks 0   2336400 states, VERDICT holds
+  python3 sim/label_sim.py --disable EmergencyPreempts --bound 40 --walks 0   VERDICT violated EmergencyNeverWaits
+  LABEL_BOUND=40 python3 sim/cross_check.py       13/13
+  cell: macOS Darwin 24.1.0, OpenJDK 21.0.4, Python 3.11.10
