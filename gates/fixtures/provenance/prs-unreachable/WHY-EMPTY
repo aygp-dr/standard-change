@@ -1,0 +1,8 @@
+Deliberately holds no open-prs.json.
+
+The stub `gh` exits 1 when the file a call needs is absent, which is
+"I could not answer" -- a different fact from "there are no open pull
+requests". gates/deploy-provenance.sh must take its exit-4 branch and BLOCK.
+
+An empty open-prs.json would test the wrong thing: that is the forge
+answering, with an empty list.

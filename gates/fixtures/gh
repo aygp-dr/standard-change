@@ -21,6 +21,11 @@ case "${1:-}" in
   pr)
     case "${2:-}" in
       view)    jq -r "$filter" "$FIX/pr.json" ;;
+      # Same rule as reviews.json below: a fixture with no open-prs.json cannot
+      # ANSWER, which is a different fact from "there are no open PRs". Exit 1
+      # so the guard takes its could-not-determine branch and blocks.
+      list)    [ -f "$FIX/open-prs.json" ] || exit 1
+               jq -r "$filter" "$FIX/open-prs.json" ;;
       edit|comment|merge)
                printf '%s\n' "$*" >> "${GUARD4_WRITES:-/dev/null}" ;;
       *)       echo "gh stub: unhandled 'pr $2'" >&2; exit 1 ;;
@@ -35,6 +40,8 @@ case "${1:-}" in
       */reviews*)   [ -f "$FIX/reviews.json" ] || exit 1
                     jq -r "$filter" "$FIX/reviews.json" ;;
       *comments*)   jq -r "$filter" "$FIX/comments.json" ;;
+      *deployments*) [ -f "$FIX/deployments.json" ] || exit 1
+                    jq -r "$filter" "$FIX/deployments.json" ;;
       *)            echo "gh stub: unhandled api path '$2'" >&2; exit 1 ;;
     esac ;;
   *) echo "gh stub: unhandled '$1'" >&2; exit 1 ;;

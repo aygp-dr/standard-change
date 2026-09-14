@@ -1,0 +1,8 @@
+Deliberately holds no deployments.json.
+
+--rollback requires that the estate has served the target build before, and
+the forge's deployment history is the record. If that history cannot be read,
+the requirement is unestablished, not satisfied: exit 4, which blocks.
+
+rollback-unknown/ is the other case -- the history IS readable and contains
+nothing for this SHA, which is a refusal (exit 1), not an unknown.
