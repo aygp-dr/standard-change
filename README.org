@@ -301,7 +301,7 @@ the pipeline is not entitled to make.
 : ./change/schedule.sh block <pr> "<groups>" <minutes> --at <iso> # a named hour
 
 *Nobody books a window for you.* There is no auto-scheduler and
-=docs/adr/0003= records why: six of seven guards do not read the calendar at
+=docs/adr/0003= records why: seven of eight guards do not read the calendar at
 all, so scheduling is the least load-bearing thing here and a cleverer one would
 only add rules that can be wrong at 3am.
 
@@ -435,8 +435,8 @@ flowchart TB
     end
 
     subgraph path["Path to production — singleton, queued"]
-        S["staging :9201<br/>held by ONE change at a time"]
-        P["production :9200<br/>blue/green"]
+        S["staging :9200<br/>held by ONE change at a time"]
+        P["production front :9230<br/>blue :9210 / green :9220"]
     end
 
     W1 --> E1
@@ -457,8 +457,18 @@ flowchart TB
 |-------------------+-------------+-------------+-------------+-----------+------------------------------|
 | worktree block    | *9000–9099* | *dev*       | per clone   | no        | =gmake port-free=            |
 | =env/<team>-<app>= | *9100–9199* | *team*     | many        | *no*      | IDP release, or lease expiry |
-| =staging=         | *9201*      | *protected* | *exactly 1* | yes       | merge, failure, or guard 4b  |
-| =production=      | *9200*      | *protected* | 1 (+1 idle) | —         | —                            |
+| =staging=         | *9200*      | *protected* | *exactly 1* | yes       | merge, failure, or guard 4b  |
+| =production= front | *9230*     | *protected* | 1           | —         | —                            |
+| =production-blue= | *9210*      | *protected* | 1 (live or idle) | —    | a cutover to green           |
+| =production-green= | *9220*     | *protected* | 1 (live or idle) | —    | a cutover to blue            |
+
+This table said =staging= 9201 / =production= 9200 until 2026-09-14 — the
+scheme from before the 2026-09-13 correction, and reversed. It is corrected
+here against =environments.tsv=, which is the declaration. The same stale pair
+was still hardcoded in =change/activate.sh= and sent the *authorizing* e2e run
+at :9201, which is one app replica rather than the router front: every route
+except core's 404s behind it, so the gate refused a healthy estate. A fact
+copied into a second place is a fact that can disagree with itself.
 
 *The port number is the tier.* An address below 9100 is disposable, 9100–9199
 is real but cannot promote, and 9200+ is the path to production — so "which
@@ -534,7 +544,7 @@ Three properties fall out, and each is a scenario in =scenarios.org=:
 
 The local worktree topology is the same graph with =nginx= and =node= processes
 instead of containers — same router, same ports, same four upstreams. That
-correspondence is the point: what you run at =:9010= is what staging runs at =:9201=.
+correspondence is the point: what you run at =:9010= is what staging runs at =:9200=.
 
 * Interfaces, and the scheduler
 

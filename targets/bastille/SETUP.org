@@ -2,6 +2,21 @@
 #+DATE: 2026-09-13
 #+OPTIONS: toc:2 num:t
 
+* This document describes the PRE-CORRECTION port scheme
+
+The addresses below say =:9200 production / :9201 staging=. That pairing was
+reversed by the 2026-09-13 port correction: =9200= is *staging*, production is
+the front on =9230= over blue =9210= and green =9220=, and =environments.tsv=
+is the declaration. They are left as written because this target was built
+against them, and rewriting them would claim a jail estate that has been
+re-addressed when it has not.
+
+Do not copy an address out of this file into anything on the node path.
+=change/activate.sh= did exactly that and pointed the *authorizing* e2e run at
+:9201 — one app replica rather than the router front — so the gate refused a
+healthy estate. See =README.org= §Environments for the current scheme.
+
+
 *Port tiers.* The number says what an environment is and whether it can
 promote (=spec.org= §The port map):
 

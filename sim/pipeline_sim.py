@@ -58,6 +58,26 @@ class Divergence(enum.IntEnum):
 
 
 WITHDRAWS = (Divergence.ARTIFACT, Divergence.HOTFIX)
+
+
+class Deploys(enum.Enum):
+    """What guard 6 is allowed to conclude about a change's deploy set.
+
+    THREE VALUES, NEVER A SET THAT MAY BE EMPTY. Both real implementations of
+    production-first derived the deploy groups and then treated an empty
+    result as EXEMPT -- the repo's gate via `groups.sh ... || true` (484 runs,
+    never once triggered), and the 000 rebuild via `exempt -- this change
+    deploys nothing (derived from the diff)`, which it returned even for the
+    case where production could not be reached at all.
+
+    The bug is not the comparison, it is collapsing "I read the diff and it
+    deploys nothing" together with "I could not read the diff". Modelling
+    deploys as a set makes that collapse the natural thing to write, so the
+    simulator refuses to offer it.
+    """
+    SOME = enum.auto()            # deploys these groups: guard 6 applies
+    PROVABLY_NONE = enum.auto()   # an oracle read it and it deploys nothing
+    INDETERMINATE = enum.auto()   # nothing could be read: abstain, and BLOCK
 _ids = itertools.count(1)
 
 
@@ -65,6 +85,7 @@ _ids = itertools.count(1)
 class Change:
     kind: Kind
     touches: Divergence
+    deploys: 'Deploys' = None          # set in __post_init__; see Deploys
     base: int = 0                      # trunk version it is based on
     head: int = 0                      # bumps on every push
     chg: str = field(default_factory=lambda: f"CHG-{next(_ids):04d}")
@@ -75,6 +96,13 @@ class Change:
     activated: int | None = None
     completed: int | None = None
     forfeits: int = 0
+    def __post_init__(self):
+        # Default SOME: a change is assumed to deploy until an oracle says
+        # otherwise. The permissive default is the one that BLOCKS, which is
+        # the opposite of how both real implementations defaulted.
+        if self.deploys is None:
+            self.deploys = Deploys.SOME
+
     def gates_green(self):  return self.gated_at == self.head
     def staging_valid(self): return self.staged_at == self.head
 
@@ -85,6 +113,11 @@ class World:
     def __init__(self, berths=1, hold_slots=1, seed=0):
         self.clock = 0                 # in slots
         self.trunk = 0
+        # Guard 6's subject: the trunk version PRODUCTION is observed serving.
+        # Separate from self.trunk on purpose -- "what is merged" and "what is
+        # running" are the two facts guard 6 exists to keep apart.
+        self.in_prod = 0
+        self.prod_reachable = True
         self.merges: list[tuple[int, Divergence]] = []
         self.berths = berths
         self.hold_slots = hold_slots
@@ -197,6 +230,32 @@ class World:
         Activation is not the last point of reliance; the merge is.
         """
         self.active.remove(c)
+        # GUARD 6 -- production-first, at the merge.
+        #
+        # Do not put something new on trunk that production is not yet
+        # serving. Evaluated here rather than at activation because the merge
+        # is what makes trunk claim to be the thing production runs.
+        #
+        # The three cases are kept apart deliberately; see Deploys.
+        if c.kind is not Kind.EMERGENCY:
+            if c.deploys is Deploys.INDETERMINATE:
+                c.state = State.ASSESSING
+                self._log(f"{c.chg} merge ABSTAINED (guard 6): the deploy set "
+                          f"could not be determined -- indeterminate is not exempt")
+                return
+            if c.deploys is Deploys.SOME:
+                if not self.prod_reachable:
+                    c.state = State.ASSESSING
+                    self._log(f"{c.chg} merge ABSTAINED (guard 6): production "
+                              f"could not be observed")
+                    return
+                if self.in_prod != self.trunk:
+                    c.state = State.ASSESSING
+                    self._log(f"{c.chg} merge refused (guard 6): production serves "
+                              f"{self.in_prod}, trunk is {self.trunk}")
+                    return
+            # Deploys.PROVABLY_NONE falls through: an oracle read it and it
+            # deploys nothing, so there is nothing for guard 6 to protect.
         if c.kind is not Kind.EMERGENCY and self.divergence(c) in WITHDRAWS:
             c.state, c.staged_at = State.ASSESSING, None
             self._log(f"{c.chg} merge refused: trunk moved during the window "
@@ -205,6 +264,11 @@ class World:
         self.trunk += 1
         self.merges.append((self.trunk,
                             Divergence.HOTFIX if c.kind is Kind.EMERGENCY else c.touches))
+        # A change that deploys carries production forward with it; one that
+        # provably deploys nothing leaves production where it was, which is
+        # exactly why it did not need guard 6.
+        if c.deploys is Deploys.SOME:
+            self.in_prod = self.trunk
         c.state, c.completed, c.window = State.COMPLETED, self.clock, None
         self._log(f"{c.chg} completed at slot {self.clock}; trunk -> {self.trunk}")
         for other in self.changes:       # main-moved
