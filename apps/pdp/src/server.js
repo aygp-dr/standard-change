@@ -192,7 +192,7 @@ export function money(price, currency) {
 // rather than being dropped -- an availability we do not recognise is still
 // information, and it is escaped like everything else.
 const AVAILABILITY = {
-  'in-stock': 'In stock',
+  'in-stock': 'In stock — ships today',
   'low-stock': 'Low stock — only a few left, grab yours!',
   'out-of-stock': 'Out of stock',
   'preorder': 'Coming soon — pre-order yours today',
