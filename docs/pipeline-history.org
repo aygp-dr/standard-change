@@ -285,6 +285,10 @@ surface that makes the gap expensive should exist at all.
 * Branching policies
 :PROPERTIES:
 :CUSTOM_ID: branching-policies
+:VERIFIED_AT: 2026-09-14T13:12:03Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Driessen 2010-01-05, Chacon 2011-08-31, GitLab flow Sijbrandij 2014-09-29 (attribution added), Bors first PR 2013-02-02 confirmed. GitHub merge queue GA July 2023 not fetched.
 :END:
 
 Each policy is a response to Git making branches free. Listed with the option
@@ -298,7 +302,7 @@ it feeds.
   the branch before merge. GitHub's own practice was deploy-the-branch, then
   merge if healthy. Direct ancestor of the production-first rule and of
   *Option 5*'s "deploy =main@sha=" discipline.
-- *GitLab flow* (2014). =main= plus environment branches (=pre-production=,
+- *GitLab flow* (Sijbrandij 2014). =main= plus environment branches (=pre-production=,
   =production=) or release branches; promotion is a merge into the environment
   branch. A branch-bound authorization — exactly the silent failure
   =scenarios.org= C2 names. Named here so nobody proposes it.
@@ -321,16 +325,21 @@ it feeds.
 * Release trains
 :PROPERTIES:
 :CUSTOM_ID: release-trains
+:VERIFIED_AT: 2026-09-14T13:12:03Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: Chrome 6w 2010-07-22, 4w from Chrome 94 2021-09-21, now 2w (cadence text extended); Firefox 5 2011-06-21; Callisto 2006-06-30 confirmed. SAFe ART length unsourced, marked needs-citation.
 :END:
 
 - *Origin.* Chrome (2010) and Firefox (2011) rapid release. A train leaves on a
-  fixed cadence (six weeks, later four); a change catches the next train or
-  waits. Cadence is fixed, scope is variable.
+  fixed cadence (six weeks from 2010, four from 2021, two by 2026); a change
+  catches the next train or waits. Cadence is fixed, scope is variable.
 - *Eclipse simultaneous release* (2006, "Callisto"). Many independent projects
   aligned to one annual date; the train is a coordination point across teams,
   not a deployment mechanism.
-- *SAFe Agile Release Train.* The organisational form, ten to twelve weeks,
-  mostly a planning construct.
+- *SAFe Agile Release Train.* The organisational form, a planning increment
+  of typically eight to twelve weeks [needs-citation], mostly a planning
+  construct.
 - *Mobile app stores.* The train is forced by review latency; hotfixes are
   expensive, so the release branch is cut early and soaked.
 - *Relation to our model.* A train is a designated window that repeats. The
@@ -371,6 +380,10 @@ Each entry is [H] until its drawer says otherwise.
 ** Books
 :PROPERTIES:
 :CUSTOM_ID: ref-books
+:VERIFIED_AT: 2026-09-14T13:12:03Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: All six match publisher/Open Library records; SRE ch. 8 byline is Dinah McNutt. Beck 1999 is the street date, copyright page says 2000 (disputed, kept).
 :END:
 
 - Humble, J. & Farley, D. /Continuous Delivery: Reliable Software Releases
@@ -389,6 +402,10 @@ Each entry is [H] until its drawer says otherwise.
 ** Papers
 :PROPERTIES:
 :CUSTOM_ID: ref-papers
+:VERIFIED_AT: 2026-09-14T13:12:03Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: All eight resolve via Crossref DOIs; Savor author order exact; Rahman was Agile 2015. Shahin pages+DOI appended.
 :END:
 
 - Rochkind, M. J. "The Source Code Control System." /IEEE Transactions on
@@ -405,19 +422,24 @@ Each entry is [H] until its drawer says otherwise.
   Continuous Deployment Practices Used in Software Development." Agile 2015.
 - Shahin, M., Babar, M. A. & Zhu, L. "Continuous Integration, Delivery and
   Deployment: A Systematic Review on Approaches, Tools, Challenges and
-  Practices." /IEEE Access/ 5, 2017.
+  Practices." /IEEE Access/ 5:3909–3943, 2017. doi:10.1109/ACCESS.2017.2685629
 - Potvin, R. & Levenberg, J. "Why Google Stores Billions of Lines of Code in a
   Single Repository." /CACM/ 59(7), 2016.
 
 ** Standards
 :PROPERTIES:
 :CUSTOM_ID: ref-standards
+:VERIFIED_AT: 2026-09-14T13:12:03Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: in-toto spec v1.0 is 2023 (v0.9 2018), not 2019. ITIL 4 CE 2020-01-09, ISO 20000-1 3rd ed 2018-09-15, SLSA v1.0 2023-04-19, IEEE 828-2012 title exact all confirmed.
 :END:
 
 - ITIL 4 Change Enablement practice guide (Axelos, 2020).
 - ISO/IEC 20000-1:2018.
 - NIST SP 800-53 rev. 5, CM-3 Configuration Change Control.
-- SLSA v1.0 (2023); in-toto specification v1.0 (2019).
+- SLSA v1.0 (2023); in-toto specification v1.0 (2023; v0.9 2018 — 2019 is the
+  USENIX Security paper, not the spec).
 - OpenSSF Scorecard.
 - IEEE 828-2012, Standard for Configuration Management in Systems and Software
   Engineering.
@@ -425,26 +447,32 @@ Each entry is [H] until its drawer says otherwise.
 ** Web
 :PROPERTIES:
 :CUSTOM_ID: ref-web
+:VERIFIED_AT: 2026-09-14T13:12:03Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: Hoare title was the HN headline; Hodgson published 2016-02-08 not 2017; ACM Queue byline is O'Hanlon; Richardson day unverifiable (weave.works gone) so reduced to August 2017. Driessen, Chacon, Fowler, Allspaw/Hammond, Liguori confirmed.
 :END:
 
 - Driessen, V. "A successful Git branching model." nvie.com, 2010-01-05; note
   of reflection added 2020-03-05.
 - Chacon, S. "GitHub Flow." scottchacon.com, 2011-08-31.
 - Hammant, P. trunkbaseddevelopment.com, 2017–.
-- Hoare, G. "The Not Rocket Science Rule Of Software Engineering."
-  graydon2.dreamwidth.org, 2014-02-01.
+- Hoare, G. "technicalities: 'not rocket science' (the story of monotone and
+  bors)." graydon2.dreamwidth.org/1597.html, February 2014. ("The Not Rocket
+  Science Rule" is the Hacker News headline, not the post's title.)
 - Fowler, M. "Continuous Integration." martinfowler.com, 2000-09-10; revised
   2006-05-01 and 2024-01-18.
 - Hodgson, P. "Feature Toggles (aka Feature Flags)." martinfowler.com,
-  2017-10-09.
-- Richardson, A. "GitOps — Operations by Pull Request." weave.works,
-  2017-08-07.
+  2016-02-08; revised 2017-10-09.
+- Richardson, A. "GitOps — Operations by Pull Request." weave.works, August
+  2017. (weave.works is gone; the Medium mirror is the surviving copy.)
 - Allspaw, J. & Hammond, P. "10+ Deploys Per Day: Dev and Ops Cooperation at
   Flickr." Velocity, 2009-06-23.
 - Amazon Builders' Library. "Automating safe, hands-off deployments" (Clare
   Liguori, 2020).
-- Vogels, W. "A Conversation with Werner Vogels." /ACM Queue/ 4(4), 2006 —
-  "you build it, you run it".
+- O'Hanlon, C. "A Conversation with Werner Vogels." /ACM Queue/ 4(4):14–22,
+  May 2006. doi:10.1145/1142055.1142065 — "you build it, you run it". (An
+  interview; the byline is O'Hanlon's, not Vogels's.)
 
 * The final gate — auto-merge once the release is complete
 :PROPERTIES:
