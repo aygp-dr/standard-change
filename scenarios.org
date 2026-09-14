@@ -484,6 +484,78 @@ Recorded because the diagnosis was nearly as instructive as the defect:
 whose build IS on main is named in the message, because that is the action the
 operator needs and it is not obvious under pressure.
 
+** D14 — a deliberately broken change, and the window that expired refusing it
+
+Injected on purpose on *#56* (=tiny/plp-no-category-label=) at 02:2xZ. *Not to be
+fixed.* The point was to watch the pipeline refuse, and to watch the
+change-control window lapse while it was refused.
+
+*** The injection, and what it took to make one
+
+First attempt: change the copy the PR exists to change — =(no category)= became
+=BROKEN-ON-PURPOSE=. *24 tests passed.*
+
+That is the finding, and it arrived before the scenario did. *#56's own change is
+asserted by nothing.* The PR could ship inverted and no gate would notice, and
+several of the twenty scaffolded changes are probably in the same position — a
+one-line copy tweak whose only verification is that the file still parses.
+
+To get a failure at all, the break had to hit a *pre-existing* assertion:
+=render()= returning =app: 'BROKEN-ON-PURPOSE'= instead of =meta.app=. *3 tests
+fail.* The change under test is untestable; the app's identity is not.
+
+*** What 001 must reproduce
+
+1. *A change whose diff is covered by no assertion is a change the pipeline
+   cannot judge.* Every gate is green and the verdict means nothing. This is the
+   =gate-selftest= rule — a suite that cannot fail produces no verdict — applied
+   to a single change rather than to a suite.
+2. *The refusal must come from CI's own verdict on THIS head*, not from a local
+   run, and not from a stale run: see D15 below on superseded check runs.
+3. *A refused change must still lose its window.* Refusal is not a hold. The
+   reaper closes it =expired=, =change:scheduled= comes off, and the change is
+   left approved-and-unbooked — eligible, not failed, and owed nothing.
+
+*** The validation, stated as a test the rebuild must pass
+
+: GIVEN  a change whose head fails its unit tests
+: WHEN   its window opens
+: THEN   preflight refuses on guard 2 with the failing head named
+: AND    nothing is deployed to staging
+: AND    the window lapses and is reaped `expired`, not `failed`
+: AND    change:scheduled is cleared and the change stays approved
+
+A rebuild that ships a change with red tests has failed. A rebuild that marks
+the lapsed window =failed= has also failed — nothing was attempted, so nothing
+failed.
+
+** D15 — superseded check runs counted as current
+
+Found at 01:57Z, minutes after Actions came back, and it would have blocked all
+sixteen queued changes.
+
+GitHub keeps *every* check run attached to a SHA. The billing-era runs from
+23:20 — one =failure=, three =skipped= — were still there beside three fresh
+successes, and guard 2 reported =4 not passing, self-test 3= on a commit whose
+gates were entirely green.
+
+*A re-run supersedes.* A guard that counts history refuses on evidence that has
+been replaced. Fixed in all five queries across =gates/preflight.sh= and
+=change/guard4.sh=:
+
+: group_by(.name) | map(max_by(.started_at))
+
+Companion to /did not run is not red/ — the same rule about a different axis.
+*Unreachable is not falsified; superseded is not current.*
+
+*** Why it matters for 001
+
+Both rules exist because a check run has three independent properties the API
+flattens into one field: *did it run*, *when did it run*, and *what did it
+conclude*. Any rebuild that reads =conclusion= alone will reproduce both defects,
+and both are silent — they refuse changes that should pass, so nothing breaks
+loudly enough to investigate.
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,

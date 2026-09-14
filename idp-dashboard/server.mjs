@@ -471,6 +471,7 @@ font-weight:700;letter-spacing:.05em;margin-right:8px;vertical-align:1px}
 .cls-none{background:#1f1f24;color:#8b93a7;border:1px dashed #4b5563}
 .prlink{color:#e6e6e6;text-decoration:none}
 .prlink:hover{color:#60a5fa;text-decoration:underline}
+.prlink:hover .br{color:#93c5fd}
 .sub{color:#8b93a7;font-size:11px;margin-top:2px}
 .rem-ok{color:#4ade80;font-size:11px;margin-left:8px}
 .rem-warn{color:#fbbf24;font-size:11px;margin-left:8px}
@@ -678,8 +679,14 @@ function render(d){
     // you leave open and watch -- following a PR must not take the board with
     // it. rel=noopener noreferrer: the new tab gets no handle back to this one.
     '<tr class="'+(x.started&&!x.expired?'active':'')+'"><td>'+
-    (x.url?'<a class=prlink href="'+esc(x.url)+'" target=_blank rel="noopener noreferrer"><b>'+
-      esc(x.pr)+'</b></a>':'<b>'+esc(x.pr)+'</b>')+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
+    // NUMBER AND BRANCH ARE ONE LINK. The branch used to sit outside the anchor,
+    // so the clickable target was four characters of PR number while the useful
+    // identifier -- the branch name -- was inert text beside it. A reader
+    // recognises 'tiny/core-css-estate-line' long before they recognise '#54'.
+    (x.url
+      ? '<a class=prlink href="'+esc(x.url)+'" target=_blank rel="noopener noreferrer">'+
+        '<b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+'</a>'
+      : '<b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':''))+
     (x.title?'<div class=ti>'+esc(x.title)+'</div>':'')+'</td>'+
     '<td class=dim>'+esc(x.groups||'—')+'</td>'+
     '<td class=sha>'+esc(x.sha)+'</td>'+
