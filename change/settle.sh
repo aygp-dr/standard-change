@@ -254,4 +254,11 @@ ok "berth released; validation labels cleared, change:complete included"
 
 echo
 echo "  settled: #$pr merged -- the forge is the record now"
+
+# The deployment marker FOLLOWS the release-complete notice, deliberately: it
+# is telemetry about a release that has already happened, not a step the
+# release depends on. marker.sh asks the front what it is serving rather than
+# being handed a build, and exits 0 even when it cannot send, so a dashboard
+# being down can never fail a deployment that succeeded.
+./change/marker.sh "$pr" || true
 echo "  labels:  $(gh pr view "$pr" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')"
