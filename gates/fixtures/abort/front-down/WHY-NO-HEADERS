@@ -1,0 +1,10 @@
+Deliberately holds no headers.txt.
+
+The stub curl exits 7 (CURLE_COULDNT_CONNECT) when it is absent, so
+change/serving.sh takes its exit-4 branch: "I could not determine what this
+front serves". That is NOT "nothing is deployed", and change/abort.sh must
+neither refuse on it nor print an assertion about the estate.
+
+front-no-sha/ is the other unknown: the front ANSWERED and named no build.
+Same verdict, different cause, and the two are separate fixtures because a
+stub that produced both from one file would be testing the stub.
