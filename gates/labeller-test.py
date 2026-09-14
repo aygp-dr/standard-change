@@ -210,6 +210,34 @@ def withdrawal_checks():
     return fails
 
 
+def groups_from_stdin():
+    """--groups: read changed paths on stdin, print the app groups they deploy.
+
+    THE POINT IS THAT THERE IS ONLY ONE GLOB ENGINE. gates/production-first.sh
+    has to know what a change deploys BEFORE the labeller has labelled anything
+    (issue #29): the check runs on `opened`, actions/labeler writes the labels
+    seconds later, and a label written by GITHUB_TOKEN cannot trigger the
+    re-run that would correct the verdict. So the guard must derive the answer
+    from the diff itself.
+
+    Deriving it a second time, by hand, in shell, is how two readers of the
+    same rule end up disagreeing -- the defect change/groups.sh's own header
+    warns about. So the derivation is done HERE, by the same load_rules() /
+    label_for() the labeller's oracle uses, against the same
+    .github/labeler.yml the labeller runs. Change a glob and both move
+    together, or SCENARIOS fails.
+
+    Output is one group per line, sorted, `app:` stripped -- the shape
+    change/groups.sh already returns.
+    """
+    paths = [l.strip() for l in sys.stdin if l.strip()]
+    got = label_for(load_rules(), paths)
+    for label in sorted(got):
+        if label.startswith("app:"):
+            print(label[len("app:"):])
+    return 0
+
+
 def main():
     rules = load_rules()
     fails = []
@@ -241,4 +269,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(groups_from_stdin() if "--groups" in sys.argv[1:] else main())

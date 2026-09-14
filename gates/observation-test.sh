@@ -43,7 +43,38 @@ production-first:current:authorized
 production-first:stale-marker:refused
 production-first:no-record:refused
 production-first:not-deployed:refused
-production-first:nothing-deploys:authorized"
+production-first:nothing-deploys:authorized
+production-first:unlabelled:refused
+production-first:diff-unreachable:refused
+production-first:label-only-surface:refused"
+
+# THE TWO PRODUCTION-FIRST CASES ADDED FOR #29, and what each is for.
+#
+#   unlabelled        the PR the check actually sees. A required status check
+#                     fires on `opened`; actions/labeler writes app:* about
+#                     eight seconds later; and a label written by GITHUB_TOKEN
+#                     cannot trigger the re-run that would correct the verdict.
+#                     So the labels ARE absent at the only moment this gate ever
+#                     runs, and reading them made it structurally incapable of
+#                     blocking. The diff says apps/core, so it must refuse.
+#
+#   diff-unreachable  the fixture ships no diff.txt, so the stub `gh` exits 1 --
+#                     "I could not determine", not "the diff is empty". The old
+#                     `./change/groups.sh "$pr" 2>/dev/null || true` turned that
+#                     into "deploys nothing" and passed. Unreachable is not
+#                     falsified: it must refuse.
+#
+#   label-only-surface  the mirror of `unlabelled`, and the reason the guard
+#                     takes the UNION rather than the diff alone. `labeler:skip`
+#                     lets a human hand-set app:* to force a build across apps
+#                     the diff does not touch (.github/labeler.yml), and that
+#                     assertion is invisible in a diff. Diff-only derivation
+#                     would read this PR as deploying nothing and wave it
+#                     through.
+#
+# Both are mutation tests of the fix rather than of the pipeline: revert
+# production-first.sh to the label-derived groups and `unlabelled` flips to
+# authorized; put the `|| true` back and `diff-unreachable` flips with it.
 
 script_for() {
   case "$1" in

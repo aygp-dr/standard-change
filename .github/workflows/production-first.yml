@@ -8,8 +8,21 @@ name: production-first
 # claiming an XSS was fixed while every production replica served the
 # vulnerable build.
 #
-# It re-runs on `labeled` and `unlabeled` so the check goes green the moment
-# gates/health.sh records production:healthy, without needing a push.
+# IT DOES NOT RE-RUN ON A LABEL, AND THE TYPES LIST BELOW IS NOT WHY IT MIGHT.
+#
+# This comment used to say the check "re-runs on `labeled` and `unlabeled` so it
+# goes green the moment gates/health.sh records production:healthy, without
+# needing a push". That was asserted, never measured, and it is false. Of 484
+# runs of this workflow, not one came from a label. `actions/labeler` writes
+# with GITHUB_TOKEN and an event produced by GITHUB_TOKEN does not start another
+# workflow run -- GitHub's loop prevention, working as designed. The labeller
+# can never wake the gate that reads its labels (issue #29).
+#
+# The types stay because a HUMAN's label -- adding production:healthy by hand,
+# or withdrawing an app:* -- does trigger a run, and that is worth reacting to.
+# What changed is that the gate no longer DEPENDS on being woken: it derives the
+# deployable surface from the diff, so its verdict on `opened` is already the
+# right one. See gates/production-first.sh.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
