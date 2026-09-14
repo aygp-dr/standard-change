@@ -3,6 +3,8 @@
 // the largest blast radius in the repo was the only module nothing asserted.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { esc, page, environment, HOST, VERSION } from '../oneui.js';
 
 const ESTATE = [{ app: 'core', port_offset: 1, routes: ['/'] }];
@@ -248,4 +250,46 @@ test('the shared stylesheet carries the badge class', () => {
   const html = page({ app: 'x', path: '/', sha: 'abc1234', block: '0' },
                     [{ app: 'x', port_offset: 1, routes: ['/'] }], '#fff');
   assert.match(html, /\.b\{background:/, '.b missing from the shared stylesheet');
+});
+
+// ---- one artifact, one version number (issue #10) ---------------------------
+//
+// shared/package.json said 1.0.0 while oneui.js exported 1.3.0 -- two version
+// numbers for one artifact, two MINORS apart, with nothing asserting either
+// against the other. Neither number is load-bearing (no app imports the
+// manifest; the apps import oneui.js by relative path) which is precisely why
+// it drifted: nothing broke, so nothing said anything.
+//
+// A repository that treats "a claim nobody checks" as the defect it keeps
+// finding elsewhere should not ship one about itself. VERSION is the source
+// and the manifest is a copy; this test is what makes the copy honest.
+test('the package manifest and the exported VERSION are the same number', () => {
+  const manifest = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
+  assert.equal(manifest.version, VERSION,
+    `shared/package.json says ${manifest.version}, oneui.js exports ${VERSION}. ` +
+    'One artifact, two version numbers, and nothing downstream to notice.');
+});
+
+// The claim the header makes about itself, asserted against the tree rather
+// than trusted. #10's third question is "can one app lag a version
+// deliberately?", and the answer is no: every app imports the file by relative
+// path, so every app is always on whatever is checked in.
+//
+// If that ever stops being true -- a real package dependency, a version range,
+// anything an app could hold back -- this test fails, and the header above,
+// .github/labeler.yml's "shared/ is a change to every app" rule and
+// gates/labeller-test.py L12 all need revisiting together.
+test('no app pins a version: every app imports the file by path', () => {
+  const root = fileURLToPath(new URL('../..', import.meta.url));
+  const apps = ['core', 'plp', 'pdp', 'checkout'];
+  for (const a of apps) {
+    const src = readFileSync(`${root}/apps/${a}/src/server.js`, 'utf8');
+    assert.match(src, /from '\.\.\/\.\.\/\.\.\/shared\/oneui\.js'/,
+      `${a} no longer imports OneUI by relative path`);
+    const pkg = JSON.parse(readFileSync(`${root}/apps/${a}/package.json`, 'utf8'));
+    assert.equal(pkg.dependencies, undefined,
+      `${a} declares dependencies; if one of them is OneUI, an app can now lag ` +
+      'a version and the labeller rule that marks all four apps needs rethinking');
+  }
 });

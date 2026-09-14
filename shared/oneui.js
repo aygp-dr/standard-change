@@ -5,8 +5,25 @@
 // for something with no routes.json and no port, and router/generate.sh globs
 // apps/*/routes.json.
 //
-// The cost is stated plainly in VERSION below: every app pins a version, and a
-// change here is a change to all of them.
+// NO APP PINS A VERSION, AND THAT IS THE ANSWER TO ISSUE #10, NOT AN OVERSIGHT.
+//
+// This header used to say "every app pins a version, and a change here is a
+// change to all of them". The second clause is true. The first was never true:
+// all four apps import '../../../shared/oneui.js' by relative path, so every
+// app is always on whatever is in the tree, and there is no expressible way
+// for one of them to lag. Issue #10 asks exactly that -- "can one app lag a
+// version deliberately?" -- and the honest answer is NO, by construction.
+//
+// The answer being no is a choice, and the cost is paid in the open:
+// .github/labeler.yml marks a change to shared/** with app:core, app:plp,
+// app:pdp and app:checkout, so the manifest on the PR says four apps redeploy.
+// gates/labeller-test.py L12 asserts it. What a reader must NOT be able to
+// conclude from this file is that some pinning mechanism is protecting them.
+//
+// VERSION below is therefore DOCUMENTATION OF THE SURFACE, not a dependency
+// constraint: it tells a reviewer whether a change added to the surface, and
+// the semver rule is enforced by shared/tests/oneui.test.mjs. It is not read
+// by any importer and it cannot hold anybody back a release.
 import { readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 
