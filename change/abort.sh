@@ -93,10 +93,20 @@ fi
 
 # 4. Clear the working state. Observations are about a build that is not going
 #    to production, and release:start claims a release is IN FLIGHT.
+#
+# deploy:production WAS MISSING FROM THIS LIST. Found on #92, a change aborted
+# `failed` that kept advertising a production deploy afterwards -- and
+# deploy-production.yml fires on that label, so an abandoned change stayed
+# armed to re-enter production on the next label event. deploy:staging was
+# cleared and its sibling was not, which is the whole defect: the list is
+# written by hand and nothing checks it against the labels this pipeline can
+# set. change:complete is here for the same reason -- a change that failed did
+# not complete, and abort must not leave the success label standing.
 for l in staging:e2e staging:e2e-failed staging:smoke staging:smoke-failed \
          staging:uat staging:in-progress production:e2e production:e2e-failed \
          production:smoke production:smoke-failed production:healthy \
-         release release:start deploy:staging change:scheduled; do
+         release release:start deploy:staging deploy:production \
+         change:complete change:scheduled; do
   gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
 done
 # LITERAL LABEL NAMES. Interpolating the closure code into the label works at
