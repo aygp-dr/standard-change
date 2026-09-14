@@ -1,0 +1,102 @@
+#+TITLE: 022 — five agents, one lock: what a watcher of the PR list can and cannot tell
+#+DATE: 2026-09-14
+
+* Hypothesis
+
+Five agents, each owning one single-line PR (#92–#96), are told to land it
+to production through the pipeline's own steps and say when it landed. The
+only lock is the =deploy:staging= label; the only signal the owner watches
+is the PR list. The hypothesis: *a watcher of the PR list alone can tell
+who is moving to production, and every refusal or reset is legible from
+the labels.* Falsified if a label state is reached that a watcher would
+misread, or if a landing needs information that is not on the list.
+
+* Setup
+
+- Estate: two shared stand-ins on the mini, block 1 (=:9010=) as staging and
+  block 2 (=:9020=) as production, redeployed to the head of whichever
+  change holds the lock. No change windows booked (the bare-knuckle mode).
+- Each agent: clean its PR's stale labels; wait for the lock; rebase onto
+  =main=; =lock.sh acquire= then =deploy:staging=; deploy staging;
+  =staging:deployed=; =health.sh --env staging= → =staging:healthy=; e2e,
+  smoke, the Playwright journey, =observe.sh= → =staging:uat=; wait for
+  =promote.yml= to land =deploy:production=; deploy production;
+  =production:deployed=; =health.sh --env production= → =production:healthy=
+  (*landed*); approve as the second identity; =guard4.sh=; =settle.sh=.
+- A background poll logged every label change on the five PRs every 20 s:
+  =label-timeline.log=, 61 transitions in 21 minutes.
+- Unplanned: a second operator on hydra was grinding #97–#101 against the
+  same lock from its own estate, under the =aygp-dr= identity.
+
+* Result
+
+| PR | head landed | production:healthy | merged | lock waits |
+|----+-------------+--------------------+--------+------------|
+| #95 | =a67e249= | 23:10:05Z | 23:10:39Z | ~2.5 min |
+| #93 | =f248ba2= | 23:16:59Z | 23:17:29Z | ~3.5 min, two lost races |
+| #96 | =a33338e= | 23:21:35Z | 23:22:02Z | ~13 min, one lost race |
+| #92 | =e32428e= | 23:24:37Z | 23:25:05Z | ~9.5 min over two runs, two lost races; first run swept at production:healthy |
+| #94 | — | — | — | refused at the lock by hydra's #98 at 23:12, reset to =change:start=; still cycling at the time of writing |
+
+Four of five through the whole pipeline, promotion automatic every time,
+guard 4 authorized first try every time, settlement wrote =change:complete=,
+merged, posted the PIR, cleared, and wrote =change:end=.
+
+*The hypothesis is refuted on the second clause.* Every landing is legible
+from the list — =deploy:staging= → =staging:deployed= → =staging:healthy= →
+=staging:e2e staging:smoke staging:uat= → =deploy:production= →
+=production:deployed production:healthy= → =change:complete= → =change:end=,
+in that order, on each of the four. What a watcher could not tell:
+
+* What confused, in the order it appeared
+
+1. *=staging:failed= on a change that never reached staging.* Written by
+   =deploy-staging.yml='s failure step on every =deploy:staging= event,
+   because a runner cannot see the estate and the run dies at preflight.
+   A retired label, on the watched list, saying a measurement failed that
+   was never taken. Fixed during the grind (=4752fa1=): the workflow writes
+   no verdict label; the instrument does.
+2. *A sweep from another estate.* At 23:07, seconds after #92 recorded
+   =production:healthy=, the =aygp-dr= identity labelled it =berth:stale=,
+   removed every observation and both deploy labels, and emptied the lock
+   record, with a comment saying the build was "serving nowhere: staging
+   =ecbdac2=, blue =0b23ee1=, green =8590826=". Those are hydra's jails.
+   The mini's blocks were serving #92's head. Nothing on a label says which
+   estate an observation is about; the evidence comments do (they name the
+   URL), and guard 4 was not fooled — but =settle.sh= read the labels and
+   refused for "evidence gone". Fixed (=6a82124=): settle reads the records
+   for the instruments, as guard 4 does; a person's =staging:uat= is still
+   the label. #92 landed on its second run. The same sweep pulled
+   =deploy:staging= off #96 mid-hold at 23:19:26.
+3. *The label and the lock record disagree for a poll cycle.* GitHub's label
+   search index lags the lock record by 10–20 s in both directions; #93 and
+   #92 lost races by one second each. Every agent that won did so by taking
+   the record the instant the label freed and rebasing under its own lock.
+   A watcher of the list sees two holders for a moment (23:11:52, #94 and
+   #98) with no way to tell which is real.
+4. *An always-step released a lock it never took.* =deploy-staging.yml='s
+   =lock.sh release= ran after its own acquire had been skipped, emptying
+   #95's record (23:08). Fixed (=a5a2d64=): in CI, release only your own.
+5. *A refusal at the lock resets the change, intent included.* Working as
+   decided — #94's comment at 23:12:04 says so — but a watcher sees a PR go
+   from =change:start deploy:staging …= to bare =app:pdp itil:standard= with
+   nothing on the list saying it was refused rather than abandoned. The
+   comment carries it; the list does not.
+6. *"Deployed outside any window"* in every PIR, because no window was
+   booked. Correct, recorded, and exactly the bare-knuckle mode; a watcher
+   who did not know that would read four deviations.
+7. *One shared checkout.* #95's =settle.sh= died with a bash syntax error
+   after finishing, because another agent's pull rewrote the file under a
+   running shell; #93 found the checkout left on another agent's branch.
+   Not a label problem; a "five agents in one worktree" problem.
+
+* What follows
+
+- The label namespace needs an estate axis, or the estate needs to live only
+  in the records: =production:healthy= does not say which production. See
+  the multi-region note in the session and issue #102.
+- Issue #102: the merge queue as the berth, which removes 3 and 4 by
+  construction and 2 by having no label lock to sweep.
+- The reset on refusal (5) wants one line on the list. A =change:refused=
+  print statement would be the print statement the grammar is trying to
+  retire; the comment is the record. Left as is, noted.
