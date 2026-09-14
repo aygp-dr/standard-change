@@ -1,0 +1,9 @@
+Timeline
+- 23:39Z owner: "i think we need to restart the experiment: each of the agents need to release:start and otherwise let the process take over"; then "but now all of the tickets are dirty" (#97-#101 carry a dead release's verdicts).
+- activate.sh is bastille-only; nothing on the mini could take over. Wrote driver.sh (node target) and scheduler.sh (consumes nothing; driver consumes change:start at the lock).
+- Added the start-sweep after the owner's observation; filed the dirty tickets as an issue rather than clearing under the other operator's live loop (D21).
+
+Reproduction
+  ./change/driver.sh 101      -> "no change:start on #101; a person has not said start", exit 2
+  ./change/scheduler.sh --once -> no PR with change:start, exit 0
+  cell: macOS 24.1.0, gh 2.x as jwalsh, blocks :9010/:9020 serving 594499a
