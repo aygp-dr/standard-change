@@ -1,0 +1,137 @@
+from	to	trigger	trigger_kind	guard	actor	reversible	weight	evidence
+opened	classified	labeller derives app:* and one itil:* from the diff	label_add	-	labeller	yes	0.72	spec.org:751
+opened	draft	the PR was opened as a draft	forge_event	-	human	yes	0.23	tla/StandardChange.tla:65
+opened	class_undefined	zero or two classifications land	label_add	-	labeller	yes	0.05	change/label-owners.tsv:86
+draft	classified	gh pr ready	human	-	human	yes	0.98	sim/label_sim.py:108
+draft	change_abandoned	the draft is closed unmerged	forge_event	-	human	no	0.02	scenarios.org:193
+classified	gates_running	push starts the required check runs	forge_event	-	workflow	no	1.00	spec.org:1387
+class_undefined	classified	a person resolves the class	label_remove	G_class	human	yes	0.98	gates/preflight.sh:187
+class_undefined	change_abandoned	nobody resolves it and the PR is closed	forge_event	-	human	no	0.02	spec.org:2790
+gates_running	gates_green	every gate and gate-selftest conclude success on the head SHA	gate_verdict	G2	gate	yes	0.72	spec.org:1206
+gates_running	gates_red	a gate concludes failure on the head SHA	gate_verdict	G2	gate	yes	0.2	scenarios.org:487
+gates_running	gates_indeterminate	runs are skipped, superseded, or the forge cannot be read	gate_verdict	G2	gate	yes	0.08	spec.org:2711
+gates_red	gates_running	the author pushes a fix; every verdict is void	forge_event	-	human	yes	0.98	sim/pipeline_sim.py:133
+gates_red	change_abandoned	nobody fixes it	forge_event	-	human	no	0.02	scenarios.org:487
+gates_indeterminate	gates_running	poll again within the bound; the third value is never a verdict	gate_verdict	G2	workflow	yes	0.862	spec.org:2739
+gates_indeterminate	gates_red	the bound expires; recorded as not green, never as pass	timer	G2	workflow	yes	0.13	spec.org:2739
+gates_indeterminate	change_abandoned	nobody returns after the bound expires	timer	-	human	no	0.008	[H]
+gates_green	requested	a person adds change:requested	label_add	-	human	yes	0.942	spec.org:1068
+gates_green	gates_running	a push voids the verdict	forge_event	-	human	yes	0.05	spec.org:830
+gates_green	change_superseded	another change delivered this content first	forge_event	-	human	no	0.008	[H]
+requested	authorized_unbooked	itil:standard: pre-authorized, no CAB review	label_add	G_class	workflow	yes	0.52	spec.org:284
+requested	awaiting_review	itil:normal: one approving review is required	label_add	G_class	workflow	yes	0.43	spec.org:285
+requested	emergency_declared	a person declares itil:emergency	label_add	-	human	yes	0.05	change/label-owners.tsv:55
+awaiting_review	approved	an approving review, or a review:proxy record naming the head	human	-	human	yes	0.838	change/guard4.sh:125
+awaiting_review	gates_running	changes requested; the author pushes	forge_event	-	human	yes	0.15	[H]
+awaiting_review	change_abandoned	the review never comes	forge_event	-	human	no	0.008	[H]
+awaiting_review	change_superseded	another change lands the same content	forge_event	-	human	no	0.004	[H]
+approved	authorized_unbooked	the change is authorized and holds no reservation	label_add	-	workflow	yes	1.00	spec.org:2785
+emergency_declared	prod_deploying	break glass: skip the staging environment, keep guards 2 and 5	label_add	G4	human	no	0.888	spec.org:1228
+emergency_declared	authorized_unbooked	the emergency is stood down; take the normal path	label_remove	-	human	yes	0.1	[H]
+emergency_declared	change_abandoned	the emergency is handled outside the pipeline	forge_event	-	human	no	0.012	change/label-owners.tsv:54
+authorized_unbooked	scheduled	schedule.sh block reserves a window	human	G0,G2	scheduler	yes	0.9423	change/schedule.sh:257
+authorized_unbooked	gates_running	the author pushes while waiting for a slot	forge_event	-	human	yes	0.05	sim/pipeline_sim.py:133
+authorized_unbooked	change_abandoned	nobody books it and the PR is closed	forge_event	-	human	no	0.0042	[H]
+authorized_unbooked	change_superseded	another change ships it first	forge_event	-	human	no	0.0035	[H]
+scheduled	window_due	the booked slot arrives	timer	-	scheduler	no	0.576	sim/pipeline_sim.py:196
+scheduled	window_cancelled	the slot is handed back, or re-booked by a loop that never drives	human	-	scheduler	yes	0.31	scenarios.org:413
+scheduled	window_expired	the window lapses without ever being activated	timer	-	reaper	yes	0.112	change/reap.sh:56
+scheduled	change_abandoned	the PR is closed while booked	forge_event	-	human	no	0.002	[H]
+window_cancelled	authorized_unbooked	still approved, simply not booked	label_remove	-	scheduler	yes	0.996	change/schedule.sh:309
+window_cancelled	change_abandoned	the change is dropped after the slot is given back	forge_event	-	human	no	0.004	[H]
+window_expired	authorized_unbooked	approved-and-unbooked; eligible, not failed, and owed nothing	label_remove	-	reaper	yes	0.987	scenarios.org:519
+window_expired	change_abandoned	nobody re-books it	forge_event	-	human	no	0.008	experiments/016-dora/notes.org (13 expired windows)
+window_expired	change_superseded	another change ships it while it waits for a slot	forge_event	-	human	no	0.005	[H]
+window_due	berthed	preflight 0, guards re-derived at reliance, the berth is claimed	deploy_event	G0,G1,G2,G3	scheduler	no	0.6	change/activate.sh:268
+window_due	blocked_queue	guard 1: another open PR holds deploy:staging	label_add	G1	workflow	yes	0.13	change/queue.sh:50
+window_due	window_expired	nothing drives the window; the reaper closes it	timer	-	reaper	yes	0.12	change/reap.sh:56
+window_due	blocked_diverged	guard 0 or 4b: main moved by a pipeline, artifact or hotfix change	label_add	G0,G4b	workflow	yes	0.06	spec.org:1137
+window_due	blocked_lock	guard 3: another deployment holds the lock	label_add	G3	workflow	yes	0.05	change/label-owners.tsv:50
+window_due	blocked_freeze	guard 3: a FREEZE covers the window	label_add	G3	gate	yes	0.03	change/label-owners.tsv:52
+window_due	preflight_abstain	exit 4: the change schedule could not be read	gate_verdict	G3	gate	yes	0.01	gates/preflight.sh:52
+blocked_queue	authorized_unbooked	the holder merges and releases the berth	label_remove	G1	workflow	yes	0.754	change/queue.sh:56
+blocked_queue	window_expired	the window lapses waiting behind the holder	timer	-	reaper	yes	0.24	change/reap.sh:9
+blocked_queue	change_abandoned	the queue wait outlasts the change	forge_event	-	human	no	0.006	[H]
+blocked_lock	window_due	the lock clears inside the window	timer	G3	workflow	yes	0.624	change/label-owners.tsv:50
+blocked_lock	window_expired	the lock outlasts the window	timer	-	reaper	yes	0.37	[H]
+blocked_lock	change_abandoned	the change is dropped	forge_event	-	human	no	0.006	[H]
+blocked_freeze	authorized_unbooked	the freeze lifts; re-book	label_remove	G3	gate	yes	0.604	change/label-owners.tsv:53
+blocked_freeze	window_expired	the freeze outlasts the window	timer	-	reaper	yes	0.39	experiments/016-dora/notes.org (emergency 22:55-23:07Z)
+blocked_freeze	change_abandoned	the change is dropped during the freeze	forge_event	-	human	no	0.006	[H]
+blocked_diverged	gates_running	rebase onto main: a new tree, so every verdict is void	forge_event	G0	human	yes	0.96	sim/pipeline_sim.py:137
+blocked_diverged	change_abandoned	the branch is too old to be verified at all	forge_event	-	human	no	0.025	scenarios.org:362
+blocked_diverged	change_superseded	what landed under it already contains its content	forge_event	-	human	no	0.015	[H]
+preflight_abstain	window_due	the schedule becomes readable; ask again	timer	G3	workflow	yes	0.504	gates/preflight.sh:124
+preflight_abstain	window_expired	the abstention outlasts the window; indeterminate blocks	timer	-	reaper	yes	0.49	spec.org:2739
+preflight_abstain	change_abandoned	the change is dropped	forge_event	-	human	no	0.006	[H]
+berthed	staging_serving	the staging deploy lands and the slot serves the build	deploy_event	-	driver	no	0.9	spec.org:1470
+berthed	berth_orphaned	the window closes on a path reap.sh does not cover, berth still held	timer	-	reaper	yes	0.05	experiments/019-rebuild-001/HELD-OUT.org:H4
+berthed	window_failed	the staging deploy itself fails	deploy_event	-	driver	yes	0.05	change/schedule.sh:285
+staging_serving	staging_pass	gates/e2e.sh --pr and gates/smoke.sh --pr record a pass on this head	gate_verdict	G2	gate	yes	0.78	change/label-owners.tsv:38
+staging_serving	staging_fail	an instrument records a failure on this head	gate_verdict	G2	gate	yes	0.13	change/label-owners.tsv:39
+staging_serving	preempted	an artifact or hotfix merge lands under the berth	forge_event	G4b	workflow	yes	0.05	spec.org:1178
+staging_serving	berth_orphaned	the window closes while the build is up	timer	-	reaper	yes	0.04	experiments/019-rebuild-001/HELD-OUT.org:H4
+staging_fail	window_failed	the window is closed failed; the berth is released	human	-	driver	yes	0.962	change/schedule.sh:285
+staging_fail	change_abandoned	the change is dropped rather than fixed	forge_event	-	human	no	0.008	[H]
+staging_fail	berth_orphaned	the window closes with the berth still held	timer	-	reaper	yes	0.03	experiments/019-rebuild-001/HELD-OUT.org:H4
+window_failed	authorized_unbooked	the refusal was the control working; the change needs a new window	label_remove	-	driver	yes	0.945	scenarios.org:729
+window_failed	change_failed	abort.sh closes it failed; production never served it	label_add	-	human	no	0.04	change/label-owners.tsv:92
+window_failed	change_abandoned	nobody re-books it	forge_event	-	human	no	0.015	[H]
+staging_pass	uat_accepted	a person uses the build and accepts it through change/observe.sh	human	-	human	yes	0.78	change/observe.sh:44
+staging_pass	uat_refused	the pinned journey is not what was accepted	gate_verdict	-	gate	yes	0.1	scenarios.org:669
+staging_pass	preempted	an artifact or hotfix merge lands under the verified change	forge_event	G4b	workflow	yes	0.08	spec.org:1195
+staging_pass	berth_orphaned	the window closes with the berth still held	timer	-	reaper	yes	0.04	experiments/019-rebuild-001/HELD-OUT.org:H4
+uat_refused	window_failed	forfeit on entry is an ordinary outcome, not an incident	human	-	driver	yes	0.98	scenarios.org:723
+uat_refused	change_abandoned	the change is dropped	forge_event	-	human	no	0.02	[H]
+uat_accepted	promoted	promote.yml re-evaluates guard 2 on the head SHA and adds deploy:production	label_add	G2	workflow	no	0.9	spec.org:1206
+uat_accepted	preempted	main moves before promotion	forge_event	G4b	workflow	yes	0.06	spec.org:1170
+uat_accepted	gates_running	writing staging:uat retriggers CI, so the gates go in_progress	forge_event	G2	workflow	yes	0.04	spec.org:2750
+preempted	berthed	revalidate on a tree containing what landed; the berth was kept and extended	forge_event	G4b	driver	yes	0.832	spec.org:1195
+preempted	berth_orphaned	the extension runs out with the berth still held	timer	-	reaper	yes	0.07	experiments/019-rebuild-001/HELD-OUT.org:H4
+preempted	window_expired	the extended window lapses	timer	-	reaper	yes	0.09	change/reap.sh:56
+preempted	change_abandoned	the change is dropped after preemption	forge_event	-	human	no	0.008	[H]
+berth_orphaned	authorized_unbooked	reap.sh releases deploy:staging from the dead window	label_remove	G1	reaper	yes	0.776	change/reap.sh:51
+berth_orphaned	window_expired	the window is closed expired and the berth follows	timer	-	reaper	yes	0.2	change/reap.sh:56
+berth_orphaned	change_abandoned	nobody claims it; abort.sh clears both deploy:* labels	label_remove	-	human	no	0.012	change/abort.sh:99
+berth_orphaned	change_failed	closed failed with the berth stranded	label_add	-	human	no	0.012	change/label-owners.tsv:92
+promoted	prod_deploying	deploy-production.yml starts	deploy_event	G4,G4b	workflow	no	0.94	spec.org:1512
+promoted	preempted	main-moved.yml withdraws the pass and the production claim	label_remove	G4b	workflow	yes	0.06	spec.org:1160
+prod_deploying	prod_placed	the build is placed on the idle colour	deploy_event	-	driver	no	0.91	experiments/016-dora/data/pirs.tsv
+prod_deploying	prod_withdrawn	the record says success and the build is serving nowhere	deploy_event	G5	driver	yes	0.06	experiments/016-dora/notes.org (#42 19:43:50Z)
+prod_deploying	window_failed	the production deploy refuses or errors before placing	deploy_event	G2,G4	driver	yes	0.03	[H]
+prod_placed	prod_serving	the front is cut over to this build	deploy_event	G4	driver	yes	0.93	experiments/016-dora/data/front_transitions.tsv
+prod_placed	prod_withdrawn	the deployment record is retracted; nothing served	deploy_event	G5	driver	yes	0.05	experiments/016-dora/notes.org (#42)
+prod_placed	window_failed	the cutover is refused	gate_verdict	G4	gate	yes	0.02	[H]
+prod_withdrawn	authorized_unbooked	the false record is withdrawn and the change re-enters the queue	label_remove	-	driver	yes	0.76	experiments/016-dora/notes.org (44s to withdraw)
+prod_withdrawn	change_failed	closed failed: production never served it, nothing to undo	label_add	-	human	no	0.2	change/label-owners.tsv:92
+prod_withdrawn	change_abandoned	the change is dropped	forge_event	-	human	no	0.04	[H]
+prod_serving	prod_healthy	gates/health.sh observes convergence across the estate on this build	gate_verdict	G5	gate	yes	0.815	spec.org:1254
+prod_serving	prod_unconverged	the estate could not be observed, or converged only partly	gate_verdict	G5	gate	yes	0.09	spec.org:2723
+prod_serving	deployed_not_merged	the merge does not happen while production serves the build	forge_event	G6	workflow	yes	0.06	spec.org:2783
+prod_serving	rolling_back	guard 5 fails on this build	gate_verdict	G5	driver	no	0.035	experiments/016-dora/notes.org (2 rollbacks)
+prod_unconverged	prod_healthy	a re-sample inside the bound resolves it	gate_verdict	G5	gate	yes	0.62	spec.org:1254
+prod_unconverged	rolling_back	the bound expires; indeterminate blocks and never authorizes	timer	G5	driver	no	0.28	spec.org:2739
+prod_unconverged	deployed_not_merged	the change sits, serving, unmerged and unjudged	timer	G6	workflow	yes	0.1	spec.org:2783
+prod_healthy	settling	settle.sh drives change:complete, merge, PIR, window redline, cleanup	human	G6	driver	no	0.4	change/settle.sh:105
+prod_healthy	merged_unsettled	merge-on-healthy.yml merges and records nothing	forge_event	G6	workflow	no	0.53	sim/label_sim.py:153
+prod_healthy	deployed_not_merged	the merge is refused or silently does not happen	forge_event	G6	workflow	yes	0.07	scenarios.org:429
+deployed_not_merged	settling	the merge is completed and the record written	human	G6	driver	yes	0.5	change/settle.sh:124
+deployed_not_merged	deployed_not_merged_window_gone	the window closes while production serves an unmerged build	timer	-	reaper	yes	0.3	spec.org:2793
+deployed_not_merged	rolling_back	the front is returned to a build main does contain	deploy_event	G6	driver	no	0.2	experiments/016-dora/notes.org (#40 00:42:23Z)
+deployed_not_merged_window_gone	rolling_back	return the front; there is no authorization left to finish on	deploy_event	G6	driver	no	0.45	spec.org:2793
+deployed_not_merged_window_gone	settling	the merge and the record are completed out of band, as a deviation	human	G6	driver	yes	0.43	change/settle.sh:87
+deployed_not_merged_window_gone	change_failed	closed failed with production left on an unmerged build	label_add	-	human	no	0.12	[H]
+rolling_back	change_backed_out	abort.sh --to <sha> names what the estate was returned to	label_add	-	human	no	0.8	change/label-owners.tsv:93
+rolling_back	authorized_unbooked	the front is restored and the change re-enters the queue	label_remove	-	driver	yes	0.16	[H]
+rolling_back	change_failed	closed failed after the front was restored	label_add	-	human	no	0.04	change/label-owners.tsv:92
+merged_unsettled	settling	settle.sh runs late and writes the record	human	-	driver	no	0.9	change/settle.sh:124
+merged_unsettled	backfill_owed	it landed without the normal evidence and owes it	label_add	-	human	yes	0.1	change/label-owners.tsv:94
+backfill_owed	change_complete	the debt is recorded and survives settlement; the change still completes	label_add	-	human	no	0.55	change/label-owners.tsv:94
+backfill_owed	settling	a person writes the owed record before closing	human	-	human	yes	0.45	change/label-owners.tsv:94
+settling	change_complete	change:complete, the PIR, then the working labels are cleared	label_add	G6	driver	no	0.932	change/settle.sh:105
+settling	deployed_not_merged	settlement reported a merge that did not happen	forge_event	G6	driver	yes	0.06	scenarios.org:429
+settling	change_failed	settlement refuses and the change is closed failed	label_add	-	human	no	0.008	change/abort.sh:120
+estate_normal	estate_frozen	a person declares a freeze	label_add	-	human	yes	0.5	change/label-owners.tsv:53
+estate_normal	estate_emergency	a person declares an estate emergency	label_add	-	human	yes	0.5	change/label-owners.tsv:54
+estate_frozen	estate_normal	the freeze is lifted	label_remove	-	human	yes	1	change/label-owners.tsv:53
+estate_emergency	estate_normal	the emergency is cleared	label_remove	-	human	yes	1	experiments/016-dora/notes.org (22:55:13Z-23:07:11Z)

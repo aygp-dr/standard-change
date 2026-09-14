@@ -1,0 +1,608 @@
+#+TITLE: 021 — the pull request as a state machine, end to end
+#+SUBTITLE: The integration model: opened to terminal, runnable as a Markov chain
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:2 num:t
+
+* Hypothesis
+
+/The whole journey of a change — from =opened= to a closure code — can be
+written as a single absorbing Markov chain over states of ONE pull request,
+such that a weighted random walk terminates, terminates in a distribution
+resembling the night of 2026-09-13/14, and can still name the states that have
+no name./
+
+*Falsifiable as stated.* It is refuted if any of these holds:
+
+1. a non-terminal state has no outgoing edge, or a state is unreachable — in
+   which case the chain is not a chain;
+2. a walk from =opened= fails to terminate inside a step bound — in which case
+   it is not absorbing;
+3. the terminal distribution cannot be brought near the observed night without
+   inventing an edge nothing in the repo supports;
+4. the model cannot represent /berth held, window gone/, /deployed, not merged,
+   window gone/, or /expired ≠ failed/.
+
+*Result: not refuted.* 52 states, 136 transitions, 10 000 walks, zero
+non-terminating walks, and the four unnamed/awkward states are states rather
+than footnotes. (3) is the weakest arm and is discussed under §Where the
+calibration is soft.
+
+*Success criterion.* =walk.py= runs, validates, and prints the distribution
+below from the two TSVs in this directory, with no network and no estate.
+
+#+begin_src sh
+python3 experiments/021-state-machines/end-to-end/walk.py
+#+end_src
+
+Read-only throughout. Nothing was deployed, merged, booked, labelled, started
+or stopped; no port in 9000-9299 was touched; the forge was not written to.
+
+* Framing: what the subject is
+
+*The subject of every state in =states.tsv= is one pull request*, with exactly
+three exceptions, marked =kind=estate=: =estate_normal=, =estate_frozen= and
+=estate_emergency=. Those are properties of the WORLD. They belong to no
+change, they are carried on issue #1 rather than on any PR, and =walk.py=
+refuses an edge that crosses between the two chains:
+
+#+begin_example
+FAIL  edge blocked_freeze -> estate_frozen crosses the change/estate boundary;
+      the estate is not a stage of anybody's change
+#+end_example
+
+That refusal is the mechanical form of =spec.org= §The distinction that carries
+the most weight (=spec.org:2819=): three subjects, three namespaces, and the
+estate's belongs on something that cannot be deployed. The PR-side consequence
+of a freeze is =blocked_freeze= — a state of the change, caused by a fact about
+the world — and the two are different rows.
+
+** Three closure vocabularies, kept apart
+
+| subject | enum | where it lives |
+|---------+------+----------------|
+| *change* | complete / failed / backed_out / abandoned / superseded | =change:*= labels, =change/abort.sh=, =change/settle.sh= |
+| *window* | passed / failed / cancelled / expired | =change/schedule.sh close=, =change/reap.sh= |
+| *estate* | normal / frozen / emergency | =freeze= and =emergency= on issue #1 |
+
+The five CHANGE codes are the only terminal states in =states.tsv=. The four
+WINDOW codes appear as *non-terminal* states of the PR whose window closed —
+=window_expired=, =window_cancelled=, =window_failed=, and (implicitly) a
+passed window as the =staging_pass= → =uat_accepted= → =promoted= path. This is
+the whole reason the two enums cannot be merged: =spec.org:2787= says an
+expired reservation is /not a failure. Its own closure code; the change keeps
+everything else/, and in this chain that sentence is a fact about the graph —
+=window_expired= has a 0.987 edge back to =authorized_unbooked= and no edge at
+all to =change_failed=.
+
+Two of the five change codes are [H]: =change_abandoned= and
+=change_superseded= have no writer in the tree. =abort.sh= spells =failed= and
+=backed-out= only (=change/abort.sh:120=); /abandoned/ appears as a condition in
+=scenarios.org:193= and nowhere as a code. They are in the model because the
+brief names them and because a walk needs somewhere to put "the PR was closed
+and nobody drove it" — which is otherwise silently folded into =failed=, and
+that is defect class 1 wearing a different hat.
+
+* Labels as semantics, not strings
+
+A label's *prefix is a namespace*, and the namespace says who may write it,
+what its subject is, and what a reader is entitled to conclude. Five semantic
+kinds, in =labels.tsv=:
+
+| semantics | who may write it | subject | what it asserts |
+|-----------+------------------+---------+-----------------|
+| *intent* | a person | the person | somebody WANTS something. =change:requested=, =release=, =labeler:skip= |
+| *state* | one automation | the pipeline | the process HAS REACHED somewhere. =deploy:*=, =blocked:*=, =change:scheduled= |
+| *observation* | the instrument that measured it | a BUILD | an instrument MEASURED something, and the record names the build. =staging:e2e=, =production:healthy= |
+| *classification* | the labeller, or a person for emergency | the change | what KIND of change this is. =itil:*= |
+| *estate* | a person | the WORLD | something is true out there. =freeze=, =emergency= |
+
+The prefixes, as namespaces:
+
+- =app:= — the *manifest*. Derived from the diff, owned by the labeller,
+  recomputed every push. A human edit does not survive (scenario L10). Filed
+  here as an *observation* whose subject is the diff rather than the estate;
+  that is the one place this model stretches the brief's definition, and it is
+  deliberate — the alternative is to call it a classification, which would let
+  a person assert it, and =spec.org= §Domain model says a manifest that can be
+  asserted "is not a manifest — it is a wish".
+- =itil:= — the *class*, exactly one. Split out of =change:= on 2026-09-13
+  precisely because the rule "a PR has at most one =change:*=" could not be
+  stated while one namespace held two kinds of fact.
+- =change:= — the *lifecycle*, at most one active, plus the terminal closure
+  codes.
+- =deploy:= — *actions in flight*, not requests. =deploy:staging= is the berth
+  claim guard 1 reads. A person adding it by hand is asserting that guards were
+  re-checked at a moment when nobody checked anything.
+- =staging:= / =production:= — *observations, per environment*. The name says
+  both the instrument and where it pointed. =staging:passed= was retired for
+  naming neither.
+- =blocked:= — *refusals, one per cause*. Each is set and cleared by the one
+  thing that can evaluate its cause.
+- =release:= — =release= (bare) is intent; =release:start= is state. The colon
+  is doing real work.
+- =review:= — =review:proxy= is an observation and is deliberately NOT
+  =APPROVED=, so a reader can tell (=change/guard4.sh:85=).
+- no prefix — =freeze=, =emergency=, =control-plane=. Two estate facts and one
+  classification, and the absence of a prefix is the tell that their subject is
+  not the change.
+
+*=itil:emergency= and =emergency= are the pair the vocabulary exists to keep
+apart.* Same word, opposite direction: the classification says THIS change is
+the remedy and passes the freeze; the estate flag says everything stops and
+grants no exemption to whatever PR carries it. In this model they are a state
+(=emergency_declared=, kind=intent) and a state of a different chain
+(=estate_emergency=, kind=estate), and no edge connects them.
+
+* The chain
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction TB
+
+    [*] --> opened
+
+    state "authoring" as authoring {
+        opened --> draft: opened as a draft
+        opened --> classified: labeller derives app and itil
+        opened --> class_undefined: zero or two classes
+        draft --> classified: gh pr ready
+        class_undefined --> classified: a person resolves the class
+        classified --> gates_running: push starts the checks
+        gates_running --> gates_green: all green on THIS head
+        gates_running --> gates_red: a gate concluded failure
+        gates_running --> gates_indeterminate: skipped, superseded, unreadable
+        gates_indeterminate --> gates_running: poll again, bounded
+        gates_indeterminate --> gates_red: bound expired, not green
+        gates_red --> gates_running: push a fix
+    }
+
+    state "authorization" as authorization {
+        gates_green --> requested: a person adds change:requested
+        requested --> awaiting_review: itil:normal
+        requested --> authorized_unbooked: itil:standard
+        requested --> emergency_declared: a person declares itil:emergency
+        awaiting_review --> approved: approval or review:proxy
+        approved --> authorized_unbooked
+    }
+
+    state "the change schedule" as schedule {
+        authorized_unbooked --> scheduled: schedule.sh block
+        scheduled --> window_due: the slot arrives
+        scheduled --> window_cancelled: handed back, or re-booked by a loop
+        scheduled --> window_expired: lapsed unattempted
+        window_cancelled --> authorized_unbooked: still approved
+        window_expired --> authorized_unbooked: eligible, not failed
+        window_due --> blocked_queue: guard 1
+        window_due --> blocked_lock: guard 3
+        window_due --> blocked_freeze: guard 3, freeze
+        window_due --> blocked_diverged: guard 0 or 4b
+        window_due --> preflight_abstain: exit 4, cannot read the schedule
+        window_due --> window_expired: nobody drove it
+        blocked_queue --> authorized_unbooked
+        blocked_queue --> window_expired
+        blocked_lock --> window_due
+        blocked_freeze --> authorized_unbooked
+        blocked_diverged --> gates_running: rebase, verdicts void
+        preflight_abstain --> window_due
+        preflight_abstain --> window_expired
+    }
+
+    state "the berth" as berth {
+        window_due --> berthed: guards re-derived at reliance
+        berthed --> staging_serving
+        berthed --> berth_orphaned
+        berthed --> window_failed
+        staging_serving --> staging_pass
+        staging_serving --> staging_fail
+        staging_serving --> preempted
+        staging_pass --> uat_accepted: a person accepted the build
+        staging_pass --> uat_refused: the journey is not what was accepted
+        staging_pass --> preempted
+        staging_fail --> window_failed
+        uat_refused --> window_failed
+        preempted --> berthed: revalidate, berth kept and extended
+        preempted --> window_expired
+        berth_orphaned --> authorized_unbooked: reap.sh releases the berth
+        berth_orphaned --> window_expired
+        window_failed --> authorized_unbooked: needs a new window
+    }
+
+    state "production" as production {
+        uat_accepted --> promoted: guard 2 re-checked on the head
+        emergency_declared --> prod_deploying: break glass
+        promoted --> prod_deploying
+        promoted --> preempted: main-moved withdraws
+        prod_deploying --> prod_placed: on the idle colour
+        prod_deploying --> prod_withdrawn: success posted, nothing placed
+        prod_placed --> prod_serving: the front cuts over
+        prod_serving --> prod_healthy: convergence measured
+        prod_serving --> prod_unconverged: could not observe
+        prod_unconverged --> prod_healthy: re-sample resolved it
+        prod_unconverged --> rolling_back: bound expired, indeterminate blocks
+        prod_serving --> rolling_back: guard 5 failed
+        prod_withdrawn --> authorized_unbooked
+    }
+
+    state "settlement" as settlement {
+        prod_healthy --> merged_unsettled: merge-on-healthy records nothing
+        prod_healthy --> settling: settle.sh
+        prod_healthy --> deployed_not_merged
+        prod_serving --> deployed_not_merged
+        deployed_not_merged --> settling
+        deployed_not_merged --> deployed_not_merged_window_gone
+        deployed_not_merged --> rolling_back
+        deployed_not_merged_window_gone --> rolling_back
+        deployed_not_merged_window_gone --> settling: out of band, a deviation
+        merged_unsettled --> settling
+        merged_unsettled --> backfill_owed: landed owing its record
+        backfill_owed --> settling
+        settling --> deployed_not_merged: settlement reported a merge that did not happen
+    }
+
+    settling --> change_complete
+    backfill_owed --> change_complete
+    rolling_back --> change_backed_out: abort.sh --to names what it returned to
+    window_failed --> change_failed
+    prod_withdrawn --> change_failed
+    deployed_not_merged_window_gone --> change_failed
+    berth_orphaned --> change_failed
+    authorized_unbooked --> change_abandoned
+    gates_red --> change_abandoned
+    window_expired --> change_abandoned
+    authorized_unbooked --> change_superseded
+    gates_green --> change_superseded
+
+    change_complete --> [*]
+    change_backed_out --> [*]
+    change_failed --> [*]
+    change_abandoned --> [*]
+    change_superseded --> [*]
+#+end_src
+
+The diagram is a readable subset: it draws 92 of the 132 change-chain edges,
+every one of which is a row in =transitions.tsv= (checked mechanically). The 40
+omitted are the low-weight abandonment and supersession arms out of every
+waiting state; drawing them turns the picture into a hairball and tells the
+reader nothing the TSV does not. *=transitions.tsv= is the model; this is the
+map.* Both blocks render: =npx @mermaid-js/mermaid-cli -p
+experiments/mermaid-check/pptr.json=, 189 KB and 12 KB of SVG [E, 2026-09-14] —
+rendering is the only check a Mermaid block gets (=experiments/mermaid-check/=).
+
+** The estate, separately, because it is a different subject
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction LR
+    [*] --> estate_normal
+    estate_normal --> estate_frozen: a person declares a freeze
+    estate_frozen --> estate_normal: the freeze is lifted
+    estate_normal --> estate_emergency: a person declares an estate emergency
+    estate_emergency --> estate_normal: the emergency is cleared
+#+end_src
+
+Recurrent by design and it has no terminal state: a freeze is lifted, an
+emergency is cleared. =walk.py= checks it for dead ends and reachability and
+refuses to walk it for termination, and refuses a terminal state inside it.
+
+* The states that have no name
+
+Four, and they are the reason the model is shaped this way rather than tidily.
+
+** =berth_orphaned= — a berth held with no open window
+
+=deploy:staging= still on the PR, the window closed on an exit path
+=reap.sh= does not cover, and the build serves nowhere. It blocks *everyone*
+via guard 1, with no declared cause. Grounded twice:
+
+- =change/abort.sh:99= — found on #92: a change aborted =failed= that kept
+  advertising =deploy:production= afterwards, because the clear-list is written
+  by hand and nothing checks it against the labels the pipeline can set.
+- =experiments/019-rebuild-001/HELD-OUT.org= H4 — =reap.sh= releases a held
+  berth only for windows *it* closes, so a window closed on another path
+  strands =deploy:staging= with nothing that will ever release it. The grading
+  rule attached to it is the point: /can the rebuild NAME the state?/
+
+The model reaches it from =berthed=, =staging_serving=, =staging_fail=,
+=staging_pass= and =preempted=, and leaves it via =reap.sh= (0.765),
+=window_expired= (0.20), or a closure. 19.7% of walks visit it at least once.
+
+** =deployed_not_merged_window_gone= — the one =spec.org= says has no word
+
+=spec.org:2793=: /Deployed, not merged, and the window is gone. Three facts at
+once, and nothing in the vocabulary says it. Reached twice here — once by a
+script that reported the opposite./ It is a state here rather than a comment,
+reachable only from =deployed_not_merged=, and it is the only state whose
+highest-weight successor is =rolling_back=: with the authorization gone there
+is nothing left to finish on.
+
+** =window_expired= — expired is not failed
+
+The load-bearing one for any measurement. 13 windows expired on the night and
+not one belongs on either side of the change failure rate
+(=experiments/016-dora/notes.org= §3, decision 2). In the graph it has no edge
+to =change_failed= at all.
+
+** =authorized_unbooked= — every observation taken, no reservation
+
+=spec.org:2785=. It is also the busiest state in the chain (4.0 expected visits
+per walk), because it is where a change lands after *every* recoverable
+refusal: a cancelled window, an expired window, a failed window, a released
+queue block, a lifted freeze, a released orphaned berth, a withdrawn deployment
+record. That concentration is a finding rather than an artefact — it says the
+pipeline has exactly one waiting room, and everything that goes wrong short of
+a closure code returns there.
+
+* Indeterminate is a third value, and it is three states
+
+Never a synonym for false, so it is never an edge into a refusal. Three
+distinct instruments, three states, and each one *blocks* rather than
+concludes:
+
+| state | the question | the third answer | where it goes |
+|-------+--------------+------------------+---------------|
+| =gates_indeterminate= | is the suite green on this head? | =in_progress=, =skipped=, a superseded run, an unreadable forge | poll again (0.858); on bound expiry recorded as *not green* (0.13), never as pass |
+| =preflight_abstain= | is there a window, a lock, a freeze? | =exit 4=, the change schedule could not be read | ask again (0.504) or lose the window (0.49); *never* proceed |
+| =prod_unconverged= | does the estate serve this build? | HTTP =000=, or a partial sample | re-sample (0.62), or roll back on bound expiry (0.28) |
+
+=gates_indeterminate → gates_red= is the edge that encodes the rule rather than
+the reflex: when the poll bound expires the suite is recorded as *not green*.
+That is not the same as failed, and the model is honest about conflating them —
+see §Deliberate exclusions.
+
+Guard 6's three-valued =deploys(c)= (=sim/pipeline_sim.py:62=) is *not* a state
+here. It is a guard on the =settling= and =prod_healthy= edges, and its
+=indeterminate= arm is what the =settling → deployed_not_merged= edge
+represents. Modelling it as a state would have duplicated the simulator that
+already models it properly.
+
+* Compatibility with the existing simulator
+
+This chain is meant to sit beside =sim/pipeline_sim.py= and
+=sim/label_sim.py=, not to replace either. The mapping, so the three can be
+cross-checked:
+
+| =sim/pipeline_sim.py= =State= | states here |
+|-------------------------------+-------------|
+| =SUBMITTED= | =opened=, =draft=, =classified=, =class_undefined= |
+| =ASSESSING= | =gates_*=, =requested=, =awaiting_review=, =approved=, =authorized_unbooked=, and every =blocked_*= |
+| =SCHEDULED= | =scheduled=, =window_due= |
+| =IMPLEMENTING= | =berthed= .. =prod_serving= |
+| =COMPLETED= | =change_complete= |
+| =FAILED= | =change_failed= |
+| =CANCELLED= | =window_cancelled= is the WINDOW; =change_abandoned= is the CHANGE |
+| =REJECTED= | (unused there; =change_superseded= here) [H] |
+
+The simulator's =CANCELLED= is the one row where the two models disagree about
+subjects, and this model takes the =spec.org= §Nomenclature side: /cancelled/ is
+a window closure code (=change/schedule.sh:285=), so it cannot also be a change
+state. Recorded rather than patched — =pipeline_sim.py= is the source of truth
+for scheduling semantics and this is a naming observation about it, not a bug
+report.
+
+** Merging with the other four models
+
+All five models in =experiments/021-state-machines/= use the same TSV headers,
+so =cat */states.tsv= merges mechanically. Checked 2026-09-14: *239 distinct
+state ids across the five, and zero shared*. That is a fact worth stating
+plainly — the models do not collide, and they also do not *join*. Nothing in
+any of the five says that this model's =berthed= and the deployment model's
+staging states are the same state seen at different magnifications. A merged
+graph would be five disconnected components, not one machine.
+
+If the five are to be composed rather than filed, the join has to be declared:
+a sixth file mapping ids across models, written by whoever owns the composition.
+This model is the one that can host it, because it is the only one whose states
+span all four facets — but inventing the mapping unilaterally would be asserting
+four other people's semantics, so it is named here as the open item rather than
+guessed at. [H]
+
+Against =sim/label_sim.py=: its per-PR tuple =(cls, life, draft, release,
+booking, berth, prod, verdict, uat, healthy, closed, served, merged, pir,
+cleaned)= is the *product* form of this chain. Every state here is a region of
+that tuple space; =label_sim= proves what is reachable, this model says how
+often. They answer different questions and neither substitutes for the other:
+=label_sim='s BFS is a proof within its bound, and a Markov chain is not a proof
+of anything.
+
+* Calibration against the night of 2026-09-13/14
+
+Sources, all read-only and all already in the repo:
+
+| figure | value | source |
+|--------+-------+--------|
+| production cutovers | 17 | =experiments/016-dora/notes.org= §1 |
+| production deployment attempts | 18 | =experiments/016-dora/notes.org= §3 |
+| PRs merged | 21 (the brief says 22) | =experiments/016-dora/notes.org:154= |
+| unplanned remediation | 3 of 18 = 16.7% | =experiments/016-dora/notes.org= §3 |
+| rollbacks that served and were returned | 2 | =experiments/016-dora/notes.org= §4 |
+| windows, total | 326 | =experiments/016-dora/data/schedule.json= |
+| windows cancelled | 277, of which 229 on three PRs (#6: 81, #42: 78, #28: 70) | computed from =schedule.json= |
+| windows passed / expired / failed / still open | 19 / 13 / 4 / 13 | computed from =schedule.json= |
+| PRs holding at least one window | 35 | computed from =schedule.json= |
+| estate emergency | 22:55:13Z → 23:07:11Z, 11m58s | =experiments/016-dora/notes.org= §3 |
+
+Two derived rates drive the weights:
+
+- *bookings per change, excluding the runaway.* 326 − 229 = 97 windows over 32
+  PRs ≈ 3.0. The model gives 3.8 expected visits to =scheduled= and 1.45 to
+  =window_cancelled= (non-runaway cancellations were 48/32 ≈ 1.5). A memoryless
+  chain *cannot* reproduce the concentration — D12's runaway is a property of
+  one booking loop, not of any change — so the 229 are excluded by construction
+  and that exclusion is the single largest modelling decision here.
+- *expired share of attempted windows.* 13 expired out of 13 + 19 + 4 = 36
+  closed-with-an-outcome windows = 36%. The model gives
+  1.13 / (1.13 + 0.49 + ~0.89) ≈ 45%, high but the right order.
+
+* Result — =walk.py= output
+
+#+begin_example
+$ python3 experiments/021-state-machines/end-to-end/walk.py
+states       52  (49 change, 3 estate, 5 terminal)
+transitions  136
+validation   no dead ends, no unreachable states, no change/estate crossings
+
+TERMINAL DISTRIBUTION over 10000 walks (seed 0)
+  closure code                n    share
+  change_complete          7111   71.1%  ####################
+  change_abandoned         1030   10.3%  ###
+  change_backed_out         813    8.1%  ##
+  change_failed             617    6.2%  ##
+  change_superseded         429    4.3%  #
+
+mean steps to termination   38.91
+median-ish (mean of visits) 39.91 state visits per walk
+
+VISIT RATES (share of walks that reach the state at least once,
+             and mean visits per walk -- the second is the one to
+             compare against a window ledger)
+  state                               reached  visits/walk
+  window_cancelled                     56.9%         1.45
+  window_expired                       51.6%         1.13
+  window_failed                        32.8%         0.49
+  berth_orphaned                       19.7%         0.25
+  deployed_not_merged                  14.3%         0.15
+  deployed_not_merged_window_gone       4.3%         0.04
+  preempted                            23.4%         0.32
+  prod_serving                         81.2%         0.83
+  prod_withdrawn                        9.2%         0.10
+  rolling_back                          9.9%         0.10
+  blocked_queue                        26.4%         0.36
+  blocked_freeze                        7.6%         0.08
+  gates_indeterminate                  15.2%         0.18
+  prod_unconverged                      7.3%         0.07
+  preflight_abstain                     2.7%         0.03
+  emergency_declared                    7.7%         0.08
+
+TRIGGER KINDS, share of all transitions taken
+  human              23.3%
+  label_add          18.0%
+  deploy_event       16.2%
+  gate_verdict       12.8%
+  timer              11.0%
+  label_remove        9.6%
+  forge_event         9.0%
+
+estate chain: recurrent, checked for dead ends and reachability, not walked.
+#+end_example
+
+The Monte Carlo agrees with the exact absorption probabilities computed from
+=(I − Q)^{-1}= to within sampling error: complete 0.7193, abandoned 0.0985,
+backed_out 0.0811, failed 0.0595, superseded 0.0416, expected steps 38.4.
+
+** How it compares to the real night
+
+| quantity | the night | the model | note |
+|----------+-----------+-----------+------|
+| changes that reached production and stayed | 17 cutovers, 15 clean | 71.1% complete | 17/21 merged = 81%; the model is lower because it charges abandonment to changes the night's ledger simply does not contain |
+| changes returned to a prior state | 2 rollbacks | 8.1% backed_out | 2/21 = 9.5% |
+| production attempts needing unplanned remediation | 3 of 18 = 16.7% | =rolling_back= + =prod_withdrawn= = 0.20 visits per walk, over 0.83 =prod_serving= visits ≈ 19% | the closest single comparison in the model, and it lands within 2.5 points without being tuned to |
+| windows per change | ≈3.0 (excluding the runaway) | 3.8 visits to =scheduled= | high |
+| expired windows | 13 / 36 closed = 36% | ≈45% of closed windows | high |
+| the estate emergency | one, 11m58s, blocking everyone | =blocked_freeze= on 7.6% of walks | an estate fact reaching the PR chain only as a refusal, which is the shape the night had |
+
+The headline discrepancy is *abandonment*. The night's ledger has no abandoned
+changes in it, because the ledger is built from PIRs and deployment records —
+artefacts that only exist for changes somebody drove. A change nobody drove
+leaves a window or two and nothing else. So 10.3% is not measured against
+anything and is [H]; it is set to the smallest value that keeps every waiting
+state honest about the possibility that nobody comes back.
+
+** Where the calibration is soft
+
+- *Bookings per change is high (3.8 vs 3.0).* The loop
+  =authorized_unbooked → scheduled → window_cancelled → authorized_unbooked= is
+  the only mechanism the chain has for queue churn, so it carries both the real
+  re-booking and the model's share of the runaway that was excluded. [H]
+- *=prod_serving= at 0.83 visits per walk vs 17 cutovers over 21 merges (0.81)*
+  is the one place the model is accidentally exact, and should not be read as
+  validation — it is one number agreeing.
+- *Nothing calibrates =change_superseded=.* 4.3% is a guess with no
+  counterpart in the record. [H]
+
+* Assumptions
+
+1. *One PR, walked alone.* Guard 1 (the berth is a singleton) is a fact about
+   the *population*, and this chain has no population — =blocked_queue= carries
+   the guard's effect as a probability rather than as a constraint. A model that
+   needed guard 1 to be *true* would have to be =tla/StandardChange.tla= or
+   =sim/label_sim.py=, both of which hold several PRs at once.
+2. *Memoryless.* A change that has already lost three windows is no more likely
+   to lose a fourth. The real ledger says otherwise — 229 of 277 cancellations
+   belong to three PRs — and that is the largest known way this model is wrong.
+3. *The head is stable within a state.* Pushes are modelled as edges back to
+   =gates_running= (from =gates_green=, =awaiting_review=,
+   =authorized_unbooked=, =blocked_diverged= and =uat_accepted=), which is the
+   SHA-binding rule turned into topology: a push voids every verdict, so it
+   returns the change to the state before any verdict existed.
+4. *Weights are per-change relative likelihoods, not rates.* There is no clock.
+   "Mean steps" counts transitions, not minutes, and a step is not a unit of
+   time — =sim/pipeline_sim.py= owns simulated time and its 30-minute quantum.
+5. *Estate facts are exogenous.* The estate chain does not depend on any PR, and
+   no PR changes it. That is true of =freeze= and =emergency= as written
+   (=change/label-owners.tsv:53-54=) and false in spirit for an emergency
+   *caused* by a change, which this model cannot express.
+
+* Deliberate exclusions
+
+- *Apps, groups, ports, worktrees, blue/green colours.* The four apps are
+  fixtures. Deploy groups appear only as the =app:*= rows in =labels.tsv=. The
+  port-block model is verified by running apps, and no chain substitutes for
+  that.
+- *Time.* No slot quantum, no deadlines, no soak. =sim/pipeline_sim.py= has
+  those and they are what caps throughput.
+- *Concurrency.* No second PR, no lock contention as a mechanism, no eviction
+  of a berth holder by an emergency (=label_sim='s =Evict=). The consequences
+  appear as weights out of =window_due=; the mechanisms do not appear at all.
+- *The distinction between "the suite failed" and "the suite could not be
+  judged past its bound".* =gates_indeterminate → gates_red= merges them at the
+  moment the bound expires, because the chain has only one "not green" sink.
+  =spec.org:2739= says the bound expiring is class 1 — =indeterminate=, said out
+  loud — and a faithful model would need a fourth gate state. Recorded as a
+  known defect of this model rather than fixed, because fixing it adds a state
+  that no transition in the repo distinguishes.
+- *Multiple simultaneous windows on one change.* The night had up to 81 on one
+  PR. Here a change holds at most one.
+- *=control-plane= and the soak.* In =labels.tsv=, absent from the chain.
+
+* Refutation conditions for this model specifically
+
+1. A non-terminal state acquires no outgoing edge, or a state becomes
+   unreachable — =walk.py= exits 1 and names it. *Negative-tested*: deleting
+   every edge out of =berth_orphaned= produces =NON-TERMINAL DEAD END=; deleting
+   every edge into =preempted= produces =UNREACHABLE=; adding
+   =change_complete → opened= produces =terminal state ... has 1 outgoing
+   edge(s)=; adding =blocked_freeze → estate_frozen= produces the boundary
+   refusal. All four exit 1. A checker that cannot fail produces no verdict.
+2. Any walk hits the 2000-step cap. None of 10 000 did.
+3. An edge is added from a WINDOW closure state directly to =change_failed=.
+   That is =expired= folded into =failed= and it refutes §Framing.
+4. The estate chain acquires a terminal state, or an edge to or from the change
+   chain.
+
+* Reproducing
+
+#+begin_src sh
+cd "$(git rev-parse --show-toplevel)"
+python3 experiments/021-state-machines/end-to-end/walk.py                 # default: 10000 walks, seed 0
+python3 experiments/021-state-machines/end-to-end/walk.py --walks 100000  # tighter
+python3 experiments/021-state-machines/end-to-end/walk.py --seed 7        # a different stream
+#+end_src
+
+The window-ledger figures quoted above re-derive from the committed snapshot:
+
+#+begin_src sh
+python3 -c "
+import json, collections
+w = json.load(open('experiments/016-dora/data/schedule.json'))['windows']
+print(len(w), collections.Counter(x.get('result') for x in w))
+print(collections.Counter(x['pr'] for x in w if x.get('result')=='cancelled').most_common(3))"
+#+end_src
+
+: 326 Counter({'cancelled': 277, 'passed': 19, 'expired': 13, None: 13, 'failed': 4})
+: [(6, 81), (42, 78), (28, 70)]
+
+* Local Variables                                                   :noexport:
+# Local Variables:
+# org-confirm-babel-evaluate: nil
+# End:
