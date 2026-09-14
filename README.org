@@ -6,7 +6,7 @@
 #+OPTIONS: toc:2 num:t
 
 #+HTML: <p align="center">
-#+HTML: <img alt="spec 0.4" src="https://img.shields.io/badge/spec-0.4_establishing-blue">
+#+HTML: <img alt="spec 0.4" src="https://img.shields.io/badge/spec-0.5_establishing-blue">
 #+HTML: <img alt="ITIL 4" src="https://img.shields.io/badge/ITIL_4-change_enablement-5b2d8e">
 #+HTML: <img alt="TLA+ verified" src="https://img.shields.io/badge/TLA%2B-7_checks_both_directions-2e7d32">
 #+HTML: <img alt="gates" src="https://img.shields.io/badge/gate--selftest-negative_tested-2e7d32">
