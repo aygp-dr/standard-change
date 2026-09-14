@@ -8,6 +8,7 @@ EXTERNAL := $(notdir $(wildcard external/*))
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
         simulate-gates smoke \
+        forge forge-list forge-pull forge-check \
         port-alloc port-free ports clean
 
 help:  ## show this list
@@ -108,12 +109,20 @@ audit: ; @./gates/audit-controls.py
 docs:  ## the documents gate
 docs: ; @./gates/docs-lint.py
 # Forge through batch emacs, so it works whether or not emacs is running.
+# `--batch' already implies no init file and no frame; adding `-nw' would not
+# make it stricter, and the entry points print rather than pop a buffer at
+# nobody. Each one sets its own exit status: batch exits 0 through an error
+# raised in a process filter, which is where an async forge pull reports.
 forge-list:  ## list PRs from the forge database
 forge-list: ; @emacs --batch -l standard-change.el -f standard-change-forge-list
 forge-pull:  ## refresh the forge database
 forge-pull: ; @emacs --batch -l standard-change.el -f standard-change-forge-pull
-forge:           forge-pull forge-list  ## pull then list PRs through emacs
-forge-check:     ; @emacs --batch -l standard-change.el -f standard-change-forge-check
+# Sequenced by recipe, not by prerequisites: under -j the two would run at
+# once and the list would print the database the pull is still writing.
+forge:  ## pull then list PRs through emacs
+forge: ; @$(MAKE) -s forge-pull && $(MAKE) -s forge-list
+forge-check:  ## can forge see this repo PRs
+forge-check: ; @emacs --batch -l standard-change.el -f standard-change-forge-check
 
 pbt:  ## exhaustive model of the promotion guards
 pbt: ; @./gates/pbt-pipeline.py --exhaustive
