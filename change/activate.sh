@@ -255,7 +255,13 @@ if ! EVENT=$(./change/schedule.sh current "$PR" staging); then
 MSG
   exit 7
 fi
-./change/schedule.sh check "$EVENT" | sed 's/^/   /' || die "the window is inside a freeze"
+# `cmd | sed ... || die` CANNOT DIE. This is #!/bin/sh with no pipefail, so
+# the pipeline's status is sed's, which is 0 whatever the guard said -- the
+# `||` binds to the pipeline, not to schedule.sh. Guard 3's freeze check was
+# therefore inert: it printed a refusal and returned success. Found by the L7
+# review on 2026-09-14, in a file whose own comment at the top of indent()
+# describes exactly this failure.
+indent ./change/schedule.sh check "$EVENT" || die "the window is inside a freeze"
 ok "window $EVENT"
 # The window closes with what happened, on every exit path. A window left open
 # by a crashed run looks like a deployment still in progress and blocks the
@@ -338,7 +344,11 @@ CUR=$(./targets/bastille/front/switch.sh status | grep -o 'production = [a-z]*' 
 IDLE=$([ "$CUR" = blue ] && echo green || echo blue)
 echo "   live=$CUR  idle=$IDLE"
 deploy_open production "standard change #$PR -> production ($IDLE)"
-./targets/bastille/deploy.sh production "$SHA" | sed 's/^/   /'
+# The PRODUCTION deploy. Same defect as the staging one fixed earlier and
+# missed here: the pipe discarded the exit code and the `ok` below fired
+# unconditionally, so a production deploy that placed nothing reported success.
+indent ./targets/bastille/deploy.sh production "$SHA" \
+  || die "the production deploy failed -- nothing was placed"
 sleep 2
 ok "both production replicas <- $SHA"
 
@@ -348,7 +358,11 @@ ROUTER_URL="http://$IDLE_IP" indent ./gates/e2e.sh || die "idle colour failed e2
 ok "$IDLE verified with no traffic on it"
 
 step "atomic cutover"
-./targets/bastille/front/switch.sh "$IDLE" | sed 's/^/   /'
+# THE CUTOVER. The single highest-consequence line in this file, and its exit
+# code was going to sed. A failed switch reported "production -> green" and the
+# run continued to settle and merge.
+indent ./targets/bastille/front/switch.sh "$IDLE" \
+  || die "the cutover failed -- production was NOT switched"
 ok "production -> $IDLE"
 
 step "guard 5 — convergence through the front"
