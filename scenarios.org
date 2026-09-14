@@ -761,3 +761,77 @@ the workflows installed, one scenario per numbered run, with the observed label
 timeline recorded per step. The labeller scenarios (Part A) are cheap enough to
 run on every change to =.github/labeler.yml=; Part B needs a disposable repo
 and is a promotion-time check.
+
+** D18 — 100 PRs under two release policies, and four kinds of degraded infrastructure
+
+*Run 2026-09-14, =sim/grind100.py=, 100 changes, one berth, seed 20260914.*
+
+Two questions were asked together and they have different kinds of answer. The
+first — /should =release:start= just deploy, with the calendar demoted to a
+warning?/ — is a POLICY choice. The second — /what can still reach production
+when infrastructure is missing?/ — is not a choice at all: it falls out of which
+guard reads which component.
+
+*** The matrix
+
+| component down | spec policy (window blocks) | =release:start= (window advisory) |
+|----------------+-----------------------------+-----------------------------------|
+| calendar | *0 / 100* | *98 / 100* |
+| staging | 92 / 100 | 92 / 100 |
+| production unobservable | *0 / 100* | *0 / 100* |
+| forge | *0 / 100* | *0 / 100* |
+
+*** What the policy actually buys, and it is narrower than it sounds
+
+The advisory window changes *exactly one row*. With the calendar gone the spec
+policy ships nothing, because guard 3 abstains and abstaining blocks; the
+advisory policy ships 98. Everywhere else the two policies are identical to the
+change. So "demote the calendar to a warning" is not a general loosening — it is
+a fix for one failure mode, and it should be argued on that basis.
+
+*** Staging can be gone and nobody noticed
+
+92 of 100 ship with staging down, *under both policies*, and this was not
+designed — it was discovered by running it. Guard 4 reads an OBSERVATION RECORD
+naming a build, not the live staging environment (=gates/e2e.sh=: "it stays true
+about the SHA it names"). 94 changes already had a record naming their head, so
+the environment being gone was irrelevant. The 6 that failed had no record yet.
+
+What is lost when staging dies is the ability to produce NEW observations — not
+the ability to use old ones. That is the difference between a pipeline that
+checks *evidence* and one that checks *traversal*, and it is worth stating
+because it is the strongest argument in the design.
+
+*** Production unobservable is the floor, and it should be
+
+0 of 100 under either policy, emergency included. Guards 5 and 6 read the
+SERVED build, and no prior record can substitute because the subject does not
+exist until the deploy happens. There is no bypass and there should not be one:
+shipping into a production you cannot observe is not a deployment, it is a
+hope. This is the one row where "we must push anyway" has no safe answer.
+
+*** The forge is the single point of failure
+
+0 of 100. Every verdict, every observation record, every label and the change
+schedule itself live in one system. When it cannot answer, nothing is
+falsified — everything is INDETERMINATE, and indeterminate blocks. Correct
+behaviour, and a concentration of risk that no guard can mitigate because the
+guards are stored there too.
+
+*** The berth is a queue, not a rejection
+
+26 block events across 100 changes, and *all 98 eligible changes still shipped*
+— a blocked change waits and is re-offered rather than being dropped. The
+refusal names the holder ("coordinate with the holder (CHG-0083)"), which
+=blocked:queue= as a bare label never did. Naming the holder is what turns a
+refusal into a handoff.
+
+*** A defect in the first version of this experiment, recorded
+
+The first run reported =blocked-berth 0= for every policy and every infra
+state. The loop completed each change inside its own iteration, so the berth
+was never held when the next change asked — a queue with no queueing in it,
+reporting the berth as frictionless. Deployments now take time (one slot,
+three for a control-plane change) and the contention appears. A simulation that
+cannot exhibit the constraint it was built to study will report that the
+constraint costs nothing.
