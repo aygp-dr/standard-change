@@ -40,23 +40,25 @@ Chrome extension. Recording: =docs/screenshots/uat-block0-dff0887.gif=
 | =/= | core :9001 | dff0887 | route table; fine |
 | =/c/shoes= | plp :9002 | dff0887 | "3 result(s) in shoes", three products; fine |
 | =/p/SKU123= | pdp :9003 | dff0887 | Trail Runner, $89.00, in stock, Add to cart; fine |
-| =/cart?add=SKU123= | core :9001 | dff0887 | *nothing about the cart.* The bare route stub |
-| =/checkout= | checkout :9004 | dff0887 | "Your order comes to *$42.00*" for an $89.00 item; shipping form |
-| =/checkout?name=…= | checkout | dff0887 | form round-trips; "Ready to continue to payment." is *text, not a link* |
-| =/checkout/payment= | checkout | dff0887 | "about to pay $42.00 … until you confirm"; *no confirm control*, only back |
-| =/checkout/confirm= | checkout | dff0887 | *empty* |
+| =/cart?add=SKU123= | core :9001 | dff0887 | the route stub; could show the item, or say the cart is empty (#40, #52) |
+| =/checkout= | checkout :9004 | dff0887 | "Your order comes to $42.00" for an $89.00 item; the total could come from the cart |
+| =/checkout?name=…= | checkout | dff0887 | form round-trips; "Ready to continue to payment." could be a link (#71) |
+| =/checkout/payment= | checkout | dff0887 | "about to pay $42.00 … until you confirm"; a confirm control would close the loop |
+| =/checkout/confirm= | checkout | dff0887 | could confirm something |
 
-Every row passes the gates: right app, right build, 200, html. Four rows
-fail a person. Two of the four have open PRs (#40/#52 for the cart, #71 for
-the link); the $42 total and the empty confirmation are new. Issue #91.
+Every row passes the gates: right app, right build, 200, html. The pipeline
+did its job. Four rows are opportunities for enhanced customer support in
+the fixture storefront — not failures, and not this repo's product; two
+already have PRs (#40/#52, #71). Issue #91 lists them.
 
 * Result
 
-*Refuted.* Smoke's exit 0 is a statement about routing and liveness, and
-=staging:uat= granted on it is acceptance of routing, not of the storefront.
-The delegation in =docs/control-path.org= is honest about being a proxy; this
-run is the first measurement of how much the proxy misses on a real build:
-half the journey.
+*The hypothesis does not hold as stated, and that is the useful part.*
+Smoke's exit 0 is a statement about routing and liveness; =staging:uat=
+granted on it is acceptance of the estate serving the build, which is what
+this repo checks, and not of the journey, which is not. The delegation in
+=docs/control-path.org= is honest about being a proxy. This run is the first
+measurement of the gap between the two on a real build.
 
 * What follows
 
