@@ -2796,6 +2796,83 @@ graded on whether it can *name* each one, not on whether it prevents them.
 in the vocabulary says it. Reached twice here — once by a script that reported
 the opposite. A rebuild needs a word for it before it needs a fix.
 
+* The label grammar — intent drives, everything else annotates
+
+Added 2026-09-14, after five independent models of this pipeline disagreed
+about what several labels MEAN. They did not disagree about the code; they
+disagreed about the vocabulary, which is a sharper problem.
+
+** The rule
+
+*A label either DRIVES or it ANNOTATES, and only intent drives.*
+
+| shape | role | example | what it is |
+|-------+------+---------+------------|
+| =app:<group>= | *manifest* | =app:pdp= | WHAT moves. Derived from the diff; the blast radius |
+| =itil:<class>= | *classification* | =itil:standard= | WHICH RULES apply |
+| =release=, =release:start= | *intent, change scope* | | ship this change |
+| =deploy:<env>= | *intent, environment scope* | =deploy:staging= | START the deploy process into that environment |
+| =<env>:<action>= | *annotation* | =staging:e2e= | what HAPPENED inside that environment |
+| =blocked:<cause>= | *annotation* | =blocked:queue= | why a refusal happened |
+| =change:<state>= | *annotation* | =change:complete= | how far it got |
+| =freeze=, =emergency= | *estate* | | properties of the WORLD. No prefix, because there is no subject to name — they are not about a change |
+
+Read the colon twice. In =app:=, =itil:=, =change:=, =deploy:= and =blocked:=
+the part BEFORE the colon names the subject and the part after is its value. In
+=staging:e2e= and =production:healthy= the part before the colon is the
+ENVIRONMENT and the part after is the action taken in it. Two grammars, one
+punctuation mark, which is why the models disagreed.
+
+** Why =deploy:<env>= is intent and not state
+
+This is the correction. =change/label-owners.tsv= describes =deploy:staging= as
+"ACTION in flight, and the berth claim guard 1 reads" — one label doing two
+jobs. Saying /start deploying to staging/ and /this change holds the only berth/
+are different facts with different lifetimes, and conflating them is how the
+stranded berth happens: the intent is satisfied or abandoned while the lock
+stays, and nothing owns releasing it. #92 sat holding =deploy:staging= with no
+window and its build serving nowhere; the intent was long dead and the lock was
+not.
+
+Under this grammar the intent is the label and *the berth is a consequence of
+the intent, not the same object as it*. A rebuild should carry the lease
+separately, with an owner and a deadline, so that "who is deploying" and "who
+holds the path" can disagree out loud.
+
+** What the actions inside an environment are for
+
+=staging:e2e=, =staging:smoke=, =staging:uat=, =production:healthy= are
+ANNOTATIONS: they record that an instrument measured something. They never
+start anything. Their authority does not live in the label at all — it lives in
+the observation record the instrument wrote, which names the build. The label
+is a convenience that goes stale; the record is the evidence that does not.
+
+That is why guard 4 reads records rather than labels, and why staging can be
+gone entirely and 74 of 100 changes still ship (scenarios.org D18).
+
+** Measured: where the vocabulary's weight actually sits
+
+From =experiments/021-state-machines/merge.py=, over five independent models —
+share of all label-driven transition mass:
+
+| role | share | what it is |
+|------+-------+------------|
+| *the core three* (=app:=, =itil:=, =release=) | *22.8%* | everything a person CHOOSES |
+| estate (=freeze=, =emergency=) | *36.6%* | two labels, about the world |
+| gatekeeping (=blocked:=, =deploy:=, =change:requested/scheduled=) | 30.3% | who may move, and when |
+| audit (=<env>:<action>=, =change:complete/failed/backed-out=) | 9.0% | the trail a PIR is written from |
+| override (=labeler:skip=, =hold:staging=, =itil:emergency=, =review:proxy=) | 5.6% | getting past a refusal, on the record |
+
+*Two thirds of this machine's movement is gatekeeping and estate.* A person
+chooses three things; the pipeline spends most of its state changes on blocking
+and on world-state. Two estate labels move it more than every deliberate choice
+combined.
+
+That is not obviously wrong — a control system should spend its time
+controlling — but it is worth a rebuild knowing before it starts, because it
+says where the complexity will actually be. It will not be in the part anyone
+demonstrates.
+
 * Nomenclature
 
 The terms a rebuild must keep, and what each one is *not*.
