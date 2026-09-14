@@ -196,6 +196,10 @@ const AVAILABILITY = {
   'low-stock': 'Low stock — only a few left',
   'out-of-stock': 'Out of stock',
   'preorder': 'Available to pre-order',
+  // loadCatalogue only checks that availability is a STRING, so '' is a value a
+  // deployed file can carry -- and '' is falsy, so the raw-value fallback below
+  // cannot catch it. Without this row the page renders a bare separator dot.
+  '': 'Availability unknown',
 };
 
 // The product panel: the product, or the reason there is not one.
