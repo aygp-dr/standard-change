@@ -1,0 +1,16 @@
+# The gate's negative fixture. Three shapes, all of them observed for real in
+# .github/workflows/deploy-*.yml before those files were removed:
+#   1. a script that has never existed
+#   2. a path built from an undeclared ${{ }} expression, which cannot be
+#      checked at all -- and skipping it is how shape 1 stayed invisible
+#   3. a target directory named by a variable whose declared value has no
+#      directory behind it
+name: fixture-fail
+on: [push]
+jobs:
+  j:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./change/lock.sh acquire 1 staging
+      - run: ./targets/${{ env.NOT_DECLARED }}/deploy.sh staging 1
+      - run: ./targets/${{ vars.DEPLOY_TARGET }}/rollback.sh production

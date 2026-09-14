@@ -1,1 +1,1 @@
-{"total_count":2,"variables":[{"name":"EMERGENCY_CHANGE"},{"name":"DEPLOY_TARGET"}]}
+{"total_count":2,"variables":[{"name":"EMERGENCY_CHANGE","value":"0"},{"name":"DEPLOY_TARGET","value":"node"}]}

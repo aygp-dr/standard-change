@@ -1,0 +1,14 @@
+# The gate's positive fixture: every path resolves, including one through a
+# repository variable that IS declared in .github/config/variables.json.
+name: fixture-pass
+on: [push]
+jobs:
+  j:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./gates/shellcheck.sh
+      - run: ./gates/workflow-refs.py
+      # A path in a COMMENT is prose, not code: ./change/never-existed.sh
+      - run: ./change/groups.sh 1
+      # a declared variable whose directory DOES exist
+      - run: ./targets/${{ vars.REAL_TARGET }}/deploy.sh staging 1

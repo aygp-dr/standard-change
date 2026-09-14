@@ -32,15 +32,21 @@ On ubuntu-latest (CI) the same targets run as `make`.
 
 ## Tangling
 
-`spec.org` is literate and carries `:tangle` targets: `apps/plp/routes.json`, `ports.tsv`, `router/nginx.conf.tmpl`, `.github/labeler.yml`, `.github/workflows/deploy-staging.yml`, `Makefile`. Tangle with `C-c C-v t` in Emacs, or batch:
+**`spec.org` tangles nothing, and a gate enforces that.** `gates/docs-lint.py --tangle`
+fails if any block in it carries `:tangle`, and `gmake gate-selftest` runs it.
 
-```sh
-emacs --batch -l org --eval '(org-babel-tangle-file "spec.org")'
-```
+This paragraph used to list six `:tangle` targets — `apps/plp/routes.json`,
+`ports.tsv`, `router/nginx.conf.tmpl`, `.github/labeler.yml`,
+`.github/workflows/deploy-staging.yml`, `Makefile` — and say all six were
+verified tangling on 2026-09-12. None of them is a `:tangle` target now, and
+the entry that outlived its file the longest was the deploy workflow, which was
+removed in `docs/adr/0004-the-forge-does-not-deploy.org` without ever having
+deployed anything.
 
-Verified [E] on 2026-09-12 with GNU Emacs 30.2: all 6 blocks tangle and nested directories are created (file-level `:mkdirp t`).
-
-**Do not re-tangle casually.** `ports.tsv` is a `:tangle` target *and* mutable state that `port-alloc`/`port-free` write to — re-tangling clobbers live worktree allocations. See `spec.org` §Open items.
+The spec is **intent**: it states what must hold, and the file on disk is the
+source. A `:tangle` directive in it hands over bytes and calls them a
+requirement — and it silently reverted two hand-edits to `Makefile` before
+anyone noticed, which is why the gate exists.
 
 ## Conventions
 

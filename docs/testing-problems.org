@@ -63,7 +63,7 @@ mechanisms and only the loud one has one.
 No GitHub runner can reach the estate, so every gate that matters runs on the
 host and reports by label. That makes labels a proxy for check runs, which makes
 label ownership a correctness concern rather than tidiness (#16, #30), and it
-makes =deploy-staging= — which has never once run successfully (#25) — invisible
+made =deploy-staging= — which never once ran successfully (#25, and it has since been removed: ADR 0004) — invisible
 until someone looked.
 
 *On a rebuild*: decide early whether CI can reach the estate. Everything about

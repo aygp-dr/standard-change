@@ -24,12 +24,17 @@ MARK = {OK: "ok  ", FINDING: "FAIL", ABSENT: "MISS", UNAVAIL: "N/A "}
 
 # The workflows the pipeline is made of. A repo missing one is not running the
 # model, whatever its labels say.
+# deploy-staging.yml and deploy-production.yml are NOT in this list. They were
+# removed in ADR 0004 having deployed nothing in 498 runs, and the berth, the
+# authorizing run and guards 4/4b live in change/queue.sh, change/activate.sh
+# and change/guard4.sh -- run from a host that can see the estate, which no
+# GitHub runner can. Requiring them here would report a correct repository as
+# not running the model.
 WORKFLOWS = {
     "labeller.yml":           "derives app:* and change:* from the diff",
     "gate.yml":               "the change authority — produces the four check runs",
     "promote.yml":            "guard 2 before deploy:production",
-    "deploy-staging.yml":     "the berth and the authorizing run",
-    "deploy-production.yml":  "guards 2, 4, 4b and 5",
+    "production-first.yml":   "main must not run ahead of production",
     "main-moved.yml":         "guard 4b when trunk moves",
 }
 
@@ -48,8 +53,10 @@ LABELS = {
 }
 
 # Guard 2 must be evaluated on BOTH paths: promote.yml is gated on
-# staging:passed, which the emergency path never reaches.
-GUARD2_FILES = ["promote.yml", "deploy-production.yml"]
+# staging:passed, which the emergency path never reaches. The second evaluation
+# was in deploy-production.yml; since ADR 0004 it is change/guard4.sh, which is
+# what actually runs on the emergency path.
+GUARD2_FILES = ["promote.yml"]
 
 
 def gh(path, jq=None):

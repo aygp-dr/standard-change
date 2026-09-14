@@ -145,17 +145,43 @@ def audit_workflows(a, root):
         a.add(ABSENT, "workflows", "no .github/workflows")
         return
     text = {p.name: p.read_text() for p in wf.glob("*.yml")}
-    prod = text.get("deploy-production.yml", "")
-    a.add(OK if "group: production" in prod.replace("{", "").replace("}", "")
-          or "concurrency" in prod else ABSENT,
-          "production concurrency", "serialized" if "concurrency" in prod else "absent")
-    a.add(OK if "cancel-in-progress: false" in prod else FINDING,
-          "production not cancellable",
-          "cancel-in-progress: false" if "cancel-in-progress: false" in prod
-          else "a cancelled production deploy leaves an indeterminate estate")
-    stg = text.get("deploy-staging.yml", "")
-    a.add(OK if "concurrency" in stg else ABSENT, "staging concurrency",
-          "present" if "concurrency" in stg else "absent")
+
+    # NO DEPLOY WORKFLOW IS ITS OWN ANSWER, not a deploy workflow missing a
+    # setting. The forge-side deploy workflows were removed (ADR 0004): they
+    # ran 249 times each and deployed nothing -- deploy-production.yml was
+    # `skipped` on every one of its runs and never evaluated a single step.
+    #
+    # Reporting "production concurrency: absent" for a workflow that is not
+    # there reads as a regression in a control, and it is not: the control was
+    # never in force, because the thing it constrained never ran. What IS true
+    # is that the forge does not serialize production at all, and that belongs
+    # in the audit under its own name rather than disguised as a missing key.
+    for env in ("production", "staging"):
+        wfname = f"deploy-{env}.yml"
+        body = text.get(wfname)
+        if body is None:
+            # OK, and the detail is the whole of the claim. ABSENT would read as
+            # a control that regressed, and nothing regressed: this control was
+            # never in force, because deploy-production.yml was `skipped` on all
+            # 249 of its runs and never evaluated a step. The design no longer
+            # asserts that the forge deploys, so the forge having no deploy
+            # concurrency is the design and not a gap in it. Where the gap
+            # actually is -- that serialization now rests on one label and one
+            # person -- is ADR 0004's Consequences, which is a document a reader
+            # consults, not a row that goes green and stops being read.
+            a.add(OK, f"{env} deploy workflow",
+                  f"none. The forge does not deploy to {env}, so it does not "
+                  f"serialize it either; the berth is change/queue.sh guard 1 "
+                  f"and a person (ADR 0004)")
+            continue
+        a.add(OK if "concurrency" in body else ABSENT,
+              f"{env} concurrency (forge)",
+              "serialized" if "concurrency" in body else "absent")
+        if env == "production":
+            a.add(OK if "cancel-in-progress: false" in body else FINDING,
+                  "production not cancellable",
+                  "cancel-in-progress: false" if "cancel-in-progress: false" in body
+                  else "a cancelled production deploy leaves an indeterminate estate")
     a.add(OK if "main-moved.yml" in " ".join(text) or (wf / "main-moved.yml").exists()
           else FINDING, "guard 4b installed",
           "main-moved.yml present" if (wf / "main-moved.yml").exists()
@@ -201,8 +227,25 @@ def audit_variables(a, repo, fixture):
     a.add(OK if "EMERGENCY_CHANGE" in names else ABSENT, "EMERGENCY_CHANGE variable",
           "present (freeze fallback when the calendar is unreachable)"
           if "EMERGENCY_CHANGE" in names else "no fallback; preflight exit 4 has no override")
-    a.add(OK if "DEPLOY_TARGET" in names else ABSENT, "DEPLOY_TARGET variable",
-          "present" if "DEPLOY_TARGET" in names else "deploy.sh target unselected")
+    # A DECLARED TARGET MUST HAVE A DIRECTORY. DEPLOY_TARGET was `github` and
+    # there has never been a targets/github/, which nothing noticed because the
+    # only readers were the deploy workflows and they never ran. Declared-and-
+    # absent is worse than undeclared: it reads as a configured choice.
+    #
+    # Undeclared is now the correct state. Nothing reads the variable: the
+    # target is whichever targets/<x>/deploy.sh a person invokes (ADR 0004).
+    if "DEPLOY_TARGET" not in names:
+        a.add(OK, "DEPLOY_TARGET variable",
+              "not declared, and nothing reads it -- the target is the script "
+              "you invoke (ADR 0004)")
+    else:
+        val = next((v.get("value") for v in data["variables"]
+                    if v["name"] == "DEPLOY_TARGET"), None)
+        root_ = pathlib.Path(__file__).resolve().parent.parent
+        tgt = root_ / "targets" / str(val) / "deploy.sh"
+        a.add(OK if val and tgt.exists() else FINDING, "DEPLOY_TARGET variable",
+              f"targets/{val}/deploy.sh" if val and tgt.exists()
+              else f"declared `{val}`, and targets/{val}/deploy.sh does not exist")
 
 
 def main():
