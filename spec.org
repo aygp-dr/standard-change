@@ -142,7 +142,7 @@ the thing itself.
 | *berth*               | an exclusive, deadline-bearing lease on the path to production              | the =deploy:staging= label + lock  |
 | *path to production*  | the ordered environments a change traverses: staging → production           | environments                       |
 | *divergence*          | the classified relation between a change's base and the trunk tip           | computed by =divergence.sh=        |
-| *authorization*       | normal (earned by gates) or emergency (granted by a person)                 | =change:emergency=                 |
+| *authorization*       | normal (earned by gates) or emergency (granted by a person)                 | =itil:emergency=                 |
 | *deployment record*   | platform-attested statement that artifact X reached environment Y           | the Deployments API                |
 
 Two of these are load-bearing and routinely got wrong:
@@ -710,7 +710,7 @@ PR that holds it. Slots may return later as an optimization; they are not in
 | =app:<group>=          | labeller    | labeller          | The diff touches =apps/<group>/=. *Owned* by the labeller     |
 | =change:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
 | =change:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
-| =change:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
+| =itil:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
 | =change:requested=     | *human*     | release / close   | *Start my change request.* The only label a person adds to set a change going |
 | =change:scheduled=     | scheduler   | activation        | A window is booked on the change schedule                    |
 | =deploy:staging=       | workflow    | the action ends   | *Action in flight:* deploying to staging right now           |
@@ -887,7 +887,7 @@ stateDiagram-v2
     Staging --> Gated: e2e fails -> staging:failed, lock released
     Staging --> Promoted: authorizing e2e passes -> staging:passed@SHA
     Promoted --> Production: promote.yml adds deploy:production
-    Gated --> Production: change:emergency + approval (bypasses staging)
+    Gated --> Production: itil:emergency + approval (bypasses staging)
     Production --> Unhealthy: health check fails -> rollback + PIR
     Unhealthy --> Gated: labels released
     Production --> Healthy: health check passes -> production:healthy
@@ -898,7 +898,7 @@ stateDiagram-v2
 ** The guards
 
 Each is a hard precondition. None is skippable except where stated, and the
-only thing that can state it is =change:emergency=.
+only thing that can state it is =itil:emergency=.
 
 | # | Guard                    | Checked by             | On failure                          | Emergency bypass |
 |---+--------------------------+------------------------+-------------------------------------+------------------|
@@ -952,7 +952,7 @@ pr="$2"
 repo="${GH_REPO:-$GITHUB_REPOSITORY}"
 
 emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
-  -q '[.labels[].name] | index("change:emergency") // empty')
+  -q '[.labels[].name] | index("itil:emergency") // empty')
 
 # Guard 0: up to date with main (standard and normal changes only).
 #
@@ -1227,11 +1227,11 @@ green is void rather than merely unverified (§Verification contract).
 
 ** Emergency — the only bypass
 
-=change:emergency= is a human label and the sole authorization to reach
+=itil:emergency= is a human label and the sole authorization to reach
 production without =staging:passed=. It does not bypass guard 2 or guard 5.
 
 #+begin_example
-change:emergency + deploy:production
+itil:emergency + deploy:production
   → require: one approving review from a change authority
   → require: gates green on head SHA        (guard 2, no bypass)
   → preflight: lock only; a FREEZE event does not block an emergency
@@ -1247,7 +1247,7 @@ known, accepted regression risk, and naming it is the difference between an
 emergency change and an accident.
 
 Note the asymmetry with §Change enablement: an =EMERGENCY:= event on the change
-schedule /blocks everyone else/, while the =change:emergency= label /exempts one
+schedule /blocks everyone else/, while the =itil:emergency= label /exempts one
 PR/. Same word, opposite direction; the calendar governs the estate, the label
 governs a change.
 
@@ -1339,7 +1339,7 @@ pr="$1"; repo="${GH_REPO:-$GITHUB_REPOSITORY}"
 # second lands a tree predating it. Found in sim/ at berths=2. Activation is
 # not the last point of reliance; the merge is.
 emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
-  -q '[.labels[].name] | index("change:emergency") // empty')
+  -q '[.labels[].name] | index("itil:emergency") // empty')
 if [ -z "$emergency" ]; then
   state=$(gh pr view "$pr" --repo "$repo" --json mergeStateStatus -q .mergeStateStatus)
   if [ "$state" = "BEHIND" ] || [ "$state" = "DIRTY" ]; then
@@ -1547,11 +1547,11 @@ jobs:
         run: |
           labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]')
           echo "$labels" | jq -e 'index("staging:passed")' >/dev/null && exit 0
-          echo "$labels" | jq -e 'index("change:emergency")' >/dev/null || {
-            echo "::error::no staging:passed on head SHA and not change:emergency"; exit 1; }
+          echo "$labels" | jq -e 'index("itil:emergency")' >/dev/null || {
+            echo "::error::no staging:passed on head SHA and not itil:emergency"; exit 1; }
           gh api "repos/${{ github.repository }}/pulls/$PR/reviews" \
             --jq '[.[]|select(.state=="APPROVED")]|length' | grep -qv '^0$' || {
-            echo "::error::change:emergency requires an approving review"; exit 1; }
+            echo "::error::itil:emergency requires an approving review"; exit 1; }
       - run: ./gates/preflight.sh production
       - run: ./change/lock.sh acquire "$PR" production
       - run: ./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh production "$(./change/groups.sh "$PR")"
@@ -2236,7 +2236,7 @@ canary or gradual rollout, which is the normal case for services.
 Not a concession — a design rule. An automation without a declared escape hatch
 does not get obeyed, it gets *circumvented*, and a circumvention leaves no
 record. §The balance already measured one instance of this: queue friction does
-not slow delivery, it routes traffic onto =change:emergency=, the one path with
+not slow delivery, it routes traffic onto =itil:emergency=, the one path with
 fewer checks. The general form:
 
 #+begin_quote
@@ -2248,10 +2248,10 @@ The catalogue, so no future exception has to be argued from first principles:
 | automation                    | bypass                | what it costs                        | where it shows |
 |-------------------------------+-----------------------+--------------------------------------+----------------|
 | labeller owns =app:*=         | =labeler:skip=        | manifest becomes asserted, not derived | label on the PR |
-| staging must pass             | =change:emergency=    | no staging evidence for this change  | label + approval + PIR |
-| the berth queue               | =change:emergency=    | jumps the queue                      | label + PIR    |
+| staging must pass             | =itil:emergency=    | no staging evidence for this change  | label + approval + PIR |
+| the berth queue               | =itil:emergency=    | jumps the queue                      | label + PIR    |
 | the freeze window             | =EMERGENCY_CHANGE=    | the calendar stops governing         | repo variable  |
-| guard 0 up-to-date            | =change:emergency=    | may ship behind trunk                | PIR records the divergence |
+| guard 0 up-to-date            | =itil:emergency=    | may ship behind trunk                | PIR records the divergence |
 | *guard 2 gates green*         | *none*                | —                                    | —              |
 | *guard 5 production healthy*  | *none*                | —                                    | —              |
 
@@ -2271,7 +2271,7 @@ deployed is what is serving; bypass it and "deployed" becomes a claim rather
 than an observation (§What completes a deployment).
 
 Those are not stricter rules than the others. They are the rules that keep the
-*other* bypasses honest: =change:emergency= is a legible, auditable act
+*other* bypasses honest: =itil:emergency= is a legible, auditable act
 precisely because the records it appears in are otherwise true.
 
 ** What makes a bypass acceptable
@@ -2281,7 +2281,7 @@ Three properties, and all three are required:
 1. *Visible on the artifact* — a label on the PR, not a flag in a job.
 2. *Carried into the record* — the PIR names it and who authorized it.
 3. *Narrow* — it suspends one automation, not the guards around it.
-   =labeler:skip= stops the labeller and touches no gate; =change:emergency=
+   =labeler:skip= stops the labeller and touches no gate; =itil:emergency=
    skips the staging environment and still faces guards 2 and 5.
 
 A "force" flag fails all three, which is why =docs/idp-api.org= refuses to
@@ -2305,7 +2305,7 @@ has one sharp consequence.
 | kind          | examples                                      | emitted by      | forgeable? |
 |---------------+-----------------------------------------------+-----------------+------------|
 | *derived*     | =app:*=, =change:standard=, =change:normal=   | the labeller, from the diff | no — resynced on every push |
-| *request*     | =change:requested=, =change:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
+| *request*     | =change:requested=, =itil:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
 | *action*      | =deploy:staging=, =deploy:production=         | the workflow    | no — it marks work in flight |
 | *observation* | =staging:passed=, =production:healthy=, =change:scheduled=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
 
@@ -2491,7 +2491,7 @@ devices. They are worth having, and they are the ones to tune.
 This is not the usual safety-versus-speed trade, and reading it that way gets
 the sign wrong.
 
-=change:emergency= is the *one* label that bypasses staging. So queue friction
+=itil:emergency= is the *one* label that bypasses staging. So queue friction
 does not convert into slower-but-equally-safe delivery — it converts into
 traffic on the path with fewer checks. =gates/simulate-gates.py= models it: at
 a mean berth wait of two hours roughly a sixth of changes route to emergency;
@@ -2514,7 +2514,7 @@ a remark:
   §Change enablement, preflight exit 4, and the =EMERGENCY_CHANGE= fallback that
   exists precisely because a /record/ was allowed to become a /control/.
 - *Watch the emergency rate as the health metric.* A rising share of
-  =change:emergency= is not an incident trend; it is the queue reporting that it
+  =itil:emergency= is not an incident trend; it is the queue reporting that it
   has become too expensive to use honestly. The PIR already records every
   bypass, so the number is free.
 
@@ -2552,7 +2552,7 @@ holds.
 and §The balance says what that queue wait does: the emergency share goes to
 100%. So a high-volume soak run against a singleton berth *does not test the
 pipeline — it tests the bypass*, because by the time the queue is that deep
-every change has a rational reason to carry =change:emergency=.
+every change has a rational reason to carry =itil:emergency=.
 
 Read that carefully, because it is not a defect the soak /finds/. It is the
 singleton berth meeting its design limit, exactly where §What this model gets
@@ -2823,6 +2823,54 @@ the part BEFORE the colon names the subject and the part after is its value. In
 ENVIRONMENT and the part after is the action taken in it. Two grammars, one
 punctuation mark, which is why the models disagreed.
 
+** Two decisions taken 2026-09-14, and why
+
+*** =change:emergency= is a category error and is gone
+
+It appeared 23 times in this document and was *declared nowhere* — no row in
+=change/label-owners.tsv=, which is the file that says who may write a label.
+Every declared member of =change:*= is a LIFECYCLE state: =requested=,
+=scheduled=, =complete=, =failed=, =backed-out=, =backfill-owed=. Each answers
+/how far did this get/.
+
+"Emergency" is not a point in a lifecycle. It is what KIND of change this is,
+which is the =itil:*= namespace by the grammar above. =change:emergency= is the
+pre-split name, and it survived here in prose after the implementation moved.
+
+All 23 are now =itil:emergency=. This was not cosmetic: =gates/preflight.sh=
+matches with =grep -cx=, an exact whole-line match, so a change labelled the way
+this document specified *would not have matched the code that reads it*. The
+governing document was specifying a label that no guard could see.
+
+*** =itil:emergency=, stated once
+
+A *classification*, asserted by change management, that this change may move
+things an ordinary change may not — and in the right designation may override
+ordering guards. Concretely it bypasses guard 0, guard 3's FREEZE (never the
+lock), guard 4 (with an approving review), and guard 4b. It does not bypass
+guard 2 or guard 5, and there is deliberately no designation that bypasses
+everything (§Emergency — the only bypass).
+
+It is a claim about the CHANGE. The bare =emergency= label on the holder issue
+is a claim about the WORLD, and stops everyone including its declarer. Same
+word, different subject, different scope.
+
+*** There is no =change:start=, and the reason is worth keeping
+
+A start signal was proposed. It already exists twice, and naming that is more
+useful than adding a third:
+
+| label | owner | role | means |
+|-------+-------+------+-------|
+| =change:requested= | human | lifecycle annotation | /I want this change to happen/ |
+| =release= | human | *intent* | /go now/ |
+
+Under the grammar, =release= DRIVES and =change:requested= records that a person
+asked. They are genuinely different — a change can be requested for a week
+before anyone says go — so both stay. A =change:start= would be a third
+human-owned label meaning something one of these already means, and two labels
+for one fact is the defect this repository keeps finding.
+
 ** Why =deploy:<env>= is intent and not state
 
 This is the correction. =change/label-owners.tsv= describes =deploy:staging= as
@@ -2937,7 +2985,7 @@ gate sequence prevents an unauthorized or unsafe production deployment/:
    =gates/lint.sh= exits 0.
 7. A stale lock older than 60 minutes is cleared without the clearance
    appearing in a PIR.
-8. The share of changes carrying =change:emergency= rises without a matching
+8. The share of changes carrying =itil:emergency= rises without a matching
    rise in incidents — the queue has become too expensive to use honestly, and
    the bypass is absorbing normal traffic (§The balance).
 
