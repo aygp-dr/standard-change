@@ -441,7 +441,7 @@ real civic-tech deployment, and this is the whole vocabulary.
   ("Reserved — do not auto-pick; worked manually in a specific session"). A
   single =status:*= namespace carrying lifecycle *and* action *and* blockage —
   the overloading =spec.org= §Nomenclature says to avoid.
-- =elastic/kibana= [E]: fourteen =ci:*-deploy-*= labels
+- =elastic/kibana= [E]: twelve =ci:*deploy*= labels
   (=ci:cloud-deploy=, =ci:project-deploy-security=, =ci:cloud-redeploy=,
   =ci:cloud-persist-deployment=…). *All intent, none state.* Plus
   =Environment:ECH= / =Environment:MKI= as loci.
@@ -490,9 +490,13 @@ label's job is to *cause* a deployment or to *record* one:
 
 | kind | strings | combined issues | note |
 |------+---------+-----------------+------|
-| intent — "please deploy" | 13 | ~7,100 | =deploy:*=, =deploy-*=, =auto-deploy=, =needs-deploy=, =*-ready=, =do-not-deploy= |
-| state — "is deployed" | 14 | ~7,300 | =deployed:*=, =in-*=, =on-staging=, =status:deployed=, =deploying=, =*-failed= |
-| ambiguous — both or neither | 7 | ~2,400 | =env:*=, =environment:*=, =code-freeze=, =production-ready= |
+| intent — "please deploy" | 13 | 9,106 | =deploy:*=, =deploy-*=, =auto-deploy=, =needs-deploy=, =staging-ready=, =do-not-deploy=, =awaiting-deploy= |
+| state — "is deployed" | 15 | 8,096 | =deployed:*=, =in-staging=, =in-production=, =on-staging=, =status:deployed=, =state:deployed=, =deploying=, =*-failed=, =deploy-blocked=, =pending-deployment= |
+| ambiguous — both or neither | 6 | 2,423 | =env:*=, =environment:staging=, =production-ready=, =code-freeze=, =deploy-freeze= |
+
+(=awaiting-deploy= is counted as intent; it is arguably a queue state. It is
+one repository's label and moving it changes the totals by 2,137 without
+changing the conclusion.)
 
 *The distinction is real and people do make it* — the grammar carries it,
 imperative for intent and past participle for state, in exactly the way
