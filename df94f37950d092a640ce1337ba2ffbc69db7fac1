@@ -1,0 +1,11 @@
+Timeline
+- Hand-edited frames: TLC "does not seem to contain badVerdict/badPromote", then "successor state not completely specified by action Label". Two attempts at regex repair made it worse (duplicated names in inner ELSE tuples). Rewrote the module with /\ FRAME markers and tla/frames.py; first generator run wrote 0 frames (heredoc doubled the backslashes in the regex); fixed.
+- gate-selftest in the background was killed by the OS for memory with the 25M-state positive under an unbounded JVM beside four dev blocks, the IDP mock and Chrome. Stopped the stand-in blocks and the mock; run() now passes -Xmx3g (TLC_HEAP) and -workers auto.
+- Not re-run in full after the last edit: gate-selftest and cross_check.py end to end. Run separately: TLC positive (372 s, 2.4 GB RSS), all 14 TLC negatives, all 14 simulator negatives, simulator census at depth 12, lint, docs gate.
+
+Reproduction
+  python3 tla/frames.py --check                     frames current
+  ./tla/check.sh                                    22 runs (TLC positive ~6 min)
+  python3 sim/label_sim.py --bound 12 --census      1,644,696 states, 173 shapes
+  LABEL_BOUND=12 python3 sim/cross_check.py         verdicts 15/15; count compared only when the sim exhausts
+  cell: macOS Darwin 24.1.0, OpenJDK 21.0.4, Python 3.11.10, 16 GB
