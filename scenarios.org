@@ -426,6 +426,64 @@ individual booking looks correct.
 The tell was visible on the dashboard immediately — a wall of identical future
 rows — which is the second time the board surfaced something no script noticed.
 
+** D13 — settlement reported a merge that did not happen
+
+Hit live on *#40* at 00:44Z, and it is the finding that justifies the whole
+manual overlay: *an autonomous loop would have reported seven successes that
+night.*
+
+*** What happened
+
+: gh         "not mergeable: the merge commit cannot be cleanly created"
+: PR state   OPEN, mergeable=CONFLICTING
+: settle.sh  "settled: #40 merged -- the forge is the record now"
+
+=change/settle.sh= had =gh pr merge ... && ok=. The merge refused, the =&&=
+short-circuited, *and execution continued*: the PIR was posted, the window was
+redlined =passed=, the validation labels were cleared, and the summary claimed
+success. Production had already been cut over to =43646f9=.
+
+*** Why it is the worst shape
+
+The change was *deployed and not merged*. That is the state with no name: the
+front serves a build =main= does not contain, and the next change branches from
+a =main= without it and reverts it on promotion. Reached by a script that
+reported the opposite, with every downstream step destroying the working state
+that would have shown it.
+
+Same shape as the =gate | sed= defect the same afternoon — a step failed, its
+status was never checked, the summary asserted the opposite. *Settlement is the
+one place that must never do this.*
+
+*** The conflict underneath
+
+#40 and #44 each add one row to =apps/core='s =PANELS= object literal. #44
+landed at 00:22, #40 tried at 00:44. The agent that scaffolded the twenty tiny
+PRs had already written this down — /"PANELS is a seam that admits one change at
+a time"/ — and capped core at four changes because of it. *The warning existed
+and nothing consumed it.*
+
+*** Two oracles I got wrong while diagnosing
+
+Recorded because the diagnosis was nearly as instructive as the defect:
+
+1. I reported all seven changes as "not on main" using
+   =git merge-base --is-ancestor=. *GitHub squash-merges*, so a branch SHA is
+   never an ancestor even when the change landed. Six had shipped fine. The
+   right oracle is the CONTENT — =PANELS= on main had =/account= and not
+   =/cart=.
+2. I twice called a rebase failure a "conflict" without reading git's message.
+   One was a *dirty index* in a worktree; one was my own lookup matching two
+   worktree paths and handing =git -C= a two-line string. Only #21's conflict
+   was real.
+
+*** Fixed
+
+=settle.sh= now exits 8 on a failed merge and runs nothing after it, printing
+=mergeable= / =mergeStateStatus= and the recovery. The rollback to a colour
+whose build IS on main is named in the message, because that is the action the
+operator needs and it is not obvious under pressure.
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
