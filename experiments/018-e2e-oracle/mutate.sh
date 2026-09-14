@@ -20,11 +20,11 @@
 # error, not a pass -- a mutation runner that silently skips is itself a check
 # that cannot fail.
 #
-# RUN:  ./experiments/017-e2e-oracle/mutate.sh
+# RUN:  ./experiments/018-e2e-oracle/mutate.sh
 # Exit 0 if every mutation is caught, 1 if any survives.
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
-here="$root/experiments/017-e2e-oracle"
+here="$root/experiments/018-e2e-oracle"
 # Three files carry the fix and all three are mutated: the oracle that decides
 # where expectations come from, the router that publishes them, and the linter
 # that keeps an app from claiming the path they are published on.

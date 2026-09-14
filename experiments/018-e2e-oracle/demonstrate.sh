@@ -22,13 +22,13 @@
 # stub/curl for why that is the honest way round.
 #
 # RUN:
-#   ./experiments/017-e2e-oracle/demonstrate.sh
+#   ./experiments/018-e2e-oracle/demonstrate.sh
 #
 # Exit 0 if every assertion holds, 1 otherwise, and it prints one line per
 # assertion either way so a mutation run can be counted.
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
-here="$root/experiments/017-e2e-oracle"
+here="$root/experiments/018-e2e-oracle"
 work=$(mktemp -d "${TMPDIR:-/tmp}/e2eoracle.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
 
