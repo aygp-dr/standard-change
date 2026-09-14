@@ -241,7 +241,7 @@ fi
 #
 #    NOT cleared: app:* and itil:* describe what the change WAS.
 #    describe what the change was, and remain true after it shipped.
-for l in change:requested change:scheduled change:complete release release:start \
+for l in change:start change:requested change:scheduled change:complete release release:start \
         deploy:staging deploy:production \
          staging:e2e staging:smoke staging:uat staging:passed staging:failed \
          staging:in-progress staging:e2e-failed staging:smoke-failed \
