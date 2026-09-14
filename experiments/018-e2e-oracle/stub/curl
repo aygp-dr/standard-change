@@ -1,0 +1,66 @@
+#!/bin/sh
+# A curl that answers from a directory instead of from a socket. (issue #14)
+#
+# gates/oracle.sh has to be tested against estates that DO NOT EXIST: a build
+# older than the manifest, a build that answers /__estate.json with something
+# of the wrong shape, a build on a sha this tree has never had. Standing those
+# up means running four node processes per case in the protected port tiers,
+# which is both slow and the one thing a test must never do on this host.
+#
+# So the transport is stubbed and the logic is not. Everything the oracle
+# actually decides on -- the x-build-sha header, the manifest body, its shape --
+# comes from $STUB_DIR, and oracle.sh is the real file, unmodified.
+#
+#   $STUB_DIR/sha          the x-build-sha the estate reports ("" = no header)
+#   $STUB_DIR/estate.json  the body served at /__estate.json (absent = 404)
+#
+# Only the two call shapes oracle.sh makes are implemented. Anything else is a
+# hard error rather than an empty string, because a stub that silently answers
+# "" to an unrecognised request is a check that cannot fail -- the defect class
+# this whole experiment is about (spec.org, The defect taxonomy, class 7).
+set -eu
+: "${STUB_DIR:?stub curl: STUB_DIR is not set}"
+
+head_only=0
+url=''
+for a in "$@"; do
+  case "$a" in
+    -sI|-Is|-I) head_only=1 ;;
+    http://*|https://*) url="$a" ;;
+  esac
+done
+[ -n "$url" ] || { echo "stub curl: no URL in: $*" >&2; exit 2; }
+
+rest=${url#*://}
+case "$rest" in
+  */*) path=/${rest#*/} ;;
+  *)   path=/ ;;
+esac
+path=${path%%\?*}
+
+if [ -f "$STUB_DIR/sha" ]; then sha=$(cat "$STUB_DIR/sha"); else sha=''; fi
+
+if [ "$head_only" = 1 ]; then
+  echo "HTTP/1.1 200 OK"
+  echo "content-type: application/json"
+  if [ -n "$sha" ]; then echo "x-build-sha: $sha"; fi
+  echo ""
+  exit 0
+fi
+
+case "$path" in
+  /__estate.json)
+    if [ -f "$STUB_DIR/estate.json" ]; then
+      cat "$STUB_DIR/estate.json"
+    else
+      # What a router that predates the manifest actually does: the path is
+      # unrouted, so it falls through to the default app and core answers with
+      # its own 404 body. That body HAS a `routes` key, which is exactly why
+      # oracle.sh checks the shape and not merely the key.
+      printf '{"app":"core","path":"/__estate.json","found":false,"block":"dev-1","sha":"%s","routes":["/","/login","/cart"]}\n' "${sha:-dev}"
+    fi
+    exit 0 ;;
+  *)
+    echo "stub curl: unstubbed path '$path'" >&2
+    exit 7 ;;
+esac
