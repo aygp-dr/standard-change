@@ -501,6 +501,96 @@ The blocks are otherwise identical.
 Observed: blocks 1 and 2 serving on =:9010= and =:9020=, each reporting its own
 build sha, =gates/e2e.sh= green against both over the LAN address.
 
+** Exposure — what may cross the LAN boundary
+
+Every port tier above says what an environment *is*. None of them says who may
+*reach* it, and the two are not the same question. A public tunnel does not
+change an environment's tier, its port, or its guards; it changes the set of
+people who can operate the controls, and nothing in the tier model notices.
+
+*** The control plane is not a web page
+
+The dashboard reads like a status board and is not one. It carries
+unauthenticated write endpoints:
+
+| endpoint | effect |
+|----------+--------|
+| =POST /api/estate/freeze/{on,off}= | declares or lifts an estate freeze — halts EVERY deployment |
+| =POST /api/estate/emergency/{on,off}= | declares or lifts an estate emergency |
+| =POST /api/schedule/<pr>/clear= | cancels a booked window |
+
+There is no authentication in front of them. On a LAN that is a deliberate
+trade: the boundary IS the authentication, and `freeze` is designed to be
+reachable in a hurry by whoever is in the room. Publish the same origin and the
+trade silently inverts — the control that stops all deployment becomes an
+unauthenticated POST from anywhere.
+
+*The rule:* an origin that can change estate state must not be tunnelled without
+an authenticating proxy in front of it. A read-only view may be; the same
+process serving both is not a read-only view.
+
+*** A tunnel is not obscurity
+
+Three assumptions that do not hold, each of which has to be stated because each
+sounds true:
+
+- /Nobody knows the hostname./ Every hostname fronted by a CA-issued certificate
+  appears in Certificate Transparency logs within minutes, and CT is crawled
+  continuously. A tunnel hostname is public the moment it is created.
+- /It is only reachable over the tunnel./ That is the point — the tunnel is
+  reachable from the whole internet, which is strictly more exposure than the
+  LAN, not less.
+- /The catch-all 404 protects the rest./ It scopes the tunnel to declared
+  hostnames. It says nothing about who may use a declared one.
+
+*** The precedent already on this host
+
+The existing =cloudflared= ingress on hydra gets this right and says so in its
+own comments: the PTY WebSocket on 7681 is *never* tunnelled — "PTY access
+requires LAN connection only" — and the demo hostname serves the static client
+page *only*, with the socket it talks to deliberately left off the tunnel. The
+rule there is the rule here: publish the view, never the actuator.
+
+The telemetry beacon is the counter-example that shows the line. It is
+tunnelled, and it is safe to tunnel, because it accepts events and controls
+nothing. Exposure is decided by what an endpoint can *do*, not by what tier it
+sits in.
+
+*** The freeze has no declarer, and that is the actual defect
+
+Exposure is the occasion for this finding, not its cause. The estate toggle
+writes:
+
+: `freeze` turned **on** from the IDP dashboard at <timestamp>.
+
+No actor and no reason, posted under the repo's own token — so every freeze is
+attributed to the same identity whoever pressed the button. That is already
+true on a LAN.
+
+It matters because a freeze is legitimately powerful: anyone with change
+authority may halt the estate, and the control is deliberately easy to reach in
+a hurry. The power is not the problem. The problem is that a =freeze= is a
+property of the WORLD (see §Nomenclature) and a world-property with no recorded
+declarer leaves the post-implementation review unable to answer /why did we stop
+shipping/. An authorised halt and a hostile one produce byte-identical records.
+
+Tunnelling the origin does not create this defect; it removes the only thing
+compensating for it, which is that the set of people who could press the button
+was the set of people in the building.
+
+*The rule:* a control that changes estate state records WHO invoked it and WHY,
+as part of the same write that changes the state. If the identity cannot be
+established, the control refuses — an unattributable freeze is not a safer
+freeze, it is an unauditable one.
+
+*** What a rebuild must record
+
+An environment registry that names tier and port but not *audience* cannot
+express any of this — it will report an estate as =protected= while the whole
+internet can freeze it. The registry needs a third axis: who may reach it, and
+whether reaching it can change anything.
+
+
 ** Registry
 
 =ports.tsv= is the CMDB for worktrees. =make port-alloc= appends a row for the current worktree path and writes =.env.ports= in the worktree. =make port-free= removes the row.
