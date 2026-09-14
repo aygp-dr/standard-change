@@ -101,3 +101,85 @@ system look broken.
    it once taught nothing to the other two.
 3. *The invariants are not the expensive part.* Half the day was ordinary work.
    The invariants made that half safe; they did not replace it.
+
+* The build, by the numbers — 2026-09-13/14
+
+Measured, not estimated. Commands are in the git history; the token figures come
+from the session transcript at
+=~/.claude/projects/-home-jwalsh-ghq-github-com-aygp-dr-slipway/*.jsonl=.
+
+** Tests
+
+| suite | tests |
+|-------+-------|
+| =apps/core= | 17 |
+| =apps/plp= | 63 |
+| =apps/pdp= | 48 |
+| =apps/checkout= | 12 |
+| =shared= | 22 |
+| *total unit* | *162* |
+
+Plus the gate suites, which are a different kind of thing — they assert the
+gates can *fail*, not that the apps work: =observation-test= (10 cases + a
+detection case), =audit-selftest=, =labeller-test=, =simulate-gates=,
+=pbt-pipeline=, and =tla/check.sh= (7 TLC runs, both directions).
+
+32 shell scripts under =gates/=, =change/= and =targets/=, at 0 shellcheck
+findings.
+
+** Deviations recorded rather than tidied
+
+1. *Spec sat at 0.4* through ~180 commits that materially changed it. Bumped to
+   0.5 only when the taxonomy was written.
+2. *=issue #1= was repurposed* from the review ledger to the estate state
+   holder, and =spec.org= went on pointing deviations at it for hours.
+3. *Approvals were posted by =change/review.py= that manufactured their own
+   verdict* — twenty of them, four on PRs that cannot merge. Found by the
+   review proxy, which refused to use the script.
+4. *Production served an unmerged, unauthorized build twice* — once because
+   =settle.sh= reported a merge that failed (#40), once because the driver
+   piped a guard through =tail= (#54). Both rolled back.
+5. *=production-green= was taken down* by a deploy from a session whose
+   processes do not outlive their tool call. Restored; the cause is recorded.
+6. *=--short= was used on every window tonight*, overriding the duration floor
+   for grind speed. The floor exists because a 5m slot cannot hold a 5m soak.
+
+** Considerations that changed the design
+
+- *The calendar is not core.* Six of seven guards never read it. What protects
+  production is evidence bound to a build and a singleton berth.
+- *Fast deployments are what let the scheduler stay dumb.* A ~90s cycle makes a
+  missed window cost the wait for the next one; at an hour per cycle somebody
+  would build an auto-rebooker, which is how the calendar filled with forty
+  reservations nobody was driving.
+- *The manual cost is presence, not process.* Roughly half of ~30 windows
+  expired unattempted. The guards refused correctly every time they were asked.
+- *The forge cannot enforce a window*, and bridging it with a mirrored required
+  check would put the authority in the stalest component. Acknowledged instead.
+- *Going public fixed CI.* The eight-hour outage was billing on a private repo,
+  reported as =failure= with 0 steps — indistinguishable from a real failure.
+
+** Token spend
+
+| | |
+|-+-|
+| assistant turns with usage | 4,268 |
+| output tokens | 4,299,283 |
+| cache creation | 8,784,934 |
+| cache read | 2,232,358,529 |
+| input (uncached) | 8,536 |
+| *total* | *2,245,451,282* |
+
+Model: =claude-opus-5= throughout, plus subagents.
+
+*Read the shape, not the total.* Cache reads are 99.4% of it — the conversation
+was re-read on every turn, which is what a long single-session grind looks like.
+The work actually produced is the 4.3M output tokens: 222 commits, 16 scenarios,
+26 org documents, a dashboard, and eight changes carried end to end through the
+full release cycle.
+
+*The interesting ratio is tokens per finding.* Sixteen scenarios and seven
+defect classes came out of this. Most were found by a human watching a board, by
+mutation-testing a check, or by reading an error message instead of a summary —
+none of which are expensive. The expense was the grind that produced the
+conditions for them.

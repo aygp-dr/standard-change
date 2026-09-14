@@ -289,6 +289,104 @@ expressed as a pipeline nobody turns on.
 then does nothing with it. Every other change queues behind a human reading a
 page. That is a real price and it is the argument for using it rarely.
 
+* Where a person has to act
+
+Everything else in this pipeline is a derivation. These are the points where it
+*stops and waits for a human*, and they are deliberate — each one is a judgement
+the pipeline is not entitled to make.
+
+** 1. Asking for a slot — =change:scheduled=
+
+: ./change/schedule.sh block <pr> "<groups>" <minutes>            # next available
+: ./change/schedule.sh block <pr> "<groups>" <minutes> --at <iso> # a named hour
+
+*Nobody books a window for you.* There is no auto-scheduler and
+=docs/adr/0003= records why: six of seven guards do not read the calendar at
+all, so scheduling is the least load-bearing thing here and a cleverer one would
+only add rules that can be wrong at 3am.
+
+Two flavours, and the difference is the point:
+
+- *next available* — "I want the path to production, put me behind whoever is
+  already waiting."
+- *=--at <hour>=* — usually a developer saying /I will be at my desk then and I
+  want to watch this go out./ That is why a designated slot does *not* win a
+  clash and why the calendar is allowed to have holes: moving the change moves
+  it away from the person who arranged to be present.
+
+=block= refuses a window too short to hold the work — deploy and settle 3m + the
+soak + 1m per extra app + 10m for control-plane. =--short= overrides, loudly.
+
+** 2. Being there when it opens
+
+*This is the real cost, and it is not the guards.*
+
+A window is an entitlement, not an event. Something still has to drive the
+change through it, and tonight that was always a person typing. Of roughly
+thirty windows booked, *about half expired unattempted* — nobody was watching
+when they opened.
+
+That is a *control-flow path, not a failure*. The recovery is two commands and
+costs the wait for the next slot, because the full cycle runs in about ninety
+seconds. See =docs/adr/0003= §Missing a window.
+
+** 3. Accepting it — =staging:uat=
+
+: ./change/uat.sh <pr> http://127.0.0.1:9200
+
+The one place *a person is the instrument*. Every other observation is a script
+recording its own measurement; user acceptance is a human looking at a running
+estate and saying it is right.
+
+=uat.sh= re-reads the window before the walk *and again after it*, because the
+walk takes time and an acceptance recorded outside the window is not an
+acceptance inside it.
+
+** 4. Declaring the class — =itil:emergency=
+
+The labeller derives =itil:standard= from the diff. *It cannot derive an
+emergency*, and must not: deciding that something is an emergency is a
+declaration about the world, not a property of a diff.
+
+** 5. Closing or opening the estate — =freeze= / =emergency=
+
+On *issue #1*, the estate holder — never on a pull request. A PR carrying the
+estate flag is a change that the same write both blocks everyone for *and*
+exempts. Toggle from the dashboard or by hand; =gates/preflight.sh= reads the
+same issue.
+
+** 6. Withdrawing acceptance — removing =staging:uat=
+
+Automation may clear a label at settlement. *Only a person may withdraw an
+acceptance*, because withdrawing means "I looked again and I no longer think
+so", which is not something a script can mean.
+
+** 7. Closing a change that did not make it
+
+: ./change/abort.sh <pr> "<reason>" [--backed-out --to <sha>]
+
+=failed= means production never served it. =backed-out= means production served
+it and was returned — and that word asserts an estate action, so =--to= is
+required.
+
+** What is NOT a human decision
+
+Worth stating, because the temptation runs the other way:
+
+| the pipeline decides | on what |
+|----------------------+---------|
+| =app:*= | the diff, via the labeller |
+| =itil:standard= | the diff touched only app paths |
+| =staging:e2e= =smoke= =production:healthy= | the instrument's own measurement |
+| whether a window is open | the clock |
+| whether the gates are green *on this head* | the forge |
+| whether the berth is free | one label, repo-wide |
+| =expired= | the reaper, and only ever =expired= |
+
+A person who finds themselves setting one of those by hand should ask why the
+derivation is not running — that is how eight hours of hand-applied =app:*=
+labels happened here while the labeller was blocked.
+
 * Feature branches and the queue
 
 #+begin_src mermaid :eval never-export
