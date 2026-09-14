@@ -105,8 +105,41 @@ esac
 gh pr edit "$pr" --repo "$R" --add-label change:complete >/dev/null 2>&1 || true
 ok "change:complete -- validation done, merging"
 
-if [ "$state" = "MERGED" ]; then ok "already merged"
-else gh pr merge "$pr" --repo "$R" --squash --delete-branch >/dev/null && ok "merged, branch deleted"; fi
+# A FAILED MERGE MUST STOP SETTLEMENT. This was `gh pr merge ... && ok`, so a
+# refusal printed nothing and execution continued: the PIR was posted, the
+# window redlined `passed`, the validation labels cleared, and the summary said
+# "settled: #N merged -- the forge is the record now" for a pull request that
+# was still OPEN and CONFLICTING.
+#
+# Observed on #40 at 00:44Z. gh said "not mergeable: the merge commit cannot be
+# cleanly created" -- its row in core's PANELS collided with #44's, which had
+# landed ten minutes earlier -- and production had ALREADY been cut over to a
+# build whose change is not on main. The state with no name, reached by a
+# script that reported the opposite.
+#
+# Same shape as the `gate | sed` defect fixed earlier today: a step failed, its
+# status was not checked, and the summary asserted success. Settlement is the
+# one place that must not do this, because everything after it destroys the
+# working state that would show what happened.
+if [ "$state" = "MERGED" ]; then
+  ok "already merged"
+else
+  if gh pr merge "$pr" --repo "$R" --squash --delete-branch >/dev/null 2>&1; then
+    ok "merged, branch deleted"
+  else
+    echo >&2
+    echo "REFUSED: the merge failed. Settlement STOPS here." >&2
+    gh pr view "$pr" --repo "$R" --json mergeable,mergeStateStatus \
+      -q '"  mergeable=\(.mergeable) state=\(.mergeStateStatus)"' >&2 2>/dev/null || true
+    echo "  Nothing below this line has run: no PIR, no window redline, no label" >&2
+    echo "  clearing. The change is deployed and NOT merged -- production is" >&2
+    echo "  serving something main does not contain, and the next change will" >&2
+    echo "  branch from a main without it and revert it on promotion." >&2
+    echo "  Recover: resolve the conflict, or roll the front back to a colour" >&2
+    echo "  whose build IS on main, then re-settle." >&2
+    exit 8
+  fi
+fi
 
 # 4. THE RECORD. Written before anything is cleared. This comment is what
 #    survives the labels, so it must carry what the labels carried.
