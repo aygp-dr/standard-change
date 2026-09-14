@@ -195,7 +195,7 @@ const AVAILABILITY = {
   'in-stock': 'In stock',
   'low-stock': 'Low stock — only a few left',
   'out-of-stock': 'Out of stock',
-  'preorder': 'Available to pre-order',
+  'preorder': 'Coming soon — pre-order yours today',
   // loadCatalogue only checks that availability is a STRING, so '' is a value a
   // deployed file can carry -- and '' is falsy, so the raw-value fallback below
   // cannot catch it. Without this row the page renders a bare separator dot.
