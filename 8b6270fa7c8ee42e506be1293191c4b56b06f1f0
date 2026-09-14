@@ -1,0 +1,13 @@
+Timeline
+- Labels.tla first positive run: OneClass violated in 4 states (DeclareEmergency, Push, Label). labeller.yml never reads itil:emergency. Rule made a constant; script implements it off (#87).
+- Second positive run: OneLifecycle violated (AddRelease, Book, Watch). watch.sh:38 adds change:requested unconditionally (#88).
+- FreezeGuard/EstateGuard negatives: "Successor state not completely specified: badClaim" -- precedence bug, `badClaim' = badClaim \/ Refused(p)` parsed as `(badClaim' = badClaim) \/ Refused(p)`. Parenthesised.
+- WindowGuard negative found nothing: Activate required change:scheduled, so an unbooked claim was unreachable. activate.sh has no such precondition; removed.
+- release:start modelled, then removed: declared, written by no script (#89).
+- cross_check first run 9/10: label_sim --walks 0 crashed in Hypothesis; fixed.
+
+Reproduction
+  ./tla/check.sh                         17 runs, all as required, ~45 s on the mini
+  python3 sim/label_sim.py --bound 30    616000 states, depth 22, exhausted, VERDICT holds
+  python3 sim/cross_check.py             10/10 agree
+  cell: macOS Darwin 24.1.0, OpenJDK 21.0.4, Python 3.11.10, Hypothesis 6.111.0
