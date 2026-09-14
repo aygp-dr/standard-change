@@ -556,6 +556,54 @@ conclude*. Any rebuild that reads =conclusion= alone will reproduce both defects
 and both are silent — they refuse changes that should pass, so nothing breaks
 loudly enough to investigate.
 
+** D16 — the driver walked past a refusal into production
+
+02:12Z, on *#54*. Guard 4 printed =NOT authorized= and the change was deployed
+to the idle colour and the front cut over to it anyway.
+
+*** The line
+
+: ./change/guard4.sh "$PR" | tail -1
+
+A pipeline's exit status is its LAST command's. =tail= always succeeds, so
+=set -e= saw zero and execution continued through the production deploy, the
+idle-colour e2e, and the cutover.
+
+*** Why it is the finding rather than a bug
+
+*This is the same defect as =change/activate.sh='s =gate | sed=, fixed eight
+hours earlier the same day, and then rebuilt from scratch in the driver written
+to replace it.* Knowing the rule did not prevent writing the code. The shape is
+too ordinary: piping a command to trim its output is the obvious thing to type,
+and it silently converts a guard into a print statement.
+
+Four more instances were in the same file — the soak, the UAT, the idle-colour
+e2e, and the staging walk. All five now capture the output, test the status, and
+print afterwards.
+
+*** What guard 4 was actually refusing
+
+=staging:uat= — *the label was absent while the observation record existed.*
+Guard 4 checks both on purpose: the record proves a measurement was taken, the
+label proves nobody has since withdrawn acceptance. A missing label with a
+present record means somebody withdrew it, and the guard is right to refuse.
+
+So the guard was correct, its verdict was correct, and the driver ignored it.
+
+*** Recovery, and what it cost
+
+Production was rolled back to =9583730= (#53, merged and authorized). #54's
+change is one CSS rule, so the blast radius was nil — but the estate served an
+*unmerged, unauthorized* build for roughly ninety seconds, and nothing in the
+pipeline would have said so. The driver reported the cutover as success.
+
+*** For 001
+
+A rebuild must not be able to express this. Any step whose verdict gates a later
+step has to be *unpipeable* — the runner captures, tests, then formats. Stated
+as a rule: *formatting happens after the verdict is in hand, never in the same
+expression that produces it.*
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
