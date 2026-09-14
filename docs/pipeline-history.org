@@ -446,6 +446,235 @@ Each entry is [H] until its drawer says otherwise.
 - Vogels, W. "A Conversation with Werner Vogels." /ACM Queue/ 4(4), 2006 —
   "you build it, you run it".
 
+* The final gate — auto-merge once the release is complete
+:PROPERTIES:
+:CUSTOM_ID: final-gate-auto-merge
+:END:
+
+Whichever of the five options the ADR takes, the last step is the same: a
+standard change has reached production, the health check has passed, the
+release is complete, and the PR merges to =main=. Today that merge is an
+*active* call — =change/release.sh= runs =gh pr merge --squash= under the
+workflow's token after re-checking guard 4b at the merge. The question here is
+whether GitHub's native auto-merge can be that final gate instead, so that the
+pipeline never holds a merge token at all.
+
+** What auto-merge is, precisely
+:PROPERTIES:
+:CUSTOM_ID: auto-merge-mechanics
+:END:
+
+From GitHub's own documentation, checked 2026-09-14 [E]:
+
+- "Auto-merge merges a pull request automatically after all required reviews
+  and status checks pass." The option "is shown only on pull requests that
+  cannot be merged immediately" — it is meaningless without a protection rule
+  or ruleset that makes something *required*.
+- Prerequisite: the repository setting *Allow auto-merge*. "People with write
+  permissions to a repository can enable auto-merge for a pull request"; the
+  author or any writer can disable it.
+- "Auto-merge is disabled if someone without write permissions pushes new
+  changes to the head branch or switches the base branch." Read the contrapositive:
+  a push by a *writer* does not disable it.
+- =gh pr merge --auto= enables it from the CLI; GraphQL
+  =enablePullRequestAutoMerge= takes =pullRequestId=, =mergeMethod=,
+  =authorEmail= and =expectedHeadOid= — the mutation can be pinned to a head
+  SHA. When the base branch requires a merge queue, "if required checks have
+  not yet passed, auto-merge will be enabled. If required checks have passed,
+  the pull request will be added to the merge queue."
+
+So auto-merge is a *standing intent*: "merge this the moment the forge's own
+requirements are satisfied." It contributes no requirement of its own. The
+whole design question is therefore *which required check encodes "released to
+production"*, and who is allowed to post it.
+
+** The mapping
+:PROPERTIES:
+:CUSTOM_ID: auto-merge-mapping
+:END:
+
+| today (=release.sh=)                         | with auto-merge as the gate                                        |
+|----------------------------------------------+--------------------------------------------------------------------|
+| =release= label added by a person = intent   | the person enables auto-merge = intent, and the merge is attributed to them |
+| =production:healthy= label                    | a *required check run* =change/settled= posted on the head SHA by the settle step |
+| =release.sh= calls =gh pr merge=              | the forge merges; no script holds a merge token                    |
+| guard 4b re-checked in =release.sh= at merge  | *Require branches to be up to date* (strict checks) — see the cost below |
+| =AUTO_MERGE=0= → comment "ready to merge"     | auto-merge simply not enabled; the check is still posted           |
+
+Three properties make this honest rather than decorative, and all three are
+GitHub's rather than ours:
+
+1. *Check runs are bound to a commit SHA.* A push after settlement produces a
+   head with *no* =change/settled= check, so auto-merge waits. This is the
+   =staging:passed@SHA= discipline done by the forge, and it closes the gap the
+   writer-push rule above would otherwise open. =expectedHeadOid= on the
+   mutation pins it a second time at enable.
+2. *The verdict is posted by the settle step, never the deployer.* This is
+   =docs/idp-api.org='s "verb that must not exist" carried to the merge: the
+   deploy job cannot post =change/settled= because it cannot be the party that
+   attests its own convergence. The check-run's =app= is the attestation of
+   who said so.
+3. *The merge is attributed to the person who enabled auto-merge.* =release=
+   is "a person only — intent" (=README.org= §Labels), and the audit trail
+   now records that person as the merger rather than a bot token. [P — GitHub's
+   auto-merge page does not state attribution explicitly; observed behaviour is
+   that the merge commit carries the enabling user, and this should be
+   confirmed on a live repo before it is relied on.]
+
+** What it costs
+:PROPERTIES:
+:CUSTOM_ID: auto-merge-costs
+:END:
+
+- *Guard 6 (production-first) and the divergence class are invisible to it.*
+  =release.sh= refuses the merge with exit 8 when =main= moved during the
+  window and the divergence is =artifact= or =hotfix=, and lets an inert move
+  through. GitHub has one knob — strict status checks — and it is binary:
+  either every stale branch must update, or none must. Updating the branch
+  changes the head SHA, which invalidates the deployed verdict, so under strict
+  checks *every* concurrent landing on =main= sends a settled change back
+  through staging, including the inert ones =divergence.sh= would have waved
+  through. Without strict checks, auto-merge would land a tree that predates
+  =main= — the exact defect =release.sh='s comment describes, found in =sim/=
+  at =berths=2=. Neither setting reproduces the three-valued rule. The
+  practical answer is guard 1: with a single berth and =main= frozen to the
+  change in flight, the branch cannot be stale at merge, and strict checks are
+  a no-op that costs nothing.
+- *The settle step still needs a token that can post a check run.* That is a
+  narrower capability than "merge to main" — =checks:write= rather than
+  =contents:write= — which is the point, but it is not zero.
+- *Label cleanup and freeing the berth still need something to run after the
+  merge.* Auto-merge fires no hook of its own; a =pull_request: closed= workflow
+  with =merged == true= does what the tail of =release.sh= does today. That
+  workflow is the =always()= cleanup ADR 0001 §Open already worries about.
+
+** Availability on this repo, observed 2026-09-14 [E]
+:PROPERTIES:
+:CUSTOM_ID: auto-merge-availability
+:END:
+
+=spec.org= §main is not protected records that =branches/main/protection=
+returned 403 on a private repo. The repo is now *public*, and today:
+
+: gh api repos/aygp-dr/standard-change --jq '{allow_auto_merge, allow_update_branch}'
+: {"allow_auto_merge":false,"allow_update_branch":false}
+: gh api repos/aygp-dr/standard-change/branches/main/protection --jq '.required_status_checks'
+: {"strict":true,"contexts":[],"checks":[]}
+
+Protection is readable and *strict is already on with no required contexts* —
+a rule that requires being up to date with =main= and requires nothing to
+pass. =allow_auto_merge= is still off. So the section title in =spec.org= is
+now wrong in the direction of the observation: =main= *can* be protected here,
+and the spec should say so rather than this note. That amendment is out of
+scope for research notes and is left as a finding.
+
+* If auto-merge is applied — can a merge queue carry "released to production"?
+:PROPERTIES:
+:CUSTOM_ID: merge-queue-released-semantics
+:END:
+
+The follow-on question. Auto-merge on a branch that requires a merge queue
+does not merge; it *enqueues*. =spec.org= §A merge queue is most of this
+model already shows the queue doing guards 0, 2 and 4b natively and nothing
+after the merge. The question is whether the queue could be given a landing
+policy whose precondition is "this change has been released to production",
+and what happens when the queue *stacks* — groups several PRs into one
+merge-group build.
+
+** The mechanics that matter
+:PROPERTIES:
+:CUSTOM_ID: merge-queue-mechanics
+:END:
+
+From GitHub's merge-queue documentation, checked 2026-09-14 [E]:
+
+- The queue is required by the branch protection setting *Require merge
+  queue*. Workflows "must use the =merge_group= event" to run on queued
+  entries; the queue pushes temporary branches under
+  =gh-readonly-queue/{base_branch}/=.
+- "The merge queue will ensure the pull request's changes pass all required
+  status checks when applied to the latest version of the target branch and
+  any pull requests already in the queue." Required checks are evaluated on
+  the *merge-group commit*, not on the PR head.
+- Grouping is configurable: minimum and maximum group size (1–100), a wait
+  timeout after which it merges with fewer than the minimum, build
+  concurrency, and a status-check timeout. "If there are failed required
+  status checks or conflicts with the base branch, the pull request will be
+  removed from the queue."
+- It "provides the same benefits as *Require branches to be up to date*"
+  without the author rebasing — i.e. it is guard 0 without the SHA churn that
+  §What it costs above complained about.
+
+** The conflict, stated
+:PROPERTIES:
+:CUSTOM_ID: merge-queue-conflict
+:END:
+
+"Released to production" is a verdict on a *PR head SHA*: production serves
+=T(c)= and the settle step attested it. A merge queue's required checks run on
+a *merge-group SHA* that no environment has ever served. So the check that
+means "released" cannot be produced by building the merge group; it has to be
+*looked up*. That is legal — a =merge_group= workflow can read the group's
+member PRs, find each one's head, and post =change/settled= on the group
+commit iff every member's head carries a settled verdict. It is a policy in
+the sense the question asks, and it is about thirty lines.
+
+The trouble is stacking. Suppose the group is ={A, B}=. Both heads were
+released to production individually — but this repo has *one* production
+surface, so they were released *in sequence*, and production currently serves
+=B='s tree, which was built on a =main= that did not yet contain =A=. The
+group commit =main + A + B= is a third tree. Landing it means =main= now says
+something production has never served, and guard 5 — the estate serves the
+promoted build — is false at the instant of merge, for the same reason
+=release-strategies.org= §Guard 5 is false by construction during a roll gives
+for rolling deploys. A lookup policy can make the queue *refuse* this — post
+the check only if the group has exactly one member, or only if the newest
+member's =T= equals what production serves — but then the queue never stacks,
+and a queue that never stacks is guard 1 wearing a different hat.
+
+** The two coherent designs
+:PROPERTIES:
+:CUSTOM_ID: merge-queue-two-designs
+:END:
+
+1. *Queue as the last-mile check, depth 1.* Keep production-before-merge.
+   Max group size 1. The =merge_group= workflow looks up the single member's
+   settled verdict and re-runs the gates on the group commit, which is =main +
+   c= — the queue supplies guard 0 and the merge-time half of 4b for free, and
+   =release.sh='s exit-8 path becomes "removed from the queue". What this buys
+   over plain auto-merge is exactly the up-to-date guarantee *without*
+   invalidating the deployed SHA, because the rebase happens on the queue's
+   throwaway branch, not the PR head. What it does not buy is batching; with a
+   single berth there is nothing to batch.
+2. *Queue as the berth — invert the ordering.* Let the queue stack. The
+   merge-group tree *is* the deploy candidate: =merge_group= triggers the
+   staging deploy and the authorizing e2e, production is deployed from the
+   group commit, the settle step posts =change/settled= on *that* SHA, and only
+   then does the queue merge. Now the landed tree and the served tree are the
+   same object by construction, guard 5 holds at merge, and a group of =N= is
+   a release train whose train commit is the deployed identifier. This is the
+   design =spec.org= §A merge queue is most of this model gestures at when it
+   says "if the ordering were inverted, a merge queue would replace most of
+   the model." It costs the production-first rule: a red group is removed
+   *before* it reaches =main= but *after* it reached production, so the
+   rollback target must be recorded on the group, and a failed group of =N=
+   attributes to nobody without the bisect =release-strategies.org= prices at
+   =log2 N=.
+
+Anything between the two — production-first *and* stacking — is the
+contradiction above and should be refused at the check, not managed.
+
+** Availability
+:PROPERTIES:
+:CUSTOM_ID: merge-queue-availability
+:END:
+
+A merge queue needs *Require merge queue* on a protection rule or ruleset.
+Protection is now readable on this repo (§Availability on this repo), so the
+2026-09-13 status "not reachable" needs re-checking rather than repeating;
+whether *Require merge queue* itself is offered on a public repo under this
+plan is untested [H].
+
 * Open
 :PROPERTIES:
 :CUSTOM_ID: open
