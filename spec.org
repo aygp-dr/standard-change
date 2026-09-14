@@ -2559,7 +2559,7 @@ monorepo, these four apps, or GitHub — every entry was found here, but each on
 is a property of *deployment pipelines that judge things*, and any pipeline that
 does not defend against them will reproduce them.
 
-Sixteen scenarios in =scenarios.org= are the evidence. This section is the
+Seventeen scenarios in =scenarios.org= are the evidence. This section is the
 pattern behind them.
 
 ** The eight classes
@@ -2652,6 +2652,26 @@ is a diff the pipeline cannot judge, and every gate will be green.
 
 *The rule:* mutate the thing the check is about and require the check to fail.
 A suite that has never rejected anything is one nobody has tested.
+
+**** The guard-level form: count lifetime refusals
+
+Measured 2026-09-14, and it is the reason this class is listed first among the
+meta-observations. TWO of this pipeline's guards have never refused anything:
+
+| guard | lifetime refusals | why |
+|-------+-------------------+-----|
+| 0 (up to date with main) | *0* | its body is inside =if state = "BEHIND"=, and the forge has never returned =BEHIND= — 0 of 14 open PRs, after 163 commits landed on main in one night |
+| 6 (production-first) | *0* | 484 workflow runs, never once triggered by a label |
+
+Both guards are correctly written. Reviewing the body of either finds nothing,
+because there is nothing wrong with it — what is wrong is that *the trigger
+condition is supplied by an oracle that does not emit that value in this
+configuration*. See =scenarios.org= D17.
+
+So the audit question for a guard is not "is the logic right". It is: *has this
+ever refused anything, and if not, can the oracle it reads ever emit the value
+it tests for?* A guard with zero lifetime refusals is a hypothesis, not a
+control.
 
 *** 8. Not yet is not no, and cannot say is not either
 

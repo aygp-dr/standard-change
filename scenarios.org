@@ -604,6 +604,68 @@ step has to be *unpipeable* — the runner captures, tests, then formats. Stated
 as a rule: *formatting happens after the verdict is in hand, never in the same
 expression that produces it.*
 
+** D17 — guard 0 has never fired, because the forge never says BEHIND
+
+*Measured 2026-09-14, after 163 commits landed on =main= in one night.*
+
+=change/queue.sh= implements guard 0 — /up to date with main/ — and the whole
+of its behind-detection sits inside one condition:
+
+: state=$(gh pr view "$pr" --json mergeStateStatus -q .mergeStateStatus)
+: if [ "$state" = "BEHIND" ]; then
+:     ... ./change/divergence.sh ... inert | pipeline | artifact ...
+: fi
+
+The careful part — classifying what landed under you, granting the berth for an
+=inert= docs merge and refusing for =pipeline= or above — only executes when the
+forge returns exactly =BEHIND=.
+
+*It never has.* Across the repository's life:
+
+| query | count |
+|-------+-------|
+| PRs whose comments say =BEHIND relative to main= | *0* |
+| PRs that got the =`main` moved by a <class>= refusal | *0* |
+| open PRs reporting =BEHIND= after 163 commits to main | *0 of 14* |
+
+The 14 were measured directly: 8 =CLEAN=/=UNSTABLE=, 6 =DIRTY=, none =BEHIND= —
+while every one of them was demonstrably behind trunk.
+
+*** Why
+
+=main= has branch protection with =required_status_checks.strict = true= — the
+"require branches to be up to date" flag — but =contexts: []= and =checks: []=.
+Strict mode with nothing required. GitHub appears to compute =BEHIND= only when
+there is a required check for being up-to-date to gate, so with an empty list
+the state is simply never produced. *[H] — inferred from the observation and the
+configuration; not verified by adding a required check and re-measuring.*
+
+*** Why it matters more than it looks
+
+This is class 7 — /a check that cannot fail produces no verdict/ — and it is the
+*second measured instance in the same repository*, which is the finding. The
+first is guard 6: =gates/production-first.sh=, 484 runs, never once triggered by
+a label. Two guards, both carefully written, both reasoned about in ADRs, and
+neither has ever refused anything.
+
+Both fail the same way: the guard is correct, and its *trigger condition is
+supplied by an oracle that does not produce that value in this configuration*.
+Reviewing the guard body finds nothing, because there is nothing wrong with it.
+
+*** What is NOT dead
+
+=change/divergence.sh= is still reachable — =change/release.sh= (guard 4b at the
+merge) fires on =BEHIND= *or* =DIRTY=, and =DIRTY= does occur. So the classifier
+runs; it is guard 0's entry to it that is unreachable.
+
+*** The rebuild test
+
+A pipeline cannot be graded on whether its guards are written correctly. It must
+be graded on *whether each guard has ever refused anything, and if not, why not*.
+A guard with zero lifetime refusals is a hypothesis, not a control — and the
+question to ask of it is not "is the logic right" but "can the oracle it reads
+ever emit the value it tests for".
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
