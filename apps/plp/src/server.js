@@ -445,7 +445,7 @@ shortly.</p>
   if (!d.count)
     return `${form}
 <h2>No results</h2>
-<p>Nothing matches <code>${q}</code>. The search ran and found nothing — try a
+<p>Nothing matches <code>${q}</code>, not yet anyway. The search ran and came up empty — try a
 category name, a product name or a SKU.</p>
 <p class=v>catalogue: ok — nothing matched</p>`;
 
