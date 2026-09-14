@@ -1,0 +1,10 @@
+Timeline
+- #92 labelled deploy:staging 21:16:15Z: queue.sh claim ok, preflight refused (no window), lock.sh release exit 127.
+- #94 labelled 21:16:37Z: queue.sh claim FAILED at `gh pr edit --add-label blocked:queue` -- GraphQL: Resource not accessible by integration (addLabelsToLabelable). Exit 1 before the exit 5. Preflight skipped: the calendar was not consulted, as required; the label writes did not land.
+- Labeller: all ten PRs first classified control-plane itil:normal -- correct: the branches carried ten unpushed main commits. main pushed; the PR base sha stayed at e9987b1 until each branch synchronized (amend + force-push); then app:* + itil:standard on all ten, four apps on #100 (shared), app:mock on #101.
+
+Reproduction
+  ./change/lock.sh acquire 92 staging; GITHUB_RUN_ID=test ./change/lock.sh acquire 94 staging   -> exit 2, blocked:lock on #94
+  ./change/lock.sh release                                                                     -> free
+  gh run view 34897883064 --log | grep 'queue.sh claim'                                        -> the 401-shaped refusal
+  cell: macOS Darwin 24.1.0; workflows on ubuntu-latest
