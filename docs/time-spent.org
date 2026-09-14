@@ -161,22 +161,40 @@ findings.
 
 ** Token spend
 
+*Corrected 2026-09-14.* This section first published a total of 2,245,451,282
+tokens. That figure was the naive sum of transcript rows, and a transcript
+writes one usage record per streaming update rather than one per API call:
+4,291 rows carry 2,171 distinct message ids. It counted most calls twice. The
+count below takes each field as the maximum within a message id, which is the
+call. See =experiments/017-token-metrics/=; =derive.py= prints both.
+
 | | |
 |-+-|
-| assistant turns with usage | 4,268 |
-| output tokens | 4,299,283 |
-| cache creation | 8,784,934 |
-| cache read | 2,232,358,529 |
-| input (uncached) | 8,536 |
-| *total* | *2,245,451,282* |
+| API calls | 2,171 |
+| output tokens | 1,942,262 |
+| (of which thinking) | 429,755 |
+| cache creation | 3,650,898 |
+| cache read | 1,177,212,205 |
+| input (uncached) | 4,342 |
+| *total* | *1,182,809,707* |
+| naive row sum, for contrast | 2,259,572,855 (1.91x) |
 
-Model: =claude-opus-5= throughout, plus subagents.
+Model: =claude-opus-5= throughout. *Subagents are not in this total* — a
+subagent's calls never enter the coordinator's transcript, and the completion
+notice reports one opaque integer with no cache/output split, so delegated work
+can be counted and not priced. The night's spend is a lower bound.
 
-*Read the shape, not the total.* Cache reads are 99.4% of it — the conversation
-was re-read on every turn, which is what a long single-session grind looks like.
-The work actually produced is the 4.3M output tokens: 222 commits, 16 scenarios,
-26 org documents, a dashboard, and eight changes carried end to end through the
-full release cycle.
+*Read the shape, not the total.* Cache reads are 99.5% of the tokens and 89.2%
+of the money; output is 0.16% of the tokens and 7.4% of the money. The
+conversation was re-read on every one of 2,171 calls and paid for once, at 322
+reads per cache write — that is the cheap shape, not a leak. The lever is turns,
+not tokens. Per unit merged: 53,764,077 tokens; per production cutover:
+69,577,041.
+
+*The correction is itself the finding.* A number that is the sum of its own
+revisions is =spec.org= defect class 2 — /superseded is not current/ — the same
+shape as guard 2 counting a superseded check run as a verdict, and it got past
+me into a published document.
 
 *The interesting ratio is tokens per finding.* Sixteen scenarios and seven
 defect classes came out of this. Most were found by a human watching a board, by

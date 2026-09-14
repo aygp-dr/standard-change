@@ -1,0 +1,5 @@
+agent	task	subagent_tokens	tool_uses	duration_ms	status
+ae0d7819fde5affba	DORA metrics for today's releases	188885	73	975869	completed
+ad26171f332df37e9	Grind guard and oracle issues	-	-	-	running
+a91d3c8b5ada3e768	Grind workflow and cleanup issues	-	-	-	running
+ac73a6f346023a45c	Grind label and feature issues	-	-	-	running
