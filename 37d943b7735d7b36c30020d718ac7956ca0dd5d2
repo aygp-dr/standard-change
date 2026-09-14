@@ -1,0 +1,56 @@
+Timeline
+--------
+1. Confirmed #24 by reading: gates/health.sh line 38/39 read
+   `router/routes.json` bare, while line 95 already resolved
+   change/evidence.sh from $0. Inconsistent within one file.
+2. Ran the pre-fix script from a directory with no checkout:
+
+     $ cd /tmp/empty && sh .../gates/health.sh http://127.0.0.1:1 deadbeef 3
+     jq: error: Could not open file router/routes.json
+     EXIT=0
+
+   Guard 5 passed having sampled nothing. `for app in $(jq ...)` does not
+   abort under set -e when the substitution fails. This is NOT in the issue
+   and is the worse direction: the issue refuses a healthy estate, this
+   certifies one nobody looked at.
+3. FAILED: first demonstrate.sh asserted B1 by running the CURRENT gate from a
+   directory with no checkout -- which post-fix is simply irrelevant, since
+   the gate reads its own tree. Got rc=7 (a real UNHEALTHY verdict from the
+   stub), not rc=4. Restructured: the tree-side cases run a copy of the gate
+   in a constructed tree, and B0 runs the PRE-#24 script from git so the
+   suite proves it can still see the defect.
+4. FAILED: B1b asserted "the refusal emits no verdict line" with an
+   unanchored grep for UNHEALTHY, which matched the refusal's own sentence
+   saying this is not that. Anchored at column 0.
+5. MUTATION FOUND TWO HOLES. First run killed 4 of 6: N3 (drop the
+   route-table validation) and N4 (drop the zero-apps backstop) both
+   survived, because each is caught by the other. Consequences:
+   - the suite now asserts the refusal REASON (B1c, B3b, B6b), which kills
+     N3. Nothing but mutation would have found that the suite could not tell
+     two different refusals apart.
+   - N4 is unreachable while N3's validation stands, so it is declared an
+     expected survivor naming N7 (remove BOTH) as what kills it. The runner
+     accepts a survivor only when a covering mutation is named.
+6. NOT FIXED, deliberately: the table still comes from a TREE, not from the
+   BUILD. Wiring gates/oracle.sh into guard 5 today would make it refuse
+   against the pre-manifest protected estates. Trigger recorded in notes.org.
+
+Reproduction
+------------
+  $ ./experiments/019-guard5-cwd/demonstrate.sh
+    11 passed, 0 failed
+
+  $ ./experiments/019-guard5-cwd/mutate.sh
+    7 mutations applied, 6 killed, 1 expected survivor(s), 0 unexplained
+
+  $ ./gates/shellcheck.sh
+    shellcheck: 34 scripts, 0 finding(s)
+  (and shellcheck -s sh -S warning over the three experiment scripts: clean)
+
+  $ python3 gates/label-audit.py
+    37 labels declared, 19 written in-tree, 16 finding(s)   (baseline)
+
+  $ gmake -s gate-selftest
+    exit 0; git status --short tla/ clean before and after
+
+Cell: hydra, FreeBSD 14.3-RELEASE amd64, jq 1.8.1, python3, shellcheck.
