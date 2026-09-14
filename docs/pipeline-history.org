@@ -27,7 +27,7 @@ deployment, and on whose evidence. Five options are on the table:
 | 2 | *Integrated scheduler.* The scheduler activates on its own when the window comes due, re-evaluating every guard | Kargo / CodePipeline stage conditions 2023–24; ADR 0001 Option B as built |
 | 3 | *Application isolation.* Give each app its own path to production; no shared surface, no berth, no queue | Microservices / "you build it, you run it" (Amazon 2006); ADR 0001 Option A |
 | 4 | *Migrate to a release train.* Fixed cadence, variable scope; a change that misses the cut rides the next one | Chrome 2010, Firefox 2011; ADR 0001 Option A3 |
-| 5 | *Mainline deployment.* Deploy =main= at a SHA and nothing else; branching strategy changes to trunk-based | Trunk-based development; GitHub flow 2011; ADR 0001 Option A4 |
+| 5 | *Mainline deployment.* Deploy =main= at a SHA and nothing else; branching strategy changes to trunk-based | Trunk-based development; GitHub's branch-deploy practice 2015; ADR 0001 Option A4 |
 
 Every row's ancestor was tried at scale by someone, and the table at the end
 records what each of them found. The timeline is the argument that the options
@@ -39,7 +39,8 @@ problem the other two do not have.
 source, in the annotation model of =www.wal.sh/docs/verification-ledger-spec.org=:
 =:CUSTOM_ID:= is the stable join key, =:VERDICT:= is one of
 ={correct, corrected, disputed, needs-citation}=, and =:FINDING:= records what
-changed. A row without a drawer is [H]. This repo does not carry a
+changed. A row without a drawer is [H]; every timeline row and reference
+heading carried one as of 2026-09-14. This repo does not carry a
 =.verify/chain.jsonl= ledger; the drawers are the whole record here.
 
 * Timeline — changes that altered pipeline semantics
@@ -55,210 +56,308 @@ because they made an existing meaning cheaper without changing it.
 ** 1972 — SCCS
 :PROPERTIES:
 :CUSTOM_ID: t-1972-sccs
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: 1972 Bell Labs, paper IEEE TSE Dec 1975 confirmed; Rochkind retrospective PDF 403.
 :END:
 
 Rochkind, Bell Labs. A version is a delta on *one file*. There is no notion of
-a tree state; "which build" is not a question the tool can answer. [H]
+a tree state; "which build" is not a question the tool can answer.
 
 ** 1982 — RCS
 :PROPERTIES:
 :CUSTOM_ID: t-1982-rcs
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Tichy ICSE '82 pp. 58-67 confirmed via ACM DL and Purdue tech report.
 :END:
 
 Tichy, Purdue. Branches and symbolic names, still per file. A "release" is a
-tag applied file by file, which can name a tree that never existed together. [H]
+tag applied file by file, which can name a tree that never existed together.
 
 ** 1986–1990 — CVS
 :PROPERTIES:
 :CUSTOM_ID: t-1986-cvs
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: Berliner's rewrite was in use from Dec 1988, USENIX Winter 1990 paper; was '1989-90'. Grune scripts 1984-85, posted 1986-06-23.
 :END:
 
-Grune's shell scripts (1986) then Berliner's C rewrite (1989–90). Module-level
+Grune's shell scripts (written 1984–85, posted 1986) then Berliner's C rewrite
+(in use at Prisma from December 1988; "CVS II", USENIX Winter 1990). Module-level
 checkout over per-file revisions. A tag can still name an inconsistent tree;
-the pipeline's identity problem is inherited whole. [H]
+the pipeline's identity problem is inherited whole.
 
 ** 1995–2000 — atomic commits: Perforce, then Subversion
 :PROPERTIES:
 :CUSTOM_ID: t-1997-atomic
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Perforce 1995, Subversion started 2000, 1.0.0 2004-02-23 per CHANGES. Slug says 1997, heading 1995-2000; slug kept as join key.
 :END:
 
 Perforce changelists (mid-1990s) and Subversion (2000, first release 2004).
 A revision names a *whole tree*. "Which build" becomes answerable for the first
-time. This is the first of the three inflection points. [H]
+time. This is the first of the three inflection points.
 
 ** 1999–2000 — integrate on every commit
 :PROPERTIES:
 :CUSTOM_ID: t-1999-ci
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: XP Explained 1999-10-05; Fowler CI 2000-09-10, rewritten 2006-05-01 and 2024-01-18 (2024 added).
 :END:
 
 Beck, /Extreme Programming Explained/ (1999); Fowler, "Continuous Integration"
-(2000, revised 2006). The build is the oracle for =main=. What the CI server
+(2000, rewritten 2006 and again 2024). The build is the oracle for =main=. What the CI server
 says about a commit *is* the verdict on that commit — the ancestor of every
-gate in =gates/=. [H]
+gate in =gates/=.
 
 ** 2001–2005 — the build server as a component
 :PROPERTIES:
 :CUSTOM_ID: t-2001-cruisecontrol
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: CruiseControl 1.0 on SourceForge 2001-03-30; Hudson named 2004, released Feb 2005 (trade press only); Jenkins rename vote closed 2011-01-29.
 :END:
 
 CruiseControl (ThoughtWorks, 2001); Hudson (Kawaguchi, 2005; forked to Jenkins
 2011). The build acquires an identity and a log; it is a thing one can point
-at. Guard 4b's "evidence on the head SHA" presupposes this. [H]
+at. Guard 4b's "evidence on the head SHA" presupposes this.
 
 ** 2005–2008 — Git, then GitHub
 :PROPERTIES:
 :CUSTOM_ID: t-2005-git
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: git initial commit e83c516 2005-04-07; GitHub 'We Launched' 2008-04-10.
 :END:
 
 Git (Torvalds, 2005); GitHub (2008). Content-addressed tree: the SHA *is* the
 build identifier, and it is the same identifier in every environment. Branching
 becomes free, which is what creates the branching-policy problem — every
-policy in §Branching policies is a response to Git making branches cheap. [H]
+policy in §Branching policies is a response to Git making branches cheap.
 
 ** 2006–2009 — deploy frequency as a design goal
 :PROPERTIES:
 :CUSTOM_ID: t-2009-flickr
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: ACM Queue 4(4) May 2006 interview contains 'you build it, you run it'; Allspaw & Hammond Velocity 2009-06-23.
 :END:
 
 Vogels on Amazon, "you build it, you run it" (ACM Queue interview, 2006);
 Allspaw & Hammond, "10+ Deploys Per Day: Dev and Ops Cooperation at Flickr"
 (Velocity, 2009). Deploy is decoupled from release and made routine. This is
-the ancestor of *Option 3* — small teams, own path to production. [H]
+the ancestor of *Option 3* — small teams, own path to production.
 
 ** 2010 — the deployment pipeline is named
 :PROPERTIES:
 :CUSTOM_ID: t-2010-cd
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Addison-Wesley 2010-07-27 confirmed. The manual-gate claim now cites ch. 5; page still needs-citation.
 :END:
 
 Humble & Farley, /Continuous Delivery/. Stages, gates, *one* build promoted
 through environments. The manual approval step at the end of the pipeline is
-in the book; it is the ancestor of *Option 1*. [H]
+in the book (ch. 5, "Anatomy of the Deployment Pipeline" — the release stage
+is push-button, on a human's decision [needs-citation: page]); it is the
+ancestor of *Option 1*.
 
 ** 2010 — git-flow
 :PROPERTIES:
 :CUSTOM_ID: t-2010-gitflow
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Post 2010-01-05; note of reflection 2020-03-05 says what the row says.
 :END:
 
 Driessen, "A successful Git branching model". Long-lived =develop=,
 =release/*=, =hotfix/*=, =master=. A release is a merge and a tag. Driessen's
 own 2020 note of reflection says the model was written for versioned software
 shipped to customers and is not the right fit for continuously delivered web
-apps. [H]
+apps.
 
 ** 2011 — GitHub flow; feature flags at scale
 :PROPERTIES:
 :CUSTOM_ID: t-2011-github-flow
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: Chacon 2011 prescribes merge then deploy; branch-deploy-before-merge is Gupta, github.blog 2015-06-02. Lineage re-attributed. Hodgson is 2016 not 2017; Etsy 2011 and Gatekeeper (Feitelson et al. 2013) confirmed.
 :END:
 
-Scott Chacon, "GitHub Flow" (2011): one =main=, short branches, *deploy the
-branch before merging*, merge if healthy. This is the ancestor of our
-production-first rule and of *Option 5*. Feature flags at scale (Facebook
-Gatekeeper, Etsy) in the same years; Hodgson formalised the vocabulary on
-martinfowler.com in 2017. Release is decoupled from deploy: code on production
-is not code in use. [H]
+Scott Chacon, "GitHub Flow" (2011): one =master=, short branches, merge after
+review, deploy immediately after merge. GitHub's *later* variant — deploy the
+branch to production first, roll back by deploying =master=, merge only once
+confirmed healthy (Aman Gupta, "Deploying branches to GitHub.com", 2015) — is
+the ancestor of our production-first rule and of *Option 5*. The 2011 post
+prescribes the opposite order and was mis-cited here until audit. Feature
+flags at scale (Etsy config flags, 2011; Facebook Gatekeeper, documented
+2013) in the same years; Hodgson formalised the vocabulary on martinfowler.com
+in 2016. Release is decoupled from deploy: code on production is not code in
+use.
 
 ** 2013 — Docker
 :PROPERTIES:
 :CUSTOM_ID: t-2013-docker
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: PyCon demo 2013-03-15, open-sourced March 2013; repo created 2013-01-18.
 :END:
 
 The artifact is an immutable image. "Rebuild per environment" becomes an
 anti-pattern; the *digest* replaces the source SHA as the deployed identifier.
 Second inflection point. Guard 5 (the estate serves the promoted build) is
 only stateable once the deployed thing has an identity independent of the
-source tree. [H]
+source tree.
 
 ** 2013–2023 — merge queues
 :PROPERTIES:
 :CUSTOM_ID: t-2013-bors
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: graydon/bors created 2013-02-02; Hoare post Feb 2014 per Wayback, exact day behind captcha; merge queue GA 2023-07-12.
 :END:
 
 Bors (Hoare, Rust, 2013) implementing the "not rocket science" rule (Hoare,
 2014 post); Zuul (OpenStack); Mergify; GitHub merge queue (GA 2023). =main=
 only advances to a state CI has tested with the *exact merged tree*. This is
-guard 0 and guard 4b implemented in the forge. [H]
+guard 0 and guard 4b implemented in the forge.
 
-** 2014 — Kubernetes; trunk-based development named
+** 2013–2017 — Kubernetes; trunk-based development named
 :PROPERTIES:
 :CUSTOM_ID: t-2014-k8s-tbd
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: Kubernetes first commit 2014-06-06 confirmed. TBD was not named in 2014: Hammant post 2013-04-05, site 2017. Heading now 2013-2017.
 :END:
 
 Kubernetes (Google, 2014): declarative desired state; reconciliation replaces
-scripted deploy. Hammant, trunkbaseddevelopment.com (2017, drawing on practice
-from the 2000s): the counter-model to git-flow. [H]
+scripted deploy. Hammant, "What is Trunk-Based Development?" (2013) and
+trunkbaseddevelopment.com (2017, drawing on practice from the 2000s): the
+counter-model to git-flow.
 
 ** 2016 — SRE book; academic framing
 :PROPERTIES:
 :CUSTOM_ID: t-2016-sre
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: SRE book print 2016-05-10, ch. 8 McNutt; Adams & McIntosh SANER 2016 doi:10.1109/SANER.2016.108; Savor et al. ICSE '16 Companion doi:10.1145/2889160.2889223.
 :END:
 
 Beyer et al., /Site Reliability Engineering/, ch. 8 "Release Engineering"
 (Rapid): hermetic builds, cherry-pick release branches, canary. Adams &
 McIntosh, "Modern Release Engineering in a Nutshell" (SANER 2016); Savor et
 al., "Continuous Deployment at Facebook and OANDA" (ICSE-SEIP 2016). The
-pipeline becomes a research object. [H]
+pipeline becomes a research object.
 
 ** 2017–2018 — GitOps
 :PROPERTIES:
 :CUSTOM_ID: t-2017-gitops
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Richardson 2017-08-07 via Wayback; Flux first commit 2016-07-07, 0.1.0 2017-01-27; Argo CD v0.1.0 2018-03-13.
 :END:
 
 Richardson, "GitOps — Operations by Pull Request" (Weaveworks, 2017); Flux
 (2016–17); Argo CD (2018). Git is the desired state; deploy is a *sync*, not a
 push. Third inflection point, and the one that matters most for the ADR:
 reconciliation has no verb for /promote/, so promotion has to be modelled
-separately. Our berth, calendar and activation sit in the gap GitOps opened. [H]
+separately. Our berth, calendar and activation sit in the gap GitOps opened.
 
 ** 2018 — Accelerate
 :PROPERTIES:
 :CUSTOM_ID: t-2018-accelerate
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: IT Revolution, print 2018-03-27.
 :END:
 
 Forsgren, Humble, Kim. The four DORA metrics as the measure of pipeline
 quality. =docs/release-standards.org= already records that this frame is
-structurally blind to forfeited windows and revalidation runs. [H]
+structurally blind to forfeited windows and revalidation runs.
 
 ** 2019–2021 — provenance
 :PROPERTIES:
 :CUSTOM_ID: t-2019-provenance
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: No in-toto 1.0 in 2019: paper USENIX Security 2019, reference impl 1.0.0 2020-11-23, spec v1.0 2023-06-05. SLSA 2021-06-16 and Sigstore 2021-03-09 confirmed.
 :END:
 
-in-toto 1.0 (2019); SLSA (2021); Sigstore (2021). Verdicts and provenance are
+in-toto (USENIX Security 2019; reference implementation 1.0 in 2020,
+specification v1.0 in 2023); SLSA (2021); Sigstore (2021). Verdicts and provenance are
 bound to artifacts and signed by the party that produced them. This is the
 only genuinely standardised layer in the space, and it is about builds, not
-deployments. [H]
+deployments.
 
 ** 2020 — ITIL 4 Change Enablement
 :PROPERTIES:
 :CUSTOM_ID: t-2020-itil4
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: ITIL 4 Foundation (2019) said 'change control'; the Change Enablement practice guide is dated 2020-01-09. AXELOS PDF seen via mirror.
 :END:
 
 Standard / normal / emergency change, change authority, change schedule — in
 the vocabulary most enterprises use. This repo's name and its =itil:*= labels
-are from here. [H]
+are from here.
 
 ** 2020–2021 — the forge carries environment state
 :PROPERTIES:
 :CUSTOM_ID: t-2020-gh-environments
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: GitHub Environments beta 2020-12-15, GA 2021-06-22; 'GA 2020-21' conflated them. Cloudflare gradual deployments beta 2024-04-04, GA 2024-09-26.
 :END:
 
-GitHub Environments (GA 2020–21): required reviewers, wait timers, deployment
-branches. Cloudflare Workers versions and gradual deployments (2024): the
-version is a first-class immutable object with a percentage. [H]
+GitHub Environments (beta December 2020, GA June 2021): required reviewers,
+wait timers, deployment branches. Cloudflare Workers versions and gradual
+deployments (beta April 2024, GA September 2024): the version is a first-class
+immutable object with a percentage.
 
 ** 2023–2024 — promotion as a modelled object
 :PROPERTIES:
 :CUSTOM_ID: t-2023-kargo
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Kargo announced by Akuity 2023-09-18 with Freight and Stage; CodePipeline stage conditions with deployment-window rule 2024-08-01.
 :END:
 
 Kargo (Akuity, 2023): =Freight= and =Stage= as first-class objects, with
 per-stage verification. Argo Rollouts analysis; AWS CodePipeline stage
 conditions (2024) with deployment-window rules. The thing GitOps left out is
-being put back as a model. This is the closest ancestor of *Option 2*. [H]
+being put back as a model. This is the closest ancestor of *Option 2*.
 
 ** 2025–2026 — agentic CI
 :PROPERTIES:
 :CUSTOM_ID: t-2025-agentic
+:VERIFIED_AT: 2026-09-14T13:15:48Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Claude Code research preview 2025-02-24; Copilot coding agent public preview 2025-05-19.
 :END:
 
 Claude Code, Copilot coding agent. The author of a change may be a machine.
@@ -298,10 +397,12 @@ it feeds.
   release is a merge and a tag. Long-lived branches, merge-heavy; matches
   versioned products shipped to customers. Feeds no option here — it is the
   thing Option 5 replaces.
-- *GitHub flow* (Chacon 2011). One =main=, short feature branches, deploy from
-  the branch before merge. GitHub's own practice was deploy-the-branch, then
-  merge if healthy. Direct ancestor of the production-first rule and of
-  *Option 5*'s "deploy =main@sha=" discipline.
+- *GitHub flow* (Chacon 2011). One =master=, short feature branches, merge
+  after review, deploy after merge. GitHub's own later practice (Gupta 2015)
+  inverted the tail: deploy the branch, roll back by deploying =master=, merge
+  once healthy. That 2015 practice, not the 2011 post, is the direct ancestor
+  of the production-first rule and of *Option 5*'s "deploy =main@sha="
+  discipline.
 - *GitLab flow* (Sijbrandij 2014). =main= plus environment branches (=pre-production=,
   =production=) or release branches; promotion is a merge into the environment
   branch. A branch-bound authorization — exactly the silent failure
@@ -375,7 +476,7 @@ the problem rather than repricing it.
 :CUSTOM_ID: references
 :END:
 
-Each entry is [H] until its drawer says otherwise.
+Each heading carries its drawer; see the :FINDING: for what changed.
 
 ** Books
 :PROPERTIES:
@@ -456,6 +557,7 @@ Each entry is [H] until its drawer says otherwise.
 - Driessen, V. "A successful Git branching model." nvie.com, 2010-01-05; note
   of reflection added 2020-03-05.
 - Chacon, S. "GitHub Flow." scottchacon.com, 2011-08-31.
+- Gupta, A. "Deploying branches to GitHub.com." github.blog, 2015-06-02.
 - Hammant, P. trunkbaseddevelopment.com, 2017–.
 - Hoare, G. "technicalities: 'not rocket science' (the story of monotone and
   bors)." graydon2.dreamwidth.org/1597.html, February 2014. ("The Not Rocket
@@ -464,8 +566,9 @@ Each entry is [H] until its drawer says otherwise.
   2006-05-01 and 2024-01-18.
 - Hodgson, P. "Feature Toggles (aka Feature Flags)." martinfowler.com,
   2016-02-08; revised 2017-10-09.
-- Richardson, A. "GitOps — Operations by Pull Request." weave.works, August
-  2017. (weave.works is gone; the Medium mirror is the surviving copy.)
+- Richardson, A. "GitOps — Operations by Pull Request." weave.works,
+  2017-08-07 (Wayback capture of the original; weave.works is gone and the
+  Medium repost is dated 2018-09-28).
 - Allspaw, J. & Hammond, P. "10+ Deploys Per Day: Dev and Ops Cooperation at
   Flickr." Velocity, 2009-06-23.
 - Amazon Builders' Library. "Automating safe, hands-off deployments" (Clare
