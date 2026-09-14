@@ -431,7 +431,7 @@ export function searchPanel(d) {
 
   if (d.reason === 'empty-query')
     return `${form}
-<p>Type a word to search categories and products. Nothing has been searched
+<p>Type a word to search categories and products &#x1F50D; Nothing has been searched
 yet, so this page is not claiming there is nothing.</p>`;
 
   if (d.products === 'unavailable' || d.catalogue === 'unavailable')
