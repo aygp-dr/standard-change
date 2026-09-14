@@ -64,7 +64,19 @@ and =SyncStatusCodeUnknown=, and above all Argo Rollouts
 The forge-side vocabularies do not: GitHub's REST deployment states have no
 indeterminate value (only the read-only, GraphQL-only =ABANDONED=), CDEvents'
 deployment events have no outcome field at all, and *no label vocabulary found
-anywhere has a third value.*
+anywhere has a third value.* The two verdict formats that might have had one do
+not: in-toto's VSA is =PASSED=/=FAILED= and OSCAL's finding status is a closed
+=satisfied=/=not-satisfied= [E].
+
+*7. The only three-valued CLOSURE vocabulary belongs to a vendor, and this repo
+is one value short of it.* ServiceNow mandates =Successful= / =Successful with
+issues= / =Unsuccessful= on its =Review= state [E, secondary]. That is tier 3
+and *not* ITIL's, which matters because this repo has been treating the PIR
+requirement as ITIL's. "Successful with issues" — production serves the new
+build and something is still wrong — currently has to be recorded here as
+=change:complete= plus prose. Whether that is a gap or a deliberate refusal (it
+is one step from the warning tier =CLAUDE.md= forbids) is an ADR question, and
+this file does not answer it.
 
 *5. The observation labels that name a build are NOT unusual — the prediction is
 refuted.* =openstax/rex-web= carries =in-staging=, =in-production= and 34
@@ -81,6 +93,23 @@ work during the code freeze" [E] — a per-change *exemption*, which is exactly
 the collapse =spec.org= §Nomenclature warns against ("freeze /is/ a property of
 the WORLD… /is NOT/ a property of a change").
 #+end_quote
+
+** Two claims withdrawn after first commit
+
+Recorded rather than silently edited, per =CLAUDE.md=: a run that refutes a
+claim amends it in the direction of the observation.
+
+1. *"Change control is clause 8.5.1, not 8.5.3."* Wrong. ISO's own free redline
+   preview shows 8.5.1 = Change management and *8.5.3 = Release and deployment
+   management* [E]. Both numbers already in use in this repository are correct,
+   for different clauses. §ISO/IEC 20000-1 carries the table.
+2. *"OSCAL's findings vocabulary does admit an indeterminate outcome."* Wrong,
+   and it was marked [H] when written. The status enum is *closed* at
+   =satisfied= / =not-satisfied= [E, read from the metaschema]. §OSCAL.
+
+A third claim is *unresolved and stays [H]*: whether ITIL 4's own text uses the
+phrase "post-implementation review". The primary is behind PeopleCert Plus and
+the free AXELOS glossary endpoint no longer serves the document.
 
 ** Method, and what the numbers do and do not mean
 
@@ -552,11 +581,13 @@ specification, 3 vendor contract, 4 framework, 5 research programme, 6 folklore.
 | CDEvents | 2 | *yes* for CI runs; *no* for deployment | *yes*, first-class subject | *4-valued for runs*; N/A for deployments | no |
 | *OpenTelemetry semconv* | *2* | *yes* — =cicd.pipeline.run.state= (3) + =.result= (6) | =deployment.environment.name=, Stable | *yes* — =error= is defined against =failure= | no |
 | SLSA | 2 | no — levels, not states | *no* — explicitly out of scope | n/a | no |
-| in-toto (VSA) | 2 | a verdict, not a machine | no | *no* — pass/fail | no |
+| in-toto (VSA) | 2 | a verdict, not a machine | no | *no* — =PASSED=/=FAILED=, plus a separate "decline to claim" | no |
+| in-toto (Test Result) | 2 | no | no | *yes, but wrong* — =PASSED=/=WARNED=/=FAILED=, a warning tier | no |
 | SPIFFE / SPIRE | 2 | no — workload identity only | no | n/a | no |
-| OSCAL | 1/2 | assessment findings, not deployment | no | see §OSCAL | no |
-| ISO/IEC 20000-1:2018 | *1* | requires records; names no states | "live environment" only | no | *yes* |
-| ITIL 4 change enablement | *4* | the *classification* (standard/normal/emergency) and closure | "live environments" | no | *yes* |
+| OSCAL | 1/2 | risk status only; findings are not a machine | no | *no* — =satisfied=/=not-satisfied=, a closed enum | no |
+| ISO/IEC 20000-1:2018 | *1* | requires policy, criteria, records; names no states | *one* — "the live environment" | no | *yes*, CHF 179 |
+| ITIL 4 change enablement | *4* | the *classification* (standard/normal/emergency); splits release from deployment | "environments", plural | no | *yes*, PeopleCert Plus |
+| ServiceNow change model | 3 | yes, incl. a reversible =Review= state | yes, per instance | *yes* — =Successful= / =Successful with issues= / =Unsuccessful= | no |
 | Kubernetes conditions | 3 | =Available= / =Progressing= / =ReplicaFailure= | no | *yes* — =Unknown= | no |
 | Argo Rollouts | 3 | =AnalysisPhase= | via Rollout targets | *yes* — =Inconclusive= | no |
 | Argo CD | 3 | health + sync + operation | via Application destination | *yes* — =Unknown= | no |
@@ -688,50 +719,147 @@ attributes this repo would use for guard 5 (=service.version=,
 
 *Tier 2.* Free. *The best adoption candidate in this survey.*
 
-** SLSA and in-toto — build-side, and they say so
+** SLSA and in-toto — build-side, and they say so; but the VSA has the better idea
 
 =docs/release-standards.org= §Provenance already established that SLSA
 "explicitly does not cover deployment" and that in-toto's Statement binds a
-predicate to an artifact digest. Nothing here changes that. Two notes:
+predicate to an artifact digest. Nothing here changes that. SLSA has *levels*,
+not states; there is no state machine to align to. One currency note:
+=slsa.dev= now renders v1.0 and v1.1 as *"Status: Retired"*, with v1.2 current
+[E] — any citation of v1.0 is stale.
 
-- SLSA has *levels*, not states. There is no state machine to align to.
-- in-toto's Verification Summary Attestation is the nearest thing to a recorded
-  verdict about an artifact, and its result field is *two-valued* — an artifact
-  either passed the verification or did not. There is no "the verifier could not
-  reach the evidence". *The same defect as everywhere else.*
+*The Verification Summary Attestation is worth reading anyway*, for a reason
+that has nothing to do with deployment.
 
-*Tier 2.* Free. Out of scope for the label question.
+- =verificationResult= is *exactly two-valued*. Verbatim: "Either =\"PASSED\"= or
+  =\"FAILED\"= to indicate if the artifact passed or failed the policy
+  verification." No =UNKNOWN=, no =INDETERMINATE=.
+- *And the indeterminate idea exists one field over.* =verifiedLevels= is of type
+  =SlsaResult=, whose spec text reads: "SHOULD be the SLSA Track level the
+  referenced artifact qualifies for as =SLSA_<TRACK_NAME>_LEVEL_<LEVEL_NUMBER>=,
+  or *=SLSA_<TRACK NAME>_LEVEL_UNEVALUATED= if the VSA issuer does not want to
+  make a claim about the track level*."
+
+*That is the pattern this repo already uses and has not named: a binary verdict
+plus a separate "I decline to claim".* =spec.org= says a gate that fails to
+reject its =fixtures/<gate>/fail/= input "produces no verdict that run — its
+PASS is void". The VSA-shaped move for that is *to omit the claim*, not to
+invent a third verdict value — and the attestation format has a reserved word
+for the omission so a verifier can tell "unevaluated" from "absent by accident".
+*If the =*-inconclusive= proposal in §Part 5 is ever built, this is the
+alternative design to price against it.*
+
+*** The wrong three-valued model, recorded so it is not borrowed by mistake
+
+The in-toto *Test Result* predicate (=https://in-toto.io/attestation/test-result/v0.1=)
+*is* three-valued [E]: =result= is "One of =PASSED=, =WARNED=, or =FAILED=", with
+=passedTests= / =warnedTests= / =failedTests= arrays.
+
+*Do not borrow it.* Its third value is a *warning tier*, which
+=CLAUDE.md= §Invariants forbids outright — "Add a warning tier to any gate. Zero
+findings or the gate failed." A warning tier and an indeterminate value look
+alike and are opposites: a warning says "I looked, it is bad, proceed anyway";
+an indeterminate says "I could not look, so you may not proceed". *The whole
+argument of =docs/exit-codes.org= is that the second must block.*
+
+*Tier 2.* Free. Out of scope for the label question, and the source of the two
+best design notes in this section.
 
 ** SPIFFE, OSCAL
 
-- *SPIFFE/SPIRE*: workload identity. No deployment-state vocabulary. Tier 2,
-  free, *irrelevant to this survey* — listed only so the absence is recorded.
-- *OSCAL*: models assessment results and control satisfaction, not deployment.
-  Its findings vocabulary does admit an indeterminate outcome, which is
-  structurally the right shape, but the subject is a control objective and not a
-  build in an environment. Adopting it would mean re-describing a gate verdict
-  as a control assessment, which is a much larger move than a vocabulary
-  borrowing. Tier 1/2 depending on which artifact; free.
+*** SPIFFE / SPIRE
 
-** ISO/IEC 20000-1:2018 — tier 1, paywalled, and it names no states
+Workload identity. No deployment-state vocabulary at all. Tier 2, free,
+*irrelevant to this survey* — listed only so the absence is on the record rather
+than an omission.
 
-*Paywalled; not read.* Claims below are [E, secondary] from independent
-restatements and are consistent across them.
+*** OSCAL — a closed two-valued enum, and the =UNKNOWN= is on the wrong axis
 
-Two corrections to the task's framing, both worth recording:
+*An earlier draft of this file guessed [H] that OSCAL "does admit an
+indeterminate outcome". That guess was wrong and is withdrawn.* Read from the
+generating metaschema, =usnistgov/OSCAL=
+=src/metaschema/oscal_assessment-common_metaschema.xml= at =main= (v1.2.3 line),
+because the rendered NIST reference pages resist fetching:
 
-1. *Change control is clause 8.5.1 in the 2018 edition*, not 8.5.3.
-   =docs/reference-survey.org= already cites it correctly as 8.5.1. The 2018
-   edition's 8.5 covers service design/build/transition, with 8.5.1 change
-   management/control and the release-and-deployment requirements adjacent
-   within 8.5 [E, secondary].
-2. *It requires records and authority; it does not enumerate states.* The
-   requirement shape is "define change types, record changes, determine who
-   authorises" — a conformance target for *having* a process, not a vocabulary
-   for the process's states. There is nothing here to map a label onto.
+| construct | members | open? |
+|-----------+---------+-------|
+| finding / objective status =state= | =satisfied=, =not-satisfied= | *closed* — no =allow-other= |
+| finding target =reason= | =pass=, =fail=, =other= | =allow-other="yes"= |
+| observation =method= | =EXAMINE=, =INTERVIEW=, =TEST=, *=UNKNOWN=* | |
+| risk =status= | =open=, =investigating=, =remediating=, =deviation-requested=, =deviation-approved=, =closed= | =allow-other="yes"= |
 
-*Tier 1. Paywalled. Defines no state machine.* It is the only genuine formal
-standard in this survey and it has the least to say about the question.
+The status enum carries no =allow-other= attribute, which in Metaschema means
+*closed*: an OSCAL finding is satisfied or it is not, full stop. The =other= on
+=reason= is an escape hatch on the *justification*, not a third verdict.
+
+The one genuine explicit unknown is =method="UNKNOWN"=, glossed for "converting
+historic content to OSCAL, where the conversion process cannot initially
+identify the appropriate method(s)" — it qualifies *how* you observed, not
+*whether it passed*. Wrong axis.
+
+The only actual state machine in OSCAL is the *risk* status, which is a
+remediation lifecycle and not a deployment one. Free, US Government public
+domain. Tier 1/2 depending on which artifact. *Nothing to adopt.*
+
+** ISO/IEC 20000-1:2018 — tier 1, paywalled, names one environment and no states
+
+*Paywalled (=iso.org/standard/70636.html=, CHF 179, third edition, stage 60.60,
+confirmed 2023); the standard was not read.* Claims are [E, secondary]. The
+clause structure below is better than secondary, however: it comes from *ISO's
+own free redline preview PDF* (cover =ISO/IEC 20000-1:redline:2018(E)=), whose
+Contents page shows the 2011→2018 renumbering with strikethrough.
+
+*** The clause numbering, settled
+
+Both numbers that have been used in this repository are correct, for different
+things, and neither the task's framing nor
+=docs/reference-survey.org= was wrong:
+
+| 2018 clause | title | replaces (2011) |
+|-------------+-------+-----------------|
+| 8.5 | Service design, build and transition | 9.2 Change management |
+| *8.5.1* | *Change management* | |
+| 8.5.2 | Service design and transition | |
+| *8.5.3* | *Release and deployment management* | 9.3 Release and deployment management |
+
+So =docs/reference-survey.org='s "clause 8.5.1" is change management and the
+task's "§8.5.3" is release and deployment management. *An earlier draft of this
+file asserted that 8.5.1 was the correction and 8.5.3 was an error. That was
+wrong and is withdrawn.*
+
+Three numbering traps worth recording so nobody re-derives them [E, secondary]:
+
+1. *"Change control" is not ISO vocabulary.* It was an ITIL 4 detour (Foundation,
+   February 2019), later reverted. The likely source of the confusion is *ISO
+   9001 clause 8.5.6, "Control of changes"* — a different standard.
+2. *Any citation of "9.2 change management" is necessarily the 2011 edition.* In
+   the 2018 edition 9.2 is Internal audit and 9.3 is Management review.
+3. *There is no Amd 1:2020.* The amendment is *ISO/IEC 20000-1:2018/Amd 1:2024*,
+   part of the ISO-wide "Climate action changes" sweep, and it touches 4.1 and
+   4.2 — *not* clause 8.5. SC 40 states an intent to revise through 2026 [H].
+
+*** What it says, and what it does not
+
+- *One environment, singular.* The only environment the standard names is *"the
+  live environment"* [E, secondary — itSMF UK's pocket guide restatement of
+  8.5.3]. There is no staging, pre-production or test tier anywhere in it. *This
+  repo's entire 9200-block staging tier has no ISO counterpart*; only production
+  maps to "live".
+- *Two-valued outcomes, with a hard reversal obligation.* Success or failure,
+  and remediation of a failed deployment is a *shall* where ITIL makes it a
+  *should* [E, secondary — Advisera draws the contrast explicitly]. That is the
+  standards warrant for =change:backed-out= being a real closure code rather
+  than a variant of =change:failed=.
+- *It requires policy, criteria and records; it enumerates no states.* The
+  fourth-level subclauses are 8.5.1.1 Change management policy, 8.5.1.2 Change
+  management initiation, 8.5.1.3 Change management activities; 8.5.3 requires
+  documented *"release acceptance criteria"*. Activities in sequence and
+  documents that must exist — a conformance target for *having* a process, not a
+  vocabulary for its states. *There is nothing here to map a label onto.*
+
+*Tier 1. Paywalled. Defines no state machine and knows of only one environment.*
+It is the only genuine formal standard in this survey and it has the least to
+say about the question this file asks.
 
 ** ITIL 4 change enablement — tier 4, paywalled, and the only source of three of this repo's labels
 
@@ -756,18 +884,65 @@ That is the one place where this repo's vocabulary has a real external parent,
 and the parent is tier 4 — a commercially licensed body of practice whose
 conformance notion certifies *people*, not systems.
 
-Two things ITIL does *not* supply, which this repo has anyway:
+One more thing ITIL supplies that ISO does not, and it bears directly on this
+repo's two-phase gate: *ITIL 4 splits release from deployment*, where ISO
+20000-1 fuses them in 8.5.3. Deployment management (a *technical* management
+practice) moves components "to environments"; release management (a *service*
+management practice) makes features "available for use"; and deploying "does NOT
+mean that the components or the change is visible or available for users" [E,
+secondary]. *That is the closest standards warrant anywhere for "a staging
+deploy is a real deployment that authorises nothing", and it is ITIL, not ISO.*
+
+*** Two things ITIL does not supply, which this repo has anyway
 
 - *A lifecycle state machine with stable names.* Secondary restatements list
-  change-record states, but they vary between restatements and between tools
-  (ServiceNow's model is not ITIL's). =change:requested= / =scheduled= /
-  =complete= is *this repo's*, not ITIL's.
-- *A post-implementation review as a named ITIL 4 artifact.* PIR is ITIL v3
-  vocabulary; ITIL 4 folds the review into the practice's continual-improvement
-  loop and the term is not prominent [H — this rests on secondary sources that
-  disagree, and the primary is paywalled]. The repo's use of "PIR" is
-  defensible and should be read as v3-inherited rather than as ITIL 4
-  conformance.
+  change-record states, but they vary between restatements and between tools.
+  =change:requested= / =scheduled= / =complete= is *this repo's*, not ITIL's.
+- *A post-implementation review as named ITIL 4 vocabulary.* *This did not
+  resolve, and is [H].* What is solid: PIR is a *v3* term — ITIL v3 change
+  management had a sub-process literally named "Post Implementation Review and
+  Change Closure" — and ITIL 4 *dropped* v3's separate Change Evaluation
+  process, folding its activities into change enablement [E, secondary]. What
+  could not be established either way: whether ITIL 4's own text uses the phrase.
+  Every ITIL-4-context use of "PIR" located is *vendor or adopting-institution*
+  (ServiceNow process guides, university IT change-enablement guides), never
+  ITIL text; and "post-implementation review" is absent from at least one
+  60-term ITIL 4 glossary that does carry /change/, /change enablement/,
+  /standard change/, /emergency change/, /release/ and /deployment/ —
+  suggestive, not dispositive.
+
+  *The primary is now harder to reach than when =docs/reference-survey.org= was
+  written* [E]: the free AXELOS glossary endpoint returns only the site shell,
+  the historic direct PDF link returns HTML, the PeopleCert equivalent redirects
+  to a login, and the 34 practice guides sit behind PeopleCert Plus membership
+  (PeopleCert completed the AXELOS acquisition in 2021).
+
+  *Defensible phrasing, and the form this repo should use*: PIR is an ITIL v3
+  term that remains near-universal in ITSM tooling; ITIL 4's change enablement
+  practice requires review activity, but that ITIL 4 uses the phrase
+  "post-implementation review" is unverified.
+
+*** Where the three-valued closure actually comes from, and it is not ITIL
+
+Worth isolating, because it is the only three-valued *closure* vocabulary in the
+whole survey and this repo is one value short of it.
+
+ServiceNow's change model mandates a close code on the =Review= state with
+exactly three values [E, secondary — ServiceNow-authored process guide]:
+
+: Successful | Successful with issues | Unsuccessful
+
+and the =Closed= → =Review= transition is reversible.
+
+*That vocabulary is ServiceNow's — tier 3 — not ITIL's and not ISO's*, and it
+should be cited that way rather than as "ITIL requires a PIR close code".
+=spec.org= §Nomenclature lists closure codes "passed / failed / cancelled /
+expired / backed-out", which is richer on the *why-it-stopped* axis and *has no
+middle value on the did-it-work axis*. "Successful with issues" is the case
+where production serves the new build and something is nonetheless wrong — which
+this repo currently has to record as =change:complete= plus prose in the PIR.
+Whether that is a gap or a deliberate refusal (it is one step from the warning
+tier =CLAUDE.md= forbids) is a question for an ADR, not for this file.
 
 ** Kubernetes, Argo, Flux — the three-valued family
 
@@ -1054,10 +1229,26 @@ repo's own and should not be described as ITIL conformance.
 *** 4. Do not adopt ISO/IEC 20000-1. Tier 1, paywalled.
 
 It is the only formal standard in the survey. It requires that change types,
-records and authorities be *defined*; it does not define them. There is nothing
-to align a label to, and the conformance test is an audit of an organisation,
-not of a repository. *Cost of adoption: a paid copy, an auditor, and no change
-to any label.*
+policy, acceptance criteria and records be *defined*; it does not define them.
+There is nothing to align a label to, and the conformance test is an audit of an
+organisation, not of a repository. *Cost of adoption: CHF 179, an auditor, and
+no change to any label.*
+
+One thing to take from it for free: ISO knows of exactly *one* environment, "the
+live environment", and fuses release with deployment in 8.5.3. *ITIL splits
+them, and the split is the thing this repo's model depends on* — a staging
+deploy is a real deployment that makes nothing available to anyone. Cite ITIL
+for that, never ISO.
+
+*** 4b. Cite ServiceNow, not ITIL, for the PIR close code. Tier 3.
+
+The three-valued closure =Successful= / =Successful with issues= /
+=Unsuccessful= is *ServiceNow's*, and the repo has been informally treating a
+PIR requirement as ITIL's. Correct the attribution wherever it appears, and note
+that "post-implementation review" as ITIL *4* vocabulary is unverified and
+probably v3-inherited. Whether to add the missing middle value is an ADR
+question and deliberately not answered here — it sits one step from the warning
+tier =CLAUDE.md= forbids.
 
 *** 5. Do not adopt GitHub's deployment state machine as the source of truth.
 
@@ -1069,9 +1260,17 @@ blue/green pair retires nothing by itself, and status history is deleted at 90
 days. *Use the Deployments API as a place to write records, as
 =docs/github-environments.org= concludes. Do not read the estate out of it.*
 
-*** 6. Adopt nothing from SLSA, in-toto, SPIFFE, OSCAL or Backstage for this question.
+*** 6. Adopt nothing from SLSA, SPIFFE, OSCAL or Backstage for this question.
 
-Recorded so the absence is on the record rather than an omission.
+Recorded so the absence is on the record rather than an omission. OSCAL in
+particular was *guessed* to have an indeterminate finding state and does not —
+its status enum is closed at =satisfied= / =not-satisfied=.
+
+From in-toto, take one design note and refuse one design: the VSA's
+=SLSA_<TRACK>_LEVEL_UNEVALUATED= is the right shape for "this run produced no
+verdict" (omit the claim, with a reserved word for the omission), and the Test
+Result predicate's =WARNED= is the wrong shape and is forbidden by
+=CLAUDE.md=.
 
 ** The cost of the status quo, stated plainly
 
@@ -1160,20 +1359,41 @@ Read directly [E]:
   nineteen prominent repositories and the exemplars named in §Part 2.
 - Label counts via =GET /search/issues?q=label:"<name>"=, 2026-09-14.
 
+Also read directly [E]:
+
+- =usnistgov/OSCAL=: =src/metaschema/oscal_assessment-common_metaschema.xml= at
+  =main= — the generating metaschema, because the rendered NIST reference pages
+  resist fetching.
+- =slsa.dev/spec/v1.2/verification_summary= and
+  =in-toto/attestation= =spec/predicates/vsa.md= at =main=.
+- =in-toto/attestation= Test Result predicate, v0.1.
+- ISO's *free redline preview* PDF for ISO/IEC 20000-1:2018 (cover reads
+  =ISO/IEC 20000-1:redline:2018(E)=) — Contents page only, which is what carries
+  the 2011→2018 clause renumbering.
+
 Paywalled, claims attributed to secondary restatements [E, secondary]:
 
-- ISO/IEC 20000-1:2018 §8.5.1 (change control) — clause numbering and
-  requirement shape.
-- ITIL 4 Change Enablement practice guide (AXELOS, 9 January 2020) — verbatim
-  definitions taken from =docs/reference-survey.org=, which is this file's
-  secondary source of record for them.
+- *ISO/IEC 20000-1:2018* — the body text. Secondaries: the ISO/IEC JTC1/SC40
+  committee paper (Forrester & Penn, /Comparison of 2018 Versions of ISO/IEC
+  20000-1 and CMMI for Services/); itSMF UK, /Planning and Achieving ISO/IEC
+  20000 Certification/, 2019 edition; Advisera's clause-indexed
+  mandatory-documents list; a PECB whitepaper (2011 edition).
+- *ITIL 4 Change Enablement practice guide* (AXELOS, 9 January 2020) — verbatim
+  definitions taken from =docs/reference-survey.org=, which remains this file's
+  secondary source of record for them. *The primary is now less reachable than
+  when that file was written*: the free AXELOS glossary endpoint returns only
+  the site shell, the historic PDF link returns HTML, the PeopleCert equivalent
+  redirects to a login, and the practice guides sit behind PeopleCert Plus.
+- *ServiceNow change model* — close codes, from a ServiceNow-authored process
+  guide. Tier 3, not paywalled, but not read from a normative document either.
 
-Not read, and therefore [H] where cited: OSCAL, SPIFFE and Backstage's
-specifications were not fetched. They were assessed from prior knowledge and
-from the projects' own repository label sets, and every claim about them in this
-file is [H]. The =deployment.environment.name= and =service.*= stability claims
-are [E] via =docs/release-standards.org=, not re-verified here; the =cicd.*=
-members *were* read directly and are [E].
+Not read, and therefore [H] where cited: SPIFFE and Backstage specifications
+were not fetched; both were assessed from prior knowledge and the projects' own
+repository label sets. The =deployment.environment.name= and =service.*=
+stability claims are [E] via =docs/release-standards.org=, not re-verified here;
+the =cicd.*= members *were* read directly and are [E]. Whether ITIL 4's own text
+uses the phrase "post-implementation review" is *unresolved* and marked [H]
+throughout.
 
 Prior work in this repository, cited rather than repeated: =docs/release-standards.org=
 (the six tiers, CDEvents, OTel, SLSA, in-toto, ITIL, GitHub Deployments as
