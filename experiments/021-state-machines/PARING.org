@@ -1,0 +1,98 @@
+#+TITLE: Paring the label vocabulary
+#+DATE: 2026-09-14
+
+* The rule
+
+Expanded to 23 candidates first (=CANDIDATES.tsv=), because it is easier to
+delete a label whose purpose is written down than to notice a missing one. Then
+pared by one question, asked in order:
+
+1. *Does a person SET it?* Then it is a label. A person needs somewhere to say
+   things, and the PR is where they are looking.
+2. *Does a guard READ it?* Then it is a label, because a guard that has to
+   fetch a record to answer a yes/no question will be written to skip the fetch.
+3. *Must it be visible at a glance on the PR list?* Then it is a label. This is
+   a real criterion and it is the only one that is about humans scanning.
+4. *Otherwise it is MACHINE STATE, and machine state belongs in the deployment
+   record* — which already has six values and where this repo writes exactly
+   one.
+
+* The finding that made this easy
+
+GitHub's =deployment_status= enum is =queued=, =in_progress=, =success=,
+=failure=, =error=, =inactive=. This pipeline writes =success= and nothing else
+(=change/activate.sh=, =deploy_state=).
+
+Every label proposed for "the missing front half" — deploying, deployed,
+cutover, soaking — already has a home in that enum. And two of the hardest
+unnamed states have an exact word waiting for them:
+
+- =inactive= is GitHub's name for *the idle colour holding a build nobody
+  shipped*. We called it =idle:retained= and said nothing clears it.
+- =error= is distinct from =failure= in that enum, and it is the third value:
+  /the deploy did not conclude/ as against /it concluded badly/.
+
+So the missing vocabulary was never missing. It was unused.
+
+* The pared set
+
+** Stays a label
+
+| label | why |
+|-------+-----|
+| =change:start= | a person sets it. The only thing a person must say |
+| =app:<group>= | guard 6 reads it; visible at a glance; derived from the diff |
+| =itil:<class>= | decides which rules apply; visible at a glance |
+| =deploy:<env>= | guard 1 reads it — *and it must actually be written* (D20) |
+| =staging:uat= | a person sets it: for acceptance the human IS the instrument |
+| =berth:stale= | nothing else names a lease that outlived its holder, and it blocks everyone. Must be visible |
+| =freeze=, =emergency= | estate properties; a person declares them; everything reads them |
+
+Seven kinds. Everything a person chooses, plus the two facts a guard cannot
+afford to fetch.
+
+** Becomes a deployment_status on the record
+
+| proposed label | GitHub state | note |
+|----------------+--------------+------|
+| =staging:deploying=, =production:deploying= | =in_progress= | |
+| =staging:deployed=, =production:deployed= | =success= | with =environment_url= |
+| =production:cutover= | =success= on the production environment | the record already distinguishes environments |
+| =production:soaking= | =in_progress= | with a description |
+| =idle:retained= | *=inactive=* | GitHub's own word for a superseded deployment |
+| =staging:indeterminate=, =production:indeterminate= | *=error=* | not =failure=: the third value |
+
+** Dropped, and why
+
+| candidate | why not |
+|-----------+---------|
+| =change:superseded=, =change:abandoned= | closure codes. They belong in the change record; nothing reads them as labels |
+| =gate:void=, =gate:indeterminate= | check runs already carry conclusion and status. A label would be a second copy of a fact that can disagree with the first |
+| =artifact:attested= | provenance is a field on an observation record, naming a subject. A label cannot name a build, which is the whole reason records exist |
+| =change:stranded= | *derivable*: deployed AND not merged AND no open window. A label for a derivable fact is one more thing to go stale |
+| =deploy:rollback= | a deployment record whose ref is the previous build. The event is already expressible |
+
+* What this nets out to
+
+We went from 44 declared labels, expanded to 67 candidates, and land on *seven
+kinds of label* plus a deployment record that finally uses more than one sixth
+of its vocabulary.
+
+The reduction is not the point. The point is that the four roles measured in
+=spec.org= §The label grammar — estate 36.6%, gatekeeping 30.3%, audit 9.0%,
+override 5.6% — were 82% of the vocabulary's movement and almost none of it was
+a decision anybody made. Audit moves to the record, where it does not go stale
+and does not need clearing on settle. Gatekeeping shrinks to the two facts a
+guard reads. What is left as labels is close to what a person actually looks at.
+
+* The one thing paring must not do
+
+=staging:e2e=, =staging:smoke= and =production:healthy= look like obvious
+candidates for the record, and they are — *the observation records already
+exist and are already the authority* (=change/evidence.sh=). Guard 4 reads the
+record, not the label.
+
+But they stay as labels anyway, for one reason: they are how a person scanning
+thirty open PRs sees where each one got to. That is criterion 3, and it is the
+only justification they have. If the dashboard is the thing people actually
+scan, they lose it.
