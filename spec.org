@@ -2909,6 +2909,61 @@ is a convenience that goes stale; the record is the evidence that does not.
 That is why guard 4 reads records rather than labels, and why staging can be
 gone entirely and 74 of 100 changes still ship (scenarios.org D18).
 
+** The labels are print statements, and that is the whole problem
+
+Said by the reviewer on 2026-09-14 and it explains more of this repository's
+behaviour than any other sentence in it:
+
+#+begin_quote
+What we are doing is effectively adding labels as a print statement at every
+point in the process.
+#+end_quote
+
+That is exactly what =staging:e2e=, =staging:smoke=, =staging:uat=,
+=deploy:staging=, =blocked:queue= and =change:complete= are. They are a trace of
+execution, written at each step so a reader can see where control reached.
+
+*A print statement is a fine thing. These are print statements with side
+effects, and that is not.*
+
+*** What a label costs that a =printf= does not
+
+| =printf= | a label |
+|----------+---------|
+| writes to a stream nobody dispatches on | *triggers workflows* — six in this repo fire on label events |
+| costs nothing to leave behind | persists, so =settle.sh= must erase the trace it just wrote |
+| cannot be read as authorization | is read by guards, so a stale print authorizes |
+| says nothing about what it observed | names no build, so it cannot say WHICH run printed it |
+| is ordered by definition | arrives whenever the forge gets to it |
+
+The second column is every defect class in this document, arrived at from a
+different direction.
+
+*** The loop it creates
+
+Recording an observation re-runs the thing being observed. =change/uat.sh=
+writes three labels; each was, until 2026-09-14, a trigger for the full gate
+suite; guard 4 requires green gates; so *the act of recording the measurement
+withdrew the authorization the measurement was taken for* until CI caught up.
+Measured at 33 seconds of a 2m26s cycle, and it is the mechanism behind the
+read-after-write race in defect class 8.
+
+=gate.yml= no longer fires on =labeled=. Five workflows still do.
+
+*** The repair is not fewer prints
+
+It is that *the print goes somewhere that does not dispatch*. The observation
+RECORD already exists (=change/evidence.sh=), already names its build, already
+survives the labels being cleared, and is already what guard 4 reads. It is the
+log. The label should be an INDEX into it — something a person scanning thirty
+pull requests can see — and nothing should ever key a workflow off one.
+
+Stated as a rule for a rebuild: *a label may be read by a human and by a query.
+It may not be the trigger for an action, and it may not be the evidence for a
+verdict.* Both of those belong to the record. Everything this repository has
+learned about stale verdicts, superseded runs and unauthorized promotion is
+downstream of having wired behaviour to a print statement.
+
 ** Measured: where the vocabulary's weight actually sits
 
 From =experiments/021-state-machines/merge.py=, over five independent models —
