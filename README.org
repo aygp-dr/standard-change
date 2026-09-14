@@ -6,11 +6,11 @@
 #+OPTIONS: toc:2 num:t
 
 #+HTML: <p align="center">
-#+HTML: <img alt="spec 0.4" src="https://img.shields.io/badge/spec-0.5_establishing-blue">
+#+HTML: <img alt="spec 0.5" src="https://img.shields.io/badge/spec-0.5_establishing-blue">
 #+HTML: <img alt="ITIL 4" src="https://img.shields.io/badge/ITIL_4-change_enablement-5b2d8e">
 #+HTML: <img alt="TLA+ verified" src="https://img.shields.io/badge/TLA%2B-7_checks_both_directions-2e7d32">
 #+HTML: <img alt="gates" src="https://img.shields.io/badge/gate--selftest-negative_tested-2e7d32">
-#+HTML: <img alt="support matrix" src="https://img.shields.io/badge/support_matrix-1_of_3_cells,_partial_tuple-b45309">
+#+HTML: <img alt="support matrix" src="https://img.shields.io/badge/support_matrix-2_of_3_cells,_partial_tuple-b45309">
 #+HTML: <img alt="platform" src="https://img.shields.io/badge/built_on-FreeBSD_14.4--RELEASE--p6-ab2b28">
 #+HTML: </p>
 
@@ -42,25 +42,19 @@ when =main= moves underneath you are all real and all deliberately absent here
 #+begin_src mermaid :eval never-export
 stateDiagram-v2
     direction TB
-    [*] --> Submitted: PR opened
-    Submitted --> Assessing: labeller sets app:*, itil:standard
-    Assessing --> Scheduled: gates green -> window reserved
-    Scheduled --> Implementing: slot arrives, scheduler activates
-    Implementing --> Verified: staging deploy + authorizing e2e
-    Verified --> Live: gates green -> promotes itself
-    Verified --> Held: hold:staging present (atypical)
-    Held --> Verified: a person removes the label -> guards re-run
-    Held --> Forfeited: hold outlives its window
-    Forfeited --> [*]: berth freed, pass withdrawn, re-request
-    Live --> Completed: estate converged on the new build
-    Completed --> [*]: PIR posted, merged, berth freed
+    [*] --> Opened: PR opened, labeller sets app:* and itil:standard
+    Opened --> Requested: a person adds change:requested
+    Requested --> Scheduled: window reserved -> change:scheduled
+    Scheduled --> Implementing: window opens, scheduler activates, guards re-run
+    Scheduled --> Forfeited: window lapses unattempted -> expired
+    Implementing --> Verified: staging deploy + authorizing e2e -> staging:passed
+    Verified --> Live: guards green -> promotes itself
+    Live --> Complete: estate converged on the build -> production:healthy, change:complete
+    Complete --> [*]: merged, PIR posted, berth released
+    Forfeited --> Requested: re-request
 
     note right of Scheduled
         reserving is not deploying
-    end note
-    note right of Held
-        the ONLY human stop.
-        expires to forfeit, never to ship
     end note
     note right of Live
         guard 5 asserts the SERVED build,
@@ -81,15 +75,15 @@ sequenceDiagram
 
     Dev->>GH: push -> PR
     GH->>GH: labeller: app:*, itil:standard
-    GH->>GH: gate-selftest -> lint, test, e2e (green @sha)
-    Dev->>IDP: request a window
-    IDP-->>Dev: window reserved
-    IDP->>Stg: slot arrives -> activate, deploy changed apps
-    Stg-->>IDP: authorizing e2e green
-    IDP->>IDP: guard 4c: is hold:staging on the PR right now?
-    IDP->>Prod: no hold -> deploy the same digests
+    GH->>GH: gates -> lint, test, e2e (green @sha)
+    Dev->>GH: change:requested
+    Dev->>IDP: reserve a window
+    IDP-->>GH: change:scheduled
+    IDP->>Stg: window opens -> activate, re-run guards, deploy changed apps
+    Stg-->>IDP: authorizing e2e green -> staging:passed
+    IDP->>Prod: promote the build staging tested
     Prod-->>IDP: N probes, one build -> converged
-    IDP->>GH: PIR, merge, release the berth
+    IDP->>GH: change:complete, merge, PIR, release the berth
     GH-->>Dev: shipped
 #+end_src
 
@@ -103,9 +97,11 @@ which:
 |----------------------+-------------+-----------------------+----------------|
 | =change:requested=   | request     | someone asked         | *yes*          |
 | =release=            | *request*   | someone said go now   | *yes*          |
-| =hold:<env>=         | *hold*      | someone said not yet  | *yes*          |
 | =deploy:<env>=       | action      | work is in flight     | no             |
 | =<subject>:<state>=  | observation | *a check came back*   | no             |
+
+(=hold:<env>= was a third hand-added shape; it is superseded — see §How to
+stop a change.)
 
 =production:healthy= reads as a check result because that is what it is.
 =deploy:staging= is not a way to ask for a deployment — it marks that the
@@ -207,7 +203,7 @@ the two labels a person adds are opposites in both directions:
 | label | added by | removed by |
 |----------------+---------------------------+--------------------------------|
 | =release=      | *a person only* — intent  | *automation* — the scheduler consumes it |
-| =hold:staging= | *a person only*           | *a person only*                |
+| =hold:staging= (superseded) | *a person only* | *a person only*             |
 
 A person must add =release= because it is the intent to ship and no machine
 may infer it. Automation must remove it because a trigger that stays on
@@ -295,7 +291,7 @@ Everything else in this pipeline is a derivation. These are the points where it
 *stops and waits for a human*, and they are deliberate — each one is a judgement
 the pipeline is not entitled to make.
 
-** 1. Asking for a slot — =change:scheduled=
+** 1. Asking for a window — =change:scheduled=
 
 : ./change/schedule.sh block <pr> "<groups>" <minutes>            # next available
 : ./change/schedule.sh block <pr> "<groups>" <minutes> --at <iso> # a named hour
@@ -316,6 +312,12 @@ Two flavours, and the difference is the point:
 
 =block= refuses a window too short to hold the work — deploy and settle 3m + the
 soak + 1m per extra app + 10m for control-plane. =--short= overrides, loudly.
+
+Terms, since three are easy to blur: a *window* is the reserved interval on the
+calendar; a *slot* is one calendar quantum, and a window occupies one or more
+of them; the *berth* is the singleton right to be in staging, held by
+=deploy:staging= and released at settlement. A window entitles a change to
+claim the berth when it opens; it does not claim it.
 
 ** 2. Being there when it opens
 
@@ -429,9 +431,9 @@ flowchart TB
     end
 
     subgraph team["Team environments — parallel, disposable, NOT on the path"]
-        E1["env/checkout-team :9100<br/>cannot promote"]
-        E2["env/search-team :9110<br/>cannot promote"]
-        E3["env/pdp-team :9120<br/>cannot promote"]
+        E1["staging-core-1 :9100<br/>cannot promote"]
+        E2["staging-plp-1 :9110<br/>cannot promote"]
+        E3["staging-pdp-1 :9120<br/>cannot promote"]
     end
 
     subgraph path["Path to production — singleton, queued"]
@@ -456,7 +458,7 @@ flowchart TB
 | Environment       | Ports       | Tier        | Count       | Promotes? | Freed by                     |
 |-------------------+-------------+-------------+-------------+-----------+------------------------------|
 | worktree block    | *9000–9099* | *dev*       | per clone   | no        | =gmake port-free=            |
-| =env/<team>-<app>= | *9100–9199* | *team*     | many        | *no*      | IDP release, or lease expiry |
+| =staging-<app>-<n>= | *9100–9199* | *team*    | many        | *no*      | change control release, or lease expiry |
 | =staging=         | *9200*      | *protected* | *exactly 1* | yes       | merge, failure, or guard 4b  |
 | =production= front | *9230*     | *protected* | 1           | —         | —                            |
 | =production-blue= | *9210*      | *protected* | 1 (live or idle) | —    | a cutover to green           |
@@ -592,9 +594,9 @@ convention someone remembers rather than something the system does.
 |-----------------------------------------+------------------------------------------|
 | Label vocabulary and guards             | specified, formally checked              |
 | Guard logic in TLA+ and =sim/=          | *verified* — both directions             |
-| =queue.sh=, =health.sh=, =release.sh=   | written, never run against a live forge  |
+| =queue.sh=, =health.sh=, =release.sh=   | run against this forge in the 2026-09-13 grind |
 | The three-verb API                      | designed (=docs/idp-api.org=), unbuilt   |
-| Change schedule integration             | *unbuilt* — no account or calendar chosen |
+| Change schedule                         | =change/schedule.sh= is the store; a calendar would be an exporter of it, and none is wired |
 | Any interface at all                    | *unbuilt*                                |
 
 The scheduler work splits in two, and they are different problems:
@@ -623,12 +625,15 @@ one change. The calendar governs everyone; the label governs one.
 | =apps/=         | the four fixture apps                                          |
 | =router/=       | nginx template, routes, Cloudflare Worker                      |
 | =gates/=        | lint, test, e2e, preflight, health                             |
-| =change/=       | queue, lock, schedule, PIR, release                            |
-| =targets/=      | github and cloudflare deploy backends                          |
+| =change/=       | queue, schedule, reap, activate, settle (PIR), release         |
+| =targets/=      | =bastille= (jails) and =node= deploy backends                  |
 
 * Status
 
-Nothing is built. =spec.org= is at 0.3, the scenarios are written, and the TLA+
-model is checked. Every matrix cell in =spec.org= is a hypothesis: no gate has
-run, because no gate exists. The one thing actually verified end to end is the
-guard logic, and only as a model.
+=spec.org= is at 0.5. The gates, the guards, the schedule and settlement exist
+and have been run: two of three matrix cells are observed — hydra (FreeBSD
+14.4) on 2026-09-13 and the mini (macOS) on 2026-09-14 — each on the partial
+tuple of node router and no browser. The TLA+ model passes both directions. The
+three-verb API and any interface to it are unbuilt; the scheduler is a person
+running =schedule.sh= and =activate.sh=, which =docs/adr/0003= records as the
+intended shape for now.
