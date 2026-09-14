@@ -354,14 +354,63 @@ const server = createServer(async (req, res) => {
   // invalidated immediately rather than left to expire: a five-minute-stale
   // "no freeze" straight after somebody declared one is the exact reading that
   // gets a change deployed into a closed estate.
+  // A WRITE THAT CHANGES ESTATE STATE IS NOT AN ORDINARY ROUTE.
+  //
+  // `startsWith` plus destructuring accepted anything that merely BEGAN with
+  // the path: /api/estate/freeze/on/whatever matched, and so did a query
+  // string, because [3] and [4] were the only segments ever looked at. The
+  // shape is now an exact anchored match and the segment count is part of it.
+  //
+  // The rest is the "bare POST with well-known values" rule: these endpoints
+  // take no body, no parameters and no content type, so anything carrying one
+  // is not a request this API has -- it is something else pointed at it, and
+  // the safe reading of a request we do not recognise is to refuse it rather
+  // than to execute the part we do recognise.
+  const writeGuard = (req) => {
+    const len = Number(req.headers['content-length'] || 0);
+    if (len > 0 || req.headers['transfer-encoding'])
+      return 'this endpoint takes no request body';
+    if (req.headers['content-type'])
+      return 'this endpoint takes no content type';
+    // Same-origin only. A browser sends Origin on cross-origin POSTs; a
+    // mismatch means some other page is driving the estate controls. Absent
+    // Origin (curl, same-origin in some browsers) is allowed -- the LAN
+    // boundary is doing that work, and spec.org §Exposure says what happens
+    // to this assumption the moment the origin is published.
+    const o = req.headers.origin;
+    if (o) {
+      let h; try { h = new URL(o).host; } catch { return 'unparseable Origin'; }
+      if (h !== req.headers.host) return `cross-origin write refused (${h})`;
+    }
+    return null;
+  };
+  // WHO ASKED. spec.org §Exposure: a control that changes estate state records
+  // who invoked it and why, in the same write that changes the state. This is
+  // the weak form -- a socket address is not an identity -- and it is recorded
+  // as exactly that, so the PIR can tell "someone on the LAN" from "we do not
+  // know", which the previous version could not.
+  const actorOf = (req) => {
+    const a = (req.headers['x-actor'] || '').toString().slice(0, 64).replace(/[^\w .@-]/g, '');
+    const ip = req.socket?.remoteAddress || 'unknown';
+    return a ? `${a} (from ${ip})` : `unattributed (from ${ip})`;
+  };
+
+  const estateWrite = /^\/api\/estate\/(freeze|emergency)\/(on|off)$/.exec(req.url || '');
   if (req.method === 'POST' && req.url?.startsWith('/api/estate/')) {
-    const [, , , label, action] = req.url.split('/');
-    if (!['freeze', 'emergency'].includes(label) || !['on', 'off'].includes(action))
+    if (!estateWrite)
       return send(400, 'application/json', JSON.stringify({ error: 'bad toggle' }));
+    const bad = writeGuard(req);
+    if (bad) return send(400, 'application/json', JSON.stringify({ error: bad }));
+    const label = estateWrite[1], action = estateWrite[2];
+    const actor = actorOf(req);
+    const reason = (req.headers['x-reason'] || '').toString().slice(0, 200).trim();
     const flag = action === 'on' ? '--add-label' : '--remove-label';
     const r = await sh('gh', ['issue', 'edit', String(HOLDER), flag, label]);
     await sh('gh', ['issue', 'comment', String(HOLDER), '--body',
-      `\`${label}\` turned **${action}** from the IDP dashboard at ${new Date().toISOString()}.`]);
+      `\`${label}\` turned **${action}** from the IDP dashboard at ${new Date().toISOString()}.\n\n`
+      + `- by: ${actor}\n- reason: ${reason || '_none given_'}\n\n`
+      + `A socket address is not an identity. This records what is knowable here; `
+      + `see \`spec.org\` §Exposure for why that is not enough if this origin is ever published.`]);
     flagCache = { at: 0, value: null };
     const s2 = await snapshot();
     for (const c of clients) { try { c.write(frame(JSON.stringify(s2))); } catch { clients.delete(c); } }
@@ -377,6 +426,8 @@ const server = createServer(async (req, res) => {
   // no body because there is nothing to configure -- which slot to give back is
   // "all of them", since a change should hold exactly one.
   if (req.method === 'POST' && /^\/api\/schedule\/\d+\/clear$/.test(req.url || '')) {
+    const badS = writeGuard(req);
+    if (badS) return send(400, 'application/json', JSON.stringify({ error: badS }));
     const pr = req.url.split('/')[3];
     const out = await sh('./change/schedule.sh', ['unschedule', pr, 'cleared from the dashboard']);
     const s2 = await snapshot();
