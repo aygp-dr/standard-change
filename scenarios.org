@@ -953,3 +953,72 @@ logic. Reviewing the guard body finds nothing in all three cases.
 ever refused anything; if not, is its trigger reachable; and what is actually
 maintaining the property in the meantime?/ For guard 1 the answer to the last
 part is "a person being careful", which is not a control.
+
+** D21 — three identities, one lock, and neither operator could tell
+
+*2026-09-14, 23:25-23:33Z. Two experiments ran against the same estate without
+either being told about the other, and each recorded the other's interference
+from its own side.* =experiments/022= (five agents, #92-#96, jwalsh identity)
+and a no-scheduler grind (#97-#101, =aygp-dr= identity). The corroboration is
+the evidence: neither account depends on the other being believed.
+
+*** The forge timeline, which settles it
+
+=deploy:staging= events on #94 and #99:
+
+| when | PR | event | actor |
+|------+----+-------+-------|
+| 23:27:17 | #94 | + | jwalsh |
+| *23:27:23* | #94 | *−* | *aygp-dr* |
+| 23:29:04 | #99 | + | aygp-dr |
+| *23:29:17* | #99 | *−* | *github-actions[bot]* |
+| 23:29:09 | #94 | + | jwalsh |
+
+Three writers. The =aygp-dr= driver removed a lock =jwalsh= was holding; six
+seconds of its own log say /releasing the estate/, meaning its own. Thirteen
+seconds after taking #99's lock, a workflow removed it.
+
+=experiments/022='s table records the same event from the other side, without
+knowing what caused it: #94 /"swept once mid-hold at 23:27:23"/.
+
+*** Why it is not a race but a missing field
+
+The lock is a LABEL. A label has no owner, so =--remove-label deploy:staging=
+is the same call whether you are releasing your own lock or taking someone
+else's. There is no operation available that means /release MINE/.
+
+Guard 1 asks "is anyone holding the berth" and gets a boolean. It cannot ask
+"am *I* holding it", so a driver that believes it holds the berth and a driver
+that has been swept are indistinguishable *to themselves*.
+
+This is the L7 review's invariant 4 arriving as an incident: *the berth must be
+a lease with an owner and a deadline.* Not a label.
+
+*** The third writer is the fix for the second
+
+=main-moved.yml= fires on every push to =main= and withdraws staging verdicts
+that trunk has outrun. It is correct. It removed #99's lock at 23:29:17 because
+=main= had moved — and =main= had moved because pipeline fixes were being
+landed directly on =main= during the grind, deliberately.
+
+*So the act of repairing the pipeline withdrew the berth of the deployment the
+repair was being tested on.* Both are right in isolation. Nothing in the system
+holds both facts at once.
+
+*** What it cost, measured
+
+From =experiments/022=: #94 took *~24 minutes over five claim rounds* — lost to
+#95, refused by the other operator's #98, lost to #96, backed off a two-holder
+tie with #100, lost to #93, and swept once mid-hold. #92 took ~9.5 minutes over
+two runs, its first run swept at =production:healthy=.
+
+All five landed. The contention did not lose a change; it multiplied the time
+to land one by roughly eight.
+
+*** The thing a watcher could not see
+
+=experiments/022='s hypothesis was that a watcher of the PR list alone can tell
+who is moving to production. A two-holder tie, a sweep mid-hold, and a
+workflow-initiated release all look identical on that list: the label is simply
+absent, and absence has no author. The PR list shows the STATE of the lock and
+never its HISTORY, which is the only place the answer lives.
