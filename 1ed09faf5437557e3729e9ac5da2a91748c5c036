@@ -1,0 +1,56 @@
+Timeline
+--------
+1. Confirmed #32 by reading targets/node/deploy.sh: the only refusal is
+   `rev-parse --verify` (the deadbee guard). No notion of a PR, window or
+   berth. targets/bastille/deploy.sh has the same hole.
+2. Read scenarios.org D9, which DEFERRED this fix on the grounds that a second
+   window check inside every target is a second implementation of guard 3.
+   That objection is correct and the design answers it: authorize.sh calls
+   gates/preflight.sh rather than re-deriving anything, and is one script
+   called by both targets. D9's own revisit trigger ("an agent driving
+   deploy.sh unattended", "a workflow that calls a target directly") has
+   fired twice over.
+3. Verified gates/preflight.sh is read-only before delegating to it: no
+   `gh pr edit`, no `gh pr comment`, no label writes. Safe to call from a
+   deploy path.
+4. MUTATION FOUND THREE VACUOUS ASSERTIONS. First run killed 7 of 10. P1 (node
+   target stops calling the guard), P2 (jail target stops calling it) and P3
+   (the call is piped) all SURVIVED -- the three most important mutations.
+   Cause: C9/C9b grepped the RAW source for authorize.sh, and both targets
+   carry comments naming authorize.sh and quoting `authorize.sh | sed` as the
+   thing never to write. The greps matched the documentation and could not
+   fail. Fixed by stripping comments before matching, and C9c added to assert
+   the exit code is propagated. All three now die.
+5. Verified against the LIVE forge, read-only:
+     ./change/authorize.sh dev-3 <head>       -> exit 0, forge never asked
+     ./change/authorize.sh staging 944c541    -> exit 1, heads no open PR
+     ./change/authorize.sh staging 37d943b    -> exit 6 via preflight
+   The last is PR #75: preflight judged the berth (#61 holds it) and the
+   draft state, and the deploy path RECEIVED the refusal. That run also
+   showed preflight returns 6, which this file's first header did not list --
+   the contract is now an open-ended pass-through rather than a second copy
+   of preflight's code table.
+6. NOT RUN: neither deploy target was executed to completion or to refusal.
+   The live estate is up and a bug would have touched staging's ports and
+   deployment worktree. C9/C9b/C9c are static assertions and say so; P1/P2/P3
+   confirm each can fail.
+
+Reproduction
+------------
+  $ ./experiments/020-deploy-authorisation/demonstrate.sh
+    18 passed, 0 failed
+
+  $ ./experiments/020-deploy-authorisation/mutate.sh
+    10 mutations applied, 10 killed, 0 expected survivor(s), 0 unexplained
+
+  $ ./gates/shellcheck.sh
+    shellcheck: 35 scripts, 0 finding(s)
+  (and shellcheck -s sh -S warning over the three experiment scripts: clean)
+
+  $ python3 gates/label-audit.py
+    37 labels declared, 19 written in-tree, 16 finding(s)   (baseline)
+
+  $ gmake -s gate-selftest
+    exit 0; git status --short tla/ clean before and after
+
+Cell: hydra, FreeBSD 14.3-RELEASE amd64, jq 1.8.1, gh 2.83.2, python3.
