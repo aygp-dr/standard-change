@@ -24,7 +24,21 @@ set -eu
 PR="${1:?usage: deploy-run <pr>}"
 R=aygp-dr/standard-change
 FRONT_PROD=http://127.0.0.1:9200
-FRONT_STG=http://127.0.0.1:9201
+# THE FRONT IS WHAT environments.tsv SAYS IT IS, not a constant here.
+#
+# This was hardcoded to :9201 and :9201 is not the staging front -- it is one
+# app replica. Every route except core's 404s behind it, so the authorizing
+# e2e run refused a healthy estate with eight "upstream unreachable" lines
+# and #62's window was spent proving that the address was wrong. The
+# declaration says staging is base_port 9200, and e2e passes 27 checks there.
+#
+# A second copy of a fact that is already declared somewhere is not a
+# convenience; it is a fact that can disagree with itself, and this one did.
+# Read the declaration. Fail loudly if it is not there, because a front we
+# cannot name is not one we should deploy to.
+_stg_port=$(awk -F'\t' '$1=="staging"{print $4}' environments.tsv)
+[ -n "${_stg_port:-}" ] || { echo "no 'staging' row in environments.tsv" >&2; exit 2; }
+FRONT_STG="http://127.0.0.1:${_stg_port}"
 # Every relative path below (./change/, ./gates/, ./targets/) is written from
 # the REPO ROOT, and this used to cd into change/ instead -- so guard 3's call
 # to ./change/schedule.sh failed with "not found" and the failure was reported
@@ -169,10 +183,27 @@ LOCALS=$(gh api "repos/$R/commits/$HEADSHA/status" \
 LOK=$(printf '%s' "$LOCALS"  | jq '[.[]|select(.state=="success")]|length' 2>/dev/null || echo 0)
 LBAD=$(printf '%s' "$LOCALS" | jq '[.[]|select(.state!="success")]|length' 2>/dev/null || echo 0)
 LSELF=$(printf '%s' "$LOCALS" | jq '[.[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
-BAD=$(gh api "repos/$R/commits/$HEADSHA/check-runs" \
-        --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
-SELF=$(gh api "repos/$R/commits/$HEADSHA/check-runs" \
-        --jq '[.check_runs[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length')
+# ONE VERDICT PER GATE, AND IT IS THE LATEST ONE. The check-runs endpoint
+# returns EVERY run ever recorded against this SHA, not the current set. A
+# re-run leaves the old attempt in the list, so without this collapse a gate
+# that failed at 23:22 and passed at 01:58 is counted as both -- and the
+# failing half wins, because the query asks "how many are not success".
+#
+# That is spec.org defect class 2, superseded is not current: the same shape
+# as guard 2 counting a superseded check run as a verdict (scenario D15).
+# preflight.sh was fixed for this; THIS COPY WAS NOT, and the two oracles
+# then disagreed about one subject -- preflight said #61 was green on
+# bfe2a21 and activate refused it as "4 gate(s) not green", naming four runs
+# that had already been replaced. A guard that reads a stale attempt is not
+# stricter than one that does not; it is wrong in the direction that looks
+# safe, which is why it survived.
+_runs() { gh api "repos/$R/commits/$HEADSHA/check-runs" \
+            --jq '[.check_runs|group_by(.name)|map(max_by(.started_at))|.[]]'; }
+_CUR=$(_runs)
+BAD=$(printf '%s' "$_CUR" \
+        | jq '[.[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
+SELF=$(printf '%s' "$_CUR" \
+        | jq '[.[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length')
 if [ "$LBAD" -eq 0 ] && [ "$LOK" -ge 3 ] && [ "$LSELF" -ge 1 ]; then
   ok "gates green on $SHA — $LOK local/ contexts, gate-selftest among them"
   ok "measured on a host, not by CI, and the contexts say so"
