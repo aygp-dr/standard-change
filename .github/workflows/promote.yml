@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Guard 2: every gate green on THIS head SHA. No bypass, emergency included.
       - name: require gates green on head SHA
         # Latest run PER GATE, and a gate still running is "not yet", not
