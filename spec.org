@@ -3003,9 +3003,36 @@ The terms a rebuild must keep, and what each one is *not*.
 | *freeze* | a property of the WORLD, blocking everyone including its declarer | a property of a change |
 | *emergency (estate)* | something is wrong out there; everything stops | a classification |
 | *itil:emergency* | THIS change is the remedy; it passes the freeze | the estate being shut |
-| *closure code* | passed / failed / cancelled / expired / backed-out | a boolean |
+| *change closure* | complete / backed-out / *abandoned* / superseded | a boolean, and never =expired= or =cancelled= |
+| *window result* | passed / failed / cancelled / forfeited / *expired* | a property of the CHANGE |
 | *soak* | proof by use across N *later* deployments | a longer test run |
 | *control-plane* | changes how every FUTURE change is verified | a big change |
+
+*** Two closure enums, not one — corrected 2026-09-15
+
+This table carried a single =closure code= row reading /passed / failed /
+cancelled / expired / backed-out/, mixing two subjects. =experiments/016-dora/
+schema.sql= had already split them and said why: *"Note what is absent:
+'expired' and 'cancelled'. Neither can be true of a change — they are true of a
+reservation."* The nomenclature had not caught up with the schema built to fix
+it.
+
+They close differently because they are different things:
+
+- A *change* completes, is backed out, is *abandoned*, or is superseded.
+- A *window* passes, fails, is cancelled, is forfeited, or *expires*.
+
+=abandoned= is the one this repository was missing entirely. On 2026-09-15 #70
+reached a state none of the three existing change closures fits: it never
+reached production (not =complete=), nothing about it was wrong (not =failed=
+— its driver hit a path belonging to another host), and it was never deployed
+(not =backed-out=). Its window lapsed and =change/reap.sh= closed that window
+=expired=, which is correct and says nothing about the change.
+
+So the change sat tombstoned with =change:end= and no closure code at all —
+unresolvable from the labels, because nothing on it says whether it needs
+resubmitting or merging. *A change nobody is driving any more is =abandoned=,
+and the absence of that word is why the state had no name.*
 
 ** The distinction that carries the most weight
 

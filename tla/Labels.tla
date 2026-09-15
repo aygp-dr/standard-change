@@ -51,7 +51,7 @@ CONSTANTS PRs,
           LockResets         \* refused at the lock: every marker goes, human intent included; the person re-states it
 
 Classes   == {"standard", "normal", "emergency"}
-Lifecycle == {"requested", "scheduled", "complete"}
+Lifecycle == {"requested", "scheduled", "complete", "abandoned", "superseded"}
 Bookings  == {"none", "queued", "designated"}
 Verdicts  == {"none", "pass", "fail"}
 

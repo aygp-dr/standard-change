@@ -73,7 +73,15 @@ def ident(label: str) -> list[str]:
     ns, _, rest = label.partition(":")
     parts = re.split(r"[-_]", rest) if rest else []
     camel = ns + "".join(p.capitalize() for p in parts)
-    return [label, camel, camel[0].upper() + camel[1:]] if rest else [label, ns]
+    if not rest:
+        return [label, ns]
+    # A model may also name the state BARE inside a set keyed by namespace --
+    # `Lifecycle == {"requested", "scheduled", "abandoned"}` in TLA, and
+    # LIFE_LABELS in the simulator. That is the natural form in both and
+    # demanding the prefixed spelling would fail every well-written model.
+    # Quoted, so a bare word in prose does not count.
+    bare = f'"{rest}"'
+    return [label, camel, camel[0].upper() + camel[1:], bare]
 
 
 def audit(labels, text):

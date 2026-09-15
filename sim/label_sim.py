@@ -83,7 +83,11 @@ def put(st, i, q, **est):
 CLEAR_STAGING = dict(berth=False, sdep=False, shealthy=False)
 CLEAR_BUILD = dict(verdict="none", uat=False, healthy=False, served=False, sdep=False, shealthy=False, pdep=False)
 
-LIFE_LABELS = ("requested", "scheduled", "start", "complete")
+# `abandoned` is a CHANGE closure: nobody is driving this any more. It is not
+# `failed` (nothing was wrong with it), not `backed-out` (it never deployed),
+# and not `cancelled` or `expired` -- those are WINDOW results and can never be
+# true of a change. spec.org §Nomenclature, corrected 2026-09-15.
+LIFE_LABELS = ("requested", "scheduled", "start", "complete", "abandoned", "superseded")
 
 
 def actions(st, R):
