@@ -68,7 +68,7 @@ export function render(path) {
 
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
-export const BACKGROUND = '#dff3ff';
+export const BACKGROUND = '#d6efff';
 
 // `port` is the port this process is ACTUALLY answering on: the caller takes it
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
