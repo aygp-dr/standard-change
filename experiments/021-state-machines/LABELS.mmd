@@ -1,0 +1,77 @@
+flowchart TB
+  %% Merged from five lens models. Weight = share of label-driven
+  %% transition mass. The CORE THREE are what a person chooses;
+  %% everything else is a consequence of those choices.
+  subgraph CORE["the core three -- what a person chooses"]
+    direction LR
+    subgraph SNapp_["app: WHAT moves"]
+      direction TB
+      Napp__["app:*<br/>5.3%"]
+      Napp__group_["app:<group><br/>0.0%"]
+      Napp_core["app:core<br/>0.0%"]
+      Napp_plp["app:plp<br/>0.0%"]
+      Napp_pdp["app:pdp<br/>0.0%"]
+      Napp_checkout["app:checkout<br/>0.0%"]
+      Napp_mock["app:mock<br/>0.0%"]
+    end
+    subgraph SNitil_["itil: WHICH RULES"]
+      direction TB
+      Nitil_emergency["itil:emergency<br/>4.3%"]
+      Nitil_standard["itil:standard<br/>2.6%"]
+      Nitil_normal["itil:normal<br/>2.4%"]
+    end
+    subgraph SNrelease["release: GO"]
+      direction TB
+      Nrelease["release<br/>8.2%"]
+      Nrelease_start["release:start<br/>0.0%"]
+    end
+  end
+  subgraph Rgatekeeping["gatekeeping -- 30% (a consequence)"]
+    direction TB
+    Nchange_requested["change:requested<br/>11.1%"]
+    Ndeploy_production["deploy:production<br/>7.8%"]
+    Ndeploy_staging["deploy:staging<br/>6.1%"]
+    Nblocked_diverged["blocked:diverged<br/>2.0%"]
+    Nblocked_freeze["blocked:freeze<br/>1.7%"]
+    Nchange_scheduled["change:scheduled<br/>1.5%"]
+    Nblocked_queue["blocked:queue<br/>0.0%"]
+    Nblocked_lock["blocked:lock<br/>0.0%"]
+  end
+  subgraph Restate["estate -- 37% (a consequence)"]
+    direction TB
+    Nemergency["emergency<br/>20.1%"]
+    Nfreeze["freeze<br/>16.6%"]
+  end
+  subgraph Raudit["audit -- 9% (a consequence)"]
+    direction TB
+    Nchange_complete["change:complete<br/>7.9%"]
+    Nstaging_failed["staging:failed<br/>0.8%"]
+    Nchange_backfill_owed["change:backfill-owed<br/>0.3%"]
+    Nstaging_in_progress["staging:in-progress<br/>0.0%"]
+    Nchange_failed["change:failed<br/>0.0%"]
+    Nchange_backed_out["change:backed-out<br/>0.0%"]
+    Nstaging_e2e["staging:e2e<br/>0.0%"]
+    Nstaging_e2e_failed["staging:e2e-failed<br/>0.0%"]
+    Nstaging_smoke["staging:smoke<br/>0.0%"]
+    Nstaging_smoke_failed["staging:smoke-failed<br/>0.0%"]
+    Nstaging_uat["staging:uat<br/>0.0%"]
+    Nproduction_e2e["production:e2e<br/>0.0%"]
+    Nproduction_e2e_failed["production:e2e-failed<br/>0.0%"]
+    Nproduction_smoke["production:smoke<br/>0.0%"]
+    Nproduction_smoke_failed["production:smoke-failed<br/>0.0%"]
+    Nproduction_healthy["production:healthy<br/>0.0%"]
+    Nstaging_passed["staging:passed<br/>0.0%"]
+    Ndeployed_production["deployed:production<br/>0.0%"]
+    Ndeployed_staging__group___n_["deployed:staging-<group>-<n><br/>0.0%"]
+  end
+  subgraph Roverride["override -- 6% (a consequence)"]
+    direction TB
+    Nitil_emergency["itil:emergency<br/>4.3%"]
+    Nhold_staging["hold:staging<br/>1.0%"]
+    Nlabeler_skip["labeler:skip<br/>0.3%"]
+    Nreview_proxy["review:proxy<br/>0.0%"]
+  end
+  CORE ==>|decides| Rgatekeeping
+  Rgatekeeping ==>|permits| Raudit
+  Restate -.->|blocks everything, including its declarer| Rgatekeeping
+  Roverride -.->|gets past a refusal, on the record| Rgatekeeping

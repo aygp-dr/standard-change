@@ -24,7 +24,7 @@ export function render(path) {
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
 // Issue #8 -- the checkout surface renders pink.
-export const BACKGROUND = '#ffd7e6';
+export const BACKGROUND = '#ffa8cc';
 
 // `port` is the port this process is ACTUALLY answering on: the caller takes it
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
@@ -42,26 +42,33 @@ export const BACKGROUND = '#ffd7e6';
 // page unescaped, and an attribute is a shorter path out than a text node.
 const SHIP = [
   ['name',    'Full name',    'text'],
-  ['line1',   'Address',      'text'],
+  ['line1',   'Address line 1', 'text'],
   ['city',    'City',         'text'],
-  ['postcode','Postcode',     'text'],
+  ['postcode','Postcode / ZIP', 'text'],
 ];
+
+export const DUE = '$42.00';  // static copy: no request value reaches it, so no esc()
 
 export function shippingForm(q) {
   const field = ([n, label, type]) =>
     `<p><label>${esc(label)}<br><input name="${esc(n)}" type="${esc(type)}" ` +
-    `value="${esc(q.get(n) || '')}" style="width:22rem;padding:4px"></label></p>`;
+    `value="${esc(q.get(n) || '')}" style="width:100%;max-width:22rem;padding:4px"></label></p>`;
   const filled = SHIP.every(([n]) => (q.get(n) || '').trim() !== '');
-  return `<h2>Shipping address</h2>
+  return `<p>Your order comes to <b>${DUE}</b>, including delivery.</p>
+<h2>Shipping address</h2>
 <form method="get" action="/checkout">
 ${SHIP.map(field).join('\n')}
-<p><button type="submit">Continue</button></p>
+<p><button type="submit">Continue ✨</button></p>
 </form>` + (filled ? '<p><b>Ready to continue to payment.</b></p>' : '');
 }
 
+export const paymentPanel = (q) =>
+  `<h2>Payment</h2><p>You are about to pay <b>${DUE}</b>. Nothing is charged until you confirm.</p>
+<p><a href="/checkout?${esc(q)}">&larr; Back to shipping address</a></p>`;
+
 export function renderHtml(path, port) {
   const q = new URL(path, 'http://x').searchParams;
-  const extra = path.split('?')[0] === '/checkout' ? shippingForm(q) : '';
+  const extra = { '/checkout': shippingForm, '/checkout/payment': paymentPanel }[path.split('?')[0]]?.(q) ?? '';
   return page({ ...render(path), host: HOST, port }, ESTATE, BACKGROUND, extra);
 }
 
@@ -111,3 +118,5 @@ if (isMain) createServer((req, res) => {
 }).listen(PORT, BIND, () => {
   console.log(`checkout listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });
+
+// feat/checkout-tax-line: simulated change

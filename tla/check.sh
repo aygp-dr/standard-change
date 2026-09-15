@@ -6,7 +6,9 @@ set -eu
 JAR="${TLA2TOOLS:-$HOME/ghq/github.com/aygp-dr/tla-plus-tutorial/tla2tools.jar}"
 [ -f "$JAR" ] || { echo "tla2tools.jar not found; set TLA2TOOLS"; exit 1; }
 cd "$(dirname "$0")"
-run() { java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -cleanup "$1" 2>&1; }
+# Bounded heap: the fourteen-rule label model has 25M states, and an unbounded
+# JVM under a loaded desktop got the whole gate killed for memory (2026-09-14).
+run() { java -Xmx${TLC_HEAP:-3g} -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -workers auto -cleanup "$1" 2>&1; }
 
 # Guard4b's negative run must ALSO disable ProdFirst. The two guards are not
 # independent: MainMoved withdraws inProd when main outruns a change, so with
@@ -59,7 +61,44 @@ printf '== concurrent positive: berths=1 (the atomic model case) .... '
 if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
+# The LABEL NAMESPACE (Labels.tla): three axes plus the estate, transcribed
+# from the scripts. Fifteen constants, one per rule; each negative run flips one
+# and TLC must name the invariant that rule protects. sim/cross_check.py runs
+# the same questions against sim/label_sim.py and requires agreement.
+#
+# Three constants name NoUnbookedDeploy on purpose: a claim with no window
+# (WindowGuard), a berth left behind by a lapsed window (ReapFreesBerth) and a
+# window reaped while its change is deploying (ReapSparesInFlight) all reach
+# the same state -- a deployment with no reservation -- by three roads.
+labels_negative() {  # labels_negative <Constant> <Invariant>
+  sed "s/$1 = TRUE/$1 = FALSE/" Labels.cfg > "No$1.cfg"
+  sed "s/MODULE Labels/MODULE No$1/" Labels.tla > "No$1.tla"
+  printf '== labels negative: %-18s must violate %-18s ' "$1=FALSE" "$2"
+  if run "No$1" | grep -q "Invariant $2 is violated"; then echo 'FAIL as required'
+  else echo "BAD: rule $1 protects nothing the model can see"; exit 1; fi
+  rm -f "No$1.cfg" "No$1.tla"
+}
+labels_negative DraftGuard         NoDraftDeployed
+labels_negative WindowGuard        NoUnbookedDeploy
+labels_negative FreezeGuard        NoRefusedClaim
+labels_negative EstateGuard        NoRefusedClaim
+labels_negative BerthGuard         AtMostOneHolder
+labels_negative ClassGuard         NoDeployWithTwoClasses
+labels_negative LifecycleExclusive OneLifecycle
+labels_negative ReapFreesBerth     NoUnbookedDeploy
+labels_negative SettleClears       CleanIsClean
+labels_negative ReapSparesInFlight NoUnbookedDeploy
+labels_negative RecordOnMerge      MergedHasRecord
+labels_negative EmergencyPreempts  EmergencyNeverWaits
+labels_negative HoldGuard          NoPromoteUnderHold
+labels_negative HealthyBeforeVerdict VerdictOnHealthy
+labels_negative LockResets         LockRefusalResets
+
+printf '== labels positive: all fifteen rules on .................... '
+if run Labels | grep -q 'No error has been found'; then echo 'PASS'
+else echo 'FAIL'; run Labels | grep -E 'Error' | head -5; exit 1; fi
+
 rm -rf Neg.tla Neg.cfg NoProdFirst.tla NoProdFirst.cfg NoMergeGuard.tla NoMergeGuard.cfg One.tla One.cfg \
-       NoOwn.tla NoOwn.cfg \
+       NoOwn.tla NoOwn.cfg No*.tla No*.cfg \
        *_TTrace_*.tla *_TTrace_*.bin states
 echo "== both directions confirmed"

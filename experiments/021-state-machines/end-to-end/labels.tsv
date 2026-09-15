@@ -1,0 +1,43 @@
+label	prefix	semantics	owner	human_add	asserts
+app:core	app:	observation	labeller	no	the diff touches apps/core/ or shared/. The MANIFEST: derived from the diff, never asserted; recomputed every push
+app:plp	app:	observation	labeller	no	the diff touches apps/plp/ or shared/
+app:pdp	app:	observation	labeller	no	the diff touches apps/pdp/ or shared/
+app:checkout	app:	observation	labeller	no	the diff touches apps/checkout/ or shared/
+app:mock	app:	observation	labeller	no	the diff touches apps/mock/ or shared/
+itil:standard	itil:	classification	labeller	no	this change touches only pre-authorized paths; no CAB review
+itil:normal	itil:	classification	labeller	no	this change touches router/, gates/, change/, targets/ or .github/; one approving review required
+itil:emergency	itil:	classification	human	yes	THIS change is the remedy. Bypasses the queue and a freeze; bypasses neither guard 2 nor guard 5
+control-plane	(none)	classification	labeller	no	this change alters how every FUTURE change is verified, so the pipeline cannot verify it and it must not auto-merge
+labeler:skip	labeler:	intent	human	yes	a person is taking ownership of the derived labels. Converts the manifest from derived to asserted, visibly
+change:requested	change:	intent	human	yes	start my change request. The only label a person adds to set a change going, and the whole of their part
+change:scheduled	change:	state	scheduler	no	a window is booked on the change schedule. A record; nothing blocks on it
+change:complete	change:	state	change/settle.sh	no	CHANGE closure code complete. Validation is done and the PIR is posted; cleared at cleanup, after which the forge's MERGED is the record
+change:failed	change:	state	change/abort.sh	no	CHANGE closure code failed. Production never served it, or never had it made live. Nothing to undo
+change:backed-out	change:	state	change/abort.sh	no	CHANGE closure code backed_out. Production DID serve it and was returned to a named prior state; abort.sh refuses this without --to <sha>
+change:backfill-owed	change:	state	human	yes	this change reached main without the normal evidence and still owes it. Blocks nothing. PERSISTENT: the merge is when the debt starts
+release	(none)	intent	human	yes	a person wants the scheduler to pick this change up. A trigger that stays on re-fires
+release:start	release:	state	the pipeline	no	the release has BEGUN for the booked change request. A person cannot truthfully assert a deployment is running
+deploy:staging	deploy:	state	workflow	no	ACTION IN FLIGHT, and the berth claim guard 1 reads. Not a request: reading it as one is what made the earlier vocabulary incoherent
+deploy:production	deploy:	state	workflow	no	ACTION IN FLIGHT: the production deployment is running
+staging:in-progress	staging:	state	workflow	no	ACTION IN FLIGHT: the staging deployment is running
+staging:e2e	staging:	observation	gates/e2e.sh --pr	no	the authorizing browser journey passed on a named build in the staging environment
+staging:e2e-failed	staging:	observation	gates/e2e.sh --pr	no	the authorizing browser journey failed on a named build. A recorded failure outranks a pass in guard 4
+staging:smoke	staging:	observation	gates/smoke.sh --pr	no	the smoke probe passed on a named build in staging
+staging:smoke-failed	staging:	observation	gates/smoke.sh --pr	no	the smoke probe failed on a named build in staging
+staging:uat	staging:	observation	human via change/observe.sh	yes	THE EXCEPTION: for acceptance the person IS the instrument. observe.sh checks that the build the person used is the head
+production:e2e	production:	observation	gates/e2e.sh --pr	no	the browser journey passed against production on a named build
+production:e2e-failed	production:	observation	gates/e2e.sh --pr	no	the browser journey failed against production on a named build
+production:smoke	production:	observation	gates/smoke.sh --pr	no	the smoke probe passed against production on a named build
+production:smoke-failed	production:	observation	gates/smoke.sh --pr	no	the smoke probe failed against production on a named build
+production:healthy	production:	observation	gates/health.sh --pr	no	CONVERGENCE, not liveness: the estate was sampled and every replica serves the named build
+review:proxy	review:	observation	change/review.sh	no	a proxy, NOT a person, accepted this build. Never APPROVED: it is a different label so a reader can tell
+blocked:queue	blocked:	state	change/queue.sh	no	guard 1 refused: another open PR holds the berth
+blocked:lock	blocked:	state	change/lock.sh	no	guard 3 refused: another deployment holds the deployment lock
+blocked:freeze	blocked:	state	gates/preflight.sh	no	guard 3 refused: a FREEZE covers the requested window. The label is on the change; the CAUSE is the estate
+blocked:diverged	blocked:	state	workflow	no	guard 0 or 4b refused: main moved under this change. A human may clear it after rebasing
+freeze	(none)	estate	human	yes	ESTATE-GLOBAL: ordinary change is suspended for everyone, including whoever declared it. A property of the world, never of a change
+emergency	(none)	estate	human	yes	ESTATE-GLOBAL: an emergency is in flight, everything stops, and it grants NO exemption to whatever PR carries it
+staging:passed	staging:	observation	RETIRED	no	RETIRED: named no measurement and no environment. Replaced by the staging:* stack
+staging:failed	staging:	observation	RETIRED	no	RETIRED: same
+deployed:production	deployed:	state	RETIRED	no	RETIRED: replaced by change:complete plus the deployment record
+hold:staging	hold:	intent	REJECTED	no	REJECTED SEMANTICS: a third way to stop a deploy, with a third scope and no rule for which applied. Covered by freeze and itil:emergency

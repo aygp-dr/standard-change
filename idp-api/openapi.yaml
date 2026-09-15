@@ -1,0 +1,416 @@
+openapi: 3.1.0
+info:
+  title: standard-change IDP
+  version: 0.1.0
+  summary: Three write verbs, a boundary, and the reads. Nothing that deploys.
+  description: |
+    The contract for the change-control component `docs/idp-api.org` designed
+    and `change/*.sh` implements as scripts. Every write is one of the three
+    verbs — **reserve**, **activate**, **settle** — plus **closure** for the
+    change that did not make it, and the **authorization boundary**: the state
+    of the estate (`freeze`, `emergency`) that a person sets and every guard
+    reads.
+
+    Deliberately absent, from the design note: no `complete()` — a deployer
+    may not claim success, settlement takes *evidence* and returns a verdict;
+    no priority field; no force flag; no deploy verb. The scheduler calls
+    activation; a change cannot activate itself.
+
+    **Eviction.** `PUT /boundary/emergency` with a `change` opens the boundary
+    for that one change and, per README §5b, evicts a standard or normal holder
+    of the berth. `docs/idp-api.org` says "nothing may evict a berth holder";
+    that sentence predates the rule and the ADR decides which stands. The verb
+    is here so both positions can be argued against one contract.
+
+    **Refusals are the product.** Every 4xx names the fact, the cost and the
+    recovery, and says whether the berth is held. `refused` names the guard and
+    maps to the scripts' exit codes (`docs/exit-codes.org`):
+
+    | HTTP | exit | refused    | meaning                                    |
+    |------|------|------------|--------------------------------------------|
+    | 409  | 1    | guard-N    | the check failed                           |
+    | 423  | 5    | guard-1    | the berth is held                          |
+    | 423  | 3    | boundary   | a freeze, or an emergency in flight        |
+    | 409  | 6    | guard-0    | behind main                                |
+    | 409  | 7    | guard-3    | no window covers now                       |
+    | 409  | 8    | guard-4b   | main moved under you                       |
+    | 412  | 9    | cas        | the state changed under the write          |
+    | 503  | 4    | unknown    | I could not check — blocks, never proceeds |
+    | 422  | 2    | usage      | the request cannot be acted on             |
+  x-authority:
+    reservation: a person, or the scheduler on `release`
+    activation: the scheduler only
+    settlement: the host that can see the estate
+    boundary: a person only
+servers:
+  - url: http://127.0.0.1:9998
+    description: idp-api/mock/server.mjs — in-memory, for the clients to be built against
+  - url: http://127.0.0.1:9999/api
+    description: the dashboard's server, once it grows these verbs
+tags:
+  - name: change
+  - name: schedule
+  - name: boundary
+paths:
+  /changes:
+    get:
+      tags: [change]
+      summary: every open change with its lifecycle state and labels
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Change" } }
+  /changes/{id}:
+    get:
+      tags: [change]
+      summary: current state and why
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/Change" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /changes/{id}/reservation:
+    post:
+      tags: [change]
+      summary: reserve a window (change/schedule.sh block)
+      description: |
+        First-fit behind whatever is already reserved, or a named hour with
+        `at`. A named hour does not win a clash. Moves the change from
+        `requested` to `scheduled`. Every guard checked here is stale by the
+        time the window opens; activation re-checks.
+      parameters: [ { $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/idem" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groups, minutes]
+              properties:
+                groups: { type: array, items: { type: string }, minItems: 1, description: the deploy groups, from app:* }
+                minutes: { type: integer, minimum: 1 }
+                at: { type: string, format: date-time, description: a designated slot; omitted = queued }
+                env: { type: string, default: staging }
+      responses:
+        "201": { description: reserved, content: { application/json: { schema: { $ref: "#/components/schemas/Window" } } } }
+        "409": { $ref: "#/components/responses/Refused" }
+        "422": { $ref: "#/components/responses/Refused" }
+    delete:
+      tags: [change]
+      summary: un-book (change/schedule.sh unschedule) — cancelled, not expired
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "204": { description: window closed `cancelled`; the change is unscheduled, still approved }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Refused" }
+
+  /changes/{id}/activation:
+    post:
+      tags: [change]
+      summary: the scheduler activates a due window (gates/preflight.sh, then change/activate.sh)
+      description: |
+        Called by the scheduler when the window opens, never by the change.
+        Re-evaluates every guard at this moment: on the calendar, not a draft,
+        one class, gates green on THIS head, the boundary open (or this is the
+        emergency), the berth free. Returns a lease on the berth or a refusal
+        naming the guard. The same `Idempotency-Key` returns the same lease
+        without re-running the guards.
+      parameters: [ { $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/idem" } ]
+      responses:
+        "201": { description: the berth is held, content: { application/json: { schema: { $ref: "#/components/schemas/Lease" } } } }
+        "409": { $ref: "#/components/responses/Refused" }
+        "423": { $ref: "#/components/responses/Refused" }
+        "503": { $ref: "#/components/responses/CouldNotCheck" }
+
+  /changes/{id}/settlement:
+    post:
+      tags: [change]
+      summary: close with EVIDENCE; the IDP renders the verdict (change/settle.sh)
+      description: |
+        Takes observations of what the estate is serving and returns
+        `settled` or `unconverged`. Never takes a verdict. `confidence` is
+        `sampled` when the platform cannot enumerate its replicas and
+        `attested` when it can; never defaulted to the stronger value. On
+        `settled` the IDP writes `change:complete`, merges if not merged,
+        posts the PIR, and clears every transient label — in that order.
+      parameters: [ { $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/idem" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lease, claimed_build, observations]
+              properties:
+                lease: { type: string }
+                claimed_build: { $ref: "#/components/schemas/Sha" }
+                observations:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [probe, at, build]
+                    properties:
+                      probe: { type: string, format: uri }
+                      at: { type: string, format: date-time }
+                      build: { $ref: "#/components/schemas/Sha" }
+      responses:
+        "202":
+          description: settled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, attested_by, confidence, samples, distinct_builds]
+                properties:
+                  state: { const: settled }
+                  attested_by: { type: string }
+                  confidence: { enum: [sampled, attested] }
+                  samples: { type: integer }
+                  distinct_builds: { const: 1 }
+                  merged: { type: boolean }
+                  pir: { type: string }
+        "409":
+          description: unconverged — not retryable; the estate is serving more than one build
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state: { const: unconverged }
+                  distinct_builds: { type: integer, minimum: 2 }
+                  seen: { type: array, items: { $ref: "#/components/schemas/Sha" } }
+                  detail: { type: string }
+        "412": { $ref: "#/components/responses/Refused" }
+
+  /changes/{id}/closure:
+    post:
+      tags: [change]
+      summary: the change did not make it (change/abort.sh)
+      description: |
+        `failed` — production never served it. `backed-out` — production
+        served it and was returned; `to` is required because the word asserts
+        an estate action. Clears the working state and the berth; the closure
+        code is terminal. An evicted change is NOT closed here — see the
+        boundary.
+      parameters: [ { $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/idem" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, reason]
+              properties:
+                code: { enum: [failed, backed-out] }
+                reason: { type: string }
+                to: { $ref: "#/components/schemas/Sha" }
+      responses:
+        "200": { description: closed, content: { application/json: { schema: { $ref: "#/components/schemas/Change" } } } }
+        "422": { $ref: "#/components/responses/Refused" }
+
+  /schedule:
+    get:
+      tags: [schedule]
+      summary: windows and the boundary over an interval (change/schedule.sh list)
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: open, in: query, schema: { type: boolean }, description: only windows with no result }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  windows: { type: array, items: { $ref: "#/components/schemas/Window" } }
+                  boundary: { $ref: "#/components/schemas/Boundary" }
+  /schedule/reap:
+    post:
+      tags: [schedule]
+      summary: close lapsed windows (change/reap.sh); the scheduler's housekeeping
+      description: |
+        Every open window whose end has passed is closed `expired`; its change
+        loses `change:scheduled` and, if it still held the berth, the berth —
+        unless the change carries `deploy:production` (rule ReapSparesInFlight)
+        or the forge says MERGED (rule RecordOnMerge). Nothing is re-booked and
+        nothing goes back to `requested`: asking is a person's act.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reaped: { type: array, items: { $ref: "#/components/schemas/Window" } }
+                  spared: { type: array, items: { $ref: "#/components/schemas/Window" } }
+
+  /boundary:
+    get:
+      tags: [boundary]
+      summary: the authorization boundary — open, frozen, or in an emergency
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/Boundary" } } } }
+  /boundary/freeze:
+    put:
+      tags: [boundary]
+      summary: close the boundary to standard and normal changes (a person)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+                until: { type: string, format: date-time }
+      responses:
+        "200": { description: frozen, content: { application/json: { schema: { $ref: "#/components/schemas/Boundary" } } } }
+    delete:
+      tags: [boundary]
+      summary: lift the freeze (a person)
+      responses:
+        "200": { description: open, content: { application/json: { schema: { $ref: "#/components/schemas/Boundary" } } } }
+  /boundary/emergency:
+    put:
+      tags: [boundary]
+      summary: declare an emergency — the boundary closes to everyone but one change
+      description: |
+        Sets `emergency` on the estate and names the change it is for, which
+        must carry `itil:emergency`. If that change is booked and ready and a
+        standard or normal change holds the berth, the holder is **evicted**
+        (rule EmergencyPreempts, README §5b): it loses the berth, its window
+        (closed `cancelled`) and its observations; keeps its class, approval
+        and head; is not closed and gets no lifecycle label back. The response
+        says who was evicted. Whether this endpoint or the emergency's
+        activation performs the eviction is the open ADR decision; the effect
+        is specified either way.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [change, reason]
+              properties:
+                change: { $ref: "#/components/schemas/ChangeId" }
+                reason: { type: string }
+      responses:
+        "200":
+          description: emergency declared
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Boundary"
+                  - type: object
+                    properties:
+                      evicted:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            change: { $ref: "#/components/schemas/ChangeId" }
+                            window: { type: string }
+                            reason: { type: string }
+        "409": { $ref: "#/components/responses/Refused" }
+    delete:
+      tags: [boundary]
+      summary: the emergency is over; the boundary reopens
+      responses:
+        "200": { description: open, content: { application/json: { schema: { $ref: "#/components/schemas/Boundary" } } } }
+
+components:
+  parameters:
+    id: { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ChangeId" } }
+    idem:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+      description: same key, same answer; a retried activation must not re-run the guards
+  responses:
+    Refused:
+      description: refused, legibly
+      content: { application/json: { schema: { $ref: "#/components/schemas/Refusal" } } }
+    CouldNotCheck:
+      description: I could not check — exit 4; blocks, never proceeds
+      content: { application/json: { schema: { $ref: "#/components/schemas/Refusal" } } }
+    NotFound:
+      description: no such change
+  schemas:
+    Sha: { type: string, pattern: "^[0-9a-f]{7,40}$" }
+    ChangeId: { type: string, description: a change id (CHG-…) or the PR number }
+    Change:
+      type: object
+      required: [id, pr, class, lifecycle, head, labels]
+      properties:
+        id: { $ref: "#/components/schemas/ChangeId" }
+        pr: { type: integer }
+        class: { enum: [standard, normal, emergency, undefined], description: "`undefined` when more than one itil:* is present" }
+        lifecycle: { enum: [opened, requested, scheduled, implementing, verified, live, complete, failed, backed-out], description: README's states; `implementing` = the berth is held }
+        head: { $ref: "#/components/schemas/Sha" }
+        draft: { type: boolean }
+        approved: { type: boolean }
+        groups: { type: array, items: { type: string } }
+        labels: { type: array, items: { type: string } }
+        window: { $ref: "#/components/schemas/Window" }
+        lease: { $ref: "#/components/schemas/Lease" }
+        observations:
+          type: object
+          properties:
+            staging: { enum: [none, pass, fail] }
+            uat: { type: boolean }
+            production: { enum: [none, healthy] }
+    Window:
+      type: object
+      required: [id, change, env, start, end, mode, result]
+      properties:
+        id: { type: string, example: CHG-20260914T1400-62.1 }
+        change: { $ref: "#/components/schemas/ChangeId" }
+        env: { type: string }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+        mode: { enum: [queued, designated] }
+        result: { type: [string, "null"], enum: [null, passed, failed, cancelled, expired, held], description: closure codes; only reap writes `expired` }
+        sha: { $ref: "#/components/schemas/Sha" }
+    Lease:
+      type: object
+      required: [id, change, env, activated_at, expires_at]
+      properties:
+        id: { type: string, example: brth_7f3a }
+        change: { $ref: "#/components/schemas/ChangeId" }
+        env: { type: string }
+        activated_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        revalidate: { type: boolean, description: set by a guard-4b refusal; the berth survives, the verdict does not }
+    Boundary:
+      type: object
+      required: [state]
+      properties:
+        state: { enum: [open, frozen, emergency] }
+        freeze:
+          type: object
+          properties: { reason: { type: string }, since: { type: string, format: date-time }, until: { type: string, format: date-time }, by: { type: string } }
+        emergency:
+          type: object
+          properties: { change: { $ref: "#/components/schemas/ChangeId" }, reason: { type: string }, since: { type: string, format: date-time }, by: { type: string } }
+        berth:
+          type: object
+          description: who holds staging right now, if anyone
+          properties: { held_by: { $ref: "#/components/schemas/ChangeId" }, lease: { type: string } }
+    Refusal:
+      type: object
+      required: [refused, fact, cost, recovery, berth]
+      properties:
+        refused: { type: string, description: "guard-0 | guard-1 | guard-2 | guard-3 | guard-4 | guard-4b | guard-5 | guard-6 | boundary | draft | class | cas | usage | unknown" }
+        fact: { type: string }
+        cost: { type: string }
+        recovery: { type: string }
+        berth: { type: string, description: "`not held`, or `HELD until <time>` — preemption is not staleness" }
+        exit: { type: integer, description: the script exit code this corresponds to }

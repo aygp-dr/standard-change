@@ -46,8 +46,12 @@ jobs:
         run: |
           SHA=$(gh pr view "$PR" --json headRefOid -q .headRefOid | cut -c1-7)
           URL="${{ vars.PRODUCTION_URL }}"
-          if [ -z "$URL" ] || ! curl -sS -o /dev/null --max-time 10 "$URL/" 2>/dev/null; then
-            gh pr comment "$PR" --body "**Merge refused — guard 5 could not be re-derived.** \`${URL:-PRODUCTION_URL unset}\` is not reachable from an \`ubuntu-latest\` runner, so this workflow cannot check whether production is serving \`$SHA\`. \`production:healthy\` has been **left alone**: it was written by \`gates/health.sh\` running where production is visible, and this workflow has no standing to withdraw a measurement it could not take — being unable to look is not the same as looking and finding nothing. Settle from a host that can see the estate: \`./change/settle.sh $PR\`."
+          # No PRODUCTION_URL means this estate is not one a runner can see, and
+          # a note saying so on every ticket read as a failure to two owners
+          # (experiments/023). Say it in the log; the ticket hears from the host.
+          [ -n "$URL" ] || { echo "PRODUCTION_URL unset: not this runner's estate; the host settles"; exit 0; }
+          if ! curl -sS -o /dev/null --max-time 10 "$URL/" 2>/dev/null; then
+            gh pr comment "$PR" --body "**Not merged from here; nothing is wrong.** Guard 5 could not be re-derived from this runner: \`${URL:-PRODUCTION_URL unset}\` is not reachable from an \`ubuntu-latest\` runner, so this workflow cannot check whether production is serving \`$SHA\`. \`production:healthy\` has been **left alone**: it was written by \`gates/health.sh\` running where production is visible, and this workflow has no standing to withdraw a measurement it could not take — being unable to look is not the same as looking and finding nothing. The host that can see the estate settles this change (\`./change/settle.sh $PR\`, run by the driver); nothing is asked of the owner."
             exit 1
           fi
           HEALTH_MODE=manifest HEALTH_SAMPLES=5 ./gates/health.sh "$URL" "$SHA" \

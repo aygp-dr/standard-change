@@ -1,0 +1,493 @@
+#+TITLE: The IDP, all in Emacs — org-mode as the store, elisp as the verbs, the agenda as the view
+#+SUBTITLE: The same contract as idp-api/openapi.yaml, with no HTTP in it
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+PROPERTY: header-args:emacs-lisp :tangle idp.el :lexical t :comments no :mkdirp t
+#+OPTIONS: toc:2 num:nil
+
+* What this is
+
+The second version the owner asked for: the change-control component with
+*nothing but Emacs* in it. The schedule is an org file. Each window is a
+heading with an org timestamp range, so =org-agenda= is the calendar view
+for free. The boundary is a heading whose tags are the state. The verbs are
+elisp functions that edit the file, and a person calls them from a one-key
+menu. Tangle with =C-c C-v t= to =idp.el=; run the demo with
+
+: emacs --batch -l idp-api/idp.el -f idp-org-demo
+
+*What it keeps from the contract.* The three verbs and closure; the
+boundary; refusals with fact, cost, recovery and berth; no =complete()=,
+settlement takes observations and renders the verdict; the eviction rule
+from README §5b.
+
+*What it gives up, and says so.* The compare-and-swap that
+=change/schedule.sh= gets from a git ref. An org file in one Emacs is
+single-writer by construction, which is a weaker guarantee than CAS and a
+stronger one than a shared calendar — last-write-wins with two writers is
+exactly the failure the ref exists to prevent. This version is for one
+person driving the pipeline from one Emacs, and for showing what the store
+*looks like* when it is legible. It is not the store of record.
+
+* The store: schedule.org
+
+One file, three top-level headings. Windows are children of =Schedule=,
+each with a timestamp range in the heading and the record in a property
+drawer; the drawer is what the agenda ignores and the verbs read.
+
+#+begin_example
+#+TITLE: standard-change — change schedule
+* Boundary                                                        :open:
+* Changes
+** #62  fix(pdp): give the unavailable-catalogue page a retry hint  :standard:
+:PROPERTIES:
+:PR: 62
+:CLASS: standard
+:HEAD: a1b2c3d
+:LIFECYCLE: scheduled
+:GROUPS: pdp
+:END:
+* Schedule
+** CHG-20260914T1400-62.1  #62  <2026-09-14 Sun 14:00>--<2026-09-14 Sun 14:30>  :window:
+:PROPERTIES:
+:CHANGE: 62
+:ENV: staging
+:MODE: queued
+:RESULT:
+:SHA: a1b2c3d
+:END:
+#+end_example
+
+=RESULT= empty means open; the closure codes are the contract's:
+=passed failed cancelled expired held=. A freeze is a =:freeze:= child of
+=Schedule= with its own range, so it appears on the agenda beside the
+windows it blocks.
+
+* The code
+
+** Where the file lives, and reading it
+
+#+begin_src emacs-lisp
+;;; idp.el --- the IDP in org-mode  -*- lexical-binding: t; -*-
+;; Tangled from idp-api/idp.org. Do not edit here.
+(require 'org)
+(require 'org-element)
+(require 'org-agenda)
+(require 'seq)
+
+(defvar idp-org-file
+  (expand-file-name "schedule.org"
+                    (or (and load-file-name (file-name-directory load-file-name))
+                        default-directory))
+  "The store. One org file; single writer; not the store of record.")
+
+(defvar idp-org-quantum 30 "Minutes per calendar slot.")
+
+(defun idp-org--buffer ()
+  "The store's buffer, created with its three headings if the file is new."
+  (let ((buf (find-file-noselect idp-org-file)))
+    (with-current-buffer buf
+      (unless (derived-mode-p 'org-mode) (org-mode))
+      (when (= (buffer-size) 0)
+        (insert "#+TITLE: standard-change — change schedule\n"
+                "* Boundary                                                        :open:\n"
+                "* Changes\n"
+                "* Schedule\n")
+        (save-buffer)))
+    buf))
+
+(defun idp-org--now (&optional plus-min)
+  "An org timestamp string for now plus PLUS-MIN minutes, to the minute."
+  (format-time-string "<%Y-%m-%d %a %H:%M>"
+                      (time-add (current-time) (* 60 (or plus-min 0)))))
+
+(defun idp-org--iso (ts)
+  "An org timestamp TS as a sortable ISO string."
+  (format-time-string "%FT%TZ" (org-time-string-to-time ts) t))
+#+end_src
+
+** Finding things
+
+Every lookup is an =org-map-entries= over one of the three trees; the
+match strings are the tags and properties above.
+
+#+begin_src emacs-lisp
+(defun idp-org--entries (match)
+  "Property alists for every heading matching MATCH, with :POS and :TITLE."
+  (with-current-buffer (idp-org--buffer)
+    (org-map-entries
+     (lambda ()
+       (append `((:pos . ,(point))
+                 (:title . ,(org-get-heading t t t t))
+                 (:tags . ,(org-get-tags nil t)))
+               (mapcar (lambda (kv) (cons (intern (concat ":" (car kv))) (cdr kv)))
+                       (org-entry-properties nil 'standard))))
+     match 'file)))
+
+(defun idp-org--change (pr)
+  (seq-find (lambda (e) (equal (alist-get :PR e) (format "%s" pr)))
+            (idp-org--entries "LEVEL=2+PR={.}")))
+
+(defun idp-org--windows (&optional open-only)
+  (seq-filter (lambda (e) (or (not open-only) (string-empty-p (or (alist-get :RESULT e) ""))))
+              (idp-org--entries "window")))
+
+(defun idp-org--holder ()
+  "The change holding the berth: the one whose LIFECYCLE is implementing."
+  (seq-find (lambda (e) (equal (alist-get :LIFECYCLE e) "implementing"))
+            (idp-org--entries "LEVEL=2+PR={.}")))
+
+(defun idp-org--boundary-entry ()
+  "The Boundary heading as an alist: :pos, :tags, and its properties."
+  (with-current-buffer (idp-org--buffer)
+    (save-excursion
+      (goto-char (point-min))
+      (re-search-forward "^\\* Boundary")
+      (beginning-of-line)
+      (append `((:pos . ,(point)) (:tags . ,(org-get-tags nil t)))
+              (mapcar (lambda (kv) (cons (intern (concat ":" (car kv))) (cdr kv)))
+                      (org-entry-properties nil 'standard))))))
+
+(defun idp-org--boundary ()
+  "open | frozen | emergency, from the Boundary heading's tag."
+  (let ((tags (alist-get :tags (idp-org--boundary-entry))))
+    (cond ((member "emergency" tags) "emergency")
+          ((member "frozen" tags) "frozen")
+          (t "open"))))
+
+(defun idp-org--set (pos prop value)
+  "Set PROP to VALUE on the heading at POS, and save."
+  (with-current-buffer (idp-org--buffer)
+    (save-excursion (goto-char pos) (org-set-property prop (or value "")))
+    (save-buffer)))
+#+end_src
+
+** Refusals — the product
+
+The same four fields as the contract. In batch they print; in a session
+they land in a buffer the menu shows.
+
+#+begin_src emacs-lisp
+(defun idp-org-refuse (refused fact cost recovery)
+  "A refusal, said legibly. Returns nil so callers can chain on it."
+  (let ((h (idp-org--holder)))
+    (princ (format "  REFUSED %s\n     fact      %s\n     cost      %s\n     recovery  %s\n     berth     %s\n"
+                   refused fact cost recovery
+                   (if h (format "HELD by #%s" (alist-get :PR h)) "not held")))
+    nil))
+
+(defun idp-org-ok (what &rest fields)
+  (princ (format "  ok  %s%s\n" what
+                 (mapconcat (lambda (f) (format "\n     %-9s %s" (car f) (cdr f))) fields "")))
+  t)
+#+end_src
+
+** The change record
+
+A change enters the store from the forge (=gh pr view=) or by hand; here
+it is a function so the demo needs no network.
+
+#+begin_src emacs-lisp
+(defun idp-org-add-change (pr title class head groups)
+  "Record change PR under * Changes. CLASS is standard | normal | emergency."
+  (with-current-buffer (idp-org--buffer)
+    (unless (idp-org--change pr)
+      (goto-char (point-min))
+      (re-search-forward "^\\* Changes$")
+      (org-end-of-subtree t t)
+      (insert (format "** #%s  %s  :%s:\n" pr title class))
+      (forward-line -1)
+      (org-set-property "PR" (format "%s" pr))
+      (org-set-property "CLASS" class)
+      (org-set-property "HEAD" head)
+      (org-set-property "LIFECYCLE" "opened")
+      (org-set-property "GROUPS" (mapconcat #'identity groups " "))
+      (save-buffer))
+    (idp-org--change pr)))
+#+end_src
+
+** Verb 1 — reserve
+
+First-fit behind the last open window on the environment, or a named hour
+that must not clash. A named hour does not win a clash.
+
+#+begin_src emacs-lisp
+(defun idp-org-reserve (pr &optional minutes at env)
+  "Reserve a window for change PR: MINUTES long, AT an org timestamp or nil."
+  (let* ((c (idp-org--change pr)) (env (or env "staging")) (minutes (or minutes idp-org-quantum)))
+    (cond
+     ((null c) (idp-org-refuse "usage" (format "no change #%s in the store" pr) "nothing to book" "idp-org-add-change first"))
+     ((member (alist-get :LIFECYCLE c) '("scheduled" "implementing"))
+      (idp-org-refuse "usage" (format "#%s is already %s" pr (alist-get :LIFECYCLE c)) "two windows for one change is two records of one fact" "cancel first"))
+     ((member (alist-get :LIFECYCLE c) '("complete" "failed" "backed-out"))
+      (idp-org-refuse "usage" (format "#%s is %s" pr (alist-get :LIFECYCLE c)) "a change that has landed does not need a window" "open a new change"))
+     (t
+      (let* ((open (seq-filter (lambda (w) (equal (alist-get :ENV w) env)) (idp-org--windows t)))
+             (last-end (car (last (sort (mapcar (lambda (w) (alist-get :END w)) open) #'string<))))
+             (start (or at last-end (idp-org--now)))
+             (end (format-time-string "<%Y-%m-%d %a %H:%M>"
+                                      (time-add (org-time-string-to-time start) (* 60 minutes))))
+             (clash (seq-find (lambda (w) (and (string< (idp-org--iso (alist-get :START w)) (idp-org--iso end))
+                                              (string< (idp-org--iso start) (idp-org--iso (alist-get :END w)))))
+                              open)))
+        (if clash
+            (idp-org-refuse "guard-1" (format "%s collides with %s" (if at "the named hour" "the slot") (alist-get :title clash))
+                            "a named hour does not win a clash" (format "pick another hour, or wait for %s" (alist-get :END clash)))
+          (let ((id (format "CHG-%s-%s" (format-time-string "%Y%m%dT%H%M" (org-time-string-to-time start)) pr)))
+            (with-current-buffer (idp-org--buffer)
+              (goto-char (point-min))
+              (re-search-forward "^\\* Schedule$")
+              (org-end-of-subtree t t)
+              (insert (format "** %s  #%s  %s--%s  :window:\n" id pr start end))
+              (forward-line -1)
+              (org-set-property "CHANGE" (format "%s" pr))
+              (org-set-property "ENV" env)
+              (org-set-property "MODE" (if at "designated" "queued"))
+              (org-set-property "START" start)
+              (org-set-property "END" end)
+              (org-set-property "RESULT" "")
+              (org-set-property "SHA" (alist-get :HEAD c))
+              (save-buffer))
+            (idp-org--set (alist-get :pos c) "LIFECYCLE" "scheduled")
+            (idp-org-ok "reserved" (cons "window" id) (cons "start" start) (cons "end" end)))))))))
+#+end_src
+
+** Verb 2 — activate (the scheduler's call)
+
+Every guard the org store can see, re-evaluated now: a window covers now,
+the boundary, one class, the berth. Gates and drafts live on the forge and
+are out of this version's reach, which the refusal vocabulary leaves room
+for.
+
+#+begin_src emacs-lisp
+(defun idp-org--window-of (pr)
+  (seq-find (lambda (w) (equal (alist-get :CHANGE w) (format "%s" pr))) (idp-org--windows t)))
+
+(defun idp-org-activate (pr)
+  "The scheduler opens change PR's window: re-check, then claim the berth."
+  (let* ((c (idp-org--change pr)) (w (and c (idp-org--window-of pr)))
+         (emg (equal (alist-get :CLASS c) "emergency")) (b (idp-org--boundary)) (h (idp-org--holder)))
+    (cond
+     ((null c) (idp-org-refuse "usage" (format "no change #%s" pr) "" ""))
+     ((null w) (idp-org-refuse "guard-3" "no open window covers now" "the calendar is what tells everyone the path is occupied" "reserve a window"))
+     ((and (equal b "frozen") (not emg))
+      (idp-org-refuse "boundary" "a DEPLOYMENT FREEZE is in force" "standard and normal changes do not progress during a freeze" "wait, or a person declares this itil:emergency"))
+     ((and (equal b "emergency") (not emg))
+      (idp-org-refuse "boundary" "an EMERGENCY is in flight" "it will land under you and invalidate your staging pass" "wait for the estate to reopen"))
+     ((and h (not (equal (alist-get :PR h) (format "%s" pr))))
+      (idp-org-refuse "guard-1" (format "staging held by #%s" (alist-get :PR h)) "one change holds staging"
+                      (if emg "declare the emergency on the boundary; the holder is evicted" "wait for it to settle or expire")))
+     (t (idp-org--set (alist-get :pos c) "LIFECYCLE" "implementing")
+        (idp-org-ok "activated" (cons "lease" (format "berth:%s" pr)) (cons "expires" (alist-get :END w)))))))
+#+end_src
+
+** Verb 3 — settle, with evidence
+
+#+begin_src emacs-lisp
+(defun idp-org-settle (pr claimed observations)
+  "Settle PR: CLAIMED build and OBSERVATIONS, a list of builds seen. Renders the verdict."
+  (let* ((c (idp-org--change pr)) (w (and c (idp-org--window-of pr)))
+         (seen (seq-uniq observations)))
+    (cond
+     ((or (null c) (not (equal (alist-get :LIFECYCLE c) "implementing")))
+      (idp-org-refuse "cas" (format "#%s does not hold the berth" pr) "a settlement must name the lease it holds" "activate, then settle"))
+     ((null observations) (idp-org-refuse "usage" "no observations" "a settlement without evidence is a claim" "probe /version.json"))
+     ((or (/= (length seen) 1) (not (equal (car seen) claimed)))
+      (princ (format "  UNCONVERGED  distinct builds %d: %s -- not retryable\n" (length seen) (mapconcat #'identity seen ", "))) nil)
+     (t (when w (idp-org--set (alist-get :pos w) "RESULT" "passed"))
+        (idp-org--set (alist-get :pos c) "LIFECYCLE" "complete")
+        (idp-org-ok "settled" (cons "attested" "convergence-probe") (cons "confidence" "sampled")
+                    (cons "samples" (length observations)) (cons "then" "change:complete, merge, PIR, cleanup"))))))
+#+end_src
+
+** Closure, cancel, reap
+
+#+begin_src emacs-lisp
+(defun idp-org-close (pr code &optional to)
+  "Close PR with CODE failed | backed-out; TO is required for backed-out."
+  (let ((c (idp-org--change pr)) (w (idp-org--window-of pr)))
+    (cond ((not (member code '("failed" "backed-out"))) (idp-org-refuse "usage" "closure code must be failed or backed-out" "a closed set" ""))
+          ((and (equal code "backed-out") (not to)) (idp-org-refuse "usage" "backed-out without a target" "the word asserts an estate action" "name the sha"))
+          ((null c) (idp-org-refuse "usage" (format "no change #%s" pr) "" ""))
+          (t (when w (idp-org--set (alist-get :pos w) "RESULT" "failed"))
+             (idp-org--set (alist-get :pos c) "LIFECYCLE" code)
+             (idp-org-ok "closed" (cons "code" code))))))
+
+(defun idp-org-cancel (pr)
+  "Un-book PR: the window is cancelled, the change is opened, still approved."
+  (let ((c (idp-org--change pr)) (w (idp-org--window-of pr)))
+    (if (not w) (idp-org-refuse "usage" (format "#%s has no open window" pr) "" "")
+      (idp-org--set (alist-get :pos w) "RESULT" "cancelled")
+      (idp-org--set (alist-get :pos c) "LIFECYCLE" "opened")
+      (idp-org-ok "cancelled" (cons "window" (alist-get :title w))))))
+
+(defun idp-org-reap ()
+  "Close every open window whose end has passed: expired. Spares a change
+whose LIFECYCLE says it is deploying to production, and a merged one."
+  (let ((now (format-time-string "%FT%TZ" nil t)) (n 0))
+    (dolist (w (idp-org--windows t))
+      (when (string< (idp-org--iso (alist-get :END w)) now)
+        (let ((c (idp-org--change (alist-get :CHANGE w))))
+          (if (member (alist-get :LIFECYCLE c) '("live" "complete"))
+              (princ (format "  spared %s: #%s is %s\n" (alist-get :title w) (alist-get :PR c) (alist-get :LIFECYCLE c)))
+            (idp-org--set (alist-get :pos w) "RESULT" "expired")
+            (idp-org--set (alist-get :pos c) "LIFECYCLE" "opened")
+            (setq n (1+ n))))))
+    (idp-org-ok "reaped" (cons "windows" n))))
+#+end_src
+
+** The boundary — and the eviction
+
+=freeze= and =emergency= are tags on the =Boundary= heading; the emergency
+names its change in a property. Declaring an emergency for a booked change
+while a standard or normal change holds the berth evicts the holder, per
+README §5b: it loses the berth, its window and its observations, keeps its
+class, approval and head, and is not closed.
+
+#+begin_src emacs-lisp
+(defun idp-org--boundary-pos ()
+  (alist-get :pos (idp-org--boundary-entry)))
+
+(defun idp-org--set-boundary (tag &optional change reason)
+  (with-current-buffer (idp-org--buffer)
+    (save-excursion
+      (goto-char (idp-org--boundary-pos))
+      (org-set-tags (list tag))
+      (org-set-property "CHANGE" (or change ""))
+      (org-set-property "REASON" (or reason ""))
+      (org-set-property "SINCE" (idp-org--now)))
+    (save-buffer)))
+
+(defun idp-org-freeze (reason)
+  (idp-org--set-boundary "frozen" nil reason)
+  (idp-org-ok "frozen" (cons "reason" reason)))
+
+(defun idp-org-open ()
+  (idp-org--set-boundary "open")
+  (idp-org-ok "boundary open"))
+
+(defun idp-org-emergency (pr reason)
+  "Declare an emergency for change PR. Evicts a non-emergency berth holder."
+  (let ((e (idp-org--change pr)))
+    (cond
+     ((null e) (idp-org-refuse "usage" (format "no change #%s" pr) "an emergency must name its fix" ""))
+     ((not (equal (alist-get :CLASS e) "emergency"))
+      (idp-org-refuse "class" (format "#%s is %s" pr (alist-get :CLASS e)) "only a person's declaration makes an emergency" "set CLASS emergency first"))
+     (t
+      (idp-org--set-boundary "emergency" (format "%s" pr) reason)
+      (let ((h (idp-org--holder)) (ready (idp-org--window-of pr)))
+        (if (and h ready (not (equal (alist-get :CLASS h) "emergency"))
+                 (not (equal (alist-get :LIFECYCLE h) "live")))
+            (let ((w (idp-org--window-of (alist-get :PR h))))
+              (when w (idp-org--set (alist-get :pos w) "RESULT" "cancelled"))
+              (idp-org--set (alist-get :pos h) "LIFECYCLE" "opened")
+              (idp-org-ok "emergency declared" (cons "for" (format "#%s" pr))
+                          (cons "evicted" (format "#%s: loses the berth, the window and its observations; keeps class, approval and head; not closed" (alist-get :PR h)))))
+          (idp-org-ok "emergency declared" (cons "for" (format "#%s" pr))
+                      (cons "evicted" (if ready "nobody held the berth" "nothing: the emergency is not booked; entry is blocked")))))))))
+#+end_src
+
+** The view — the agenda, and a one-key menu
+
+The calendar view costs nothing: the windows are headings with ranges, so
+=org-agenda-list= over the store *is* the change calendar, freezes beside
+windows. The menu mirrors the TUI's keys.
+
+#+begin_src emacs-lisp
+(defun idp-org-agenda ()
+  "The change calendar: org-agenda over the store, seven days."
+  (interactive)
+  (let ((org-agenda-files (list idp-org-file))
+        (org-agenda-span 7)
+        (org-agenda-start-on-weekday nil))
+    (org-agenda-list)))
+
+(defun idp-org-status ()
+  "The boundary, the changes and the open windows, as text."
+  (interactive)
+  (let ((b (idp-org--boundary-entry)) (h (idp-org--holder)))
+    (princ (format "\n  BOUNDARY  %s%s%s\n" (upcase (idp-org--boundary))
+                   (if (string-empty-p (or (alist-get :REASON b) "")) "" (format "  %s" (alist-get :REASON b)))
+                   (if h (format "   berth: #%s" (alist-get :PR h)) "   berth: free")))
+    (princ (format "  %-5s %-10s %-13s %-8s %s\n" "#" "class" "lifecycle" "head" "title"))
+    (dolist (c (idp-org--entries "LEVEL=2+PR={.}"))
+      (princ (format "  %-5s %-10s %-13s %-8s %s\n" (alist-get :PR c) (alist-get :CLASS c)
+                     (alist-get :LIFECYCLE c) (alist-get :HEAD c)
+                     (replace-regexp-in-string "^#[0-9]+ +" "" (alist-get :title c)))))
+    (princ "\n")
+    (dolist (w (idp-org--entries "window"))
+      (princ (format "  %-40s %s\n" (alist-get :title w) (if (string-empty-p (or (alist-get :RESULT w) "")) "open" (alist-get :RESULT w)))))))
+
+(defun idp-org ()
+  "One key per verb: r a s c f F O E R ? and g for the agenda."
+  (interactive)
+  (let ((k (read-char "idp(org): [r]eserve [a]ctivate [s]ettle [c]ancel [f]ail [F]reeze [O]pen [E]mergency [R]eap [g]agenda [?]status ")))
+    (with-output-to-temp-buffer "*idp(org)*"
+      (pcase k
+        (?r (idp-org-reserve (read-string "PR: ")))
+        (?a (idp-org-activate (read-string "PR: ")))
+        (?s (let* ((pr (read-string "PR: ")) (h (alist-get :HEAD (idp-org--change pr))))
+              (idp-org-settle pr h (list h h h))))
+        (?c (idp-org-cancel (read-string "PR: ")))
+        (?f (idp-org-close (read-string "PR: ") "failed"))
+        (?F (idp-org-freeze (read-string "reason: ")))
+        (?O (idp-org-open))
+        (?E (idp-org-emergency (read-string "PR: ") (read-string "reason: ")))
+        (?R (idp-org-reap))
+        (?g (idp-org-agenda))
+        (_ (idp-org-status))))))
+#+end_src
+
+** The demo, runnable in batch
+
+The same walk the TUI ran against the HTTP mock, on a fresh store in a
+temporary directory: reserve and activate a standard change, book an
+emergency, declare it on the boundary, watch the holder evicted, activate
+and settle the emergency, then print the store and the agenda.
+
+#+begin_src emacs-lisp
+(defun idp-org-demo ()
+  "Run the eviction walk on a fresh store and print the result."
+  (interactive)
+  (let ((idp-org-file (expand-file-name "schedule.org" (make-temp-file "idp-org-" t))))
+    (idp-org-add-change 62 "fix(pdp): give the unavailable-catalogue page a retry hint" "standard" "a1b2c3d" '("pdp"))
+    (idp-org-add-change 59 "feat(plp): offer search as a way out of an unknown category" "standard" "b2c3d4e" '("plp"))
+    (idp-org-add-change 99 "fix(core): checkout down for everyone" "emergency" "e5f6a7b" '("core"))
+    (princ "> reserve 62\n")   (idp-org-reserve 62)
+    (princ "> activate 62\n")  (idp-org-activate 62)
+    (princ "> reserve 59\n")   (idp-org-reserve 59)
+    (princ "> activate 59\n")  (idp-org-activate 59)
+    (princ "> freeze\n")       (idp-org-freeze "change advisory board weekend")
+    (princ "> activate 59\n")  (idp-org-activate 59)
+    (princ "> open\n")         (idp-org-open)
+    (princ "> reserve 99\n")   (idp-org-reserve 99)
+    (princ "> emergency 99\n") (idp-org-emergency 99 "checkout down for everyone")
+    (princ "> activate 99\n")  (idp-org-activate 99)
+    (princ "> settle 99\n")    (idp-org-settle 99 "e5f6a7b" '("e5f6a7b" "e5f6a7b" "e5f6a7b"))
+    (princ "> settle 62\n")    (idp-org-settle 62 "a1b2c3d" '("a1b2c3d"))
+    (idp-org-status)
+    (princ (format "\n  store: %s\n\n" idp-org-file))
+    (princ (with-current-buffer (idp-org--buffer) (buffer-string)))
+    (when noninteractive
+      (let ((org-agenda-files (list idp-org-file)) (org-agenda-span 1) (org-agenda-start-day nil))
+        (org-batch-agenda "a")))))
+
+(provide 'idp-org)
+;;; idp.el ends here
+#+end_src
+
+* What the two versions share, and where they part
+
+| | =openapi.yaml= + mock + web/tui/emacs clients | =idp.org= |
+|--+--+--|
+| store | in memory (mock); the CAS git ref (real) | an org file, single writer |
+| calendar view | the web page; =schedule.sh list= | =org-agenda= over the store, free |
+| verbs | HTTP, with =Idempotency-Key= | elisp functions, one key each |
+| refusals | JSON: refused, fact, cost, recovery, berth | the same four lines, printed |
+| eviction | =PUT /boundary/emergency= | =idp-org-emergency= |
+| what it cannot see | nothing: the real server fronts the scripts | the forge: gates, drafts, approvals |
+| who it is for | a team; a scheduler; the dashboard | one person, one Emacs, and anyone who wants to *read* the store |
+
+The org version is the one to show a reviewer what a change schedule *is*:
+a heading per window with a range, a tag for the boundary, a drawer for the
+record. The HTTP version is the one to run. Neither deploys.

@@ -35,7 +35,7 @@ written in the same hour, which had not yet had time to rot.
 ** Finding 9 is the one that matters
 
 : ./targets/bastille/deploy.sh staging deadbee
-: HEALTH_MODE=manifest ./gates/health.sh http://127.0.0.1:9201 deadbee
+: HEALTH_MODE=manifest ./gates/health.sh http://127.0.0.1:9200 deadbee
 : ok checkout /checkout (4/4 on deadbee)
 : ...
 : exit=0

@@ -1,0 +1,78 @@
+#+TITLE: 020 — browser UAT: does the curl gate's "deployed" survive a person?
+#+DATE: 2026-09-14
+
+* Hypothesis
+
+The gates say an estate is deployed when every route is served by the app
+that owns it and every app reports one =x-build-sha= (=gates/e2e.sh=, 27
+checks) and every page in the journey returns 200 with a body
+(=gates/smoke.sh=). =docs/control-path.org= delegates *user acceptance* to
+smoke.sh: =staging:uat= is granted iff smoke exits 0. The hypothesis under
+test: *a person walking the same journey in a browser accepts what smoke
+accepted.*
+
+Falsifiable: if the person finds the journey does not hold together on a
+build smoke passed, the proxy is measuring routing and calling it
+acceptance.
+
+* Success criterion
+
+The add-to-cart journey — home → category → product → add to cart → cart →
+checkout → payment → confirmation — completes in a browser with each page
+showing what the previous page implied, on a build for which =gate app=plp=
+and =smoke= exit 0.
+
+* Run
+
+: gmake dev                                   # block 0, :9000, build dff0887
+: ROUTER_URL=http://127.0.0.1:9000 gmake gate app=plp   # 27 checks passed
+: gmake smoke url=http://127.0.0.1:9000       # smoke passed, 15 urls crawled
+: # then the journey by hand in Chrome, recorded
+
+Host: the mini, macOS Darwin 24.1.0, Node v26.2.0, Chrome via the Claude in
+Chrome extension. Recording: =docs/screenshots/uat-block0-dff0887.gif=
+(22 frames).
+
+* Observations, 2026-09-14 [E]
+
+| step | served by | build | what a person sees |
+|------+-----------+-------+--------------------|
+| =/= | core :9001 | dff0887 | route table; fine |
+| =/c/shoes= | plp :9002 | dff0887 | "3 result(s) in shoes", three products; fine |
+| =/p/SKU123= | pdp :9003 | dff0887 | Trail Runner, $89.00, in stock, Add to cart; fine |
+| =/cart?add=SKU123= | core :9001 | dff0887 | the route stub; could show the item, or say the cart is empty (#40, #52) |
+| =/checkout= | checkout :9004 | dff0887 | "Your order comes to $42.00" for an $89.00 item; the total could come from the cart |
+| =/checkout?name=…= | checkout | dff0887 | form round-trips; "Ready to continue to payment." could be a link (#71) |
+| =/checkout/payment= | checkout | dff0887 | "about to pay $42.00 … until you confirm"; a confirm control would close the loop |
+| =/checkout/confirm= | checkout | dff0887 | could confirm something |
+
+Every row passes the gates: right app, right build, 200, html. The pipeline
+did its job. Four rows are opportunities for enhanced customer support in
+the fixture storefront — not failures, and not this repo's product; two
+already have PRs (#40/#52, #71). Issue #91 lists them.
+
+* Result
+
+*The hypothesis does not hold as stated, and that is the useful part.*
+Smoke's exit 0 is a statement about routing and liveness; =staging:uat=
+granted on it is acceptance of the estate serving the build, which is what
+this repo checks, and not of the journey, which is not. The delegation in
+=docs/control-path.org= is honest about being a proxy. This run is the first
+measurement of the gap between the two on a real build.
+
+* What follows
+
+- *Built, same day:* =gates/uat/journey.spec.mjs=, run by =gmake uat
+  url=<base>=. One Playwright test, serial steps, headless Chromium, 567 ms
+  against block 0. It pins the storefront *as-is* — the empty cart page, the
+  $42.00, the text that is not a link — on purpose: a change to the flow must
+  change the acceptance, and until it does the change is refused on entry to
+  staging. =scenarios.org= D18 is the case.
+- *Negative direction, observed:* PR #71's head (=fc2ee1b=) on block 1 was
+  refused — at the *category* page, not at the payment link it changes,
+  because the branch predates plp's named product links. An approved change,
+  behind main in a way guard 0 does not report (D17), refused by acceptance
+  for a page it never touched. The refusal is right; the reason it names is
+  the first page that differs, which is not the page that changed.
+- =staging:uat= from the proxy should say what it measured; now it can say
+  "the as-is journey held" rather than "smoke exited 0".

@@ -19,6 +19,7 @@ Verified present on hydra (see `spec.org` §Host survey of record): node 24.14.1
 gmake port-alloc          # first command in a new worktree; writes .env.ports
 gmake dev                 # render router, start apps present in this worktree
 gmake gate app=plp        # lint + test + e2e for one group
+gmake uat url=http://127.0.0.1:9000   # the browser journey as accepted; refuses a changed flow
 gmake gate-selftest       # negative-test the gates; must pass before gate results count
 gmake simulate app=pdp    # touch a group so the labeller attaches app:pdp
 gmake port-free           # last command in a worktree
