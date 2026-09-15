@@ -2,23 +2,30 @@
 #+SUBTITLE: Everything that was read, tried and found, assembled for a rebuild; none of the internals
 #+DATE: 2026-09-15
 #+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
-#+LATEX_CLASS: article
-#+LATEX_CLASS_OPTIONS: [11pt,oneside]
+#+LATEX_CLASS: research
+#+LATEX_CLASS_OPTIONS: [11pt,oneside,titlepage]
 #+LATEX_COMPILER: xelatex
-# Preamble conventions from jwalsh/build-a-clojure books/the-stripped-jar (the
-# family's one multi-include book) and aygp-dr/gentle-symbolic-computation:
-# article not book (chapters force clearpage and leave a third of the pages
-# white); explicit paper and margin; ragged bottom; hidden link boxes; verbatim
-# that breaks lines; a newunicodechar block because xelatex drops missing
-# glyphs silently. Tables are handled per table by export-common.el.
-#+LATEX_HEADER: \usepackage{fontspec}\setmainfont{STIX Two Text}\setmonofont{Menlo}[Scale=0.82]
-#+LATEX_HEADER: \usepackage[letterpaper,margin=2cm]{geometry}\usepackage{microtype}\linespread{1.04}\raggedbottom\sloppy
-#+LATEX_HEADER: \usepackage{ltablex}\keepXColumns\setlength{\tabcolsep}{3pt}
-#+LATEX_HEADER: \usepackage{xurl}\usepackage[htt]{hyphenat}\hypersetup{hidelinks}\setcounter{tocdepth}{2}
-#+LATEX_HEADER: \usepackage{fvextra}\fvset{breaklines=true,breakanywhere=true,fontsize=\footnotesize}
-#+LATEX_HEADER: \makeatletter\def\verbatim@font{\ttfamily\footnotesize}\makeatother
-#+LATEX_HEADER: \usepackage{amssymb}\usepackage{newunicodechar}\newunicodechar{→}{\ensuremath{\rightarrow}}\newunicodechar{←}{\ensuremath{\leftarrow}}\newunicodechar{↔}{\ensuremath{\leftrightarrow}}\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
-#+LATEX_HEADER: \newunicodechar{≈}{\ensuremath{\approx}}\newunicodechar{≤}{\ensuremath{\leq}}\newunicodechar{≥}{\ensuremath{\geq}}\newunicodechar{≠}{\ensuremath{\neq}}\newunicodechar{⊆}{\ensuremath{\subseteq}}\newunicodechar{∈}{\ensuremath{\in}}\newunicodechar{∉}{\ensuremath{\notin}}\newunicodechar{∧}{\ensuremath{\wedge}}\newunicodechar{∨}{\ensuremath{\vee}}\newunicodechar{¬}{\ensuremath{\neg}}\newunicodechar{×}{\ensuremath{\times}}\newunicodechar{✓}{\ensuremath{\checkmark}}\newunicodechar{✗}{\ensuremath{\times}}
+# Preamble from the LaTeX review of 2026-09-15 (verified build in the reviewer's copy).
+# 11pt at 15.5cm (~93 characters per line) rather than the reviewed 12pt at 14.5cm, to keep the page count near 280. Fonts by file name so the same preamble builds on
+# any TeX Live (Menlo exists only on macOS); STIX Two Text has none of the
+# arrows or set symbols, STIX Two Math has all but the cross; mono scaled to
+# the text's x-height. Prose measure 14.5cm (~80 characters at 12pt); tables
+# may overhang it by 2cm each side (export-common.el). verbatim is redefined
+# as fvextra's Verbatim so it wraps; \sloppy replaced by \emergencystretch.
+#+LATEX_HEADER: \usepackage{fontspec}
+#+LATEX_HEADER: \setmainfont{STIXTwoText}[Extension=.otf,UprightFont=*-Regular,BoldFont=*-Bold,ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]
+#+LATEX_HEADER: \setmonofont{SourceCodePro}[Extension=.otf,UprightFont=*-Regular,BoldFont=*-Bold,ItalicFont=*-RegularIt,BoldItalicFont=*-BoldIt,Scale=MatchLowercase]
+#+LATEX_HEADER: \newfontfamily\symbolfont{STIXTwoMath}[Extension=.otf,UprightFont=*-Regular]
+#+LATEX_HEADER: \usepackage[letterpaper,textwidth=15.5cm,textheight=23cm,hcentering,vcentering]{geometry}
+#+LATEX_HEADER: \usepackage{microtype}\linespread{1.04}\raggedbottom\setlength{\emergencystretch}{1.5em}
+#+LATEX_HEADER: \usepackage{ltablex}\keepXColumns\usepackage{booktabs}\setlength{\tabcolsep}{4pt}
+#+LATEX_HEADER: \usepackage[export]{adjustbox}
+#+LATEX_HEADER: \usepackage{xurl}\usepackage[htt]{hyphenat}
+#+LATEX_HEADER: \usepackage{xcolor}\definecolor{linkblue}{rgb}{0.12,0.22,0.5}\hypersetup{colorlinks=true,linkcolor=linkblue,urlcolor=linkblue,bookmarksdepth=3}
+#+LATEX_HEADER: \usepackage{fvextra}\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\small,breaksymbolleft={}}
+#+LATEX_HEADER: \XeTeXinterchartokenstate=1\newXeTeXintercharclass\slashclass\XeTeXcharclass`\/=\slashclass\XeTeXinterchartoks\slashclass 0={\allowbreak}
+#+LATEX_HEADER: \usepackage{amssymb}\usepackage{newunicodechar}\newunicodechar{⊕}{{\symbolfont ⊕}}\newunicodechar{∅}{{\symbolfont ∅}}\newunicodechar{→}{{\symbolfont →}}\newunicodechar{←}{{\symbolfont ←}}\newunicodechar{↔}{{\symbolfont ↔}}\newunicodechar{⇒}{{\symbolfont ⇒}}
+#+LATEX_HEADER: \newunicodechar{≈}{{\symbolfont ≈}}\newunicodechar{≤}{{\symbolfont ≤}}\newunicodechar{≥}{{\symbolfont ≥}}\newunicodechar{≠}{{\symbolfont ≠}}\newunicodechar{⊆}{{\symbolfont ⊆}}\newunicodechar{∈}{{\symbolfont ∈}}\newunicodechar{∉}{{\symbolfont ∉}}\newunicodechar{∧}{{\symbolfont ∧}}\newunicodechar{∨}{{\symbolfont ∨}}\newunicodechar{✓}{{\symbolfont ✓}}\newunicodechar{✗}{{\symbolfont ☓}}
 
 This document is the research directory of the repository, assembled by
 =#+INCLUDE= from =history/=, =substrates/=, =findings/= here and =experiments/= so it can be

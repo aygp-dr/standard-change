@@ -7,6 +7,7 @@ The history and the research, none of the internals, as one document.
 - =adoption.org=: how a repository with its own risk designation and deployable labels takes the tracking layer without renaming anything, and every decision with its options.
 - =build/=: =gmake= here (or =gmake build= at the root) writes =index.html= and =index.pdf=; =gmake html= or =gmake pdf= for one; git-ignored.
 - =puppeteer.json=: the browser mermaid-cli renders with (this machine's desktop Chrome; edit the path elsewhere). A block mmdc cannot render stays verbatim and the export log says so.
+- Fonts are named by TeX Live file (STIX Two Text, STIX Two Math for symbols, Source Code Pro for mono) so the same preamble builds on any TeX Live; the PDF goes through latexmk so the cross-references settle. The LaTeX review of 2026-09-15 is the record of why.
 - =export-common.el=, =export-html.el=, =export-pdf.el=: the batch export; Mermaid blocks become figures via mmdc; the common hook strips the included files' own title keywords so the master's wins.
 
 The included files are not copied; edit them where they live. Adding a

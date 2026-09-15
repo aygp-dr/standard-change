@@ -1,7 +1,7 @@
 #+TITLE: The label table, as declared
 #+DATE: 2026-09-15
 
-Generated from =change/label-owners.tsv= at =fd6e740= by =research/generate.py=.
+Generated from =change/label-owners.tsv= at =544f42e= by =research/generate.py=.
 48 labels. A label with no row here has no owner and cannot be trusted
 (=findings/label-ownership.org=). Columns: persistent (survives settlement),
 a person may add, a person may clear; the first sentence of the declaration.
