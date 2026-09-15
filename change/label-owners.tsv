@@ -44,7 +44,7 @@ staging:e2e	gates/e2e.sh --pr	no	no	no	observation; the gate is the instrument
 staging:e2e-failed	gates/e2e.sh --pr	no	no	no	observation
 staging:smoke	gates/smoke.sh --pr	no	no	no	observation
 staging:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
-staging:uat	human	no	yes	no	THE EXCEPTION: for acceptance the person IS the instrument. Via change/observe.sh, which checks the build matches. DELEGATED 2026-09-13 to the jwalsh proxy for ten PRs, granted iff smoke exits 0 -- see docs/control-path.org; the record says so, the label cannot
+staging:uat	human	no	yes	no	THE EXCEPTION: for acceptance the person IS the instrument. Via change/observe.sh, which checks the build matches. ALSO gates/uat.sh --pr: the journey a person accepted, replayed by Playwright, recorded as what it is (no person looked); experiments/023 F4, 2026-09-15. DELEGATED 2026-09-13 to the jwalsh proxy for ten PRs, granted iff smoke exits 0 -- see docs/control-path.org; the record says so, the label cannot
 production:e2e	gates/e2e.sh --pr	no	no	no	observation
 production:smoke	gates/smoke.sh --pr	no	no	no	observation
 production:healthy	gates/health.sh --pr	no	no	no	observation. Typed by hand on #9 because health.sh had no --pr; that was the ownership defect

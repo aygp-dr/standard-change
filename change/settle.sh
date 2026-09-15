@@ -44,6 +44,11 @@ echo "settling #$pr @ $short"
 # 1. It must actually be in production, observed now -- not "was healthy once".
 served=$(curl -sI --max-time 5 "$FRONT/" | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}')
 colour=$(curl -sI --max-time 5 "$FRONT/" | tr -d '\r' | awk 'tolower($1)=="x-colour:"{print $2}')
+# A target with no blue/green (the node target: one block, redeployed in
+# place) sends no X-Colour, and the PIR printed "-> ****" for it (#104's owner:
+# "an empty value where a build or colour presumably belongs"). Say what is
+# there instead of nothing.
+[ -n "$colour" ] || colour="single (no blue/green on this target)"
 if [ "$served" = "$short" ]; then ok "production is serving $short ($colour), asked just now"
 else bad "production serves '${served:-nothing}', not $short -- this change is not live"; fi
 
@@ -171,6 +176,10 @@ fi
 #    survives the labels, so it must carry what the labels carried.
 prev=$(curl -sI --max-time 5 "http://127.0.0.1:$([ "$colour" = blue ] && echo 9220 || echo 9210)/" \
         | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}')
+case "$colour" in
+  blue|green) rollback="\`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" ;;
+  *)          rollback="no idle colour on this target; redeploy the previous head (\`${prev:-unknown}\`) in place" ;;
+esac
 gh pr comment "$pr" --repo "$R" --body "## Post-implementation review
 
 **\`change:complete\`** — the terminal state. Everything below is recorded here because the labels are about to be cleared, and a label is working state, not the record.
@@ -190,7 +199,7 @@ ${DEVIATION:+## Deviation
 
 $DEVIATION
 
-}Rollback: \`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" >/dev/null
+}Rollback: $rollback" >/dev/null
 ok "PIR posted -- the evidence now survives the labels"
 
 # THE DEPLOYMENT RECORD, written here rather than at deploy time.

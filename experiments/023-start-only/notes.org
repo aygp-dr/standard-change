@@ -27,10 +27,11 @@ person's own words) rather than asking a person to sweep.
   =change:requested= + =release=). The scheduler runs the oldest PR number
   first; the label carries no time, so who said start first is not on the
   list.
-- The driver refuses a head behind =main= (guard 0) and clears every marker
-  including the intent; the owner rebases and says start again. The driver
-  never rebases: a machine rewriting a person's branch is a push on their
-  behalf.
+- Guard 0, first version: the driver refuses a head behind =main= and
+  clears every marker including the intent; the owner rebases and says
+  start again. Replaced at 23:56Z (see Findings, F1) by the forge's own
+  "update branch": a merge of =main= into the branch, nothing of the
+  person's rewritten; the driver refuses only a conflict.
 - The second identity approves under its standing delegation; the review
   says so. The clearing at end has no identity of its own: it is whoever's
   =gh= is active on the host (jwalsh here, aygp-dr on hydra, the actions bot
@@ -42,4 +43,35 @@ person's own words) rather than asking a person to sweep.
 
 * Findings
 
-(filled in as the run proceeds)
+** F1 — refuse-and-rebase livelocks against a moving trunk (23:50–23:54Z)
+
+All five PRs (#104–#108) were refused at guard 0 on their first start: they
+had branched from =main= seconds before the driver commit landed. Two
+owners rebased and said start again within three minutes, and were refused
+again: the other operator landed #101 at 23:49:51 and #99 at 23:53:49, so
+=main= moved between the rebase and the driver's look, twice. With a trunk
+moving every four minutes and a person's rebase, push, labeller wait and
+second start taking three, "rebase and say start again" never converges.
+This is the merge queue's reason for existing (#102) arriving as an
+incident. Fix taken: the driver asks the forge to bring the branch up to
+=main= (=gh pr update-branch=, a merge commit authored by the forge), waits
+for the new head and the labeller, and continues; it says so on the PR.
+A person is asked only for a conflict. Guard 0 also now runs before the
+lock: the first version held the berth for fifteen seconds to discover a
+stale head (#104, #105).
+
+** F2 — the tickets were dirty because five releases never ended
+
+Reported as #103. The other operator's loop re-runs the staging
+instruments on #97–#101 every ~8 minutes and never ends the release, so
+each carries =staging:e2e staging:smoke staging:uat= and the retired
+=staging:failed=; five tickets accepted at staging at once is not a state
+the estate can be in. The driver's start-sweep makes a start on such a
+ticket pay the missing =change:end=; the loop should have paid it.
+
+** F3 — the reaper has no identity
+
+The clearing at end (=settle.sh=, =abort.sh=, =reap.sh=) runs as whichever
+=gh= account is active on the host: =jwalsh= here, =aygp-dr= on hydra,
+=github-actions[bot]= in a workflow. A machine's removal is indistinguishable
+on the forge from a person's, which is D21's finding from the other side.

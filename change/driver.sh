@@ -71,23 +71,46 @@ for l in $labels; do
 done
 [ -z "$swept" ] || { say "Starting clean: markers of a previous release that never ended were cleared by the driver on \`change:start\`:$swept. Nothing they said is evidence about \`$sha\`."; log "swept:$swept"; }
 
-# --- 1. the lock: deploy:staging, one holder ---------------------------------
+# --- 1. guard 0: on top of main, or brought up to it by the forge ---------------
+# First written as a refusal: "rebase and say start again". It livelocked in
+# four minutes (23:50-23:54Z): the other operator was landing a change every
+# four minutes and an owner's rebase, push, labeller wait and second start took
+# three, so every rebase was stale on arrival (#105 twice, #108 twice). The
+# forge has its own act for this -- "Update branch", a merge of main INTO the
+# branch, authored by the forge, rewriting nothing of the person's -- and the
+# merge queue (#102) does the same thing for the same reason. So the driver
+# asks the forge to do that, waits for the new head and the labeller, and
+# refuses only when the merge conflicts: that is a decision, and decisions are
+# a person's.
+branch=$(gh pr view "$PR" --repo "$R" --json headRefName -q .headRefName)
+if ! git merge-base --is-ancestor origin/main "origin/$branch" 2>/dev/null; then
+  before=$sha
+  if gh pr update-branch "$PR" --repo "$R" >/dev/null 2>&1; then
+    i=0
+    until [ "$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid | cut -c1-7)" != "$before" ]; do
+      sleep 5; i=$((i+1)); [ $i -le 24 ] || fail "update branch" "the forge accepted the update but the head did not move"
+    done
+    sleep 40   # labeller on synchronize
+    git fetch -q origin
+    sha=$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid | cut -c1-7)
+    say "Brought up to \`main\` by the driver: \`$before\` was behind, and \`main\` is moving faster than a person can rebase. The forge merged \`main\` into this branch (nothing of yours was rewritten); the head under release is now \`$sha\`."
+    log "updated from main: $before -> $sha"
+  else
+    for l in change:start deploy:staging change:scheduled staging:e2e staging:smoke staging:uat staging:deployed staging:healthy; do
+      gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
+    done
+    say "Refused: \`$sha\` is behind \`main\` and the forge could not merge \`main\` into it (a conflict). Every marker has been cleared, the intent included. Resolve it, push, and say \`change:start\` again."
+    log "behind main and conflicting; refused and reset"; exit 6
+  fi
+fi
+
+# --- 2. the lock: deploy:staging, one holder ---------------------------------
 holder=$(gh pr list --repo "$R" --state open --label deploy:staging --json number -q "[.[].number]|map(select(.!=$PR))|first // empty")
 [ -z "$holder" ] || { log "lock held by #$holder"; exit 5; }
 ./change/lock.sh acquire "$PR" staging >/dev/null || { log "lock record held"; exit 5; }
 # CONSUME THE INTENT FIRST (watch.sh's rule): a trigger that stays on re-fires.
 gh pr edit "$PR" --repo "$R" --remove-label change:start --add-label deploy:staging >/dev/null
 log "claimed the lock for $sha"
-
-# --- 2. guard 0: on top of main, or refused and reset -------------------------
-if ! git merge-base --is-ancestor origin/main "$(git rev-parse "origin/$(gh pr view "$PR" --repo "$R" --json headRefName -q .headRefName)")" 2>/dev/null; then
-  ./change/lock.sh release >/dev/null 2>&1 || true
-  for l in deploy:staging change:scheduled staging:e2e staging:smoke staging:uat staging:deployed staging:healthy; do
-    gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
-  done
-  say "Refused: \`$sha\` is behind \`main\`. Deploying it would ship a tree missing what landed since. Every marker has been cleared, the intent included. Rebase onto \`main\`, push, and say \`change:start\` again."
-  log "behind main; refused and reset"; exit 6
-fi
 
 # --- 3. staging: install, health, then the instruments ------------------------
 deploy staging "$sha" || fail "deploy staging" "staging did not come up serving $sha"

@@ -18,14 +18,22 @@ set -eu
 cd "$(dirname "$0")/.."
 R="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
 INTERVAL="${SCHED_INTERVAL:-20}"
+told=''
 log() { printf '%s  scheduler  %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 tick() {
   for pr in $(gh pr list --repo "$R" --state open --label change:start --json number -q 'sort_by(.number)|.[].number'); do
     log "change:start on #$pr"
     rc=0; ./change/driver.sh "$pr" || rc=$?
     case $rc in
-      0) log "#$pr settled" ;;
-      5) log "#$pr waits: lock held" ; return 0 ;;   # one holder; try the same one next tick
+      0) log "#$pr settled"; told=$(echo " $told " | sed "s/ $pr / /") ;;
+      5) # One holder; try the same one next tick. Say so ONCE: #104's owner sat
+         # five minutes on change:start with no acknowledgement (experiments/023).
+         case " $told " in *" $pr "*) ;; *)
+           told="$told $pr"
+           holder=$(gh pr list --repo "$R" --state open --label deploy:staging --json number -q '[.[].number]|first // empty')
+           gh pr comment "$pr" --repo "$R" --body "Heard \`change:start\`. Waiting: the berth (\`deploy:staging\`) is held by #${holder:-?}. This ticket is retried every ${INTERVAL}s and takes the berth when it is free; nothing is asked of you." >/dev/null 2>&1 || true ;;
+         esac
+         log "#$pr waits: lock held"; return 0 ;;
       6) log "#$pr refused: behind main" ;;
       *) log "#$pr ended: driver exit $rc" ;;
     esac
