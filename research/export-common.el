@@ -77,6 +77,43 @@ heading and every other keyword after the master's own header is dropped."
     (while (re-search-forward "^#\\+\\(DATE\\|AUTHOR\\|OPTIONS\\|SUBTITLE\\|LATEX_HEADER\\|LATEX_CLASS\\):.*\n" nil t)
       (replace-match ""))))
 
+
+;;; MERMAID -> FIGURES. Eight diagrams exported as verbatim text. mermaid-cli
+;;; (mmdc) renders each block to a PNG at export time and the block becomes a
+;;; figure. Two facts found on 2026-09-15: mmdc needs a browser, given by
+;;; ../puppeteer.json (the desktop Chrome); and mermaid 10.9 refuses a colon
+;;; inside a state transition's label, which every label here has (change:start),
+;;; so the rendering copy writes those colons as #58; and the org source is
+;;; untouched. A block mmdc cannot render stays verbatim and says so in the log.
+(defvar sc-mermaid-counter 0)
+(defun sc--mermaid-fix-colons (body)
+  "In stateDiagram transition lines, a colon after the first is #58;."
+  (mapconcat
+   (lambda (line)
+     (if (string-match "^\\(.*-->[^:]*:\\)\\(.*\\)$" line)
+         (concat (match-string 1 line)
+                 (replace-regexp-in-string ":" "#58;" (match-string 2 line)))
+       line))
+   (split-string body "\n") "\n"))
+(defun sc-render-mermaid (_backend)
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward "^[ \t]*#\\+begin_src mermaid[^\n]*\n" nil t)
+      (let ((beg (match-beginning 0)) (body-start (match-end 0)))
+        (when (re-search-forward "^[ \t]*#\\+end_src[ \t]*$" nil t)
+          (let* ((body-end (match-beginning 0)) (end (match-end 0))
+                 (body (buffer-substring-no-properties body-start body-end))
+                 (n (setq sc-mermaid-counter (1+ sc-mermaid-counter)))
+                 (mmd (format "mermaid-%d.mmd" n))
+                 (png (format "mermaid-%d.png" n)))
+            (with-temp-file mmd (insert (sc--mermaid-fix-colons body)))
+            (if (= 0 (call-process "mmdc" nil "*mmdc*" nil "-p" "../puppeteer.json" "-i" mmd "-o" png "-b" "white" "-s" "2"))
+                (progn (delete-region beg end)
+                       (goto-char beg)
+                       (insert (format "#+ATTR_LATEX: :width \\linewidth\n#+ATTR_HTML: :style max-width:100%%\n[[file:%s]]\n" png)))
+              (message "mermaid: block %d not rendered, left verbatim" n))))))))
+(add-hook 'org-export-before-parsing-functions #'sc-render-mermaid 50)
+
 (add-hook 'org-export-before-parsing-functions #'sc-strip-included-keywords)
 (add-hook 'org-export-before-parsing-functions #'sc-wrap-wide-tables 90)
 (setq org-latex-src-block-backend 'verbatim   ; fvextra wraps verbatim; listings/minted would not

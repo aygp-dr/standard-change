@@ -12,7 +12,7 @@ build/index.org: index.org adoption.org $(wildcard history/*.org substrates/*.or
 check: build/index.org
 	@cd build && emacs --batch -l org -l ox --eval '(progn (find-file "index.org") (org-export-expand-include-keyword) (message "includes resolved: %d lines" (count-lines (point-min) (point-max))))' 2>&1 | grep -E 'resolved|Cannot include|Error' 
 org: build/index.org
-	@cd build && emacs --batch -l org -l ox --eval '(progn (find-file "index.org") (org-export-expand-include-keyword) (write-region (point-min) (point-max) "index-expanded.org"))' 2>&1 | grep -E 'Error' ; ls -la build/index-expanded.org
+	@cd build && emacs --batch -l org -l ox --eval '(progn (find-file "index.org") (org-export-expand-include-keyword) (write-region (point-min) (point-max) "index-expanded.org"))' 2>&1 | grep -E "Error" ; ls -la index-expanded.org
 html: build/index.org
 	@cd build && emacs --batch -l org -l ../export-html.el 2>&1 | grep -E 'Error|error' || true; ls -la index.html
 pdf: build/index.org
