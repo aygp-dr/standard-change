@@ -181,7 +181,7 @@ cannot be answered from the records — that question belongs to the berth.
 
 *Two namespaces, and they are different kinds of fact.* Mixing them is the
 defect that made "a PR has at most one =change:*=" impossible to state, because
-=change:standard= plus =change:complete= was a legitimate pair:
+=itil:standard= plus =change:complete= was a legitimate pair:
 
 | namespace  | kind             | members                                              | cardinality |
 |------------+------------------+------------------------------------------------------+-------------|

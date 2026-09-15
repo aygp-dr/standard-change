@@ -232,7 +232,7 @@ sequenceDiagram
     participant Prod as production
 
     Dev->>GH: push, opening PR 101 touching apps/pdp
-    GH->>GH: labeller: +app:pdp +change:standard
+    GH->>GH: labeller: +app:pdp +itil:standard
     GH->>IDP: change submit --pr 101 --groups pdp
     IDP-->>GH: CHG-20260913-0001 risk=8 type=standard
     GH->>GH: gate-selftest -> lint, test, e2e (green @sha1)

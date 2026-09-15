@@ -40,7 +40,7 @@ depend on state the earlier ones create.
 
 | # | transition            | do this with a real PR                                      | expect |
 |---+-----------------------+-------------------------------------------------------------+--------|
-| 1 | submitted             | open a PR touching =apps/<x>=                                | labeller attaches =app:<x>= and =change:standard= |
+| 1 | submitted             | open a PR touching =apps/<x>=                                | labeller attaches =app:<x>= and =itil:standard= |
 | 2 | gate red              | push a commit failing a unit test                            | =gate.yml= red; =promote.yml= refuses |
 | 3 | activated             | let a reserved window come due with =main= unmoved           | =deploy:staging= appears — added by the scheduler, not a person |
 | 4 | slot forfeited        | merge an =apps/**= change to =main= while a window is reserved | slot forfeited, berth *held*, staging pass withdrawn |

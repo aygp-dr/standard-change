@@ -32,7 +32,7 @@ and name which one.
 
 | shape | kind | who | safe to add by hand? |
 |---|---|---|---|
-| `app:*`, `change:standard` | derived | the labeller, from the diff | no — resynced every push |
+| `app:*`, `itil:standard` | derived | the labeller, from the diff | no — resynced every push |
 | `change:requested` | **request** | **a human** | **yes — this is the whole of their part** |
 | `deploy:<env>` | action | the workflow | no — it marks work in flight |
 | `<subject>:<state>` | observation | a gate | **no** — it asserts a measurement |
@@ -62,7 +62,7 @@ because the record summarises them and the PR timeline retains every add and
 remove with actor and timestamp — 25 events on #9, checked, so clearing
 destroys nothing. `change:*` is never cleared, because it *is* the record.
 
-`app:*` and `change:standard` also survive: they describe what the change was.
+`app:*` and `itil:standard` also survive: they describe what the change was.
 
 ### Adding and removing are different acts, with different owners
 

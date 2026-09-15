@@ -51,7 +51,7 @@ scenario D4. *A rule change that makes the model unable to fail is the failure.*
 =gates/labeller-test.py= replays the scenario catalogue against
 =.github/labeler.yml= with no PR and no forge. It is the only thing here that
 verifies a *label* change, and it was itself wrong once: it modelled
-=change:standard= as derived while the config never implemented it, so PRs got
+=itil:standard= as derived while the config never implemented it, so PRs got
 =app:*= and no =change:*= for four iterations.
 
 That is the shape of the danger. *An oracle for the control plane can encode
@@ -91,7 +91,7 @@ The pipeline depends on behaviours nothing here checks:
 - label writes are *not* immediately readable back
 
 Every one of those was learned by *being broken by it*: the missing =--repo=,
-the labeller race, the hardcoded port, the four iterations of =change:standard=.
+the labeller race, the hardcoded port, the four iterations of =itil:standard=.
 An agent changing the rules inherits all of them and has no list.
 
 *The fix:* a =gates/forge-contract.sh= that asserts each assumption against a
@@ -123,7 +123,7 @@ govern.* One repo cannot be both the subject and the instrument.
 
 Which is the same argument as §C6 — /a platform can attest to what is running
 only if it runs it/ — applied one level up. A rule cannot attest to itself, and
-=change:normal='s required approval is a *procedural* answer to a *structural*
+=itil:normal='s required approval is a *procedural* answer to a *structural*
 problem: it asks a human to notice what no gate checks.
 
 * What this does not solve

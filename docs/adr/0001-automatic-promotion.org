@@ -60,7 +60,7 @@ triggered by that. Each transition is caused by an observation, not a command
 | act                  | who    | why it cannot be automated              |
 |----------------------+--------+-----------------------------------------|
 | raise the change     | human  | it is the intent                        |
-| approve =change:normal= | human | the gates cannot judge a control-plane change |
+| approve =itil:normal= | human | the gates cannot judge a control-plane change |
 | break glass          | human  | =change:emergency= is an authorization, not a measurement |
 
 Everything else is the system. *The approval gate sits before production, not
@@ -297,7 +297,7 @@ defeats them in a specific way:
 |-------------------------------------+-------------------------------------------|
 | a change touched one app            | a =shared/= change touches *every* app    |
 | blast radius was in the manifest    | the manifest still says =app:core=        |
-| =change:standard= was defensible    | it is a coordinated change wearing a standard label |
+| =itil:standard= was defensible    | it is a coordinated change wearing a standard label |
 
 *=apps/**= is no longer the deployable entity, and the classifier still thinks
 it is.* The =apps/**=-blocks rule was a coarse but honest approximation while
@@ -327,7 +327,7 @@ the failure mode most likely to make A2 disappointing. See
 
 *Open, not scheduled:* the classifier has no notion of blast radius, and
 =idp.py change risk= — which does — is not wired into the pipeline. PR #5
-carries five =app:*= labels and is labelled =change:standard= today.
+carries five =app:*= labels and is labelled =itil:standard= today.
 
 *** Consequence — the environment tiers (was ADR 0002)
 
@@ -740,14 +740,14 @@ exemption is narrow: guard 2 (gates green on this head) and guard 5
 (convergence) still have *no bypass*, and the exemption is recorded in the PIR
 rather than waved through.
 
-*Walked, both directions*: =freeze= on #3 refused #28 (=change:standard=) with
+*Walked, both directions*: =freeze= on #3 refused #28 (=itil:standard=) with
 exit 3; the same freeze let #2 through once a person declared it
 =change:emergency=, with the freeze named in the output and a note that it
 lands in the PIR.
 
 *** The defect the walk found: a change with two classes
 
-#2 came out of that test carrying *=change:standard= and =change:emergency= at
+#2 came out of that test carrying *=itil:standard= and =change:emergency= at
 once*. The labeller derives the class from the diff; a person declares an
 emergency; *nothing reconciles them*.
 

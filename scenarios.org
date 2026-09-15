@@ -27,14 +27,14 @@ classic checker that cannot fail.
 
 | id  | WIP diff touches                            | expect labels                              | checks                     |
 |-----+---------------------------------------------+--------------------------------------------+----------------------------|
-| L1  | =apps/core/src/pages/index.js=              | =app:core=, =change:standard=              | basic attach               |
-| L2  | =apps/pdp/= and =apps/checkout/=            | =app:pdp=, =app:checkout=, =change:standard= | multi-group attach       |
-| L3  | all four app dirs                           | four =app:*=, =change:standard=            | full fan-out               |
-| L4  | =router/nginx.conf.tmpl= only               | =change:normal=, *no* =app:*=              | normal with no group       |
-| L5  | =apps/plp/= and =.github/workflows/gate.yml= | =app:plp=, =change:normal=                | normal wins over standard  |
+| L1  | =apps/core/src/pages/index.js=              | =app:core=, =itil:standard=              | basic attach               |
+| L2  | =apps/pdp/= and =apps/checkout/=            | =app:pdp=, =app:checkout=, =itil:standard= | multi-group attach       |
+| L3  | all four app dirs                           | four =app:*=, =itil:standard=            | full fan-out               |
+| L4  | =router/nginx.conf.tmpl= only               | =itil:normal=, *no* =app:*=              | normal with no group       |
+| L5  | =apps/plp/= and =.github/workflows/gate.yml= | =app:plp=, =itil:normal=                | normal wins over standard  |
 | L6  | =README.org= only                           | none                                       | no-op diff labels nothing  |
 | L7  | =apps/pdp/fixtures/catalog.json=            | =app:pdp=                                  | non-source file still owns |
-| L8  | =gates/e2e.sh=                              | =change:normal=                            | gate change is normal      |
+| L8  | =gates/e2e.sh=                              | =itil:normal=                            | gate change is normal      |
 
 ** Removal (the half that proves ownership)
 
@@ -42,7 +42,7 @@ classic checker that cannot fail.
 |-----+-------------------------------------------------------------+-------------------------------------------------|
 | L9  | L2, then push removing all =apps/checkout/= changes          | =app:checkout= *gone*; =app:pdp= remains         |
 | L10 | L1, then a human hand-adds =app:plp=, then push any commit   | =app:plp= *removed* by the labeller              |
-| L11 | L5, then push removing the =.github/= change                 | =change:normal= gone, =change:standard= attached |
+| L11 | L5, then push removing the =.github/= change                 | =itil:normal= gone, =itil:standard= attached |
 | L12 | L1 reaching =staging:passed=, then push one more commit      | =staging:passed= *removed* (SHA binding)         |
 
 L10 is the ownership assertion: the =app:*= set is a /derived/ artifact of the
@@ -73,7 +73,7 @@ Three PRs, all touching =apps/pdp/=. The point is the queue and the rebase loop.
 
 | step | action                                    | expected                                                            |
 |------+-------------------------------------------+---------------------------------------------------------------------|
-|    1 | PR-P1, PR-P2, PR-P3 opened; gates green   | each gets =app:pdp=, =change:standard=                              |
+|    1 | PR-P1, PR-P2, PR-P3 opened; gates green   | each gets =app:pdp=, =itil:standard=                              |
 |    2 | =deploy:staging= on PR-P1                 | guard 0 pass, guard 1 pass → claims staging                         |
 |    3 | =deploy:staging= on PR-P2 (while P1 holds) | *guard 1 fails*: =blocked:queue=, =deploy:staging= removed, comment naming #P1 |
 |    4 | P1 staging e2e passes                     | =staging:passed= → promote adds =deploy:production=                 |

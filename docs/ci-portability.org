@@ -88,7 +88,7 @@ flowchart LR
     G4B --> C4
     G4B --> C1
     G5["guard 5<br/>health<br/>NO BYPASS"] --> C8
-    CN["change:normal<br/>edits its own gates"] --> C9
+    CN["itil:normal<br/>edits its own gates"] --> C9
     AUD["controls audit"] --> C10
 
     C1["C1 change-state carrier"]
@@ -230,7 +230,7 @@ The whole content of this capability is *who attests* [I]. A deployment record
 written by the platform is evidence that the platform observed a deployment. A
 status posted by a job is evidence that *something holding a write token asserted*
 a deployment. The second is forgeable by anything with the token — including the
-workflow of the change under review, which on a =change:normal= PR is being
+workflow of the change under review, which on a =itil:normal= PR is being
 modified by the change it is supposed to gate.
 
 This is the capability with the sharpest degradation story, and it is where
@@ -260,8 +260,8 @@ serving."*
 *The enforcement configuration cannot be edited by the change it is enforcing.*
 
 Not in the original list, and it earns a place [I]. =spec.org= defines
-=change:normal= as a diff touching =router/=, =gates/=, =change/=, =targets/= and
-=.github/= — so a =change:normal= PR *edits the guards that gate it*. The model
+=itil:normal= as a diff touching =router/=, =gates/=, =change/=, =targets/= and
+=.github/= — so a =itil:normal= PR *edits the guards that gate it*. The model
 handles this with review requirements and an audit of =bypass_actors=, which is a
 procedural answer to a structural problem.
 
@@ -326,7 +326,7 @@ Reading down the matrix rather than across is where the useful result is [I].
 Only Azure DevOps provides it, and it does so emphatically: *"Approvals and other
 checks aren't defined in the yaml file. Users modifying the pipeline yaml file
 can't modify the checks performed before start of a stage"* [H]. On GitHub and
-Gitea the workflows live in the repository, so a =change:normal= PR edits its own
+Gitea the workflows live in the repository, so a =itil:normal= PR edits its own
 gates. The model's answer is procedural — require review, audit the bypass list —
 and procedural answers degrade under load exactly as §The balance predicts.
 
@@ -334,7 +334,7 @@ and procedural answers degrade under load exactly as §The balance predicts.
 GitHub *does* have partial answers that the free-plan box cannot exercise and the
 current spec therefore does not use: org-level rulesets (owned outside the repo),
 required workflows, and =bypass_actors= scoped at the org. Whether those close
-C9 for =change:normal= is an open question worth answering before the first real
+C9 for =itil:normal= is an open question worth answering before the first real
 run [I].
 
 *C7 — platform-attested deployment record — is native on four of six and absent
@@ -449,7 +449,7 @@ Detail behind the matrix, organized by capability rather than by feature tour.
 On enterprise, the reference implementation. Worth stating what it does *not*
 have, since the matrix says =absent= twice.
 
-*C9 absent.* Workflows live in =.github/workflows/=, which =change:normal=
+*C9 absent.* Workflows live in =.github/workflows/=, which =itil:normal=
 touches by definition. Org-level rulesets and required workflows are the partial
 answer and are untested here [H].
 
@@ -1194,7 +1194,7 @@ The conformance study's practical output. In order [I]:
 1. *C9 — gate-authority separation.* The one capability absent on our platform
    and native on exactly one other, and the one the current spec answers
    procedurally. Confirm whether *org-level rulesets* and *required workflows*
-   can own the gates for =change:normal= from outside the repository, so a change
+   can own the gates for =itil:normal= from outside the repository, so a change
    editing =.github/= cannot weaken what gates it. If they can, that is a real
    strengthening the free-plan box could never have shown.
 2. *C7 — deployment records and environment protection.* Confirm

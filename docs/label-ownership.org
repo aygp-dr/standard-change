@@ -41,7 +41,7 @@ that someone is then asserting a measurement they did not take. *A missing
 
 * Rule 1b — derived labels are owned by the deriver, and ownership transfers by an opt-out, never by an edit
 
-=app:*= and =change:standard= are *derived*: the labeller computes them from the
+=app:*= and =itil:standard= are *derived*: the labeller computes them from the
 diff on every push. They are owned by the labeller, absolutely, and hand-editing
 one is not a disagreement the system can see — the next push simply recomputes
 it and your edit is gone. There is no argument, and no record that one was had.

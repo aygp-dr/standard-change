@@ -25,7 +25,7 @@
 app:*	labeller	yes	no	no	derived from the diff: the app's own glob, OR any change to shared/ (which every app pins). Recomputed every push. To touch shared/ without redeploying all, use labeler:skip and set them by hand
 itil:standard	labeller	yes	no	no	derived; same
 itil:normal	labeller	yes	no	no	derived; same
-control-plane	labeller	yes	no	no	derived from gates/, change/, .github/ -- NARROWER than change:normal, which also globs router/ and targets/. Says WHY the change is handled differently: it alters how every future change is verified, so it cannot be verified by the pipeline and must not auto-merge. Soak trigger, docs/changing-the-pipeline.org
+control-plane	labeller	yes	no	no	derived from gates/, change/, .github/ -- NARROWER than itil:normal, which also globs router/ and targets/. Says WHY the change is handled differently: it alters how every future change is verified, so it cannot be verified by the pipeline and must not auto-merge. Soak trigger, docs/changing-the-pipeline.org
 labeler:skip	human	yes	yes	yes	the opt-out that transfers ownership of the derived labels
 change:requested	human	no	yes	no	the human's part of starting a change; the pipeline clears it
 change:scheduled	scheduler	no	no	no	set when a window is booked
@@ -67,16 +67,16 @@ production:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
 #
 # SPLIT 2026-09-13: classification moved to itil:* and change:* now holds only
 # the lifecycle. The two were mixed in one namespace, which is why the rule
-# "a PR has at most one change:*" could not be stated -- change:standard plus
+# "a PR has at most one change:*" could not be stated -- itil:standard plus
 # change:complete was a legitimate pair and occurred six times. itil:* names
 # the ITIL change type; change:* names where the change record has got to.
 #
 # The rows above say who may WRITE each label. They cannot say that two labels
 # are mutually exclusive, and that turned out to matter: #2 carried
-# change:standard AND change:emergency at once, which left its class undefined
+# itil:standard AND change:emergency at once, which left its class undefined
 # while every rule in preflight branches on the class.
 #
-# Note the rule is NOT "at most one change:*". change:standard + change:complete
+# Note the rule is NOT "at most one change:*". itil:standard + change:complete
 # is a legitimate pair and occurs six times in this repo's history. The change:*
 # namespace holds TWO kinds of fact and the exclusion applies within each:
 #
@@ -84,7 +84,7 @@ production:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
 #   lifecycle  where it is in the process        at most one ACTIVE state
 #
 # That overloading is a naming defect, recorded rather than renamed: renaming
-# change:standard now would rewrite the class of every settled change in the
+# itil:standard now would rewrite the class of every settled change in the
 # history, and the history is the record.
 #
 # group	kind	members	cardinality	who resolves a violation
