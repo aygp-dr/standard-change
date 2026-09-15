@@ -158,7 +158,16 @@ journey | while IFS="$(printf '\t')" read -r path label; do
 done > .smoke.journey 2>&1
 cat .smoke.journey
 grep -q '^  FAIL' .smoke.journey && rc=1
-pass=$(grep -c '^  [^F]' .smoke.journey || echo 0)
+# NOT `|| echo 0` -- the same defect fixed in the crawl verdict below, and
+# this site is worse. grep -c prints 0 AND exits 1 when it matches nothing, so
+# the fallback appended a second 0 and pass became "0\n0". That happens exactly
+# when EVERY journey step failed, and the next `pass=$((pass + 1))` then dies
+# with "arithmetic expression: variable conversion error" under set -e.
+# Measured: the gate exits 2, not 1, when the estate is at its most broken --
+# and 2 is a code this project has already spent on "lock held" (preflight.sh,
+# docs/exit-codes.org). A gate that crashes instead of refusing hands its
+# caller an exit code that means something else somewhere else.
+pass=$(grep -c '^  [^F]' .smoke.journey) || pass=0
 rm -f .smoke.journey
 
 # ---- 1b. is this an estate, or one app wearing it? ---------------------------
