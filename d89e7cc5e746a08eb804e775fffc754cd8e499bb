@@ -1,0 +1,11 @@
+Timeline
+- The owner: "if i labeled a PR as unaffected or release:unaffected infer the semantics ... or, alternatively: if i mark something as release:unaffected can that just merge to the default branch without additional intervention". Second reading taken: the label is itself the intent.
+- Model: unit[p] (the labeller's finding, fixed per head) and unaffected[p]; DeclareUnaffected, WithdrawUnaffected, MergeUnaffected; Activate refuses an unaffected change; frames regenerated (35 actions, 31 variables).
+- label-audit first flagged the new row as transient (settle.sh must clear it); declared persistent and human-clearable, back to the pre-existing 20 findings.
+
+Reproduction
+  python3 sim/label_sim.py --bound 8 --walks 0 --disable Interfere                              -> VERDICT holds
+  python3 sim/label_sim.py --bound 8 --walks 0 --disable Interfere --disable UnaffectedMerges   -> VERDICT violated UnaffectedNeverDeploys (Init, DeclareUnaffected(p2), MergeUnaffected(p2))
+  TLC with UnaffectedMerges = FALSE  -> "Invariant UnaffectedNeverDeploys is violated" after 1,382 distinct states
+  TLC positive, all seventeen rules  -> running at commit time; appended below when done
+  cell: macOS 24.1.0, OpenJDK, python3.14 (walks off)
