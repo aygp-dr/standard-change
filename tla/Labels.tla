@@ -273,7 +273,7 @@ Reap(p) ==
                    badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty>>
 
 (***************************************************************************)
-(* gates/preflight.sh, then change/activate.sh:265-268 -- the window opens, *)
+(* gates/preflight.sh, then change/activate.sh:271-275 -- the window opens,*)
 (* the guards are re-evaluated and the berth is claimed. Each rule here is *)
 (* a preflight refusal; with its constant off the refusal is skipped and   *)
 (* badClaim records that a claim was made which the rule would refuse.     *)

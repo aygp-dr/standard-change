@@ -157,7 +157,12 @@ def actions(st, R):
             life = ((q.life - {"requested"}) | {"scheduled"}) if R["LifecycleExclusive"] else q.life | {"scheduled"}
             for b in ("queued", "designated"):
                 yield f"Book({p},{b})", put(st, i, q._replace(life=life, booking=b))
-        # preflight, then activate.sh:265-268 -- claim the berth
+        # preflight, then activate.sh:271-275 -- claim the berth.
+        # WAS activate.sh:265-268, which is the window-close trap, a different
+        # control entirely. The citation rotted when lines moved and nothing
+        # noticed, because nothing here executes activate.sh: this simulator
+        # replays its OWN table and the pointer to the driver is prose.
+        # Peer standard-change-002 names the general case F-15.
         if not q.berth:
             others = holder(st) - {i}
             refused = (q.draft or q.booking == "none" or (st.freeze and not is_emg(q))
