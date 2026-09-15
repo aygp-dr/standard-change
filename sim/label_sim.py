@@ -34,7 +34,23 @@ the same invariant to be named.
 """
 import argparse, collections, itertools, sys
 
-RULES = ["DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
+# INTERFERE is not a rule of the pipeline. It is a rule of the WORLD: any
+# actor -- a human, a CI workflow, a scheduler, another agent -- may add or
+# remove any label at any moment, and none of them can see the others. The
+# labels are the entire channel (docs/labels-are-the-only-channel.org).
+#
+# With it ON, label-set invariants like OneLifecycle STOP BEING INVARIANTS,
+# because no guard on one writer can prevent a violation produced by a writer
+# it does not control. That is not the model breaking; it is the model finally
+# describing the estate we actually run, where five identities wrote
+# deploy:staging in one day.
+#
+# What must survive interference is the ACTION invariants: no deploy on a
+# draft, no deploy with two classes, no unbooked deploy, no verdict without a
+# measurement. Those hold because the refusal happens at the deploy, not at
+# the labelling -- which is the whole reason guard 4 reads observation records
+# that name a build, and why a label cannot name one.
+RULES = ["Interfere", "DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
          "ClassGuard", "LifecycleExclusive", "ReapFreesBerth", "SettleClears",
          "ReapSparesInFlight", "RecordOnMerge", "EmergencyPreempts",
          "HoldGuard", "HealthyBeforeVerdict", "LockResets"]
@@ -67,7 +83,29 @@ def put(st, i, q, **est):
 CLEAR_STAGING = dict(berth=False, sdep=False, shealthy=False)
 CLEAR_BUILD = dict(verdict="none", uat=False, healthy=False, served=False, sdep=False, shealthy=False, pdep=False)
 
+LIFE_LABELS = ("requested", "scheduled", "start", "complete")
+
+
 def actions(st, R):
+    # THE UNCOORDINATED WRITER. Enabled by default; --disable Interfere turns
+    # the world back into one where every actor is well behaved, which is the
+    # world the earlier model assumed and the estate has never been in.
+    if R["Interfere"]:
+        for i, q in enumerate(st.prs):
+            p = PRS[i]
+            if q.closed:
+                continue
+            for lab in LIFE_LABELS:
+                if lab not in q.life:
+                    yield (f"Interfere({p},+{lab})",
+                           put(st, i, q._replace(life=q.life | {lab})))
+                else:
+                    yield (f"Interfere({p},-{lab})",
+                           put(st, i, q._replace(life=q.life - {lab})))
+            # somebody else's berth label, added or taken -- scenarios D21
+            yield (f"Interfere({p},berth={not q.berth})",
+                   put(st, i, q._replace(berth=not q.berth)))
+
     for i, q in enumerate(st.prs):
         p = PRS[i]
         if q.closed:
@@ -195,7 +233,28 @@ def invariants():  # same order as tla/Labels.cfg
                                           and q.verdict == "none" and not q.uat and not q.healthy and q.booking == "none")
                                           for q in st.prs)
     yield "MergedHasRecord", lambda st: all(not (q.merged and not q.life) or q.pir for q in st.prs)
+    # NOT CHECKED UNDER INTERFERENCE. At most one active lifecycle label is a
+    # property the pipeline CONVERGES to, not one it can hold against an
+    # uncoordinated writer. It is still checked when Interfere is disabled,
+    # which is where it says something: it means the pipeline's own actions
+    # never produce two.
     yield "OneLifecycle", lambda st: all(len(active(q)) <= 1 for q in st.prs)
+    # --- LABEL-SET PROPERTIES vs ACTION PROPERTIES ---------------------------
+    #
+    # The four below are stated over the LABEL, not over the act of deploying,
+    # and `--disable Interfere` is the only world in which they can hold. Run
+    # with interference and NoUnbookedDeploy falls at depth 1 to a single
+    # Interfere(p1,berth=True): somebody set the berth label without a booking,
+    # which is a thing that happens (deploy-staging.yml sets it; a person can
+    # set it; a second driver set it on 2026-09-15 at 02:51:42Z).
+    #
+    # That is not a bug in the estate. It is these four being MISNAMED: they
+    # read as "no unbooked deploy" and they check "no unbooked LABEL". The
+    # deploy is what must be refused, and the pipeline does refuse it -- at the
+    # deploy, from a record, not from the label. The model has not caught up.
+    #
+    # They are reported under interference rather than silently skipped,
+    # because the gap between what they say and what they check is the finding.
     yield "NoDraftDeployed", lambda st: all(not q.draft or (not q.berth and not q.prod) for q in st.prs)
     yield "NoUnbookedDeploy", lambda st: all(not (q.berth or q.prod) or q.booking != "none" for q in st.prs)
     yield "BerthHasCause", lambda st: all(not q.berth or "scheduled" in q.life for q in st.prs)
