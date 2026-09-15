@@ -9,7 +9,8 @@ const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
 // OneUI is the shared UI surface (issue #10). Every app pins it, so a change
 // there is a change to all of them -- the cost is named in
 // docs/cross-cutting-coupling.org, not hidden.
-import { page, loadEstate, esc, HOST, VERSION as ONEUI } from '../../../shared/oneui.js';
+import { page, loadEstate, esc, HOST, VERSION as ONEUI,
+         productBadge, badgeHtml } from '../../../shared/oneui.js';
 const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
@@ -136,7 +137,12 @@ export function status(d) {
   return 404;
 }
 
-export function render(path, catalogue = loadCatalogue()) {
+// `now` is a PARAMETER, not a call to the clock inside the renderer. The
+// freshness badge is derived from a date (issue #18), so a test that pinned
+// today's output would rot on a date nobody chose -- and a test that rots is
+// one somebody deletes. Every assertion about a badge injects the day it is
+// asserting about. The request path passes nothing and gets the real clock.
+export function render(path, catalogue = loadCatalogue(), now = Date.now()) {
   const d = { app: meta.app, path, found: owns(path), block: BLOCK, sha: SHA,
               routes: meta.routes };
   const sku = skuOf(path);
@@ -163,6 +169,11 @@ export function render(path, catalogue = loadCatalogue()) {
     price: hit.price,
     currency: typeof hit.currency === 'string' ? hit.currency : 'USD',
     availability: hit.availability,
+    // DERIVED HERE, IN THE PAYLOAD, not only in the HTML. JSON is the contract
+    // the gates assert on; a badge that exists only in the markup is a fact
+    // about this estate that no gate can read, and the plp/pdp agreement
+    // assertion would have to scrape a page to ask the question.
+    badge: productBadge(hit, now),
   };
   return d;
 }
@@ -222,7 +233,7 @@ This product has not gone away; try again shortly.</p>
 <p>We have no product <code>${sku}</code>. It may have been renamed or removed — <a href="/search">search everything</a> instead.</p>
 <p class=v>catalogue: ok — this product is not in it</p>`;
   const p = d.product;
-  return `<h2>${esc(p.name)}</h2>
+  return `<h2>${badgeHtml(p.badge)}${esc(p.name)}</h2>
 <p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability)}</p>
 <p>SKU <code>${sku}</code></p>
 <p>${addToCart(p.sku)}</p>`;
@@ -279,8 +290,8 @@ export function addToCart(sku) {
 // it off the accepted socket, not from PORT. shared/oneui.js derives the tier
 // from it, and a tier derived from something the deployer exported would be the
 // estate reporting what it was told rather than what is true (issue #15).
-export function renderHtml(path, catalogue = loadCatalogue(), port) {
-  const d = render(path, catalogue);
+export function renderHtml(path, catalogue = loadCatalogue(), port, now = Date.now()) {
+  const d = render(path, catalogue, now);
   return page({ ...d, host: HOST, port }, ESTATE, background(d), panel(d));
 }
 

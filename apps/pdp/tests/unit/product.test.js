@@ -217,3 +217,73 @@ test('a path that is not a product page is untouched by the catalogue', () => {
     assert.equal(status(d), 404);
   }
 });
+
+// ---- the freshness badge (issue #18) ----------------------------------------
+//
+// pdp's HALF of a two-app requirement. That the two apps AGREE is asserted in
+// estate.test.js, because neither app can see it from inside itself; what is
+// asserted here is that pdp renders the verdict at all, and renders it as the
+// shared surface says to.
+//
+// `now` is injected on every case. An assertion pinned to the real clock would
+// pass today and fail on a date nobody chose -- and a test that rots is one
+// somebody deletes, which is how a badge nobody expires gets shipped.
+
+const DAY = (s) => Date.parse(`${s}T00:00:00Z`);
+
+test('a recently added product carries New in the payload and on the page', () => {
+  const c = loadCatalogue(CATALOGUE_FILE);
+  const d = render('/p/SKU123', c, DAY('2026-09-06'));
+  assert.equal(d.found, true);
+  assert.equal(d.product.badge, 'New');
+  const html = renderHtml('/p/SKU123', c, 9030, DAY('2026-09-06'));
+  assert.ok(html.includes('<span class=b>New</span>'), 'the badge is not on the page');
+});
+
+test('a recently updated product says Updated, not New', () => {
+  const c = loadCatalogue(CATALOGUE_FILE);
+  assert.equal(render('/p/SKU124', c, DAY('2026-09-13')).product.badge, 'Updated');
+});
+
+test('the badge expires with the date, on the page as well as in the payload', () => {
+  // The same SKU, two days. Nothing was edited between them and no cleanup ran.
+  const c = loadCatalogue(CATALOGUE_FILE);
+  const later = DAY('2026-09-06') + 400 * 86400000;
+  assert.equal(render('/p/SKU123', c, later).product.badge, null);
+  assert.ok(!renderHtml('/p/SKU123', c, 9030, later).includes('class=b'),
+            'a badge outlived its date');
+});
+
+test('an old product is not badged', () => {
+  const c = loadCatalogue(CATALOGUE_FILE);
+  assert.equal(render('/p/SKU201', c, DAY('2026-09-13')).product.badge, null);
+});
+
+// A catalogue written before this change carries no dates at all, and the
+// shape check must keep accepting it: `added` is OPTIONAL. If it were
+// required, every fixture in tests/fixtures/catalogue/ would become
+// catalogue-malformed and pdp would 503 on a file it can read perfectly well.
+test('a product with no dates still renders, unbadged', () => {
+  const c = { ok: true, reason: null,
+              products: [{ sku: 'SKU999', name: 'Undated', price: 1, currency: 'USD',
+                           availability: 'in-stock' }] };
+  const d = render('/p/SKU999', c, DAY('2026-09-13'));
+  assert.equal(d.found, true);
+  assert.equal(d.product.badge, null);
+  assert.equal(status(d), 200);
+});
+
+test('a badge is never built from catalogue text', () => {
+  // The verdict is one of three literals decided by a date comparison, so a
+  // catalogue cannot reach the markup through this field however it is
+  // spelled. page()'s 4th argument is interpolated RAW, which is what makes
+  // this worth asserting rather than assuming.
+  const c = { ok: true, reason: null,
+              products: [{ sku: 'SKU999', name: 'Hostile', price: 1, currency: 'USD',
+                           availability: 'in-stock',
+                           added: '"><script>alert(1)</script>' }] };
+  const d = render('/p/SKU999', c, DAY('2026-09-13'));
+  assert.equal(d.product.badge, null);
+  const html = renderHtml('/p/SKU999', c, 9030, DAY('2026-09-13'));
+  assert.ok(!html.includes('<script>alert(1)'), 'a date reached the document');
+});

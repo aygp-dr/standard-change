@@ -10,6 +10,19 @@
 import { readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 
+// 1.4.0 -- productBadge() and BADGE_WINDOW_DAYS (issue #18). A MINOR: two
+// names are ADDED to the surface and nothing is removed, so an app pinned to
+// 1.3 renders exactly as it did. It is here rather than in either app because
+// the badge has to appear in TWO places at once -- the plp listing and the pdp
+// product page -- and the failure this issue exists to prevent is a listing
+// that badges a product NEW next to a product page that does not. Two copies
+// of a freshness rule is that failure with extra steps.
+//
+// What is NOT here is the product data. `apps/pdp/products.json` stays the one
+// catalogue and plp already reads it. So a product changing redeploys nothing
+// shared; only a change to the RULE costs four deployments, which is the right
+// thing to be expensive.
+//
 // 1.3.0 -- a `.b` badge class in the shared stylesheet. One line, and the
 // smallest possible change that still redeploys every app: nothing in the
 // surface changed, no function signature moved, and every app's output is
@@ -33,7 +46,7 @@ import { hostname } from 'node:os';
 // security patch, not a replacement for it: 1.0.1 escaped what page()
 // interpolates and that escaping is inherited here unchanged. This release adds
 // to the surface, which is why it is not a patch.
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 
 // d.path is whatever the client put in the request line, and it went straight
 // into the document: GET /<script>alert(1)</script> came back as live markup
@@ -47,6 +60,80 @@ export const VERSION = '1.3.0';
 export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---- product freshness (issue #18) ------------------------------------------
+//
+// A DATE, NOT A BOOLEAN, AND IT EXPIRES BY ITSELF.
+//
+// `isNew: true` in a catalogue is permanently true. Nobody clears it, because
+// clearing it is a chore with no deadline and no owner, and a storefront that
+// badges a two-year-old product NEW has taught its customers to ignore the
+// badge. The catalogue therefore carries WHEN, and the badge is DERIVED from
+// the date every time it is rendered. There is no state to go stale, for the
+// same reason change/evidence.sh records a SHA instead of a label: a fact that
+// names its own moment does not need withdrawing.
+//
+// ONE RULE, BOTH APPS. plp lists products and pdp shows one, and the two must
+// never disagree about the same SKU on the same day. That cannot be achieved
+// by two apps each "following the same rule"; it is achieved by there being
+// one function. apps/pdp/tests/unit/estate.test.js asserts the agreement
+// against what each app actually SERVES.
+export const BADGE_WINDOW_DAYS = 30;
+
+// Strict YYYY-MM-DD, parsed at UTC midnight. Date.parse is deliberately not
+// used on its own: it accepts '2026-09-31' (rolling into October) and a pile
+// of locale formats, so a typo in the catalogue would become a silent, wrong
+// badge rather than no badge. Returns null for anything it cannot vouch for.
+export function calendarDay(s) {
+  if (typeof s !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const t = Date.UTC(y, mo - 1, d);
+  const back = new Date(t);
+  // Round-trip: rejects 2026-02-30 and 2026-13-01, which Date.UTC happily
+  // normalises into a different day than the one written down.
+  if (back.getUTCFullYear() !== y || back.getUTCMonth() !== mo - 1
+      || back.getUTCDate() !== d) return null;
+  return t;
+}
+
+// null, 'New' or 'Updated'. Never throws, for the same reason loadCatalogue
+// never throws: every caller is on the request path.
+//
+// Three refusals, all of which produce NO badge rather than a guess:
+//
+//   an unparseable date      a typo is not a product launch
+//   a date in the future     nothing has been added yet. A catalogue that
+//                            says a product arrives next Tuesday is either
+//                            wrong or describing something that has not
+//                            happened, and a badge is a statement that it has
+//   a date outside the window  the whole point
+//
+// `updated` outranks `added` only when it is BOTH in the window and not
+// earlier than `added` -- an `updated` before the product existed is data
+// nobody should render, and an `added` that is still fresh keeps its New.
+export function productBadge(p, now = Date.now()) {
+  if (!p || typeof p !== 'object') return null;
+  const t = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(t)) return null;
+  const window = BADGE_WINDOW_DAYS * 86400000;
+  const fresh = (day) => day !== null && t >= day && t - day < window;
+
+  const added = calendarDay(p.added);
+  const updated = calendarDay(p.updated);
+  if (fresh(updated) && (added === null || updated >= added)) return 'Updated';
+  if (fresh(added)) return 'New';
+  return null;
+}
+
+// The markup, so the two apps cannot render the same verdict differently. `.b`
+// is the shared badge class (1.3.0); the label is escaped even though it comes
+// from the closed set above, because the next caller to hand this a string
+// from a catalogue should find escaping already here rather than absent.
+export function badgeHtml(label) {
+  return label ? `<span class=b>${esc(label)}</span>` : '';
 }
 
 // The machine, asked of the machine. Not process.env.HOSTNAME: a page that

@@ -25,14 +25,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { render, status, loadCatalogue, CATALOGUE_FILE } from '../../src/server.js';
+import { render, renderHtml, status, loadCatalogue, CATALOGUE_FILE } from '../../src/server.js';
 // plp's server, imported for the SECOND estate invariant below (#35): plp's
 // search now reads pdp's product file, so there is a new way for these two to
 // disagree and it is asserted here for the same reason the first one is --
 // neither app can see it from inside itself. Importing it binds no port
 // (server.js only listens when it is argv[1]).
 import {
-  render as plpRender, loadProducts as plpLoadProducts,
+  render as plpRender, renderHtml as plpRenderHtml, loadProducts as plpLoadProducts,
+  loadCatalogue as plpLoadCatalogue, CATALOGUE_FILE as PLP_CATALOGUE,
   PRODUCTS_FILE as PLP_READS,
 } from '../../../plp/src/server.js';
 
@@ -138,4 +139,117 @@ test('the query gates/smoke.sh walks still finds something', () => {
   const d = plpRender('/search?q=shoes');
   assert.equal(d.reason, null, `/search?q=shoes reports ${d.reason}`);
   assert.ok(d.count > 0, 'the estate advertises /c/shoes and search cannot find it');
+});
+
+// ---- the third estate invariant: the freshness badge (issue #18) ------------
+//
+// THE FAILURE THIS PREVENTS, stated exactly: a category listing that badges a
+// product NEW next to a product page that does not. It is the same shape as
+// the first invariant above -- plp linking a SKU pdp has never heard of -- and
+// it is invisible from inside either app for the same reason. plp's suite
+// passes, pdp's suite passes, and the estate contradicts itself on a page a
+// person is looking at.
+//
+// #18 called this assertion "arguably the most valuable part", and it is the
+// reason the badge rule lives in shared/oneui.js rather than twice. What is
+// asserted is not that both apps implement the rule correctly -- shared/tests
+// does that once -- but that both apps are asking the SAME question of the
+// SAME record and putting the answer where a person sees it.
+//
+// EVERY CASE NAMES ITS DAY. The verdict is derived from a date, so a test that
+// read the clock would assert a different thing every morning and eventually
+// fail on a day nobody chose. `now` is threaded through both apps' render()
+// for exactly this.
+
+const BADGES = [
+  ['the day a product was added',            '2026-09-05'],
+  ['a fortnight later',                      '2026-09-19'],
+  ['the day the window closes on the newest','2026-10-06'],
+  ['long after every date in the catalogue', '2027-06-01'],
+  ['before anything in the catalogue existed','2020-01-01'],
+];
+
+test('plp and pdp never disagree about a badge, on any day', () => {
+  const pdpCat = loadCatalogue(CATALOGUE_FILE);
+  const plpCat = plpLoadCatalogue(PLP_CATALOGUE);
+  const plpProds = plpLoadProducts(PLP_READS);
+  assert.equal(pdpCat.ok, true);
+  assert.equal(plpCat.ok, true);
+  assert.equal(plpProds.ok, true);
+
+  const disagreements = [];
+  let compared = 0;
+  for (const [label, day] of BADGES) {
+    const now = Date.parse(`${day}T00:00:00Z`);
+    for (const c of plpCat.categories) {
+      const listing = plpRender(`/c/${c.slug}`, plpCat, plpProds, now);
+      for (const item of listing.items) {
+        const product = render(`/p/${item.sku}`, pdpCat, now);
+        if (status(product) !== 200) continue;   // the FIRST invariant's job
+        compared++;
+        if (item.badge !== product.product.badge)
+          disagreements.push(
+            `${day} (${label}): /c/${c.slug} says ${JSON.stringify(item.badge)} ` +
+            `for ${item.sku}, /p/${item.sku} says ${JSON.stringify(product.product.badge)}`);
+      }
+    }
+  }
+  // A guard on the guard, the same one the first invariant has: a loop that
+  // compared nothing reports perfect agreement.
+  assert.ok(compared > 0, 'nothing was compared -- this test asserts nothing');
+  assert.deepEqual(disagreements, [],
+    'the estate contradicts itself about product freshness:\n  ' +
+    disagreements.join('\n  '));
+});
+
+// Agreement between two nulls is agreement. It is also what you get from a
+// badge feature that is wired up nowhere, so the suite must be able to tell
+// the two apart -- otherwise deleting the badge from both apps passes.
+test('the agreement is between real badges, not between two blanks', () => {
+  const pdpCat = loadCatalogue(CATALOGUE_FILE);
+  const plpCat = plpLoadCatalogue(PLP_CATALOGUE);
+  const plpProds = plpLoadProducts(PLP_READS);
+  const now = Date.parse('2026-09-13T00:00:00Z');
+
+  const badged = [];
+  for (const c of plpCat.categories)
+    for (const i of plpRender(`/c/${c.slug}`, plpCat, plpProds, now).items)
+      if (i.badge) badged.push(i.sku);
+
+  assert.ok(badged.length > 0,
+    'no product in the shipped catalogue carries a date that badges on ' +
+    '2026-09-13, so the agreement test above is comparing nothing to nothing');
+  assert.ok(badged.some((s) =>
+    render(`/p/${s}`, pdpCat, now).product.badge === 'New'), 'no New anywhere');
+  assert.ok(plpCat.categories.some((c) =>
+    plpRender(`/c/${c.slug}`, plpCat, plpProds, now).items
+      .some((i) => i.badge === 'Updated')), 'no Updated anywhere');
+});
+
+// The payloads agreeing is not yet the property anyone cares about. The
+// property is that the two PAGES say the same thing, because that is where the
+// contradiction would be seen. Same reasoning as the first invariant, which is
+// stated against what pdp SERVES rather than against what its file contains.
+test('the badge a person sees on the listing is the one on the product page', () => {
+  const pdpCat = loadCatalogue(CATALOGUE_FILE);
+  const plpCat = plpLoadCatalogue(PLP_CATALOGUE);
+  const plpProds = plpLoadProducts(PLP_READS);
+  const now = Date.parse('2026-09-13T00:00:00Z');
+  const badge = (html, sku) =>
+    (html.match(/<span class=b>([^<]*)<\/span>/g) || []).join('|') + `#${sku}`;
+
+  const shoes = plpCat.categories.find((c) => c.slug === 'shoes');
+  const listing = plpRenderHtml('/c/shoes', plpCat, 9020, plpProds, now);
+  for (const sku of shoes.skus) {
+    const item = plpRender('/c/shoes', plpCat, plpProds, now)
+      .items.find((i) => i.sku === sku);
+    const page = renderHtml(`/p/${sku}`, pdpCat, 9030, now);
+    const onPage = /<span class=b>([^<]*)<\/span>/.exec(page);
+    assert.equal(onPage ? onPage[1] : null, item.badge,
+      `/p/${sku} renders a different badge than /c/shoes listed for it`);
+    if (item.badge)
+      assert.ok(listing.includes(`<span class=b>${item.badge}</span>`),
+        `/c/shoes claims ${sku} is ${item.badge} but does not render it`);
+  }
+  assert.ok(badge(listing, 'shoes').length > 0);
 });
