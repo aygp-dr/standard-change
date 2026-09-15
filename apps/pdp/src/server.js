@@ -178,7 +178,7 @@ export const BACKGROUND = '#fff6c2';
 //
 // Keyed off `found`, the same field status() uses, so the colour cannot
 // disagree with the status code. If it renders red it returned 404 or 503.
-export const ERROR_BACKGROUND = '#ffe3e3';
+export const ERROR_BACKGROUND = '#ffd9d9';
 const background = (d) => (d.found ? BACKGROUND : ERROR_BACKGROUND);
 
 const SYMBOL = { USD: '$', GBP: '£', EUR: '€' };
