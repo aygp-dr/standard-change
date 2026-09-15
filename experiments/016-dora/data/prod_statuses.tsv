@@ -1,0 +1,30 @@
+6429182663	df22f7a	success	2026-09-14T02:11:21Z	observed at settlement on df22f7a
+6429091074	9583730	inactive	2026-09-14T02:11:22Z	
+6429091074	9583730	success	2026-09-14T02:01:28Z	observed at settlement on 9583730
+6428359190	43646f9	inactive	2026-09-14T02:01:28Z	
+6428359190	43646f9	success	2026-09-14T00:41:19Z	observed at settlement on 43646f9
+6428274545	d720341	inactive	2026-09-14T00:41:19Z	
+6428274545	d720341	success	2026-09-14T00:31:27Z	observed at settlement on d720341
+6428190933	e526722	inactive	2026-09-14T00:31:27Z	
+6428190933	e526722	success	2026-09-14T00:21:30Z	observed at settlement on e526722
+6428018679	81f3cb4	inactive	2026-09-14T00:21:31Z	
+6428018679	81f3cb4	success	2026-09-14T00:01:28Z	observed at settlement on 81f3cb4
+6427937311	37dc1c0	inactive	2026-09-14T00:01:28Z	
+6427937311	37dc1c0	success	2026-09-13T23:51:24Z	observed at settlement on 37dc1c0
+6427858378	8fb503d	inactive	2026-09-13T23:51:24Z	
+6427858378	8fb503d	success	2026-09-13T23:41:41Z	observed at settlement on 8fb503d
+6427782069	c5babfe	inactive	2026-09-13T23:41:41Z	
+6427782069	c5babfe	success	2026-09-13T23:33:29Z	c5babfe live on production-green via front 9230; cutover 23:31:51Z from blue 055fd20
+6427782069	c5babfe	success	2026-09-13T23:32:26Z	observed at settlement on c5babfe
+6425660073	2567015	failure	2026-09-13T19:44:34Z	WITHDRAWN: 2567015 is not serving anywhere in the estate.
+6425660073	2567015	success	2026-09-13T19:43:59Z	observed by gates/health.sh
+6425660073	2567015	in_progress	2026-09-13T19:43:50Z	observed by gates/health.sh
+6425459870	055fd20	inactive	2026-09-13T23:32:27Z	
+6425459870	055fd20	success	2026-09-13T19:22:42Z	observed at settlement on 055fd20
+6425337093	675adb2	inactive	2026-09-13T19:22:43Z	
+6425337093	675adb2	success	2026-09-13T19:10:10Z	observed at settlement on 675adb2
+6425222818	73423f0	inactive	2026-09-13T19:10:11Z	
+6425222818	73423f0	success	2026-09-13T18:58:35Z	observed at settlement on 73423f0
+6424495747	ad5f5f7	inactive	2026-09-13T18:58:35Z	
+6424495747	ad5f5f7	success	2026-09-13T17:43:30Z	observed: health.sh 5/5 on ad5f5f7
+6424495747	ad5f5f7	in_progress	2026-09-13T17:43:30Z	opened before observing

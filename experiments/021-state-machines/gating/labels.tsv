@@ -1,0 +1,43 @@
+label	prefix	semantics	owner	human_add	asserts
+app:core	app:	state	labeller	no	the diff touches apps/core/ or shared/. Derived from the diff and recomputed every push; it names no build because it is kept true by recomputation rather than by dating
+app:plp	app:	state	labeller	no	the diff touches apps/plp/ or shared/
+app:pdp	app:	state	labeller	no	the diff touches apps/pdp/ or shared/
+app:checkout	app:	state	labeller	no	the diff touches apps/checkout/ or shared/
+app:mock	app:	state	labeller	no	the diff touches external/ stand-ins. Lives in the app:* namespace for routing and is NOT a deployable of ours, which is the conflation that namespace turned out to carry
+itil:standard	itil:	classification	labeller	no	this change is a standard change: the diff is limited to pre-authorized paths. Derived. At most one itil:* may stand
+itil:normal	itil:	classification	labeller	no	this change is a normal change: it touches router/, gates/, change/, targets/ or .github/ and needs a human approval
+itil:emergency	itil:	classification	human	yes	THIS change is the remedy, so it passes the freeze and the queue. Declared, never derived. Not the estate being shut
+control-plane	(bare)	classification	labeller	no	this change alters how every FUTURE change is verified, so it cannot be verified by the pipeline it changes. Narrower than itil:normal, and the soak trigger
+labeler:skip	labeler:	intent	human	yes	the manifest is handed back to a human. Converts app:* from derived to asserted and says so where a reviewer can see it
+change:requested	change:	intent	human	yes	start my change request. The only label a person adds to set a change going; the pipeline clears it
+change:scheduled	change:	state	scheduler	no	a window is booked. An entitlement to the path to production, not permission to deploy
+change:complete	change:	state	change/settle.sh	no	the change RECORD is closed passed. Terminal, persistent, and about the change rather than about any build
+change:failed	change:	state	change/abort.sh	no	ITIL closure code: the change did not complete. Production never served it, or served it and never made it live
+change:backed-out	change:	state	change/abort.sh	no	ITIL closure code: production DID serve this and was returned. Refused without --to <sha>, because the word asserts an estate action
+change:backfill-owed	change:	state	change/abort.sh	yes	this change reached main without the normal evidence and still owes the window, the observations and the why. Blocks nothing. Persistent, because the merge is when the debt STARTS
+deploy:staging	deploy:	state	workflow	no	ACTION IN FLIGHT: a deployment to staging is running, and this is the berth claim guard 1 reads. Not a request and not a result
+deploy:production	deploy:	state	workflow	no	ACTION IN FLIGHT: a deployment to production is running. deploy-production.yml fires on it, so leaving it set leaves a dead change armed to re-enter production
+release:start	release:	state	the pipeline	no	the release has BEGUN for the booked change request. Never written by hand: adding it claims a deployment is running, which a person cannot truthfully assert
+release	release:	intent	human	yes	a person wants the release to go. The scheduler consumes it; a trigger that stays on re-fires
+staging:e2e	staging:	observation	gates/e2e.sh --pr	no	the e2e instrument observed the journeys hold on staging. The LABEL cannot say on what build; the record can, which is why guard 4 authorizes on the record
+staging:e2e-failed	staging:	observation	gates/e2e.sh --pr	no	the e2e instrument observed a failure on staging. Present alongside its pass it is a contradiction, not a pass
+staging:smoke	staging:	observation	gates/smoke.sh --pr	no	the smoke instrument observed that a browser can use staging
+staging:smoke-failed	staging:	observation	gates/smoke.sh --pr	no	the smoke instrument observed a failure
+staging:uat	staging:	observation	human via change/observe.sh	yes	a person used the site on this build and accepted it. THE EXCEPTION: for acceptance the person IS the instrument. Not repeatable, so the label is durable and the record still names the build
+staging:in-progress	staging:	state	workflow	no	action in flight
+production:e2e	production:	observation	gates/e2e.sh --pr	no	the e2e instrument observed the journeys hold in production
+production:e2e-failed	production:	observation	gates/e2e.sh --pr	no	the e2e instrument observed a failure in production
+production:smoke	production:	observation	gates/smoke.sh --pr	no	the smoke instrument observed production usable
+production:smoke-failed	production:	observation	gates/smoke.sh --pr	no	the smoke instrument observed a failure
+production:healthy	production:	observation	gates/health.sh --pr	no	the estate was SAMPLED N times per route and every sample carried the expected build. Sampled, never attested: nothing enumerated the instances
+blocked:queue	blocked:	state	change/queue.sh	no	guard 1 refused: another open PR holds the berth. The refusal, with its cause, standing where a reader can see it
+blocked:lock	blocked:	state	change/lock.sh	no	guard 3 refused: another deployment holds the deployment lock
+blocked:freeze	blocked:	state	gates/preflight.sh	no	guard 3 refused: a freeze or an emergency covers the requested window
+blocked:diverged	blocked:	state	workflow	no	guard 4b refused: main moved under this change. A human may clear it after rebasing, which is the one blocked:* a person may remove
+freeze	(bare)	estate	human	yes	ESTATE STATE: ordinary change is suspended. A property of the WORLD, carried on the estate holder issue, blocking everyone including its declarer
+emergency	(bare)	estate	human	yes	ESTATE STATE: an emergency is in flight out there. Grants NO exemption to whatever carries it, which is the whole reason it is not itil:emergency
+hold:staging	hold:	intent	REJECTED	no	REJECTED SEMANTICS. Still read, so a leftover stops a deploy rather than being silently ignored; its job is covered by freeze and by simply not approving
+staging:passed	staging:	observation	RETIRED	no	RETIRED. It named no measurement and no environment, so it could be satisfied by observing something else. Replaced by the staging:* stack plus records
+staging:failed	staging:	observation	RETIRED	no	RETIRED, same reason
+deployed:production	deployed:	state	RETIRED	no	RETIRED. Replaced by change:complete plus the deployment record
+review:proxy	review:	intent	driver	no	consent by a delegated proxy, backed by a record naming the SHA that was read. Never APPROVED, and the record says PROXY so nobody reads one as the other

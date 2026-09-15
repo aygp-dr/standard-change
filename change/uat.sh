@@ -54,13 +54,35 @@ window_open() {
 
 echo "uat for #$PR @ $SHORT against $URL"
 
-W=$(window_open) || {
+# THE WINDOW, AND ONE WAY TO DEMOTE IT.
+#
+# Removing the scheduler from the DRIVER does not remove the calendar from the
+# PIPELINE. This check lives here, not only in preflight.sh, so a run that
+# skips preflight is still window-gated at acceptance -- which is how a
+# "no scheduler this round" grind discovered it could not record a single uat.
+#
+# CHANGE_WINDOW_ADVISORY=1 demotes it to a warning. That is the policy
+# scenarios.org D18 measured: over 100 changes it moves exactly one row --
+# with the calendar unreachable, the strict policy ships 0 and the advisory
+# policy ships 73. It is not a general loosening and must not be argued as one.
+#
+# It stays a REFUSAL by default. The warning names what is being given up, on
+# every run, because a bypass nobody is reminded of becomes the default path.
+if W=$(window_open); then
+  echo "  yes  window ${W%%|*} is open, closes ${W##*|}"
+elif [ "${CHANGE_WINDOW_ADVISORY:-0}" = 1 ]; then
+  W="ADVISORY|none"
+  echo "  WARN no open window, and CHANGE_WINDOW_ADVISORY=1 -- proceeding." >&2
+  echo "       This acceptance is NOT covered by a booking. Nothing scheduled" >&2
+  echo "       it, nothing will reap it, and the change record cannot say when" >&2
+  echo "       it was meant to happen." >&2
+else
   echo "  NO   the deploy window is not open. Acceptance is not recorded." >&2
   echo "       A change outside its window does not get accepted into it." >&2
   echo "       Book one:  ./change/schedule.sh block $PR \"<groups>\" 30" >&2
+  echo "       Or set CHANGE_WINDOW_ADVISORY=1 to proceed without one." >&2
   exit 7
-}
-echo "  yes  window ${W%%|*} is open, closes ${W##*|}"
+fi
 
 # The build under test must be the build the window is FOR. An acceptance is
 # about a build (issue #16) and so is a booking.
@@ -95,13 +117,22 @@ rm -f /tmp/uat.$$.log
 [ "$RC" -eq 0 ] || { echo "  NO   smoke exited $RC; the delegation grants acceptance only on 0." >&2; exit 1; }
 
 # RE-CHECK. The measurement took time, and the window may have closed during it.
-W2=$(window_open) || {
+# The re-check is guard 4b's law applied to the calendar: a guard whose subject
+# can change after it is checked must be re-checked at the moment it is relied
+# on. Under CHANGE_WINDOW_ADVISORY there was no window to begin with, so there
+# is nothing that can have closed -- the advisory branch is carried through
+# rather than re-evaluated, which keeps the two halves honest with each other.
+if W2=$(window_open); then
+  echo "  yes  window still open after the walk (${W2##*|})"
+elif [ "${CHANGE_WINDOW_ADVISORY:-0}" = 1 ]; then
+  echo "  WARN no window to re-check (advisory). The walk happened; nothing" >&2
+  echo "       bounds it." >&2
+else
   echo "  NO   smoke passed, but the window CLOSED while it ran." >&2
   echo "       The measurement is real and the acceptance is not: it would be" >&2
   echo "       recorded outside the window it claims to be inside. Re-book and" >&2
   echo "       re-run -- the estate is fine, the clock is not." >&2
   exit 7
-}
-echo "  yes  window still open after the walk (${W2##*|})"
+fi
 
 ./change/observe.sh "$PR" uat --on "$URL"

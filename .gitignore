@@ -21,6 +21,10 @@ targets/bastille/front/nginx.conf
 targets/bastille/front/tmp/
 dashboard.html
 deployments/
+# ...but `deployments/` is unanchored, so it also swallows any directory of
+# that name anywhere in the tree. experiments/021-state-machines/deployments/
+# is the deployment-lifecycle state model, not a deployment worktree.
+!experiments/021-state-machines/deployments/
 
 # Runtime state, tracked by mistake. Same defect class as ports.tsv: a file that
 # a running process writes has no business in git -- it is stale the moment it

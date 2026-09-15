@@ -1,0 +1,166 @@
+23:42:05Z  scheduler  watching aygp-dr/standard-change for change:start every 20s
+23:45:32Z  scheduler  change:start on #104
+23:45:35Z  driver #104  lock held by #101
+23:45:35Z  scheduler  #104 waits: lock held
+23:45:55Z  scheduler  change:start on #104
+23:45:57Z  driver #104  lock held by #101
+23:45:57Z  scheduler  #104 waits: lock held
+23:46:18Z  scheduler  change:start on #104
+23:46:20Z  driver #104  lock held by #101
+23:46:20Z  scheduler  #104 waits: lock held
+23:46:41Z  scheduler  change:start on #104
+23:46:43Z  driver #104  lock held by #101
+23:46:43Z  scheduler  #104 waits: lock held
+23:47:04Z  scheduler  change:start on #104
+23:47:07Z  driver #104  lock held by #101
+23:47:07Z  scheduler  #104 waits: lock held
+23:47:28Z  scheduler  change:start on #104
+23:47:30Z  driver #104  lock held by #101
+23:47:30Z  scheduler  #104 waits: lock held
+23:47:51Z  scheduler  change:start on #104
+23:47:53Z  driver #104  lock held by #101
+23:47:53Z  scheduler  #104 waits: lock held
+23:48:14Z  scheduler  change:start on #104
+23:48:16Z  driver #104  lock held by #101
+23:48:16Z  scheduler  #104 waits: lock held
+23:48:37Z  scheduler  change:start on #104
+23:48:39Z  driver #104  lock held by #101
+23:48:39Z  scheduler  #104 waits: lock held
+23:49:00Z  scheduler  change:start on #104
+23:49:02Z  driver #104  lock held by #101
+23:49:02Z  scheduler  #104 waits: lock held
+23:49:23Z  scheduler  change:start on #104
+23:49:26Z  driver #104  lock held by #101
+23:49:26Z  scheduler  #104 waits: lock held
+23:49:46Z  scheduler  change:start on #104
+23:49:49Z  driver #104  lock held by #101
+23:49:49Z  scheduler  #104 waits: lock held
+23:50:09Z  scheduler  change:start on #104
+23:50:19Z  driver #104  claimed the lock for 9f5f945
+23:50:34Z  driver #104  behind main; refused and reset
+23:50:34Z  scheduler  #104 refused: behind main
+23:50:34Z  scheduler  change:start on #105
+23:50:41Z  driver #105  claimed the lock for b94d82a
+23:50:53Z  driver #105  behind main; refused and reset
+23:50:53Z  scheduler  #105 refused: behind main
+23:50:53Z  scheduler  change:start on #106
+23:51:06Z  driver #106  behind main; refused and reset
+23:51:06Z  scheduler  #106 refused: behind main
+23:51:06Z  scheduler  change:start on #107
+23:51:19Z  driver #107  behind main; refused and reset
+23:51:19Z  scheduler  #107 refused: behind main
+23:51:19Z  scheduler  change:start on #108
+23:51:32Z  driver #108  behind main; refused and reset
+23:51:32Z  scheduler  #108 refused: behind main
+23:52:13Z  scheduler  change:start on #105
+23:52:17Z  driver #105  lock held by #99
+23:52:17Z  scheduler  #105 waits: lock held
+23:52:38Z  scheduler  change:start on #105
+23:52:41Z  driver #105  lock held by #99
+23:52:41Z  scheduler  #105 waits: lock held
+23:53:01Z  scheduler  change:start on #105
+23:53:05Z  driver #105  lock held by #99
+23:53:05Z  scheduler  #105 waits: lock held
+23:53:25Z  scheduler  change:start on #105
+23:53:28Z  driver #105  lock held by #99
+23:53:28Z  scheduler  #105 waits: lock held
+23:53:49Z  scheduler  change:start on #105
+23:54:05Z  driver #105  behind main; refused and reset
+23:54:05Z  scheduler  #105 refused: behind main
+23:54:05Z  scheduler  change:start on #108
+23:54:18Z  driver #108  behind main; refused and reset
+23:54:18Z  scheduler  #108 refused: behind main
+23:55:41Z  scheduler  change:start on #105
+23:55:44Z  driver #105  lock held by #98
+23:55:44Z  scheduler  #105 waits: lock held
+23:56:05Z  scheduler  change:start on #104
+23:56:08Z  driver #104  lock held by #98
+23:56:08Z  scheduler  #104 waits: lock held
+23:56:29Z  scheduler  change:start on #104
+23:56:31Z  driver #104  lock held by #98
+23:56:31Z  scheduler  #104 waits: lock held
+23:56:52Z  scheduler  change:start on #104
+23:56:55Z  driver #104  lock held by #98
+23:56:55Z  scheduler  #104 waits: lock held
+23:57:15Z  scheduler  change:start on #104
+23:57:18Z  driver #104  lock held by #98
+23:57:18Z  scheduler  #104 waits: lock held
+23:57:40Z  scheduler  change:start on #104
+23:57:46Z  driver #104  lock held by #98
+23:57:46Z  scheduler  #104 waits: lock held
+23:58:07Z  scheduler  change:start on #104
+23:59:01Z  driver #104  updated from main: fb1629d -> 64c6ee5
+23:59:08Z  driver #104  claimed the lock for 64c6ee5
+23:59:30Z  driver #104  staging: healthy, e2e, smoke, uat on 64c6ee5
+23:59:42Z  driver #104  promoted
+23:59:48Z  driver #104  LANDED 64c6ee5 at 2026-09-14T23:59:48Z
+  MARKER NOT SENT: http://127.0.0.1:7510/webhook unreachable. The release stands; only the marker is missing.
+00:00:56Z  driver #104  SETTLED #104 (64c6ee5): landed 2026-09-14T23:59:48Z, merged 2026-09-15T00:00:02Z
+00:00:56Z  scheduler  #104 settled
+00:00:56Z  scheduler  change:start on #105
+00:01:29Z  scheduler  watching aygp-dr/standard-change for change:start every 20s
+00:01:30Z  scheduler  change:start on #105
+00:01:38Z  driver #105  claimed the lock for 6f35c7c
+00:01:49Z  driver #105  updated from main: f2ac8a6 -> 6f35c7c
+00:01:55Z  driver #105  claimed the lock for 6f35c7c
+00:01:58Z  driver #105  staging: healthy, e2e, smoke, uat on 6f35c7c
+00:02:09Z  driver #105  promoted
+./change/scheduler.sh: line 24: 70736 Terminated: 15          ./change/driver.sh "$pr"
+00:02:12Z  scheduler  #105 ended: driver exit 143
+00:02:12Z  scheduler  change:start on #106
+00:02:14Z  driver #105  staging: healthy, e2e, smoke, uat on 6f35c7c
+00:02:14Z  driver #105  promoted
+00:02:21Z  driver #105  LANDED 6f35c7c at 2026-09-15T00:02:21Z
+00:03:05Z  driver #106  updated from main: d881a60 -> 644551a
+  lock: held by #105 on staging since 2026-09-15T00:01:50Z -- refused
+00:03:08Z  driver #106  lock record held
+00:03:09Z  scheduler  #106 waits: lock held
+  MARKER NOT SENT: http://127.0.0.1:7510/webhook unreachable. The release stands; only the marker is missing.
+00:03:26Z  driver #105  SETTLED #105 (6f35c7c): landed 2026-09-15T00:02:21Z, merged 2026-09-15T00:02:35Z
+00:03:30Z  scheduler  change:start on #106
+00:03:34Z  driver #106  swept: `blocked:lock`
+00:04:25Z  driver #106  updated from main: 644551a -> 9246550
+00:04:25Z  driver #106  lock held by #97
+00:04:25Z  scheduler  #106 waits: lock held
+00:04:46Z  scheduler  change:start on #106
+00:04:49Z  driver #106  lock held by #97
+00:04:49Z  scheduler  #106 waits: lock held
+00:05:10Z  scheduler  change:start on #106
+00:05:12Z  driver #106  lock held by #97
+00:05:12Z  scheduler  #106 waits: lock held
+00:05:33Z  scheduler  change:start on #106
+00:05:35Z  driver #106  lock held by #97
+00:05:35Z  scheduler  #106 waits: lock held
+00:05:56Z  scheduler  change:start on #106
+00:06:48Z  driver #106  updated from main: 9246550 -> 09f4bda
+00:06:54Z  driver #106  claimed the lock for 09f4bda
+00:07:13Z  driver #106  staging: healthy, e2e, smoke, uat on 09f4bda
+00:07:25Z  driver #106  promoted
+00:07:30Z  driver #106  LANDED 09f4bda at 2026-09-15T00:07:30Z
+  MARKER NOT SENT: http://127.0.0.1:7510/webhook unreachable. The release stands; only the marker is missing.
+00:08:45Z  driver #106  SETTLED #106 (09f4bda): landed 2026-09-15T00:07:30Z, merged 2026-09-15T00:07:49Z
+00:08:45Z  scheduler  #106 settled
+00:08:45Z  scheduler  change:start on #107
+00:09:01Z  driver #107  behind main and conflicting; refused and reset
+00:09:01Z  scheduler  #107 refused: behind main
+00:09:01Z  scheduler  change:start on #108
+00:09:17Z  driver #108  behind main and conflicting; refused and reset
+00:09:17Z  scheduler  #108 refused: behind main
+00:11:00Z  scheduler  change:start on #108
+00:11:08Z  driver #108  claimed the lock for 41c01a3
+00:11:27Z  driver #108  staging: healthy, e2e, smoke, uat on 41c01a3
+00:11:38Z  driver #108  promoted
+00:11:44Z  driver #108  LANDED 41c01a3 at 2026-09-15T00:11:44Z
+  MARKER NOT SENT: http://127.0.0.1:7510/webhook unreachable. The release stands; only the marker is missing.
+00:12:56Z  driver #108  SETTLED #108 (41c01a3): landed 2026-09-15T00:11:44Z, merged 2026-09-15T00:11:57Z
+00:12:56Z  scheduler  #108 settled
+00:13:28Z  scheduler  watching aygp-dr/standard-change for change:start every 20s
+00:17:40Z  scheduler  watching aygp-dr/standard-change for change:start every 20s
+00:18:22Z  scheduler  change:start on #107
+00:18:31Z  driver #107  claimed the lock for 6b97fae
+00:18:52Z  driver #107  staging: healthy, e2e, smoke, uat on 6b97fae
+00:19:03Z  driver #107  promoted
+00:19:09Z  driver #107  LANDED 6b97fae at 2026-09-15T00:19:09Z
+  MARKER NOT SENT: http://127.0.0.1:7510/webhook unreachable. The release stands; only the marker is missing.
+00:20:16Z  driver #107  SETTLED #107 (6b97fae): landed 2026-09-15T00:19:09Z, merged 2026-09-15T00:19:23Z
+00:20:16Z  scheduler  #107 settled

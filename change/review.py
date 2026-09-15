@@ -137,8 +137,15 @@ def approve(st: ReviewState, verdict: Verdict) -> int:
        "-f", f"commit_id={st.head}", "-f", "event=APPROVE", "-f", f"body={body}",
        token=token)
 
-    # Verify by re-reading, not by the call's exit code.
+    # Verify by re-reading, and compare the POSTED commit_id to the head that
+    # was reviewed -- approvals_on_head alone only proves the login appears, not
+    # that it approved this build. That gap let a body naming 47518d6 sit
+    # against a review whose commit_id was 5bbac0a.
     after = state(st.pr)
+    if after.head != v.head:
+        print(f"refused: head moved to {after.head[:7]} while posting; the "
+              f"verdict was about {v.head[:7]}", file=sys.stderr)
+        return 7
     if st.reviewer_token_is not in after.approvals_on_head:
         print("refused: posted, but the forge reports no such approval", file=sys.stderr)
         return 7
@@ -162,9 +169,47 @@ def main() -> int:
         print(f"  {k:<22} {v}")
     if "--approve" not in sys.argv:
         return 0
-    return approve(st, Verdict(approve=True, pr=pr, head=st.head,
-                               checked=["diff", "tests", "lint"],
-                               reasons=["grind: exercising the approval flow"]))
+
+    # THIS SCRIPT DOES NOT DECIDE. It used to construct its own Verdict here --
+    # approve=True, checked=["diff","tests","lint"], reasons=["grind"] -- with
+    # nothing having looked at anything. Every approval it posted asserted three
+    # checks that never ran, and postable()'s guard ("an approval that could not
+    # observe what it approves is not one") could not fire, because not_checked
+    # was never populated by anything.
+    #
+    # That is the forged-evidence defect, in the tool written to prevent it. It
+    # posted twenty canned approvals on 2026-09-14, four of them on PRs that
+    # cannot even merge.
+    #
+    # The verdict now comes from OUTSIDE: a JSON object on stdin, or --verdict
+    # <file>, produced by whatever actually did the reviewing. This process
+    # holds the credential and has no judgement; the reviewer has judgement and
+    # never sees the credential. Neither half can forge an approval alone.
+    raw = None
+    if "--verdict" in sys.argv:
+        raw = Path(sys.argv[sys.argv.index("--verdict") + 1]).read_text()
+    elif not sys.stdin.isatty():
+        raw = sys.stdin.read()
+    if not raw or not raw.strip():
+        print("refused: --approve needs a verdict. Pipe JSON on stdin or pass",
+              file=sys.stderr)
+        print("  --verdict <file>. This script posts a judgement; it does not",
+              file=sys.stderr)
+        print("  make one, and it will not invent one to keep a grind moving.",
+              file=sys.stderr)
+        print('  shape: {"approve":true,"pr":N,"head":"<sha>","checked":[...],',
+              file=sys.stderr)
+        print('          "reasons":[...],"not_checked":[...]}', file=sys.stderr)
+        return 2
+    try:
+        v = Verdict.model_validate_json(raw)
+    except Exception as e:
+        print(f"refused: the verdict is not readable: {e}", file=sys.stderr)
+        return 2
+    if v.pr != pr:
+        print(f"refused: verdict names PR #{v.pr}, invoked for #{pr}", file=sys.stderr)
+        return 5
+    return approve(st, v)
 
 
 if __name__ == "__main__":

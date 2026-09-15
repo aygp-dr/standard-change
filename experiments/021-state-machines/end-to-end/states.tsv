@@ -1,0 +1,53 @@
+id	name	kind	terminal	description
+opened	Opened	lifecycle	no	A pull request exists on the forge. No labels yet; the labeller has not run. This is the start state of the CHANGE chain.
+draft	Draft	intent	no	The author's own statement that the change is unfinished. The only input to any guard that the pipeline believes rather than derives (tla/StandardChange.tla:114).
+classified	Classified	lifecycle	no	The labeller has derived the manifest (app:*) and exactly one class (itil:standard or itil:normal) from the diff.
+class_undefined	Undefined class	lifecycle	no	Zero or two classifications present. Every rule that branches on the class takes an arm nobody chose. Boundary condition, spec.org:2790.
+gates_running	Gates running	observation	no	Check runs are in_progress with conclusion null. This is the THIRD VALUE, not a failure: nothing has concluded yet.
+gates_green	Gates green	observation	no	Every gate plus gate-selftest concluded success on THIS head SHA. A verdict that names its build.
+gates_red	Gates red	observation	no	At least one gate concluded failure on the head, or the indeterminate poll bound expired and the suite is recorded as not green.
+gates_indeterminate	Gates indeterminate	observation	no	The suite could not be judged: skipped runs, an unreachable forge, or superseded runs sitting beside current ones. Never a verdict (spec.org:2727).
+requested	Change requested	intent	no	change:requested. The human act that starts a change, and the whole of a person's part (spec.org:1066).
+awaiting_review	Awaiting change authority	lifecycle	no	itil:normal: one approving review from a named change authority is required before the change is authorized.
+approved	Approved	observation	no	An approving review, or a review:proxy record naming the head SHA. An approval is an observation about a build (spec.org:1968).
+emergency_declared	Emergency declared	intent	no	itil:emergency. A person declares THIS change the remedy. Bypasses the queue and the staging environment; bypasses neither guard 2 nor guard 5.
+authorized_unbooked	Authorized, unbooked	lifecycle	no	Every observation taken, no reservation held. Eligible; needs one command. Boundary condition, spec.org:2785.
+scheduled	Scheduled	lifecycle	no	change:scheduled. A window is booked on the change schedule. A record; nothing blocks on it (spec.org:1102).
+window_due	Window due	lifecycle	no	The booked window's start has arrived. Every guard is re-evaluated at this moment; holding a window is not deploying.
+blocked_queue	Blocked on the queue	lifecycle	no	Guard 1: another open PR holds deploy:staging. blocked:queue set, deploy:staging removed (change/queue.sh:50).
+blocked_lock	Blocked on the lock	lifecycle	no	Guard 3: another deployment holds the deployment lock. blocked:lock, set and cleared by change/lock.sh.
+blocked_freeze	Blocked by a freeze	lifecycle	no	Guard 3: a FREEZE covers the requested window. The label is on the PR; the CAUSE is estate-global (see estate_frozen).
+blocked_diverged	Blocked, diverged	lifecycle	no	Guard 0 or guard 4b refused: main moved by a pipeline, artifact or hotfix change. Rebase and re-earn every verdict.
+preflight_abstain	Preflight abstained	observation	no	preflight.sh exit 4: the change schedule could not be read. Indeterminate BLOCKS; it does not proceed (gates/preflight.sh:52).
+window_cancelled	Window cancelled	lifecycle	no	WINDOW closure code cancelled: somebody decided against the slot and handed it back. Not expired; the change is still approved (change/schedule.sh:285).
+window_expired	Window expired	lifecycle	no	WINDOW closure code expired: the reservation lapsed unattempted. NOT a failure; the change keeps everything else (spec.org:2787, change/reap.sh:17).
+window_failed	Window failed	lifecycle	no	WINDOW closure code failed: the window was attempted and a gate or the acceptance refused. The control working, not the change failing.
+berthed	Berthed	lifecycle	no	Holds deploy:staging -- the exclusive, deadline-bearing lease on the path to production. The scarce resource (spec.org:142).
+staging_serving	Staging serving	observation	no	The staging slot serves this build. The estate was observed, not self-reported.
+staging_pass	Staging observed pass	observation	no	staging:e2e and staging:smoke recorded against this head SHA by the instruments that measured them.
+staging_fail	Staging observed fail	observation	no	staging:e2e-failed or staging:smoke-failed on this head. A recorded failure outranks a pass in guard 4.
+uat_accepted	Acceptance accepted	observation	no	staging:uat. The one observation whose instrument is a person, taken through change/observe.sh:44 which checks the build matches.
+uat_refused	Acceptance refused	observation	no	The pinned journey is not what was accepted (scenarios.org D18). The window is spent discovering something knowable at review time.
+preempted	Preempted	lifecycle	no	An artifact or hotfix merge landed under a berthed change. Berth KEPT and extended, pass withdrawn, revalidate required (spec.org:1178).
+berth_orphaned	Berth held, window gone	lifecycle	no	UNNAMED STATE. deploy:staging still held, the window closed on a path reap.sh does not cover, the build serves nowhere. Blocks everyone via guard 1 with no declared cause (change/abort.sh:99 on #92; experiments/019-rebuild-001/HELD-OUT.org H4).
+promoted	Promoted	lifecycle	no	deploy:production added by promote.yml after guard 2 was re-evaluated on the head SHA.
+prod_deploying	Production deploying	lifecycle	no	deploy-production in flight. An action, not a request.
+prod_placed	Placed on the idle colour	observation	no	The build is resident on the idle production colour. Placing and cutting over are different acts with different risk (experiments/016-dora/notes.org, schema note 2).
+prod_serving	Production serving	observation	no	The front is pointed at this build. This, not the merge and not the deployment record, is a deployment.
+prod_healthy	Production healthy	observation	no	production:healthy. Convergence measured across the estate by gates/health.sh, naming the build.
+prod_unconverged	Production unconverged	observation	no	The health check could not observe the estate, or observed it partially. HTTP 000 is unreachable, not unhealthy (spec.org:2723).
+prod_withdrawn	Deployment record withdrawn	observation	no	A production deployment opened, posted success, placed nothing, and was retracted. #42 at 19:43Z; 44s to withdraw.
+deployed_not_merged	Deployed, not merged	lifecycle	no	Production serves a build trunk does not contain. Boundary condition spec.org:2783; observed on #40 (D13).
+deployed_not_merged_window_gone	Deployed, not merged, window gone	lifecycle	no	UNNAMED STATE. Three facts at once and nothing in the vocabulary says it. Reached twice, once by a script that reported the opposite (spec.org:2793).
+rolling_back	Rolling back	lifecycle	no	The front is being returned to a prior build. Both of the night's rollbacks were front switches that left the bad build resident.
+merged_unsettled	Merged, unsettled	lifecycle	no	merge-on-healthy.yml merged it and recorded nothing: no change:complete, no PIR, no window redline.
+backfill_owed	Backfill owed	lifecycle	no	change:backfill-owed. The change reached main without the normal evidence and still owes it. Blocks nothing; survives settlement.
+settling	Settling	lifecycle	no	settle.sh: change:complete, merge, PIR, window redline, then clear the working labels.
+change_complete	Complete	lifecycle	yes	CHANGE closure code complete. The PIR is posted and the record survives the labels being cleared.
+change_backed_out	Backed out	lifecycle	yes	CHANGE closure code backed_out. Production DID serve this change and was returned to a named prior state (change/label-owners.tsv:93).
+change_failed	Failed	lifecycle	yes	CHANGE closure code failed. Production never served it, or never had it made live. Nothing to undo (change/label-owners.tsv:92).
+change_abandoned	Abandoned	lifecycle	yes	CHANGE closure code abandoned. The PR was closed unmerged and nobody is driving it. [H] -- no in-tree writer; scenarios.org:193 names the condition, abort.sh does not spell this code.
+change_superseded	Superseded	lifecycle	yes	CHANGE closure code superseded. Another change delivered this one's content first. [H] -- named in the brief, not implemented in-tree.
+estate_normal	Estate normal	estate	no	ESTATE-GLOBAL, not a state of any PR. Ordinary change is permitted. Start state of the ESTATE chain.
+estate_frozen	Estate frozen	estate	no	ESTATE-GLOBAL. freeze on issue #1: ordinary change is suspended for everyone including its declarer (change/label-owners.tsv:53).
+estate_emergency	Estate emergency	estate	no	ESTATE-GLOBAL. emergency on issue #1: something is wrong out there, everything stops, and it grants NO exemption to whatever PR carries it (change/label-owners.tsv:54).

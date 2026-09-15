@@ -1,7 +1,22 @@
 name: gate
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    # NO `labeled`. The gates measure the HEAD SHA, and a label does not change
+    # the head SHA -- so a label-triggered run re-measures the identical build
+    # and can only return the same verdict, unless the gates are
+    # non-deterministic, in which case re-running is actively harmful: it can
+    # flip green to red on a build nobody touched.
+    #
+    # It was not free. change/uat.sh writes three labels (staging:e2e,
+    # staging:smoke, staging:uat), each of which re-ran this whole suite, and
+    # guard 4 requires green check runs -- so RECORDING THE OBSERVATION VOIDED
+    # THE AUTHORIZATION THAT OBSERVATION WAS TAKEN FOR, until CI caught up.
+    # Measured on #69: 33 seconds of a 2m26s cycle, 23% of it, spent waiting
+    # for a rerun of a verdict we already had.
+    #
+    # This is also the read-after-write race in spec.org defect class 8: it is
+    # what made guard 4 refuse #57 one minute before reading it as authorized.
+    types: [opened, synchronize, reopened]
 permissions: {contents: read}
 
 jobs:
@@ -69,5 +84,34 @@ jobs:
           . ./.env.ports
           echo "router on $BASE_PORT"
           ROUTER_URL="http://127.0.0.1:$BASE_PORT" ./gates/e2e.sh
+
+      # THE CONTRACT GATE, for both environment shapes.
+      #
+      # Runs the same suite twice, once with each environment's values, against
+      # the runner's own ephemeral block. It answers "would this build satisfy
+      # the staging contract, and the production contract" -- which is worth
+      # gating on, and is NOT the same question as "is production serving it".
+      #
+      # DELIBERATELY NO `--pr`. With it, e2e.sh writes an observation record and
+      # a staging:e2e / production:e2e label. A record from here would name an
+      # estate that lives for ninety seconds inside a runner, and guard 4 would
+      # read it as authorization to reach the real production. gates/e2e.sh
+      # already carries the comment about this exact defect: "Hardcoding
+      # 'staging' made a run against the PRODUCTION front record staging:e2e".
+      #
+      # So this GATES (a red run blocks the PR) and OBSERVES NOTHING. The
+      # authorizing observation still has to be taken on an estate that exists.
+      - name: contract gate -- staging and production shapes
+        run: |
+          . ./.env.ports
+          rc=0
+          for env in staging production; do
+            echo "== contract: $env"
+            CHANGE_ENV="$env" ROUTER_URL="http://127.0.0.1:$BASE_PORT" \
+              ./gates/e2e.sh || rc=1
+          done
+          [ "$rc" = 0 ] || { echo "::error::a contract gate failed"; exit 1; }
+          echo "both contracts satisfied on the ephemeral block "\
+               "(this is not an observation of any real environment)"
       - if: always()
         run: PORTS_REGISTRY=$RUNNER_TEMP/ports.tsv ./change/ports.sh stop || true

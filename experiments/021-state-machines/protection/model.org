@@ -1,0 +1,563 @@
+#+TITLE: The pull request as a state machine — protection, precedence and overrides
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+
+* What this models
+
+One of five lenses on the same machine. The primitive is the *pull request*:
+every state in =states.tsv= is a state of a PR, and the states whose *cause* is
+a fact about the world rather than about that PR are marked =kind=estate= and
+named =EST_*=.
+
+This lens is the *politics layer*: freeze, emergency, locks, holds, bypasses,
+and who may set what. It deliberately does not model the deployment lifecycle,
+the environments, the gate suite, or the end-to-end journey beyond the minimum
+spine needed to hang a refusal on.
+
+Three companion files, tab-separated so five models merge mechanically:
+
+| file               | rows | what it is |
+|--------------------+------+------------|
+| =states.tsv=       |   40 | states of a PR, by kind and terminality |
+| =transitions.tsv=  |  119 | edges, with trigger, guard, actor, weight and evidence |
+| =labels.tsv=       |   38 | the label namespace as semantics, not strings |
+
+* The claim this lens exists to make
+
+#+begin_quote
+An override should move the *declared writer*, not silence the *guard*. The
+record then still says who decided.
+#+end_quote
+
+=labeler:skip= is the only override in this repo that gets that right, and it
+is the smallest one. Every other override in the model either suspends a check
+(=itil:emergency=), suspends the estate (=freeze=), or — in one case — is
+declared dead and still enforced (=hold:staging=).
+
+* Assumptions
+
+1. *The PR is the subject.* A change is not a PR (§Nomenclature), but the PR is
+   the only artifact every guard in this repo actually reads, so it is what the
+   machine is over. The change *record* outlives it; that is the =change:*=
+   namespace's job and it is modelled as state, not as a separate machine.
+2. *Estate facts are modelled as states of the PR that reads them.* =freeze= is
+   a property of the world; =EST_FREEZE_REFUSED= is the state a PR is in
+   because of it. This keeps one graph with one initial state and one walk. The
+   world's own machine — open / frozen / emergency / unreadable — is the union
+   of the =EST_*= rows, and it is stated in prose below rather than given
+   separate nodes, because a separate estate chain has no terminal and would
+   make the model unrunnable.
+3. *Guards are re-derived at the moment of reliance.* =PR_PREFLIGHT= is
+   therefore re-entrant: almost every refusal returns to it rather than
+   forward. That is not a modelling convenience, it is guard 4b's rule applied
+   uniformly (=change/release.sh:6-8=: "activation is not the last point of
+   reliance; the merge is").
+4. *Weights are illustrative, not measured.* They encode relative plausibility
+   so the chain is runnable and so the shape of the pressure is visible. No
+   weight is an observation. Every one of them is =[H]=.
+
+* Deliberate exclusions
+
+- The gate suite's internals (which check, why it flaked) — another lens.
+- Environments, ports, tiers, blue/green cutover — another lens.
+- The observation *record* format and the repeatable/attested split, except
+  where a hold or a bypass turns on it.
+- =change:complete= cleanup order and what settle.sh clears — another lens.
+- The *estate* as an independent process. See assumption 2.
+- Multi-PR interleaving. The walk is one PR. Cross-PR effects appear as guards
+  on edges ("another open PR holds the berth", "another PR carries
+  itil:emergency"), never as states of a second PR.
+
+* The two things called "emergency"
+
+The single most load-bearing distinction in this lens, and it is one word doing
+two jobs on two subjects at two scopes.
+
+| | =itil:emergency= on a PR | bare =emergency= on issue #1 |
+|---+---+---|
+| subject | *the change* | *the estate* |
+| says | THIS change is the remedy | something is wrong out there |
+| kind | classification | estate state |
+| scope | one PR's ordering | everyone |
+| grants its carrier | a bypass of guards 0, 3-freeze, 4, 4b | *nothing* |
+| blocks its carrier | no | *yes* — deliberately no self-exclusion |
+| declared by | a person, never derived | a person, never derived |
+| lives on | the PR | an issue, which cannot be deployed |
+
+The reason the estate flag lives on an issue is the defect that took longest to
+find here: an emergency handled *outside* the pipeline has no PR to classify,
+so making the estate show it meant hanging =itil:emergency= on some open PR —
+and that handed *that* PR a bypass of every blocker. The one change that must
+not proceed became the only one that may (=gates/preflight.sh:243-256=). An
+issue cannot be deployed, so there is no exemption it could be handed
+(=gates/preflight.sh:227=).
+
+The *no self-exclusion* rule is the mirror image and is equally deliberate: a
+change does not block itself, but the *world* blocks everyone in it, including
+whoever raised the flag (=gates/preflight.sh:262-267=). That produces
+=EST_SELF_BLOCKED_BY_OWN_FLAG=, a correct state with no name in the
+vocabulary: a PR refused by the estate flag it is carrying.
+
+** A divergence found while modelling this
+
+=gates/preflight.sh:152-155= states the rule as:
+
+: an EMERGENCY is in flight -- itil:emergency on any other open PR
+
+and =gates/preflight.sh:274= implements it as:
+
+: gh pr list --repo "$R" --state open --label emergency
+
+The prose reads the *classification* on other PRs; the code reads the *estate*
+label on other PRs. Both refusals are modelled —
+=EST_OTHERS_ITIL_EMERGENCY= for the stated rule and =EST_EMERGENCY_REFUSED=
+for the implemented one — because they are not the same set of PRs and they do
+not clear at the same time. Which one is intended is not resolved here. Recorded
+rather than tidied, per the repo's own convention.
+
+* The bypass table, as the model uses it
+
+Grounded in =spec.org:903-911= (the guards), =spec.org:913-916= (the two with
+none), =spec.org:2250-2256= (the bypass catalogue), and
+=.github/workflows/deploy-production.yml:18-39=.
+
+| guard | what it protects | =itil:emergency= | where the model shows it |
+|-------+------------------+------------------+--------------------------|
+| 0 up to date with main | not reverting the last deployment | *bypasses* | =change/queue.sh:23= gates the whole block on the label |
+| 1 the berth is a singleton | one path to production | n/a — the emergency path never claims a berth | =EST_BERTH_REFUSED= has no emergency in-edge |
+| 2 gates green on head SHA | that the verification happened | *no bypass* | =EMG_GATE2_REFUSED= is reachable only from the emergency arm |
+| 3 lock | that nothing is physically deploying now | *no bypass* | =EST_LOCK_REFUSED=, entered from =PR_AUTHORIZED= as well as preflight |
+| 3 freeze | that ordinary change is suspended | *bypasses* | =EST_FREEZE_REFUSED= → =EMG_DECLARED= |
+| 4 staging pass on this head | that somebody measured this build | *bypasses, with an approving review* | =EMG_AWAITING_APPROVAL= is the condition, modelled as its own state |
+| 4b head still contains main's tip | not reverting what shipped mid-window | *bypasses* | =PR_STALE_EVIDENCE= → =EMG_DECLARED= |
+| 5 production health | that what was deployed is what is serving | *no bypass* | =EMG_GUARD5_REFUSED= |
+
+Two structural notes the table does not carry:
+
+- *There is no bypass-everything designation, and that is the design.* The rule
+  is not "everything has a bypass"; it is "everything has a bypass except the
+  things whose bypass would make the system lie about itself"
+  (=spec.org:2260-2264=). Guard 2 and guard 5 are what keep the *other*
+  bypasses honest: =itil:emergency= is a legible, auditable act precisely
+  because the records it appears in are otherwise true.
+- *Guard 2 is evaluated twice on purpose.* =promote.yml= is gated on the
+  staging pass, so the emergency path never reaches it; a single evaluation
+  there would have given guard 2 exactly the bypass the spec denies
+  (=spec.org:917-923=). The model reflects this: =EMG_BYPASS_ACTIVE= →
+  =EMG_GATE2_REFUSED= is the *production-path* evaluation, not the promote one.
+
+* =labeler:skip= — the override done right
+
+The only override in the repo that transfers ownership instead of disabling a
+check.
+
+- It stops the labeller entirely
+  (=.github/workflows/labeller.yml:13,23=), so =app:*= and the class become
+  hand-maintained.
+- It *disables no guard*. The gates, the berth, guard 4b and guard 5 are
+  unaffected (=spec.org:739-742=).
+- It costs exactly one thing and says so: the build manifest moves from
+  *derived* to *asserted*. §Domain model's line is that a manifest that can be
+  asserted "is not a manifest — it is a wish, and the build ships whatever
+  someone typed". =labeler:skip= makes that true on purpose and wears a label
+  saying so.
+- It is *visible on the artifact*, *carried into the record*, and *narrow* —
+  the three properties =spec.org:2277-2290= requires of an acceptable bypass.
+
+In the model this is =PR_MANIFEST_ASSERTED=, a state with no refusal edges at
+all. Nothing is blocked; the *writer* changed. Contrast =EMG_BYPASS_ACTIVE=,
+which is defined entirely by the guards it makes not fire.
+
+The pattern generalises, and it is the recommendation this lens makes: the
+override that moves the declared writer leaves an auditable record of who
+decided; the override that silences the guard leaves only the absence of a
+refusal, which looks exactly like never having been at risk.
+
+* =hold:staging= — the contradiction, modelled rather than resolved
+
+=change/label-owners.tsv:35= declares it:
+
+| owner | =REJECTED= |
+| persistent | no |
+| human_add | *no* |
+| human_rm | *no* |
+
+So by the declaration nothing may write it and nobody may add it. And it is
+enforced in three places:
+
+| site | what happens | evidence |
+|------+--------------+----------|
+| preflight, before the berth | exit 2, "only a person may remove it" | =gates/preflight.sh:310-319= |
+| guard 4, at authorization | =FAIL hold:staging=, =rc=1= | =change/guard4.sh:195-197= |
+| activation, after =staging:passed= | window closed with result =held=, berth kept, production untouched | =change/activate.sh:304-332= |
+
+=gates/preflight.sh:310-313= states the reasoning for keeping the check: a
+label left over from before should still stop a deploy rather than be silently
+ignored, and removing the check would be more dangerous than keeping it. That
+is a coherent position. It is also a label with *no declared writer that three
+scripts obey*, which is the precise shape of the two-writers-one-fact defect
+the ownership declaration exists to prevent — arriving from the other
+direction, as zero writers and three readers.
+
+*How it is modelled.* One state, =PR_HELD=, entered from two different sites
+(=PR_PREFLIGHT= and =PR_OBSERVED=) with three different consequences, and left
+by exactly one actor: a human removing the label. Deliberately *not* resolved:
+
+- there is no edge by which any automation clears it — "a hold a machine can
+  lift is not a hold" (=change/activate.sh:317=);
+- there is no edge by which it expires into a promotion — "a hold that timed
+  out into shipping would be the most dangerous label here"
+  (=change/activate.sh:319-321=);
+- the =labels.tsv= row keeps =owner=REJECTED= and =human_add=no= verbatim, so
+  the contradiction is *in* the merged data rather than smoothed out of it.
+
+The rejection argument itself (=docs/precedence-and-locks.org:98-130=) is
+sound: the human stops were always earlier — do not add =change:requested=, do
+not approve — and a fourth mechanism with a fifth scope and no precedence rule
+is a hazard. What the model records is that the argument was won and the code
+was not changed.
+
+* The states that have no name
+
+Four, and each is reachable in the walk.
+
+| state | why it has no name | evidence |
+|-------+--------------------+----------|
+| =EST_FREEZE_UNATTRIBUTED= | the estate is shut, the record carries no actor and no reason, and the write is posted under the repo's own token. An authorised halt and a hostile one produce byte-identical records | =spec.org:619-644=; the mock literally records =by: "a person"= at =idp-api/mock/server.mjs:150= |
+| =EMG_BYPASS_UNNEEDED= | a change still carrying =itil:emergency= after the incident closed. Nothing withdraws it — the labeller does not own it and no gate may remove a person's declaration — and it goes on outranking everyone | =change/label-owners.tsv:55=, edges =[H]= |
+| =EST_OTHERS_ITIL_EMERGENCY= / =EST_SELF_BLOCKED_BY_OWN_FLAG= | someone else's emergency blocking you, and your own estate flag blocking you. Both correct, neither named | =gates/preflight.sh:152-155=, =262-267= |
+| =X_DEPLOYED_UNMERGED_WINDOW_GONE= | named as nameless in the spec: three facts at once and no vocabulary for the conjunction | =spec.org:2793-2797= |
+
+The freeze one is the one this lens would fix first, and the fix is already
+written down: *a control that changes estate state records WHO invoked it and
+WHY, as part of the same write that changes the state; if the identity cannot
+be established, the control refuses* (=spec.org:641-644=). An unattributable
+freeze is not a safer freeze, it is an unauditable one. Note the exposure
+argument does not create this defect — it removes the only thing compensating
+for it, which was that the set of people who could press the button was the set
+of people in the building.
+
+Note also =sim/label_sim.py:205-206=: the simulator's own estate transitions
+are =yield "Freeze", st._replace(freeze=not st.freeze)= and the same for
+=Estate=. No actor parameter exists to pass. The model of the system reproduces
+the system's blind spot exactly, which is a small piece of evidence that the
+blind spot is in the design and not in any one implementation.
+
+* Indeterminate is a third value
+
+=EST_INDETERMINATE= is its own state with its own edges, never a synonym for
+"no freeze" and never for "frozen".
+
+Preflight returns *4* — which blocks — for: an unreadable calendar
+(=gates/preflight.sh:51=), an unreachable forge (=:113=), an unreadable berth
+query (=:139=), an unreadable draft flag (=:207-208=), and unreadable estate
+flags (=:284-285=). Its recovery edge goes *back to =PR_PREFLIGHT=* — ask
+again — not forward to the berth and not sideways to a refusal with a cause.
+
+This is =spec.org:2590-2601= (unreachable is not falsified) and
+=spec.org:2699-2743= (not yet is not no, and cannot say is not either) applied
+to the protection layer. The guard's return type is three-valued; a boolean
+cannot express this, and an implementation that cannot express it is unusable.
+
+* The escalation failure mode
+
+=gates/simulate-gates.py:186-196= makes the argument directly:
+=emergency_pressure()= is logistic in berth-wait over patience, with a
+genuinely-urgent floor of 5%. At the design's own soak scale — a few hundred
+PRs through a singleton berth — the wait drives the emergency share toward
+100% (=gates/simulate-gates.py:161-183=):
+
+#+begin_quote
+A soak test run that way does not test the pipeline: it tests the BYPASS,
+because by the time the queue is that deep every change has a rational reason
+to carry =itil:emergency=.
+#+end_quote
+
+In this model that pressure is structural rather than parametric: *every*
+refusal state has an out-edge to =EMG_DECLARED= or =EMG_QUEUE_ESCALATED=,
+because in every one of those states a person may add one label and be past the
+thing that stopped them. Running the chain 20,000 times from =PR_OPEN=:
+
+| state | share of runs that visit it |
+|-------+-----------------------------|
+| =EMG_DECLARED= | 69% |
+| =EMG_BYPASS_ACTIVE= | 65% |
+| =EMG_AWAITING_APPROVAL= | 57% |
+| =EMG_QUEUE_ESCALATED= | 47% |
+| =EMG_BYPASS_UNNEEDED= | 16% |
+
+Those numbers are a property of the weights and are =[H]=. The *shape* is not:
+a bypass reachable from every refusal, requiring one label and one approval,
+becomes the default path with extra steps. Over-protecting the queue does not
+trade safety for speed — it trades safety for safety, through the only door
+left open (=spec.org:2489-2520=, =gates/simulate-gates.py:199-214=).
+
+The one real friction on that path is =EMG_AWAITING_APPROVAL=, and it is worth
+saying plainly that in this estate it does not hold: the proxy authenticates as
+the account that authored every PR, and the forge refuses self-approval
+(=change/guard4.sh:75-93=). The narrowest check on the widest bypass is the one
+a single-identity estate cannot satisfy.
+
+* The label namespace, as semantics
+
+Five semantics, and the prefix is supposed to tell you which. Full rows in
+=labels.tsv=; this is what each *namespace* means and who its declared writer
+is.
+
+| prefix | semantics | declared writer | reads as |
+|--------+-----------+-----------------+----------|
+| =app:= | classification (the manifest) | labeller — unless =labeler:skip= moves it to a human | "this change deploys this group" |
+| =itil:= | classification (the ITIL change type) | labeller for =standard=/=normal=; *a person* for =emergency=. At most one | "what kind of change is this" |
+| =change:= | state (lifecycle) *and* closure codes | the pipeline, as the change advances | "where the change record has got to" |
+| =deploy:= | state (action in flight) | the workflow | "work is happening, right now, to this target" |
+| =staging:= =production:= | observation | the instrument that took it; =staging:uat= is the exception, where the person *is* the instrument | "a check came back, about a build" |
+| =blocked:= | state (refusal) | the guard that refused | "this guard said no, and which one" |
+| =release:= | state / intent, split by suffix | =release:start= the pipeline, bare =release= a person | "begun" vs "please begin" |
+| =labeler:= | intent, addressed to an automation | a person | "stop deriving; I will assert" |
+| =hold:= | intent | *REJECTED — none* | "a person wants to look" |
+| *(bare)* | *estate, and two others* | a person | see below |
+
+*The bare namespace is the defect.* It holds three unrelated kinds: the estate
+states =freeze= and =emergency=, the human intent =release=, and the
+classification =control-plane=. A reader has no prefix to go on, and the two
+that shut the estate sit in the same flat space as a trigger and a class. The
+=itil:= / =change:= split (=change/label-owners.tsv:63-83=) fixed exactly this
+collapse one level up; the bare namespace is where it survives.
+
+Three further distinctions the table compresses:
+
+1. *Intent versus state.* =change:requested= is a person saying "start"; the
+   pipeline clears it. =release:start= is the pipeline saying "begun"; a person
+   may never write it, because adding it claims a deployment is running, which
+   is not something a person can truthfully assert
+   (=change/label-owners.tsv:33=).
+2. *Observation versus label.* Repeatable observations (=e2e=, =smoke=)
+   authorize from the *record* — a comment naming environment, instrument,
+   verdict and SHA — never from the label, because a label names the
+   measurement but not the build. Non-repeatable ones (=uat=) need the record
+   *and* the label, because the label is the person's own signal and a person
+   may withdraw it (=change/guard4.sh:28-47=).
+3. *A recorded failure outranks its pass.* =staging:e2e= and
+   =staging:e2e-failed= can coexist, because they are written by whichever
+   instrument ran last, and last is not authoritative
+   (=change/guard4.sh:186-193=).
+
+* The machine
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction TB
+
+    [*] --> PR_OPEN
+
+    state "classification" as CLS {
+        PR_OPEN --> PR_CLASSIFIED: labeller derives itil:*
+        PR_OPEN --> PR_MANIFEST_ASSERTED: human adds labeler:skip
+        PR_MANIFEST_ASSERTED --> PR_CLASSIFIED: human asserts app:* and class
+        PR_OPEN --> PR_CLASS_UNDEFINED: declared over derived
+        PR_MANIFEST_ASSERTED --> PR_CLASS_UNDEFINED
+        PR_CLASS_UNDEFINED --> PR_CLASSIFIED: a person removes the wrong class
+    }
+
+    PR_CLASSIFIED --> PR_REQUESTED: human adds change:requested
+    PR_REQUESTED --> PR_SCHEDULED: scheduler books a window
+    PR_SCHEDULED --> PR_PREFLIGHT: the window comes due
+    PR_SCHEDULED --> PR_EXPIRED: lapsed unattempted
+    PR_EXPIRED --> PR_REQUESTED: still eligible, re-book
+
+    state "estate-caused refusals (kind=estate)" as EST {
+        EST_BERTH_REFUSED
+        EST_LOCK_REFUSED
+        EST_FREEZE_REFUSED
+        EST_FREEZE_UNATTRIBUTED
+        EST_EMERGENCY_REFUSED
+        EST_OTHERS_ITIL_EMERGENCY
+        EST_SELF_BLOCKED_BY_OWN_FLAG
+        EST_INDETERMINATE
+    }
+
+    PR_PREFLIGHT --> PR_DRAFT_REFUSED: exit 6, the author's own stop
+    PR_PREFLIGHT --> PR_BEHIND_MAIN: guard 0
+    PR_PREFLIGHT --> EST_BERTH_REFUSED: guard 1, exit 5
+    PR_PREFLIGHT --> EST_LOCK_REFUSED: guard 3 lock, exit 2
+    PR_PREFLIGHT --> EST_FREEZE_REFUSED: guard 3 freeze, exit 3
+    PR_PREFLIGHT --> EST_FREEZE_UNATTRIBUTED: exit 3, no declarer
+    PR_PREFLIGHT --> EST_EMERGENCY_REFUSED: bare emergency, exit 2
+    PR_PREFLIGHT --> EST_OTHERS_ITIL_EMERGENCY: someone else's precedence
+    PR_PREFLIGHT --> EST_SELF_BLOCKED_BY_OWN_FLAG: no self-exclusion
+    PR_PREFLIGHT --> EST_INDETERMINATE: exit 4 BLOCKS
+    PR_PREFLIGHT --> PR_HELD: hold:staging, rejected yet enforced
+    PR_PREFLIGHT --> PR_BERTH: exit 0
+
+    PR_DRAFT_REFUSED --> PR_PREFLIGHT: gh pr ready
+    PR_BEHIND_MAIN --> PR_REQUESTED: rebase and re-request
+    EST_BERTH_REFUSED --> PR_REQUESTED: holder merges
+    EST_LOCK_REFUSED --> PR_PREFLIGHT: released, or 60min stale
+    EST_FREEZE_REFUSED --> PR_PREFLIGHT: a person lifts it
+    EST_FREEZE_UNATTRIBUTED --> EST_FREEZE_REFUSED: declarer found out of band
+    EST_FREEZE_UNATTRIBUTED --> PR_PREFLIGHT: lifted by whoever
+    EST_EMERGENCY_REFUSED --> PR_PREFLIGHT: it settles
+    EST_EMERGENCY_REFUSED --> PR_STALE_EVIDENCE: it lands under you
+    EST_OTHERS_ITIL_EMERGENCY --> PR_PREFLIGHT
+    EST_OTHERS_ITIL_EMERGENCY --> PR_STALE_EVIDENCE: it moves main
+    EST_SELF_BLOCKED_BY_OWN_FLAG --> PR_PREFLIGHT: move the flag to the issue
+    EST_INDETERMINATE --> PR_PREFLIGHT: ask again
+    EST_INDETERMINATE --> EST_FREEZE_REFUSED: resolves to a real freeze
+    PR_HELD --> PR_PREFLIGHT: only a person removes it
+    PR_HELD --> PR_REQUESTED: closed held, berth kept
+
+    PR_BERTH --> PR_OBSERVED: instruments record on this head
+    PR_BERTH --> PR_STALE_EVIDENCE: a push withdraws them
+    PR_BERTH --> EST_OTHERS_ITIL_EMERGENCY: preempted
+    PR_BERTH --> PR_EXPIRED: window lapses holding the berth
+    PR_OBSERVED --> PR_AUTHORIZED: guard 4
+    PR_OBSERVED --> PR_HELD: read at the moment of reliance
+    PR_OBSERVED --> PR_STALE_EVIDENCE: names a different build
+    PR_OBSERVED --> EMG_AWAITING_APPROVAL: no approving review
+    PR_STALE_EVIDENCE --> PR_REQUESTED: rebase, re-run, re-book
+    PR_STALE_EVIDENCE --> PR_BERTH: re-observe, the berth is held
+
+    PR_AUTHORIZED --> PR_PRODUCTION: deploy:production
+    PR_AUTHORIZED --> EST_LOCK_REFUSED: lock acquired late
+    PR_AUTHORIZED --> PR_STALE_EVIDENCE: guard 4b at the merge
+    PR_PRODUCTION --> PR_HEALTHY: guard 5, no bypass
+    PR_PRODUCTION --> PR_UNHEALTHY: guard 5 refuses
+    PR_PRODUCTION --> X_DEPLOYED_UNMERGED_WINDOW_GONE
+
+    state "the override arm" as OVR {
+        EMG_QUEUE_ESCALATED --> EMG_DECLARED: the one door left open
+        EMG_DECLARED --> EMG_BYPASS_ACTIVE: G0, G3-freeze, G4, G4b waived
+        EMG_DECLARED --> PR_CLASS_UNDEFINED: derived class never removed
+        EMG_BYPASS_ACTIVE --> EMG_AWAITING_APPROVAL
+        EMG_BYPASS_ACTIVE --> EMG_GATE2_REFUSED: guard 2 has NO bypass
+        EMG_BYPASS_ACTIVE --> EMG_BYPASS_UNNEEDED: incident closed, label stays
+        EMG_BYPASS_UNNEEDED --> EMG_AWAITING_APPROVAL: ships on a bypass it does not need
+        EMG_BYPASS_UNNEEDED --> PR_PREFLIGHT: a person withdraws it
+        EMG_AWAITING_APPROVAL --> EMG_REFUSED_NO_APPROVAL
+        EMG_REFUSED_NO_APPROVAL --> EMG_AWAITING_APPROVAL: a change authority approves
+        EMG_GATE2_REFUSED --> EMG_AWAITING_APPROVAL: re-run the FAILED checks
+        EMG_GATE2_REFUSED --> PR_CLASSIFIED: fix and push
+    }
+
+    PR_REQUESTED --> EMG_QUEUE_ESCALATED: berth wait exceeds patience
+    PR_SCHEDULED --> EMG_QUEUE_ESCALATED
+    PR_EXPIRED --> EMG_QUEUE_ESCALATED
+    PR_PREFLIGHT --> EMG_QUEUE_ESCALATED
+    EST_BERTH_REFUSED --> EMG_QUEUE_ESCALATED
+    PR_OPEN --> EMG_DECLARED
+    PR_CLASSIFIED --> EMG_DECLARED
+    PR_BEHIND_MAIN --> EMG_DECLARED: ship behind trunk
+    EST_FREEZE_REFUSED --> EMG_DECLARED: an emergency is what a freeze is FOR
+    EST_FREEZE_UNATTRIBUTED --> EMG_DECLARED: no declarer to ask
+    EST_EMERGENCY_REFUSED --> EMG_DECLARED
+    PR_STALE_EVIDENCE --> EMG_DECLARED: guard 4b waived
+    EMG_AWAITING_APPROVAL --> PR_PRODUCTION: approved on this head
+
+    PR_UNHEALTHY --> EMG_GUARD5_REFUSED: guard 5 has NO bypass
+
+    PR_HEALTHY --> T_COMPLETE
+    PR_HEALTHY --> T_COMPLETE_UNPAID: change:backfill-owed
+    PR_HEALTHY --> X_DEPLOYED_UNMERGED_WINDOW_GONE
+    PR_HEALTHY --> PR_STALE_EVIDENCE: release.sh exit 8
+    PR_UNHEALTHY --> T_BACKED_OUT
+    PR_UNHEALTHY --> T_FAILED
+    EMG_GUARD5_REFUSED --> T_BACKED_OUT
+    EMG_GUARD5_REFUSED --> T_FAILED
+    EMG_REFUSED_NO_APPROVAL --> T_FAILED
+    EMG_GATE2_REFUSED --> T_FAILED
+    PR_OBSERVED --> T_FAILED
+    X_DEPLOYED_UNMERGED_WINDOW_GONE --> T_BACKED_OUT
+    X_DEPLOYED_UNMERGED_WINDOW_GONE --> T_COMPLETE_UNPAID
+    X_DEPLOYED_UNMERGED_WINDOW_GONE --> T_FAILED: wrong closure code, undetected
+
+    PR_OPEN --> T_ABANDONED
+    PR_BERTH --> T_ABANDONED: wedges the berth until reaped
+    EMG_BYPASS_UNNEEDED --> T_ABANDONED: closing it is what finally stops it blocking
+
+    T_COMPLETE --> [*]
+    T_COMPLETE_UNPAID --> [*]
+    T_FAILED --> [*]
+    T_BACKED_OUT --> [*]
+    T_ABANDONED --> [*]
+#+end_src
+
+The diagram elides the =T_ABANDONED= edge from most refusal states for
+legibility; =transitions.tsv= is authoritative and carries all 119.
+
+Rendered [E] on 2026-09-14 via =experiments/mermaid-check= —
+=npx @mermaid-js/mermaid-cli -p pptr.json= against chromium 148 at
+=/usr/local/bin/chrome=. It parsed only after three edge labels lost their
+semicolons, which are statement separators in mermaid: a malformed diagram is
+invisible until something renders it, so rendering is the check.
+
+* Runnability
+
+Checked mechanically, not asserted:
+
+| property | result |
+|----------+--------|
+| schema — kinds, trigger kinds, actors, weights in range | clean |
+| non-terminal states with no out-edge | none |
+| terminal states with an out-edge | none |
+| states unreachable from =PR_OPEN= | none |
+| non-terminal states never visited in 20,000 walks | none |
+| 20,000 weighted walks from =PR_OPEN= reaching a terminal | 20,000 / 20,000 |
+| mean path length | 15.0 edges (max observed 105) |
+
+Terminal distribution over 20,000 walks: =T_COMPLETE= 34%, =T_ABANDONED= 25%,
+=T_FAILED= 23%, =T_BACKED_OUT= 10%, =T_COMPLETE_UNPAID= 8%. All =[H]= — a
+property of the weights, reported so the chain's behaviour is falsifiable
+rather than described.
+
+Reproduce:
+
+#+begin_src sh :eval no
+python3 - <<'EOF'
+import csv, random, collections
+D = "experiments/021-state-machines/protection"
+S = list(csv.DictReader(open(D+"/states.tsv"), delimiter="\t"))
+T = list(csv.DictReader(open(D+"/transitions.tsv"), delimiter="\t"))
+term = {s["id"] for s in S if s["terminal"] == "yes"}
+out = collections.defaultdict(list)
+for t in T: out[t["from"]].append(t)
+rng = random.Random(20260914); hits = collections.Counter()
+for _ in range(20000):
+    n = "PR_OPEN"
+    while n not in term:
+        e = out[n]
+        n = rng.choices([x["to"] for x in e], weights=[float(x["weight"]) for x in e])[0]
+    hits[n] += 1
+print(hits)
+EOF
+#+end_src
+
+* What a rebuild should take from this lens
+
+1. *Give the estate flags a declarer.* The write that changes estate state
+   records who and why, in the same write, or it refuses. Already specified at
+   =spec.org:641-644= and implemented nowhere.
+2. *Prefer ownership-transfer overrides to guard-silencing ones.*
+   =labeler:skip= is the template. An override that moves the declared writer
+   leaves a record of who decided; one that silences a guard leaves only the
+   absence of a refusal.
+3. *An always-available bypass is a default path.* If the queue can starve, the
+   bypass is where the traffic goes. Either the queue must not starve — a path
+   to production per team, which the spec already names as the right
+   architecture — or the bypass needs a cost that scales with how often it is
+   used.
+4. *Resolve =hold:staging= in one direction or the other.* A label with no
+   declared writer that three scripts obey is the ownership defect wearing the
+   costume of a safety feature.
+5. *Keep the third value.* Every estate read has three answers and the third
+   must block differently from the second.
+
+* Epistemic status
+
+Everything cited to =file:line= was read in this checkout on 2026-09-14.
+Everything marked =[H]= is proposed: all 119 weights, the edges out of
+=EMG_BYPASS_UNNEEDED= (the state is not named in the repo, so nothing describes
+how a change leaves it), the =T_ABANDONED= edges (closing a PR is a forge event
+no script models), and the =review:proxy= owner. The
+=EST_OTHERS_ITIL_EMERGENCY= / =EST_EMERGENCY_REFUSED= pair is grounded in a
+*divergence* between =gates/preflight.sh:152-155= and =gates/preflight.sh:274=,
+not in a settled rule; which is intended has not been established here.

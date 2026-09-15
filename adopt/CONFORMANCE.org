@@ -1,0 +1,478 @@
+#+TITLE: The conformance ladder — what the minimum is, what each rung buys, and what is unattainable where
+#+SUBTITLE: Graded, with the refusals kept rather than softened
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:3 num:t
+
+* Status
+
+*Additive research note. =spec.org= governs and nothing here amends it.*
+Companion to [[./PROFILE.org]], which asks the questions, and to [[./generate.sh]],
+which acts on the answers. This file answers the question the other two do not:
+/given that I cannot have all of it, what should I have, and in what order?/
+
+Epistemic labels are =spec.org='s: [E] established on a named cell, [P]
+provisional, [H] hypothesis, [I] inferred. *Everything in this file about a
+platform we have not run on is [H].* The rungs themselves are [I] — they are a
+partial order derived from the guards' stated dependencies, not an order anyone
+has climbed.
+
+Where this file cites a published standard it also cites the tier from
+=docs/release-standards.org=, because "standard" covers six different kinds of
+object and they differ in exactly one respect that matters: *is there a
+conformance test, and who can change the rules?*
+
+* The two honest headlines
+
+*First: the minimum viable set is two controls, and neither of them is a guard.*
+A gate that can be shown to fail, and a verdict that names the build it is about.
+Everything above rung 2 is refinement. A team that adopts only those two has
+gained more than a team that adopts six guards on top of gates nobody has
+watched reject anything, because the second team's green tells them nothing and
+they do not know it.
+
+*Second: the rung most teams cannot reach is rung 6, and it is not their fault.*
+Rung 6 requires a production the pipeline can observe, reporting the identity of
+the build it is serving. Most deployment platforms will tell you a deploy
+*succeeded* and will not tell you what is *running* — the difference between
+intent and evidence, and the difference on which guard 5 and guard 6 both stand.
+=spec.org= is explicit that the Deployments API of the forge this repo runs on
+does not clear that bar: a deployment is created by a caller and its status is
+posted by that same caller, so it records intent with good provenance about /who
+claimed it/, not evidence about /what is running/ [E, 2026-09-13].
+
+* The ladder
+
+#+begin_src mermaid :eval never-export
+flowchart TB
+    R0["Rung 0 — No verdict<br/>no negative fixture exists"]
+    R1["Rung 1 — Verified<br/>gate self-test, guard 2, evidence records"]
+    R2["Rung 2 — Manifested<br/>the deploy set is derived, and three-valued"]
+    R3["Rung 3 — Authorized<br/>guard 4, an environment upstream of production"]
+    R4["Rung 4 — Current<br/>guard 0, guard 4b, re-derived at reliance"]
+    R6["Rung 6 — Observed<br/>guard 5, convergence on a build you can read"]
+    R7["Rung 7 — Ordered<br/>guard 6, the trunk never runs ahead"]
+    S["Side rung S — Serialized<br/>guard 1, a lease with a deadline and a reaper"]
+    G["Side rung G — Governed<br/>freeze, emergency, windows, PIR"]
+
+    R0 --> R1 --> R2 --> R3 --> R4 --> R6 --> R7
+    R1 -.-> S
+    R1 -.-> G
+
+    style R0 fill:#fecaca,stroke:#b91c1c,color:#000
+    style R1 fill:#bbf7d0,stroke:#15803d,color:#000
+    style R2 fill:#bbf7d0,stroke:#15803d,color:#000
+    style R6 fill:#fde68a,stroke:#a16207,color:#000
+    style R7 fill:#fde68a,stroke:#a16207,color:#000
+    style S fill:#e5e7eb,stroke:#6b7280,color:#000
+    style G fill:#e5e7eb,stroke:#6b7280,color:#000
+#+end_src
+
+*The two side rungs hang off rung 1 and are prerequisites for nothing.* That is
+the load-bearing shape of the diagram. Serialization protects a *shared* path
+from contention, and governance buys *auditability*. Neither makes any change
+more correct, and a team that climbs S and G while sitting at rung 1 has built a
+process around gates whose verdicts nobody has tested.
+
+** Rung 0 — No verdict
+
+*What it is:* you have gates, and no gate has ever been watched rejecting
+anything.
+
+*What it buys:* nothing, and it is worse than nothing, because the gates are
+green and the greenness is load-bearing in everyone's head.
+
+Three tests in this repo passed while asserting nothing: a =typeof === 'string'=
+check satisfied by a request-derived value, an escaping assertion satisfied by an
+unrelated =&amp;= elsewhere on the page, and an =esc()= call whose deletion failed
+zero tests. *All three were found by mutation, never by reading* [E].
+=generate.sh= emits nothing at all for a profile at rung 0, which is the only
+honest response.
+
+** Rung 1 — Verified
+
+*Adds:* the gate self-test, guard 2, the evidence record, the fact-ownership
+declaration.
+
+*Requires:* a failing fixture per gate. Nothing else. *No forge, no estate, no
+second environment.*
+
+*What it buys:* a verdict you can rely on, bound to the content it is about. Two
+rules, and both have been paid for here:
+
+- *A suite that cannot be shown to reject its negative fixture returns no
+  verdict that run — not a pass.* This is the one rule that has to be in the
+  interface rather than in a convention, because it changes the return type: the
+  suite's answer is three-valued.
+- *Every observation, approval and deployment record carries the commit it was
+  measured against*, and every guard compares that to the head at the moment it
+  relies on it. "Staging passed" is not a fact. "Staging passed at =a013270=" is.
+
+*What it costs:* one fixture per gate, and the discipline of writing the fixture
+first. In this repo two of the negative fixtures did not fail on the first try.
+
+*Standards footing:* the build-naming half is =in-toto='s =subject= — tier 2,
+open specification with normative language and a self-asserted conformance test.
+The self-test half is folklore, tier 6: widely practised, never written down
+normatively, and *not standardised by anybody* [E, =docs/release-standards.org=].
+
+** Rung 2 — Manifested
+
+*Adds:* the derived manifest, and with it the three-valued =deploys(c)=.
+
+*Requires:* that the set of deployable units a change touches can be computed
+from the diff.
+
+*What it buys:* the ability to distinguish /this change deploys nothing/ from /I
+could not tell what this change deploys/. That distinction is invisible until it
+costs you something, and then it costs you everything: two independent
+implementations of guard 6 — this one, and a clean-room rebuild — both derived
+the deploy set and then treated an *empty* set as *exempt*, and one of them ran
+*484 times without ever triggering* [E].
+
+*What it costs:* a glob table you have to maintain, and the rule that a human
+edit to the manifest must not survive. A manifest that can be asserted is not a
+manifest, it is a wish, and the build ships whatever someone typed.
+
+** Rung 3 — Authorized
+
+*Adds:* guard 4, and its approval rung.
+
+*Requires:* an environment upstream of production whose observation is what lets
+production happen, and — for the approval rung — an approver identity the
+platform can prove is not the author.
+
+*What it buys:* production is downstream of a measurement someone took against
+something real. The rule that makes it worth anything: *the in-runner run does
+not authorize production.* The authorizing run is the one against the deployed
+environment. Collapse those and you have re-tested the artifact in the place it
+was built, which tells you about the build and nothing about the deployment.
+
+*What it costs:* an environment, and the queue for it if it is scarce.
+
+*One honest note on the approval rung [E]:* in this repo the separation between
+author and approver exists *by accident*. The proxy reviewer runs as the
+author's own token and the forge refuses to let an author approve their own pull
+request — "that refusal is currently the only thing keeping author and reviewer
+apart, and it is doing it by accident." If your platform does not refuse the
+call, your approval rung is a convention wearing a control's name, and
+=generate.sh= emits it saying exactly that on every run.
+
+** Rung 4 — Current
+
+*Adds:* guard 0 and guard 4b.
+
+*Requires:* that you deploy a *branch head*, not the trunk after merge. Most
+teams do not, and lose this rung without ever being asked the question.
+
+*What it buys:* what you verified is still what you ship. Guard 4b is the
+expensive one and the one worth understanding, because its content is not the
+comparison but *when* the comparison happens: a guard whose subject can change
+after it is checked must be re-checked at the moment it is relied on. Guard 0 at
+claim time is a convenience that gives fast feedback. Guard 4b at reliance is the
+guard.
+
+*It also needs the divergence to be classified rather than collapsed.* Guard 4b
+as first written withdrew the staging pass on *any* movement of the trunk, so a
+docs merge cost every open branch a full rebase and re-verify and the berth went
+back to the pool. Four classes, and they block at two different thresholds:
+
+| class    | what moved                 | guard 0 | guard 4b |
+|----------+----------------------------+---------+----------|
+| inert    | docs, notes                | pass    | pass     |
+| pipeline | gates, workflows           | *block* | pass     |
+| artifact | the deployables            | *block* | *block*  |
+| hotfix   | a deployable, urgently     | *block* | *block*  |
+
+The asymmetry is the point: =pipeline= blocks guard 0 because your branch would
+be verified by the *old* gates, and does not block guard 4b because your tree
+would not revert anything.
+
+*Standards footing:* capabilities C4 (an event when the trunk moves) and C5
+(verdicts revocable after issue), both marked *rare* by =spec.org=. C5 is
+standardised in one adjacent place — =OSV= is revocable verdicts specified, for a
+world in which rollback does not exist. Tier 2.
+
+** Side rung S — Serialized
+
+*Adds:* guard 1, an exclusive lease with an owner and a deadline, and a reaper.
+
+*Requires:* that the path to production is actually *shared*. If it is not, this
+rung is refused and the refusal is the right answer.
+
+*What it buys:* two changes cannot both believe they are the last one in.
+
+*What it costs, and know this before you climb it:* the berth is a throughput
+ceiling and it is computable. At 100 changes through one berth with 30-minute
+holds: 2.2 days of serialized wall-clock, a 26-hour mean wait, and *the emergency
+share reaches 100%* [E, =gates/simulate-gates.py --soak=]. That last number is
+not a defect the soak finds — it is the design meeting its limit. By the time the
+queue is that deep, every change has a rational reason to declare itself an
+emergency, so a high-volume run through a singleton berth *does not test the
+pipeline, it tests the bypass.*
+
+*The remedy is not more berths.* It is a path to production per team, and hard
+contracts at the boundary so that "do these compose?" is answerable statically
+rather than by serializing. =spec.org= §What this model gets wrong, on purpose is
+unambiguous about this: the queue "is not a design, it is what you are left with
+when nothing else can tell you whether two changes compose." A reader who adopts
+the berth without reading that section has taken home the wrong artifact.
+
+** Side rung G — Governed
+
+*Adds:* the freeze, the emergency declaration, change windows, the
+post-implementation review.
+
+*Requires:* a place to record an estate-level fact that *is not a change*, and a
+declarer identity for each.
+
+*What it buys:* auditability, a vocabulary, and — uniquely — a place to record a
+*forfeit*. It does not buy correctness. No guard is more sound because a window
+was booked.
+
+*The single most transferable lesson on this rung, and it is a refusal:* a
+freeze recorded on a change is not a freeze. The write that closes the estate to
+everyone is the write that exempts its own carrier, so *the one change that must
+not proceed becomes the only one that may* [E, PR #48, confirmed by TLC]. Record
+it on something that cannot be deployed.
+
+*Standards footing, stated carefully:*
+
+- *ITIL 4 — tier 4, framework, paywalled.* Its release/deployment vocabulary is
+  more useful than its reputation suggests, and it is the only body of practice
+  with an object a forfeited window could be an instance of. The purpose
+  statements are consistent across several independent restatements, *which is
+  corroboration and not verification* — [E, secondary]. The primary practice
+  guides were not read.
+- *ISO/IEC 20000-1:2018 §8.5.3 — tier 1, formal standard, certifiable,
+  paywalled.* Its clause title is "Release and deployment management" [E,
+  secondary — ISO's own browsing platform returned 403 and no clause text was
+  read]. *[H] on any claim about what the clause actually requires.* It is a real
+  standard that does not cover our case, which is worth recording precisely
+  because it is the one thing here that is certifiable.
+- *DORA — tier 5, research programme.* It is not a standard and should stop
+  being quoted as one. Across nine reports, =change window= / =deployment
+  window= / =maintenance window= / =release window= return *zero* hits, and the
+  only adjacent finding is that code-freeze periods correlate with *lower*
+  performance, in 2016 and 2017 only [E]. So no standard motivates the freeze.
+  The research is evidence against it and the framework is merely the only place
+  to write it down.
+- *The rest of this rung is tier 6 — folklore.* Change windows as practised,
+  "one live version", "rollback means redeploy the previous one". Widely done,
+  never written down normatively, and nobody's conformance test.
+
+*The inescapable conclusion from the standards survey, worth quoting because it
+sets the expectations for this whole directory:* everything up to and including
+publication is standardised, signed and settled. Everything from "it is now
+running in an environment" onward is either unstandardised or standardised
+without evidence. *Our guards live entirely in the second half.*
+
+** Rung 6 — Observed
+
+*Adds:* guard 5.
+
+*Requires:* a production the pipeline can reach, serving a build that reports its
+own identity.
+
+*What it buys:* you learn what is *running* rather than what you told something
+to run. This is the rung that converts the whole pipeline from a story about
+intent into a claim about the world, and it is the one most teams cannot reach.
+
+*Two things it must assert, and neither is obvious:*
+
+- *Convergence, not liveness.* N samples per route, one request each,
+  cache-busted, and every one must report the expected build. One sample cannot
+  distinguish "converged" from "I happened to reach a new replica" — a fleet 10%
+  migrated passes a single sample 10% of the time, which is not a bug you find by
+  re-running.
+- *One request, both facts.* Reading the status code and the build identity in
+  two separate requests lets the first hit an old replica and the second a new
+  one, and the pair passes while the estate is mixed.
+
+*What it cannot survive:* a cache it does not bust. This repo's static target
+serves =cache-control: max-age=600= [E, =age: 284= observed on a live response],
+so "deployed" and "served" can be ten minutes apart, and a convergence check that
+trusts a CDN is measuring the CDN.
+
+** Rung 7 — Ordered
+
+*Adds:* guard 6, production-first.
+
+*Requires:* rung 6, rung 2, and rung 4 — an observable production, a derivable
+deploy set, and branch-head deploys. Three preconditions, and =generate.sh=
+refuses this rung when any one of them is missing.
+
+*What it buys:* the trunk never asserts a change that no replica is serving. In
+this model the merge is *settlement, not authorization*: production deploys from
+the branch, converges, and the trunk follows. Trunk trailing production for the
+length of a window is the intended state.
+
+*Why it is stated as a rung rather than assumed:* it was missing from the model,
+implemented twice from the same unstated assumption, and *wrong in both* by the
+same mechanism [E]. That is the argument for writing predicates down: both
+implementations invented the guard and both invented it the same broken way,
+because there was nothing to check the invention against.
+
+*And it is the one rung whose conformance requirement includes its own test.*
+=spec.org=: "guard 6 cannot be tested without a real estate. A pipeline that can
+only test it against an in-process double has not tested it." A conforming
+implementation must have a test that fails when the guard is removed, *for all
+three values of =deploys(c)=* — the clean-room rebuild's self-test had exactly the
+right two cases and the guard exempted its way past both.
+
+* Attainability by shape
+
+Read down the column for your deployment shape. Verdicts use
+=docs/release-standards.org='s vocabulary: *holds* as specified, *restated* with
+a different subject, *vacuous* — stateable but with no content, *unimplementable
+as written*, *fails by construction*.
+
+*Everything in this table that is not about this estate is [H].* It is derived
+from the guards' preconditions, not observed on those platforms.
+
+| control   | no forge, git + a host      | forge, runner cannot reach the estate | static site behind a CDN     | one VM, one process     | rolling fleet            | blue/green            | serverless, no addressable replicas |
+|-----------+-----------------------------+---------------------------------------+------------------------------+-------------------------+--------------------------+-----------------------+-------------------------------------|
+| self-test | *holds* — it is local       | *holds*                               | *holds*                      | *holds*                 | *holds*                  | *holds*               | *holds*                             |
+| guard 2   | *restated* — re-run at reliance, never read a stored verdict | *holds*   | *holds*                      | *holds*                 | *holds*                  | *holds*               | *holds*                             |
+| manifest  | *holds* — it is a diff      | *holds*                               | *holds*                      | *holds*                 | *holds*                  | *holds*               | *holds*                             |
+| guard 0   | *holds*                     | *holds*                               | *holds*                      | *holds*                 | *holds*                  | *holds*               | *holds*                             |
+| guard 1   | *restated* — CAS on a git ref | *holds*                             | *holds*                      | often *vacuous* — nothing contends | *holds*       | *holds*               | *holds*                             |
+| guard 3   | *holds* — a trunk file      | *holds*                               | *holds*                      | *holds*                 | *holds*                  | *holds*               | *holds*                             |
+| guard 4   | *restated* — records in refs | *holds*                              | *holds*                      | *holds*                 | *holds*                  | *holds*               | *holds*                             |
+| guard 4b  | *restated* — re-derive, nothing to revoke | *holds* with C5, else re-derive | *holds*            | *holds*                 | *restated* — a third evaluation point mid-roll | *holds* | *holds*                       |
+| guard 5   | *holds* if you can curl it  | *holds*, carried by record            | *unimplementable as written* — no custom response headers [E] | *restated* — one sample, UNCONVERGED unstateable | *false by construction during the roll* | *holds*, and cleanly | *unknown* [H] — depends entirely on whether the platform exposes a per-response build id |
+| guard 6   | *holds* if guard 5 holds    | *holds*                               | *restated* — via the manifest file, and cacheable | *holds*   | *holds*, with the roll as an accepted intermediate | *holds* | inherits guard 5's verdict          |
+| windows   | *holds* — CAS on a ref      | *holds*                               | *holds*                      | *holds*                 | *holds*                  | *holds*               | *holds*                             |
+| tier model| *vacuous* unless addresses are shared | *vacuous* unless addresses are shared | *vacuous*         | *vacuous*               | *vacuous*                | *vacuous*             | *vacuous*                           |
+
+Four rows deserve their reasons written out.
+
+** Guard 5 on a static site is unimplementable as written [E]
+
+GitHub Pages cannot set custom response headers. A GitHub staff member, 2023:
+"We don't support this feature today so a =meta= tag unfortunately is the only
+way", and re-asked in 2024: "This is not an area that is being prioritized at
+the moment." Confirmed by a live =curl -sSI= on 2026-09-13.
+
+*This is a documented absence, which is the one thing a vendor document is
+authoritative about*, corroborated empirically. So it is [E], and it means guard
+5 as specified cannot run there.
+
+The repair — publish the build identity as *content*, at =/version.json= — works
+and is weaker in one specific way that must be said: *a header is emitted by the
+serving layer per response, and a file is content, and content is cacheable.*
+You are then measuring what the CDN chose to hand you.
+
+** Guard 5 is false by construction during a rolling deploy
+
+A fleet mid-roll is *meant* to be serving two builds. Guard 5 as written reports
+=UNCONVERGED=, which is correct and is not a failure — so on a rolling platform
+the verdict needs a third state that means "still rolling, ask again", and the
+window in which the third state is acceptable needs a bound, or it is an
+unbounded excuse. =spec.org= marks this open and provisional [P]. *Do not adopt
+guard 5 onto a gradual-rollout platform without deciding what UNCONVERGED means
+there first.*
+
+** The tier model is vacuous nearly everywhere, and that is fine
+
+Six of seven columns say *vacuous*. Addresses are only scarce where a namespace
+is shared, and the normal case — a host, an IP, a container, a DNS name per
+environment — does not share one. This is the most estate-specific control in the
+repository and the honest thing to say is that it does not travel. What *does*
+travel is the invariant underneath it: *a reader should be able to tell what kind
+of environment they are looking at, and whether it may promote, from its address
+alone, without consulting a policy file.* Encode that however your addresses
+work.
+
+** Guard 1 is vacuous on a single-service deployment, and refusing it is the win
+
+If nothing contends for the path, the berth serializes changes that were never in
+each other's way. =spec.org='s test: name what it protects, name who pays, and if
+the answer is "the queue pays and production gains nothing", it is ceremony.
+
+* Honest degradation, control by control
+
+For each control: the version that works with *no forge*, with *no live estate*,
+and with *no blue/green*. "You cannot have this" appears four times and each is a
+real answer.
+
+| control     | without a forge                                          | without a live estate                              | without blue/green                                     |
+|-------------+----------------------------------------------------------+----------------------------------------------------+--------------------------------------------------------|
+| self-test   | unchanged — it is a local command                        | unchanged                                          | unchanged                                              |
+| guard 2     | re-run the suite at reliance, record against the SHA     | unchanged — gates test the artifact, not the estate | unchanged                                             |
+| manifest    | a diff and a glob table in the repo                      | unchanged                                          | unchanged                                              |
+| evidence    | append-only records in =refs/=, CAS-guarded              | unchanged — records name instruments, not estates  | unchanged                                              |
+| guard 0     | =git merge-base --is-ancestor=                           | unchanged                                          | unchanged                                              |
+| guard 1     | a CAS lease on a git ref, with a deadline and a reaper   | unchanged                                          | unchanged                                              |
+| guard 3     | a tracked file on the trunk with a path-owner rule       | unchanged                                          | unchanged                                              |
+| guard 4     | records in =refs/=, read at reliance                     | *you cannot have this* — nothing to authorize from | unchanged                                              |
+| guard 4     | approval rung: *you cannot have this* without an identity the platform will refuse | as left | unchanged                              |
+| guard 4b    | re-derive from =git log=, never read a persisted pass    | unchanged                                          | unchanged                                              |
+| guard 5     | curl plus a build-id mechanism is enough — a forge is not what makes it work | *you cannot have this* | holds, with a slower and manual failure path |
+| guard 6     | holds wherever guard 5 holds                             | *you cannot have this*, and saying so is a conformance requirement, not a caveat | holds — the ordering is about the trunk, not about slots |
+| freeze      | a trunk file with a declared writer                      | unchanged                                          | unchanged                                              |
+| emergency   | a signed tag, or a file, with a declared writer          | unchanged                                          | unchanged                                              |
+| windows     | CAS on a git ref                                         | unchanged                                          | unchanged                                              |
+| PIR         | a git note on the merge commit                           | *degraded* — it records intent, and must say so    | unchanged                                              |
+| rollback    | out of scope                                             | out of scope                                       | *degraded to a refusal* naming the SHA a person must restore |
+| tier model  | unchanged                                                | unchanged                                          | *vacuous* unless addresses are shared                  |
+
+Two rows are worth expanding.
+
+** "Without a live estate" is the expensive column, and it has only two entries
+
+Everything except guard 4, guard 5, guard 6 and the PIR survives with no
+deployable environment at all. That is the good news and it is larger than it
+looks: *rungs 1, 2, 4 and both side rungs are attainable by a team that ships a
+library and never deploys anything.*
+
+What does not survive is exactly the part that makes claims about the world.
+There is no offline version of "production is serving this build", and a pipeline
+that fakes one with an in-process double has not tested anything — it has written
+a test whose subject is the test.
+
+** The PIR without an estate is intent, and must say so
+
+A post-implementation review that reports gate durations and a deployment record
+is a narrative about what was attempted. It becomes evidence only when a
+convergence observation is in it. Both are worth writing. Conflating them is
+=spec.org= defect class 3 — *observation is not intent* — and the fix is one line:
+the record says by name where each value came from. "Someone said it was fine" is
+not evidence. "=gates/smoke.sh= observed pass on =a013270=" is.
+
+* Where to stop
+
+A recommendation, and it is [I].
+
+- *Everyone stops at rung 2 or above.* Below it, nothing you have is worth
+  reading.
+- *Most teams should stop at rung 4*, and spend what they would have spent on
+  rungs 6 and 7 on making the deploy set smaller and the path per-team instead.
+- *Climb side rung S only if you measured contention.* Not if you anticipated it.
+- *Climb side rung G when someone outside the team needs to read what happened*,
+  which is a real requirement and not a lesser one. Just do not expect it to make
+  a deployment safer.
+- *Rung 6 is worth more than everything above rung 2 combined*, if you can reach
+  it, because it is the only rung that tells you the truth rather than your own
+  intentions. If your platform can expose the build identity of what it is
+  serving, do that before anything else on this page.
+
+* Refutation conditions
+
+1. *A team at rung 1 reports that a guard from a higher rung caught something
+   rungs 1 and 2 would not have.* Would refute §The two honest headlines.
+2. *Guard 5 is implemented on a static target without a custom header and
+   without inheriting the cache's answer.* Would refute §Guard 5 on a static site.
+3. *A gradual-rollout platform is shown to support guard 5 unmodified.* Would
+   refute the =false by construction= verdict and would upgrade a [P] to a
+   refuted claim, which is the better outcome.
+4. *The tier model turns out to be load-bearing where addresses are not shared.*
+   Would refute §The tier model is vacuous nearly everywhere.
+5. *A conforming guard 6 is demonstrated against something that is not a real
+   estate.* Would refute rung 7's conformance requirement and =spec.org= §Guard 6
+   with it — and it is the single most valuable refutation available here,
+   because it would make the most expensive rung cheap.
+6. *ISO/IEC 20000-1 §8.5.3 turns out to require something this ladder omits.*
+   Would refute the [E, secondary] claim that it is silent on every question
+   here. The only way to settle it is to read the clause, which costs money.

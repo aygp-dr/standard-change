@@ -47,9 +47,22 @@ fi
 holder=$(gh pr list --repo "$repo" --state open --label deploy:staging \
   --json number -q "[.[].number] | map(select(. != $pr)) | first // empty")
 if [ -n "$holder" ]; then
-  gh pr edit "$pr" --repo "$repo" --add-label blocked:queue --remove-label deploy:staging
+  # THE LOCK IS deploy:staging, AND A REFUSAL RESETS THE CHANGE. Decided
+  # 2026-09-14: a change that asks for staging while another holds it keeps
+  # NO marker -- not the window, not the lifecycle, not the observations, and
+  # not the human intent. blocked:queue used to be left behind as the trace of
+  # this refusal, and a label left behind is a print statement that later
+  # reads as a claim (spec.org, "the labels are print statements"). The person
+  # re-states the intent when the lock is free; the comment below is the
+  # record of why they have to. Rule LockResets in tla/Labels.tla.
+  ./change/schedule.sh unschedule "$pr" "refused at the lock: staging held by #$holder" >/dev/null 2>&1 || true
+  for l in deploy:staging blocked:queue change:scheduled change:requested change:start release \
+           staging:hold staging:deployed staging:healthy staging:e2e staging:e2e-failed \
+           staging:smoke staging:smoke-failed staging:uat staging:in-progress; do
+    gh pr edit "$pr" --repo "$repo" --remove-label "$l" >/dev/null 2>&1 || true
+  done
   gh pr comment "$pr" --repo "$repo" --body \
-    "Staging is held by #$holder. Re-add \`deploy:staging\` once it merges; you will need to rebase onto \`main\` first."
+    "Refused at the lock: staging is held by #$holder. Every marker on this change has been cleared -- its window, its lifecycle, its observations and the intent that asked for it -- so that nothing here reads as a claim while it waits. When #$holder settles or its window lapses, say \`change:start\` again (rebase onto \`main\` first if it moved)."
   exit 5
 fi
 

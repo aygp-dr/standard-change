@@ -139,7 +139,7 @@ lself=$(gh api "repos/$repo/commits/$head/status" \
   --jq '[.statuses[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
 
 bad=$(gh api "repos/$repo/commits/$head/check-runs" \
-  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion!="success"))|length')
 if [ "$lbad" -eq 0 ] && [ "$lok" -ge 3 ] && [ "$lself" -ge 1 ]; then
   printf '  ok    %-16s %s\n' "gates" "$lok local/ contexts green on $short (host run, not CI)"
 elif [ "$bad" -eq 0 ]; then printf '  ok    %-16s %s\n' "check runs" "green on $short"

@@ -2,6 +2,13 @@ name: deploy-staging
 on:
   pull_request:
     types: [labeled]
+# WITHOUT THIS, GUARD 1 COULD NOT SAY NO. The repo's default token is
+# read-only, so queue.sh's refusal -- add blocked:queue, remove deploy:staging,
+# comment -- died on the first label write with "Resource not accessible by
+# integration" (run 34897883064, #94, 2026-09-14). The guard fired; its verdict
+# never landed, and the second holder kept the label. issues: write is for
+# change/lock.sh, which records the lock in the estate issue's body.
+permissions: {contents: read, pull-requests: write, issues: write}
 jobs:
   deploy:
     if: github.event.label.name == 'deploy:staging'
@@ -19,11 +26,17 @@ jobs:
       - run: ./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh staging "$(./change/groups.sh "$PR")"
       - name: authorizing e2e run
         run: ROUTER_URL="$(cat .slot-url)" ./gates/e2e.sh $(./change/groups.sh "$PR")
-      - if: success()
-        run: gh pr edit "$PR" --add-label staging:passed --remove-label staging:in-progress
-      - if: failure()
-        run: gh pr edit "$PR" --add-label staging:failed --remove-label staging:in-progress
+      # NO VERDICT LABEL FROM THIS WORKFLOW. staging:passed and staging:failed are
+      # retired (label-owners.tsv); the instrument writes its own verdict
+      # (gates/e2e.sh --pr -> staging:e2e / staging:e2e-failed). Until 2026-09-14
+      # the failure step here stamped staging:failed on every claim, because a
+      # runner cannot see the estate and this run always dies at preflight -- a
+      # refusal at the calendar was being recorded as a failed measurement, on
+      # a label the declaration had already retired.
       - if: always()
-        run: ./change/schedule.sh close "$(cat .change-event-id)" "${{ job.status }}"
+        run: gh pr edit "$PR" --remove-label staging:in-progress || true
+      - if: always()
+        # a run refused before it booked has no event to close
+        run: '[ -f .change-event-id ] && ./change/schedule.sh close "$(cat .change-event-id)" "${{ job.status }}" || echo "no window was booked; nothing to close"'
       - if: always()
         run: ./change/lock.sh release
