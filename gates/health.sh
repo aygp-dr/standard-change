@@ -1,5 +1,9 @@
 #!/bin/sh
-# health.sh <base-url> <expected-sha> [samples] -- guard 5. Exit 0, or 7.
+# health.sh <base-url> <expected-sha> [samples] -- guard 5.
+#
+# Exit 0 converged, 7 not converged, 4 I COULD NOT CHECK. The third is not a
+# nicety: 0 and 7 are both verdicts about the estate, and a run that could not
+# read its own route table has no standing to return either (issue #24).
 #
 # Asserts CONVERGENCE, not liveness. Two defects the single-sample version had:
 #
@@ -35,8 +39,65 @@ done
 base="$1"; want="$2"; samples="${3:-${HEALTH_SAMPLES:-5}}"; rc=0
 MODE="${HEALTH_MODE:-header}"   # header | manifest (static targets)
 
-for app in $(jq -r '.[].app' router/routes.json); do
-  path=$(jq -r --arg a "$app" '.[] | select(.app==$a) | .health' router/routes.json)
+# THE ROUTE TABLE COMES FROM THIS SCRIPT'S TREE, NOT FROM THE CALLER'S CWD.
+#
+# This file read `router/routes.json` as a bare relative path, so guard 5 --
+# the guard documented as having no bypass, ever, and the only evidence the
+# forge gets that production converged -- answered a different question
+# depending on the directory it was invoked from (issue #24). Confirmed live
+# on staging at e7b0e7d: UNHEALTHY from the main checkout, ok 5/5 from #19's
+# worktree, same estate, same build, same command.
+#
+# The rest of the file already resolved change/evidence.sh from $0. Only the
+# thing the verdict depends on was left to the caller.
+root=$(cd "$(dirname "$0")/.." && pwd)
+ROUTES="$root/router/routes.json"
+
+# AND IT FAILS CLOSED, because the cwd bug's worst outcome was not the wrong
+# verdict -- it was a PASS.
+#
+#   $ cd /anywhere-without-a-checkout
+#   $ sh gates/health.sh http://127.0.0.1:1 deadbeef 3
+#   jq: error: Could not open file router/routes.json
+#   $ echo $?
+#   0
+#
+# `for app in $(jq ...)` does not abort under `set -e` when the command
+# substitution fails: the list is empty, the loop body never runs, rc stays 0,
+# and the script falls through to the recorder. With --pr that writes the
+# evidence record `pass` and adds <env>:healthy -- for a URL nothing was
+# listening on, at a SHA that does not exist, having taken zero samples.
+#
+# That is class 7 exactly: a check that cannot fail produces no verdict, and
+# this one produced a verdict anyway. Being unable to read the oracle is "I
+# could not determine", which is exit 4, and 4 blocks (docs/exit-codes.org).
+refuse() {
+  echo "REFUSED: guard 5 cannot establish what to probe." >&2
+  echo "  $*" >&2
+  echo "  This is not UNHEALTHY and it is not healthy: nothing was sampled." >&2
+  echo "  No observation is recorded and no label is touched." >&2
+  exit 4
+}
+[ -f "$ROUTES" ] || refuse "no route table at $ROUTES"
+apps=$(jq -r '.[].app' "$ROUTES" 2>/dev/null) \
+  || refuse "$ROUTES is not a readable route table"
+[ -n "$apps" ] || refuse "$ROUTES declares no apps; there is nothing to converge"
+
+# Name the oracle in the output. `production:healthy` says the estate
+# converged and could not say on what; it still cannot say against WHICH route
+# table, and that is the variable #24 turned out to hinge on.
+echo "guard 5: $(printf '%s\n' "$apps" | grep -c .) apps from $ROUTES, $samples samples each"
+
+probed=0
+for app in $apps; do
+  path=$(jq -r --arg a "$app" '.[] | select(.app==$a) | .health' "$ROUTES")
+  # A declared app with no health path is not a healthy app and is not an
+  # unhealthy one either -- it is one this instrument cannot ask about. Before
+  # this, `path` became the string "null" and the probe of $base/null 404'd,
+  # reporting UNHEALTHY for a defect in the route table.
+  [ -n "$path" ] && [ "$path" != null ] \
+    || refuse "app '$app' declares no health path in $ROUTES"
+  probed=$((probed + 1))
   seen=""; bad=0
   n=1
   while [ "$n" -le "$samples" ]; do
@@ -75,6 +136,11 @@ for app in $(jq -r '.[].app' router/routes.json); do
   fi
 done
 
+# The loop ran. Belt and braces against the exact shape of the original bug:
+# if anything ever makes the app list empty again, this is a refusal rather
+# than a silent 0. A gate must not be able to pass by not looking.
+[ "$probed" -gt 0 ] || refuse "zero apps were probed"
+
 if [ -n "$PR" ]; then
   repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
   if [ -z "$ENV_" ]; then
@@ -92,7 +158,7 @@ if [ -n "$PR" ]; then
   # workflow having fired (issue #16). This comment states the SHA that was
   # sampled, so a guard can check it against the head it is about to merge.
   [ "$rc" = 0 ] && verdict=pass || verdict=fail
-  "$(dirname "$0")/../change/evidence.sh" record "$PR" "$ENV_" healthy "$verdict" "$want" "$base" \
+  "$root/change/evidence.sh" record "$PR" "$ENV_" healthy "$verdict" "$want" "$base" \
     || { echo "  FAIL could not record the $ENV_:healthy observation for #$PR"; rc=7; }
 
   if [ "$rc" = 0 ]; then
