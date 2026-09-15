@@ -1,5 +1,5 @@
 #+TITLE: How would an agent verify a change to the rules?
-#+SUBTITLE: Speculation — the control plane cannot be its own test subject
+#+SUBTITLE: Speculation -- the control plane cannot be its own test subject
 #+DATE: 2026-09-13
 #+OPTIONS: toc:2 num:t
 
@@ -13,7 +13,7 @@ The thing that decides whether a change is safe is the thing being changed.
 #+end_quote
 
 That is not solvable by adding a check, because the new check is inside the
-boundary too. It is only solvable by finding something *outside* — and this
+boundary too. It is only solvable by finding something *outside* -- and this
 repo has three such things, two gaps where it does not, and one honest limit.
 
 * What is already outside the boundary
@@ -27,7 +27,7 @@ expressed there *first* and checked before any YAML moves:
 : change the predicate -> ./tla/check.sh -> six checks, three of them negative
 
 This has already caught a guard change that looked fine: splitting deploy from
-merge exposed that *guard 4 had guard 0's flaw* — a change marked
+merge exposed that *guard 4 had guard 0's flaw* -- a change marked
 =itil:emergency= after its pass was withdrawn could merge with neither a pass
 nor an approval. TLC found it; no workflow would have.
 
@@ -43,7 +43,7 @@ operations against an executable model, including the divergence classes TLA+
 abstracts away. Same property: it does not call GitHub, so GitHub cannot lie to
 it.
 
-Its negative run is the part that matters — =GUARD_4B=0= must still reproduce
+Its negative run is the part that matters -- =GUARD_4B=0= must still reproduce
 scenario D4. *A rule change that makes the model unable to fail is the failure.*
 
 ** 3. The offline labeller oracle
@@ -59,7 +59,7 @@ the intended behaviour rather than the actual one, and then agree with itself.*
 
 * The two gaps
 
-** Gap 1 — the label vocabulary has no single source of truth
+** Gap 1 -- the label vocabulary has no single source of truth
 
 Fifteen files name labels. They disagree:
 
@@ -75,12 +75,12 @@ So an agent renaming =deploy:staging= must find and update fifteen places, and
 *nothing tells it when it has missed one*. The conformance auditor would not
 notice, because its own list is one of the fifteen.
 
-*The fix is mechanical and not yet done:* one machine-readable file — say
-=labels.yml= — with kind, description and colour, from which the auditor, the
+*The fix is mechanical and not yet done:* one machine-readable file -- say
+=labels.yml= -- with kind, description and colour, from which the auditor, the
 skills' shared vocabulary, =gh label sync= and the spec table are all generated
 or checked. Then a rename is one edit and a diff.
 
-** Gap 2 — GitHub's semantics are assumed, never asserted
+** Gap 2 -- GitHub's semantics are assumed, never asserted
 
 The pipeline depends on behaviours nothing here checks:
 
@@ -95,7 +95,7 @@ the labeller race, the hardcoded port, the four iterations of =itil:standard=.
 An agent changing the rules inherits all of them and has no list.
 
 *The fix:* a =gates/forge-contract.sh= that asserts each assumption against a
-scratch repo — apply a label, read it back, assert the delay; push without a
+scratch repo -- apply a label, read it back, assert the delay; push without a
 checkout, assert =gh= fails without =--repo=. Turn folklore into a gate.
 
 * The answer
@@ -107,7 +107,7 @@ first:
    runs nowhere near GitHub.
 2. *Run the exhaustive model*, both directions. If the negative run stops
    failing, the change removed the model's ability to detect the defect.
-3. *Run the labeller oracle* for anything touching labels — and check whether
+3. *Run the labeller oracle* for anything touching labels -- and check whether
    the oracle asserts the config or merely restates the intent.
 4. *Run the conformance auditor against a scratch repo* with the new rules
    applied. This is the only step that touches real GitHub semantics.
@@ -121,8 +121,8 @@ is the real recommendation:
 govern.* One repo cannot be both the subject and the instrument.
 #+end_quote
 
-Which is the same argument as §C6 — /a platform can attest to what is running
-only if it runs it/ — applied one level up. A rule cannot attest to itself, and
+Which is the same argument as §C6 -- /a platform can attest to what is running
+only if it runs it/ -- applied one level up. A rule cannot attest to itself, and
 =itil:normal='s required approval is a *procedural* answer to a *structural*
 problem: it asks a human to notice what no gate checks.
 
@@ -131,6 +131,6 @@ problem: it asks a human to notice what no gate checks.
 Even with all five steps, an agent cannot verify that a rule change is
 *desirable*. The gates can show that the guards still hold, that the model
 still fails when it should, and that GitHub still behaves as assumed. They
-cannot show that the new rule is the rule you wanted — which is the one job
+cannot show that the new rule is the rule you wanted -- which is the one job
 §Approval as a gate reserves for a second judgement, and the reason an agent
 review is worth something only insofar as it *re-derives* rather than agrees.

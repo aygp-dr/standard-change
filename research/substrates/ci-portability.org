@@ -1,4 +1,4 @@
-#+TITLE: Guard conformance — what any platform must provide to enforce this model
+#+TITLE: Guard conformance -- what any platform must provide to enforce this model
 #+SUBTITLE: Research notes. Capability study, not a migration plan.
 #+AUTHOR: aygp-dr
 #+DATE: 2026-09-13
@@ -7,14 +7,14 @@
 
 * What this is, and what it is not
 
-Research notes, not spec. =spec.org= governs; nothing here amends it.
+Research notes. =spec.org= is the spec; it governs, and nothing here amends it.
 
 *This is not a migration plan.* Nobody is moving to sourcehut, AWS or Azure. The
 target is an enterprise GitHub account, and the point of looking at other
 platforms is different:
 
 #+begin_quote
-The guards in =spec.org= are written in GitHub vocabulary — labels, rulesets,
+The guards in =spec.org= are written in GitHub vocabulary -- labels, rulesets,
 environments, =concurrency=. A guard that can only be *stated* in GitHub
 vocabulary is a guard we have not actually understood. So: for each guard, what
 *abstract capability* does it require of any platform, and which platforms
@@ -23,7 +23,7 @@ provide it?
 
 The deliverable is a conformance study. A guard that survives translation to five
 unrelated platforms names a real invariant. A guard that does not survive is
-either encoding a GitHub feature, or is naming something genuinely rare — and the
+either encoding a GitHub feature, or is naming something genuinely rare -- and the
 difference between those two matters, because the rare ones are what an
 enterprise rollout must confirm early and design around.
 
@@ -32,7 +32,7 @@ eight unreadable controls because =repos/{r}/rulesets= answers =403 Upgrade to
 GitHub Pro=. On enterprise GitHub, rulesets, branch protection, environments with
 protection rules and org-level rulesets all work. That 403 is *an artifact of the
 local development box* and is treated here as a footnote about hydra, not as a
-constraint on the model. It still matters for one thing only — it is why the
+constraint on the model. It still matters for one thing only -- it is why the
 audit keeps four outcomes instead of two, and that discipline is worth keeping
 regardless of plan.
 
@@ -43,10 +43,10 @@ largely from vendor documentation and source reading:
 
 | label | meaning here                                                             |
 |-------+--------------------------------------------------------------------------|
-| [E]   | observed — a command run on hydra, a live API response, or a named source file read at a named tag |
+| [E]   | observed -- a command run on hydra, a live API response, or a named source file read at a named tag |
 | [H]   | documented by the vendor, never exercised here                          |
 | [I]   | inferred from the model or from other claims                            |
-| [P]   | provisional — a reading of ambiguous or conflicting evidence            |
+| [P]   | provisional -- a reading of ambiguous or conflicting evidence            |
 
 *A vendor doc is not an observation.* That a feature is documented is [H]: it
 establishes the name is real and not invented, and nothing about behaviour under
@@ -65,7 +65,7 @@ that tag rather than from documentation [E].
 | 1  | staging held by no one else              | n/a (emergency skips it)  |
 | 2  | all gates green on the head SHA          | *none, ever*              |
 | 4  | no production without a staging pass     | emergency, with approval  |
-| 4b | when =main= moves, classify the divergence (=inert= / =pipeline= / =artifact= / =hotfix=) and withdraw the staging pass only for =artifact= and =hotfix= — *keeping the berth* and extending its deadline | emergency |
+| 4b | when =main= moves, classify the divergence (=inert= / =pipeline= / =artifact= / =hotfix=) and withdraw the staging pass only for =artifact= and =hotfix= -- *keeping the berth* and extending its deadline | emergency |
 | 5  | production health check asserting the served build SHA | *none, ever* |
 
 ** The ten capabilities
@@ -112,18 +112,18 @@ flowchart LR
 
 Red is rare (§Which capabilities are rare), amber is usually mis-supplied as
 run-serialization, green is widely native. Note that guard 4b alone needs four
-capabilities, one of them the scarcest — which is a structural restatement of
-=spec.org='s claim that it is the load-bearing guard.
+capabilities, one of them the scarcest -- which is a structural restatement of
+=spec.org='s claim that it is the structural guard.
 
-*** C1 — Change-state carrier
+*** C1 -- Change-state carrier
 
 *A mutable, queryable label set on the change, owned by automation.*
 
 Three properties, and the second is the one usually missed [I]:
 
-1. *Mutable by automation* — a workflow can add and remove state without a human.
+1. *Mutable by automation* -- a workflow can add and remove state without a human.
 2. *Queryable across changes.* The berth query is *"which open change holds
-   =deploy:staging="* — a query over the whole change population, not a read of
+   =deploy:staging="* -- a query over the whole change population, not a read of
    one change. A platform can have per-change metadata and still fail C1 if you
    cannot ask that question. This is what makes a label set different from a
    free-text field.
@@ -135,20 +135,20 @@ Three properties, and the second is the one usually missed [I]:
 Needed by: change state generally, and guards 1, 4 and 4b specifically, since all
 three read and write it.
 
-*** C2 — Trunk-movement event
+*** C2 -- Trunk-movement event
 
 *An event fired when the trunk tip moves, carrying enough to enumerate the
 changes affected.*
 
 Needed by: guard 4b's trigger. The user's framing was that a platform without
-this cannot implement 4b at all — correct as far as it goes, but it turns out
+this cannot implement 4b at all -- correct as far as it goes, but it turns out
 *this is not the rare capability* [I]. Every platform surveyed has a
 push-to-trunk event, because every one has either webhooks or a native push
 trigger. C2 is nearly universal. The scarcity is entirely in C4.
 
-*** C3 — Ancestry relation
+*** C3 -- Ancestry relation
 
-*A readable relation between a change's base and the trunk tip — is this change
+*A readable relation between a change's base and the trunk tip -- is this change
 behind?*
 
 Needed by: guard 0, and guard 4b's re-check at production time.
@@ -158,29 +158,29 @@ cheap enough to evaluate on every change on every trunk push [I]. GitHub's
 =mergeStateStatus= gives it in one read. Others require a compare call, or
 computing it yourself.
 
-*** C4 — Revocable verdict
+*** C4 -- Revocable verdict
 
-*A verdict, once issued, can be withdrawn by automation after issue — and the
+*A verdict, once issued, can be withdrawn by automation after issue -- and the
 withdrawal must be separable from rejection.*
 
 Needed by: guard 4b. *This is the rare one*, and the second clause is what makes
-it rare rather than merely uncommon [I].
+it rare [I]. The first clause alone would be uncommon.
 
 Revocability alone is not enough. §Guard 4b insists that =artifact= and =hotfix=
 divergence withdraw the staging pass *while the change keeps its berth and gets
 an extension*, because *"losing your berth because someone else had an emergency
 is a punishment for being in the queue at the wrong moment."* So the platform
 must let automation say *"this verdict no longer holds, through no fault of the
-change"* — distinct from *"this change is rejected."* A platform with one
+change"* -- distinct from *"this change is rejected."* A platform with one
 status field per change can revoke, but cannot separate; revoking collapses into
 rejecting, and the operator message becomes false.
 
-*** C5 — Exclusive lease
+*** C5 -- Exclusive lease
 
 *An exclusive hold with an owner and a deadline, readable by third parties,
 outliving any single execution.*
 
-Needed by: guard 1 — the berth.
+Needed by: guard 1 -- the berth.
 
 *A lease, not a queue, and not a lock.* This is the distinction that decides most
 of the survey, and =spec.org= §Guard 1 already states it:
@@ -193,14 +193,14 @@ is the lock; =concurrency: staging= is only the anti-collision on top of it.
 #+end_quote
 
 Four sub-properties [I]: an *owner* (which change holds it), a *deadline* (so a
-dead holder does not wedge the queue — =spec.org='s 60-minute stale rule),
+dead holder does not wedge the queue -- =spec.org='s 60-minute stale rule),
 *renewability* (guard 4b extends the deadline on preemption), and *third-party
 readability* (the audit must see who holds it; a lock you cannot read back is not
 auditable).
 
 Almost every platform offers run-serialization, which satisfies none of these.
 
-*** C6 — Content-addressed verdicts
+*** C6 -- Content-addressed verdicts
 
 *Check verdicts bound to a content hash, and enumerable for a given hash.*
 
@@ -208,37 +208,37 @@ Needed by: guard 2, which has no bypass.
 
 Binding to a branch or to a change instead of to a SHA silently breaks it: the
 verdict survives a push and authorizes a tree nobody tested. =spec.org= makes
-this explicit — *"A pass observed on an earlier commit authorizes nothing"* — and
+this explicit -- *"A pass observed on an earlier commit authorizes nothing"* -- and
 implements it with a workflow step that strips =staging:passed= on =synchronize=.
 A platform where verdicts are natively SHA-addressed does not need that step; the
 binding is a property of the data model rather than a rule someone remembered to
 write [I].
 
 *Enumerable* matters as much as *bound*: guard 2 asks "are *all* gates green on
-this SHA", and additionally that =gate-selftest= ran at all — *"a gate suite whose
+this SHA", and additionally that =gate-selftest= ran at all -- *"a gate suite whose
 self-test never ran produces no verdict, so its green is void"*. That requires
 listing verdicts for a hash, not just querying one by name.
 
-*** C7 — Platform-attested deployment record
+*** C7 -- Platform-attested deployment record
 
 *A record that a deployment happened, written by the platform rather than
 self-reported by the job.*
 
-Needed by: guard 4 — no production without a staging pass.
+Needed by: guard 4 -- no production without a staging pass.
 
 The whole content of this capability is *who attests* [I]. A deployment record
 written by the platform is evidence that the platform observed a deployment. A
 status posted by a job is evidence that *something holding a write token asserted*
-a deployment. The second is forgeable by anything with the token — including the
+a deployment. The second is forgeable by anything with the token -- including the
 workflow of the change under review, which on a =itil:normal= PR is being
 modified by the change it is supposed to gate.
 
 This is the capability with the sharpest degradation story, and it is where
-Gitea's substitute is genuinely weaker rather than merely different.
+Gitea's substitute is genuinely weaker; on the other capabilities it is only different.
 
-*** C8 — Runtime artifact identity
+*** C8 -- Runtime artifact identity
 
-*The deployed artifact is identifiable at runtime* — =gates/health.sh= asserting
+*The deployed artifact is identifiable at runtime* -- =gates/health.sh= asserting
 =x-build-sha=.
 
 Needed by: guard 5, which has no bypass.
@@ -247,21 +247,21 @@ Needed by: guard 5, which has no bypass.
 so. It is a property of the artifact and the deploy target: the app must emit its
 build SHA, and the target must preserve the header. The CI system's only role is
 to pass the *expected* identity to the checker. So C8 is close to universally
-=buildable= and the platform column is nearly uninformative — what varies is
+=buildable= and the platform column is nearly uninformative -- what varies is
 whether the platform *also* supplies rollback and alarm-driven abort, which is
 guard 5's failure branch rather than guard 5 itself.
 
-The load-bearing half is worth restating because it is easy to lose: *"A 200 only
+The structural half is worth restating because it is easy to lose: *"A 200 only
 proves something is serving; =x-build-sha= proves the thing we just deployed is
 serving."*
 
-*** C9 — Gate-authority separation
+*** C9 -- Gate-authority separation
 
 *The enforcement configuration cannot be edited by the change it is enforcing.*
 
 Not in the original list, and it earns a place [I]. =spec.org= defines
 =itil:normal= as a diff touching =router/=, =gates/=, =change/=, =targets/= and
-=.github/= — so a =itil:normal= PR *edits the guards that gate it*. The model
+=.github/= -- so a =itil:normal= PR *edits the guards that gate it*. The model
 handles this with review requirements and an audit of =bypass_actors=, which is a
 procedural answer to a structural problem.
 
@@ -269,7 +269,7 @@ One platform solves it structurally, and noticing that is one of the more useful
 outcomes of the survey. Listing it as a capability makes visible something the
 GitHub-native design cannot express at all.
 
-*** C10 — Readable enforced configuration
+*** C10 -- Readable enforced configuration
 
 *The controls actually in force are readable as data, without a UI visit.*
 
@@ -279,9 +279,9 @@ unreadable is not reported as fine.
 
 * The conformance matrix
 
-=native= — the platform provides it as configuration or as a property of its data
-model. =buildable= — expressible with work, using platform primitives that exist.
-=absent= — no enforcement point or no data model to hold it.
+=native= -- the platform provides it as configuration or as a property of its data
+model. =buildable= -- expressible with work, using platform primitives that exist.
+=absent= -- no enforcement point or no data model to hold it.
 
 | Capability                              | GitHub (Enterprise) | AWS         | Azure DevOps | sourcehut | Jenkins   | Gitea 1.26.1 |
 |-----------------------------------------+---------------------+-------------+--------------+-----------+-----------+--------------|
@@ -300,17 +300,17 @@ model. =buildable= — expressible with work, using platform primitives that exi
 writes *the forge's* labels, so C1 is satisfied by the forge, never by Jenkins.
 ² =CommitsBehind= is computed and stored but *not exposed in the REST API*;
 obtainable via =compare/{head}...{base}= =total_commits= [E].
-³ PR statuses carry =iterationId=, which pins a status to a PR iteration — an
+³ PR statuses carry =iterationId=, which pins a status to a PR iteration -- an
 iteration, not a hash, so [P] on whether it is exactly content-addressed.
 ⁴ Jenkins posts to the forge's SHA-addressed status/checks API; the capability is
 the forge's, and Jenkins can drive it.
 ⁵ =ValidateService= / =PutLifecycleEventHookExecutionStatus= plus alarm-driven
-abort and auto-rollback make the failure branch native, not just the check.
+abort and auto-rollback make both the check and the failure branch native.
 ⁶ Runnable as a build task, but =set -x= prints every command with environment
 variables expanded, so a credentialed check leaks into a public log [H].
 ⁷ IAM can separate who may change a pipeline from who may run it.
 ⁸ Only if the Jenkinsfile is not in the repo under change, or via JJB-generated
-jobs — i.e. by construction, not by a platform feature.
+jobs -- i.e. by construction, not by a platform feature.
 ⁹ Plus AWS Config: the audit becomes continuous rather than a snapshot.
 ¹⁰ But the key reads (checks, approvals, environments) are all =-preview= APIs.
 ¹¹ Nothing is enforced, so there is no enforced configuration to read. The audit
@@ -322,12 +322,12 @@ Reading down the matrix rather than across is where the useful result is [I].
 
 ** C7 and C9 are the scarcest, and they are scarce in opposite directions
 
-*C9 — gate-authority separation — is absent on both platforms we actually use.*
+*C9 -- gate-authority separation -- is absent on both platforms we actually use.*
 Only Azure DevOps provides it, and it does so emphatically: *"Approvals and other
 checks aren't defined in the yaml file. Users modifying the pipeline yaml file
 can't modify the checks performed before start of a stage"* [H]. On GitHub and
 Gitea the workflows live in the repository, so a =itil:normal= PR edits its own
-gates. The model's answer is procedural — require review, audit the bypass list —
+gates. The model's answer is procedural -- require review, audit the bypass list -- 
 and procedural answers degrade under load exactly as §The balance predicts.
 
 *This is the capability an enterprise rollout should confirm first*, because
@@ -337,7 +337,7 @@ required workflows, and =bypass_actors= scoped at the org. Whether those close
 C9 for =itil:normal= is an open question worth answering before the first real
 run [I].
 
-*C7 — platform-attested deployment record — is native on four of six and absent
+*C7 -- platform-attested deployment record -- is native on four of six and absent
 on Gitea*, which is precisely the trade a self-hosted forge makes. Its absence is
 not cosmetic: it converts guard 4 from "the platform observed a staging deploy"
 into "a token-holder asserted one".
@@ -352,12 +352,12 @@ Two platforms have C4 natively, by opposite routes, and the contrast is
 instructive:
 
 - *Azure DevOps* made it a configuration option. Build Validation's *Build
-  expiration* — *"Immediately when =<branch>= is updated: This option sets PR
+  expiration* -- *"Immediately when =<branch>= is updated: This option sets PR
   build policy status to failed whenever the branch is updated, and requeues a
   build"* [H]. A verdict that expires on a trigger.
 - *Jenkins* made the stale state *unrepresentable*. Under
-  =ChangeRequestCheckoutStrategy.MERGE=, =ChangeRequestSCMRevision.equals()= —
-  which is =final= — includes the target revision in revision identity [H]:
+  =ChangeRequestCheckoutStrategy.MERGE=, =ChangeRequestSCMRevision.equals()= -- 
+  which is =final= -- includes the target revision in revision identity [H]:
 
 #+begin_src java :eval no
 if (!equivalent(that)) { return false; }
@@ -388,13 +388,13 @@ is absent is withdrawal of a *verdict*: the base-branch path never calls
 
 Only Jenkins provides a real lease, and it is not the mechanism people reach for.
 The =lock= step is build-scoped, as expected. But the Lockable Resources plugin
-also has *reservations* — permission =RESERVE=, *"Reserves an available resource
+also has *reservations* -- permission =RESERVE=, *"Reserves an available resource
 for currently logged user indefinitely (until that person, or some explicit
-scripted action, decides to release the resource)"* — and a *remote lease API*
+scripted action, decides to release the resource)"* -- and a *remote lease API*
 with heartbeats: =POST /lockable-resources/remote/v1/acquire/=,
 =POST .../lease/{lockId}/heartbeat=, =POST .../lease/{lockId}/release= [H].
 
-That is owner, deadline, renewal and explicit release — all four sub-properties —
+That is owner, deadline, renewal and explicit release -- all four sub-properties -- 
 plus =/lockable-resources/api/json= to read who holds it [H, verified from
 =LockableResourcesRootAction= being =@ExportedBean=]. *It is the only lock in the
 survey you can audit.*
@@ -402,7 +402,7 @@ survey you can audit.*
 Everywhere else, including GitHub and Gitea, C5 is =buildable= by the same trick
 the spec already uses: *the label is the lease*, with the deadline in
 =change/state.sh= and the query as the authority. That works, and it is worth
-noticing that it works *because* C1 is native — the berth is implemented out of
+noticing that it works *because* C1 is native -- the berth is implemented out of
 the change-state carrier rather than out of a locking primitive.
 
 ** The two nobody has
@@ -412,7 +412,7 @@ keep-the-berth-on-preemption.* Both are application code on all six platforms.
 
 These are exactly the two amendments scenario D4 forced. That no vendor has
 productized them is mild evidence they are a real contribution rather than a
-local quirk [I] — and it is also a warning: they will never be enforced *by* a
+local quirk [I] -- and it is also a warning: they will never be enforced *by* a
 platform, so they must be tested by us, which is what =tla/StandardChange.tla=
 and =gates/pbt-pipeline.py= exist for.
 
@@ -435,7 +435,7 @@ GitHub's feature set. The answer differs per guard [I]:
 - *Guard 0 is the weakest of the six.* Its native forms are all *merge-time*, and
   §=strict= does not protect production already explains why merge-time is the
   wrong time here: production deploys before the merge. So guard 0 is doing less
-  work than its prominence suggests, and guard 4b is carrying the real load —
+  work than its prominence suggests, and guard 4b is carrying the real load -- 
   which =spec.org= states outright and the matrix confirms from outside.
 - *Guard 4 depends on a capability (C7) that one platform lacks entirely*, which
   makes it the guard most sensitive to platform choice.
@@ -453,12 +453,12 @@ have, since the matrix says =absent= twice.
 touches by definition. Org-level rulesets and required workflows are the partial
 answer and are untested here [H].
 
-*C4 buildable, not native.* =main-moved.yml= exists precisely because no ruleset
-rule can express it — §Not expressible as ruleset rules says so, and the matrix
+*C4 by scripting only.* =main-moved.yml= exists precisely because no ruleset
+rule can express it -- §Not expressible as ruleset rules says so, and the matrix
 now gives the reason in general terms: GitHub has C2 and C3 natively and C4 only
 by scripting.
 
-*C6 native and load-bearing.* =repos/{r}/commits/{sha}/check-runs= enumerates
+*C6 native and structural.* =repos/{r}/commits/{sha}/check-runs= enumerates
 verdicts for a hash, which is what lets guard 2 check both "all four green" and
 "=gate-selftest= actually ran".
 
@@ -466,21 +466,21 @@ verdicts for a hash, which is what lets guard 2 check both "all four green" and
 
 *C10 native on enterprise.* The 403 is a local artifact.
 
-** Azure DevOps — the closest conformance
+** Azure DevOps -- the closest conformance
 
 *Highest score in the matrix, and the only =native= for C9.*
 
 *C4 native.* Build expiration, with three options: *Immediately when =<branch>= is
 updated*, *After =<n>= hours if =<branch>= has been updated*, *Never* [H]. The
 asymmetry that makes it special: every *other* reset in Azure Repos keys off the
-*source* branch moving — reset approval votes on push, reset status on new
+*source* branch moving -- reset approval votes on push, reset status on new
 changes, *"The server reevaluates branch policies when pull request owners push
 changes and when reviewers vote"*. *Build expiration is the only one keyed on the
 target branch moving* [H], which is exactly scenario D4's blind spot.
 
 What is still ours: the =inert= / =pipeline= / =artifact= / =hotfix=
 classification. Expiration is all-or-nothing, so a README merge expires
-everything — the behaviour §Guard 4b corrected precisely because *"a README merge
+everything -- the behaviour §Guard 4b corrected precisely because *"a README merge
 forcing a full re-verify teaches people the guard is noise."* The "After =n=
 hours" option softens it by *time*, not by *content*.
 
@@ -495,46 +495,46 @@ the natural reading. Resolve empirically via =GET _apis/policy/configurations=.
 vocabulary is also the richest surveyed: Approvals, Branch control, Business
 hours, Invoke Azure Function, Invoke REST API, Query Azure Monitor Alerts,
 Required template, Evaluate artifact, Exclusive lock, ServiceNow Change
-Management [H]. =isSkippable: false= on a stage — documented for forcing an
-injected malware-detection stage into every pipeline — is structurally "guard 2
+Management [H]. =isSkippable: false= on a stage -- documented for forcing an
+injected malware-detection stage into every pipeline -- is structurally "guard 2
 has no bypass".
 
 *C5 buildable, better than most.* =lockBehavior: sequential= makes all runs
 *"acquire the lock to the protected resource sequentially"* with nothing
-cancelled — an ordered waiting line GitHub cannot express. Still run-scoped, so
+cancelled -- an ordered waiting line GitHub cannot express. Still run-scoped, so
 the hold across a quiet production-verification window remains external. Note
 =#ExclusiveLock= and =concurrency:= *do not exist* in Azure Pipelines [H]; both
 circulate and neither is real.
 
-*C1 partial.* PR labels exist but *no policy consumes them* [H] — decorative. The
+*C1 partial.* PR labels exist but *no policy consumes them* [H] -- decorative. The
 working carrier is PR statuses, which do gate merge and carry =iterationId= and a
 =properties= bag.
 
 *C10 native but fragile.* =GET _apis/policy/configurations=,
 =_apis/pipelines/checks/configurations?$expand=settings=, =_apis/pipelines/approvals=,
-=_apis/pipelines/environments= — the last three all =-preview= [H]. Audit log is
+=_apis/pipelines/environments= -- the last three all =-preview= [H]. Audit log is
 rich (=CheckConfiguration.*=, =Git.RefUpdatePoliciesBypassed=) but preview,
 Entra-only, off by default, 90-day retention, and unavailable on Azure DevOps
 Server [H].
 
-** Jenkins — best guards, no audit
+** Jenkins -- best guards, no audit
 
 *The sharpest split in the survey: native C4 and native C5, absent C10.*
 
 *C4 native*, by the revision-identity route described in §Which capabilities are
 rare. Guard 0 comes with it: under =MERGE=, an unmergeable change *fails
-checkout*, so it cannot produce a green build [I]. Latency is [P] — the
+checkout*, so it cannot produce a green build [I]. Latency is [P] -- the
 re-trigger fires on *indexing*, and whether a webhook push to the target
 immediately re-indexes every open PR was not verified.
 
-*C5 native* — the remote lease API, the only auditable lock surveyed.
+*C5 native* -- the remote lease API, the only auditable lock surveyed.
 
 *C1 absent.* The complete =CHANGE_*= set is =CHANGE_ID=, =CHANGE_TARGET=,
 =CHANGE_BRANCH=, =CHANGE_FORK=, =CHANGE_URL=, =CHANGE_TITLE=, =CHANGE_AUTHOR=,
 =CHANGE_AUTHOR_DISPLAY_NAME=, =CHANGE_AUTHOR_EMAIL= [H, from
-=BranchNameContributor=] — *no =CHANGE_LABELS=*. Everything Jenkins can hold state
+=BranchNameContributor=] -- *no =CHANGE_LABELS=*. Everything Jenkins can hold state
 on is a *build*, which is a run. =pipeline-github= gives a =labels= property with
-a setter, but *the store is the forge's* — which is fine in practice and means
+a setter, but *the store is the forge's* -- which is fine in practice and means
 Jenkins never satisfies C1 alone.
 
 *C10 absent, and this is the decisive finding* [H]. =config.xml= returns the job
@@ -543,7 +543,7 @@ that Jenkins does not hold; Declarative Pipeline is a Groovy DSL parsed at
 runtime where =when=, =options=, =lock= and =input= are method calls that can sit
 inside =if= or come from a shared library at an unpinned version. *There is no
 endpoint returning the effective set of gates enforced on a job.* JCasC does not
-close it — it exports *controller* configuration, not pipeline logic, its export
+close it -- it exports *controller* configuration, not pipeline logic, its export
 is a UI action, and no REST or CLI export path is documented [P].
 
 Against §Controls audit, whose premise is *"Every control the spec claims is
@@ -554,10 +554,10 @@ nothing.
 
 =py312-jenkins-job-builder= is the partial escape [E]: jobs generated from YAML
 make the *input* readable data. The gap between that YAML and the live controller
-is then itself the =FINDING= an audit should look for — which requires reading
+is then itself the =FINDING= an audit should look for -- which requires reading
 both, and is a drift check rather than a config read [I].
 
-** Gitea 1.26.1 — the one already running
+** Gitea 1.26.1 -- the one already running
 
 Verified against the =v1.26.1= source tree and the live instance's own swagger
 [E]. Several early assumptions were wrong and are corrected here.
@@ -568,11 +568,11 @@ plus =/repos/{o}/{r}/labels= and org labels [E]. The cross-change query works.
 =app:*= from the diff [E].
 
 *But =actions/labeler@v5= will not port cleanly* [E]. There is no GitHub API
-shim — =GITHUB_API_URL= points at Gitea's own =/api/v1=. Two concrete breaks:
+shim -- =GITHUB_API_URL= points at Gitea's own =/api/v1=. Two concrete breaks:
 =EditIssueOption= has *no =labels= field*, so labeling via =PATCH issues/{n}=
 silently no-ops; and remove-by-name does not exist, since Gitea's delete is
 =DELETE .../labels/{id}= with an *integer* id. *The =sync-labels: true= removal
-half — the half §Labels depends on for ownership — is exactly what breaks.* The
+half -- the half §Labels depends on for ownership -- is exactly what breaks.* The
 honest port is a few lines of =curl= against =POST /issues/{index}/labels= with
 label *names*. Worth noting that =gates/labeller-test.py= tests the labeller's
 *oracle*, not the action, so the negative tests survive the substitution.
@@ -584,7 +584,7 @@ once. Any workflow keyed on =unlabeled= will not fire as expected.
 
 *C2 and C3 native, and better than expected* [E]. On a push to a base branch,
 =AddTestPullRequestTask= calls =GetUnmergedPullRequestsByBaseInfo= and then
-=syncCommitDivergence= for every open PR targeting it — recomputing
+=syncCommitDivergence= for every open PR targeting it -- recomputing
 =CommitsAhead=/=CommitsBehind=. =block_on_outdated_branch= is then enforced at
 merge:
 
@@ -595,8 +595,8 @@ func MergeBlockedByOutdatedBranch(protectBranch *git_model.ProtectedBranch, pr *
 #+end_src
 
 *C3 has a wrinkle*: =CommitsBehind= is computed and stored but *not exposed in
-the REST API* [E]. And =mergeable= reflects *conflicts only* — not branch
-protection, not status checks, not behind-ness — so a PR that
+the REST API* [E]. And =mergeable= reflects *conflicts only* -- not branch
+protection, not status checks, not behind-ness -- so a PR that
 =block_on_outdated_branch= will refuse still reports =mergeable: true= [E]. The
 workaround is =GET /repos/{o}/{r}/compare/{head}...{base}= and read
 =total_commits= [E]; two-dot versus three-dot semantics should be confirmed
@@ -604,11 +604,11 @@ empirically [P].
 
 *C4 buildable, with a native partial.* The base-branch path *never* calls
 =DismissApprovalReviews=; =dismiss_stale_approvals= fires only on head moves, and
-only when =checkIfPRContentChanged= says the diff actually changed — so a no-op
+only when =checkIfPRContentChanged= says the diff actually changed -- so a no-op
 rebase does not dismiss [E]. So Gitea re-arms the *block* when trunk moves but
 does not withdraw a *verdict*. =main-moved.yml= ports as-is.
 
-*C5 buildable — and =concurrency:= is supported, correcting an earlier
+*C5 buildable -- and =concurrency:= is supported, correcting an earlier
 assumption* [E]. It is real in 1.26.1 at both workflow and job level
 (=services/actions/concurrency.go=, migration =v1_26/v323.go=), and
 =cancel-in-progress: false= blocks rather than cancels:
@@ -620,16 +620,16 @@ runs, jobs, err := GetConcurrentRunsAndJobs(ctx, actionRun.RepoID, actionRun.Con
 return len(runs) > 0 || len(jobs) > 0, nil
 #+end_src
 
-So the anti-collision layer the audit checks for — =concurrency: production= with
+So the anti-collision layer the audit checks for -- =concurrency: production= with
 =cancel-in-progress: false=, because *"a cancelled production deploy leaves an
-indeterminate estate"* — ports directly. *One hard limit*: the group is keyed by
+indeterminate estate"* -- ports directly. *One hard limit*: the group is keyed by
 =(RepoID, ConcurrencyGroup)=, so *concurrency groups are per-repository* and
 there is no cross-repo lock [E]. For this repo, which is one monorepo, that is
 sufficient.
 
 *C6 native.* =POST /repos/{o}/{r}/statuses/{sha}=, states
 =pending, success, error, failure, warning, skipped=; =status_check_contexts=
-supports *globs* via =gobwas/glob=; and the failure mode is *fail-closed* — a
+supports *globs* via =gobwas/glob=; and the failure mode is *fail-closed* -- a
 required context with no matching status yields overall =pending=, so a workflow
 that never ran blocks the merge [E]. That is the right default and matches
 §Three outcomes.
@@ -640,18 +640,18 @@ that never ran blocks the merge [E]. That is the right default and matches
 ctxName := strings.TrimSpace(fmt.Sprintf("%s / %s (%s)", runName, job.Name, event))
 #+end_src
 
-so a real context reads =Deploy / guard (pull_request)= — *the event is in the
+so a real context reads =Deploy / guard (pull_request)= -- *the event is in the
 string*. =status_check_contexts= entries must glob it, e.g. =Deploy / guard (*)=.
 The four gate names in =gates/audit-controls.py='s =GATES= set would not match
 as written.
 
-*C7 absent — the sharpest regression.* Verified directly: the swagger has *zero*
+*C7 absent -- the sharpest regression.* Verified directly: the swagger has *zero*
 paths matching =deployment= and *zero* matching =environment= [E]. =environment:=
-in a job is not merely unsupported, it is *silently dropped* — the key is absent
+in a job is not merely unsupported, it is *silently dropped* -- the key is absent
 from the Job struct [E]. There is no Deployments API, no environment secrets, no
 required reviewers, no wait timer, no deployment branch policy. The only approval
 gate is the fork-PR gate, hardcoded in =ifNeedApproval= with no setting and no
-admin toggle, and it applies only to fork PRs [E] — it cannot be repurposed.
+admin toggle, and it applies only to fork PRs [E] -- it cannot be repurposed.
 
 Three consequences, and the first is the one to state carefully:
 
@@ -662,11 +662,11 @@ Three consequences, and the first is the one to state carefully:
    a *status check* emitted by =deploy-staging.yml=. The control changes from
    "the platform recorded a staging deployment" to "a token-holder asserted one",
    and =audit-controls.py= cannot distinguish a forged status from an earned one
-   — both are a =CommitStatus= with =status: success=. This is C7 stated
+ -- both are a =CommitStatus= with =status: success=. This is C7 stated
    concretely [I].
 2. *Environment protection becomes unauditable because it is inexpressible.*
    =audit_environments()= checks =production= for a required reviewer,
-   =wait_timer= 0 and a =deployment_branch_policy=. All three become =ABSENT= —
+   =wait_timer= 0 and a =deployment_branch_policy=. All three become =ABSENT= -- 
    not configured-and-wrong, but *not expressible*.
 3. *Secret scoping collapses.* Secrets are repo-, org- and user-scoped only [E],
    so production credentials are reachable by *any* workflow in the repo,
@@ -683,9 +683,9 @@ something to cite, keyed by run rather than by deployment [E].
 =/actions/workflows=, =/actions/runs=, =/commits/{ref}/status=, plus
 =/admin/actions/*= [E]. Field names confirmed from source, with two corrections
 to the obvious guesses: =approvals_whitelist_username= is *singular* (an upstream
-typo, but it is the real JSON tag), and =apply_to_admins= does not exist — the
+typo, but it is the real JSON tag), and =apply_to_admins= does not exist -- the
 field is =block_admin_merge_override= [E]. The gap: *there is no admin config
-API* — nothing reflects =app.ini=, which must be read off disk [E].
+API* -- nothing reflects =app.ini=, which must be read off disk [E].
 
 *Other 1.26.1 limits worth knowing before designing* [E]: reusable workflows
 (=workflow_call=) *do not exist* until 1.27; =permissions:= starts from all-none,
@@ -694,33 +694,33 @@ added; and =checks=, =deployments= and =statuses= are silently-ignored permissio
 scopes. Both =.gitea/workflows= and =.github/workflows= are read, configurable via
 =WORKFLOW_DIRS=.
 
-** AWS — strong audit, no change model
+** AWS -- strong audit, no change model
 
 *C1 absent.* No annotation or label operation in the API; tags are on the
 *pipeline resource*. Pipeline variables are *immutable for the life of an
 execution* and *"Using pipeline-level variables in any kind of Source action is
 not supported"*, with webhook-triggered executions getting only =defaultValue=
-[H] — so exactly the executions a change produces cannot carry per-change state.
+[H] -- so exactly the executions a change produces cannot carry per-change state.
 =#{SourceVariables.PullRequestId}= is a *correlation key* into your own store.
 
 *C5 buildable, and instructively so.* No AWS-native named lock exists; DynamoDB
 conditional writes and the Step Functions semaphore are documented *patterns*
-[H]. The stage lock is real but per-*stage* — =QUEUED= explicitly creates
+[H]. The stage lock is real but per-*stage* -- =QUEUED= explicitly creates
 *"multiple queues in the same pipeline"* [H], so a pipeline-wide singleton
 requires collapsing the deployment into one stage. CodeDeploy's
-one-deployment-per-group limit is non-adjustable and unbypassable [H] — a genuine
+one-deployment-per-group limit is non-adjustable and unbypassable [H] -- a genuine
 singleton at the wrong layer.
 
 *=DisableStageTransition= is a valve, not a lease*, and this is the trap [H]:
 *"when a transition is disabled, the execution waiting to enter the stage can
 still be superseded by a new execution ... the latest execution enters the
-stage."* You block the gate, not a change. Under the berth model that is exactly
+stage."* You block the gate and hold no change. Under the berth model that is exactly
 backwards, and it is a good illustration of why C5 is stated as a *lease with an
 owner* rather than as "a way to stop things".
 
 *C8 native*, the strongest guard-5 story: alarm configuration with
 =ignorePollAlarmFailure: false= (losing sight of the alarm also stops the
-deploy — correct fail-closed), =autoRollbackConfiguration.events=, and
+deploy -- correct fail-closed), =autoRollbackConfiguration.events=, and
 =ValidateService= / =PutLifecycleEventHookExecutionStatus= where *"the deployment
 is considered to have failed if CodeDeploy is not notified ... within one hour"*
 [H]. =gates/health.sh= is a =ValidateService= script almost verbatim.
@@ -734,7 +734,7 @@ script into a continuous control [H].
 A method note worth keeping: =docs.aws.amazon.com= returns HTTP 200 for *bogus*
 URLs under =/config/latest/developerguide/= [H], so "404 means it does not exist"
 fails as a verification method there. That is §Three outcomes in the
-documentation layer — a 200 that means nothing is an =UNAVAILABLE= wearing an
+documentation layer -- a 200 that means nothing is an =UNAVAILABLE= wearing an
 =ok=.
 
 Also native and better than ours: =DeploymentWindow= as a freeze rule (no
@@ -742,7 +742,7 @@ fail-closed outage mode, unlike a calendar API), and =OverrideStageCondition= as
 an *IAM-gated* emergency bypass rather than a label anyone with write access can
 add [H].
 
-** sourcehut — the honest failure
+** sourcehut -- the honest failure
 
 Fails C1, C3, C4, C6, C7 and C9, which makes it the most informative column.
 
@@ -755,13 +755,13 @@ change simultaneously; one enum cannot hold them, and =Patchset= has no other
 writable metadata field [H].
 
 Build tags attach to a *job*, are slash-separated with *prefix* matching rather
-than set membership, and have no =.build.yml= key [H] — a namespace, not a label,
+than set membership, and have no =.build.yml= key [H] -- a namespace, not a label,
 and about an execution rather than a change. =todo.sr.ht= labels are first-class
 but no documented mechanism links a ticket to a patchset [H].
 
 *C4 absent in the specific way §C4 predicts.* sourcehut can detect trunk movement
 (git webhooks) and can classify divergence (a script). It cannot *withdraw*,
-because there is no verdict field — and setting =NEEDS_REVISION= collapses
+because there is no verdict field -- and setting =NEEDS_REVISION= collapses
 revocation into rejection, making the operator message false: a preempted change
 is told its patch is wrong when it is not. That is the separability clause
 failing in practice [I].
@@ -771,7 +771,7 @@ protection, no required checks, no merge or protection mutations in the git.sr.h
 GraphQL surface at all [H]. A maintainer applies the mbox with =git am= and
 pushes. Build results are advisory; nothing stops marking =APPLIED= over a red
 build and nothing records that it happened. *Guard 2, which has no bypass in
-=spec.org=, is all bypass here* — not hard to enforce, but with no enforcement
+=spec.org=, is all bypass here* -- not hard to enforce, but with no enforcement
 point, because the act it would gate does not pass through any policy [I].
 
 *The honest substitute for C1* is an external state store keyed by patchset id,
@@ -782,11 +782,11 @@ correspondence [I].
 *Three things sourcehut does better*, worth recording because a failing column
 can still teach:
 
-1. *=Job.manifest= is a recorded artifact* — the manifest *as executed*, stored
+1. *=Job.manifest= is a recorded artifact* -- the manifest *as executed*, stored
    against the job [H]. GitHub lets you read the workflow file and the check
    result and *infer* that one produced the other. For "what actually ran",
    sourcehut's is strictly stronger evidence.
-2. *Secrets are disabled for untrusted submitters structurally* [H] — a property
+2. *Secrets are disabled for untrusted submitters structurally* [H] -- a property
    of the submission path, not a permission someone configures. Cleaner than
    =pull_request_target=, and a hard ceiling: a contributor's patch can never
    deploy.
@@ -799,7 +799,7 @@ check leaks into a public build log.
 
 * The audit read, per platform
 
-C10 stated concretely. =gates/audit-controls.py= is four reads — rulesets,
+C10 stated concretely. =gates/audit-controls.py= is four reads -- rulesets,
 workflow files, environments, variables. These are the equivalents. *A control
 you cannot read back is not auditable*, so this table is the operational core of
 the conformance study.
@@ -814,7 +814,7 @@ gh api repos/{o}/{r}/commits/{sha}/check-runs    # C6: enumerate verdicts for a 
 # .github/workflows/*.yml read locally: concurrency groups, cancel-in-progress
 #+end_src
 
-** Gitea — the same shape, no plan gating
+** Gitea -- the same shape, no plan gating
 
 #+begin_src sh :eval no
 GET /repos/{o}/{r}/branch_protections        # + /{name}   <- the rulesets equivalent
@@ -857,7 +857,7 @@ aws configservice describe-compliance-by-config-rule          # continuous, not 
 
 CLI service name is =deploy=, not =codedeploy= [H].
 
-** Jenkins — where it fails
+** Jenkins -- where it fails
 
 #+begin_src sh :eval no
 GET /api/json                      # controller
@@ -868,7 +868,7 @@ GET /lockable-resources/api/json   # who holds the lease -- the one strong read
 # repo; shared libraries may be unpinned. JCasC exports CONTROLLER config only.
 #+end_src
 
-** sourcehut — nothing to read
+** sourcehut -- nothing to read
 
 #+begin_src sh :eval no
 # POST https://builds.sr.ht/query  (GraphQL)
@@ -879,7 +879,7 @@ GET /lockable-resources/api/json   # who holds the lease -- the one strong read
 #   patchset(id) { status version supersedes }
 #+end_src
 
-=Job.manifest= is a *better* artifact than anything GitHub offers — the manifest
+=Job.manifest= is a *better* artifact than anything GitHub offers -- the manifest
 as executed, recorded against the job [H]. But there is no enforced configuration
 to read, so an audit correctly returns =ABSENT= for every control.
 
@@ -890,7 +890,7 @@ Two observations [I]:
 - *The audit ports more easily than the guards do.* Four of six platforms return
   enforced configuration as structured data, and the three-outcome discipline
   (=ok= / =FINDING= / =ABSENT= / =UNAVAILABLE=) is platform-independent. What
-  changes per platform is *which rows are inexpressible* — Gitea's environment
+  changes per platform is *which rows are inexpressible* -- Gitea's environment
   rows, sourcehut's everything.
 - *Jenkins is the counter-example that proves the requirement is real.* It has
   the best guard-4b mechanism in the survey and would still fail an audit, because
@@ -898,7 +898,7 @@ Two observations [I]:
   onto: *a guard that works but cannot be read back is, to an auditor,
   indistinguishable from one that does not exist.*
 
-* Developer experience — what the change author actually sees
+* Developer experience -- what the change author actually sees
 
 A guard that blocks without a legible reason is a DX failure regardless of
 correctness. The reference standard is =spec.org= §Guard 4b's two messages, which
@@ -913,20 +913,20 @@ do three things in order: *name the fact, name the cost, name the recovery.*
 
 Three properties make it work [I], and they are the criteria for the table below:
 
-- *Legibility* — is the blocked state visible where the author is looking?
-- *Attribution* — does it say *why*, naming the specific cause?
-- *Recovery* — does it say what to do, and is the cost of doing it stated?
+- *Legibility* -- is the blocked state visible where the author is looking?
+- *Attribution* -- does it say *why*, naming the specific cause?
+- *Recovery* -- does it say what to do, and is the cost of doing it stated?
 
 ** Per-platform
 
 | Platform  | How they learn they are blocked | How they learn why | Recovery | Assessment |
 |-----------+---------------------------------+--------------------+----------+------------|
-| GitHub    | a label appears (=blocked:queue=) *and* a PR comment | the comment, written by us | named in the comment | *the reference* — one surface, prose, in the change's own timeline |
-| Gitea     | same — labels and comments both exist | same | same | *equivalent*, with the caveats below |
-| Azure DevOps | policy panel on the PR shows a failed/expired check | a policy name, not prose | *inferred by the author* | legible state, poor attribution — "Build expiration" does not say *what* landed |
-| AWS       | nothing reaches the change; state is in the console | rule execution history, if you go looking | none surfaced | *worst* — the author is not a participant |
-| Jenkins   | a build re-runs, possibly silently | build log, if they open it | none surfaced | poor — a rebuild is not a message |
-| sourcehut | an email reply on the thread | whatever the build reply says | none automated | *unexpectedly good* — the channel is where the author already is |
+| GitHub    | a label appears (=blocked:queue=) *and* a PR comment | the comment, written by us | named in the comment | *the reference* -- one surface, prose, in the change's own timeline |
+| Gitea     | same -- labels and comments both exist | same | same | *equivalent*, with the caveats below |
+| Azure DevOps | policy panel on the PR shows a failed/expired check | a policy name, not prose | *inferred by the author* | legible state, poor attribution -- "Build expiration" does not say *what* landed |
+| AWS       | nothing reaches the change; state is in the console | rule execution history, if you go looking | none surfaced | *worst* -- the author is not a participant |
+| Jenkins   | a build re-runs, possibly silently | build log, if they open it | none surfaced | poor -- a rebuild is not a message |
+| sourcehut | an email reply on the thread | whatever the build reply says | none automated | *unexpectedly good* -- the channel is where the author already is |
 
 ** The three findings worth acting on
 
@@ -940,14 +940,14 @@ C1 buys DX as well as correctness.
 
 *2. Native guard 4b is worse DX than ours, on both platforms that have it.* This
 is the survey's most counter-intuitive result [I]. Azure's Build expiration flips
-a policy to failed and requeues — the author sees a red check and no reason, and
+a policy to failed and requeues -- the author sees a red check and no reason, and
 cannot tell a README merge from a hotfix. Jenkins silently re-triggers the build;
 under =MERGE= the author may not notice anything happened at all. Both are
 *correct* and both fail all three DX criteria.
 
 Our implementation is more code and better experience, precisely because the
 classification exists: =inert= prints nothing, =artifact= and =hotfix= get
-different messages, and the =hotfix= message states the stake — *"Deploying your
+different messages, and the =hotfix= message states the stake -- *"Deploying your
 current image would REVERT it. This is not a staleness warning."* §Guard 4b
 argues the classification is needed for *correctness of incentives* (*"a README
 merge forcing a full re-verify teaches people the guard is noise"*). The survey
@@ -955,27 +955,27 @@ adds that it is also what makes the guard *explicable*. Those are the same
 argument seen from two sides.
 
 *3. Recovery cost must be stated, and only our messages do it.* *"Berth held
-until 14:20Z"* tells the author they have not lost their place — the single most
+until 14:20Z"* tells the author they have not lost their place -- the single most
 important fact after a preemption, and the one a policy-name UI can never convey.
 No platform surfaces the analogue, because no platform has the berth concept.
 
 ** Gitea-specific DX hazards
 
 Three, all from the source reading, all of which would produce *silent* wrong
-behaviour rather than errors — the worst DX failure mode [E]:
+behaviour rather than errors -- the worst DX failure mode [E]:
 
 - *Removing a label fires =labeled=, not =unlabeled=.* A workflow keyed on
   =unlabeled= to release the berth would never run, and the berth would appear
   stuck with no error anywhere.
 - *=environment:= in a job is silently dropped.* A workflow that looks like it
   has an environment gate has none, and nothing says so.
-- *=container:= overrides a =host= runner label and forces Docker* — so on hydra
+- *=container:= overrides a =host= runner label and forces Docker* -- so on hydra
   a job with =container:= *fails* rather than degrading, and an unmatched
   =runs-on= falls back to a Docker image rather than skipping [E]. Both should be
   forbidden in review rather than discovered in a run.
 
-A fourth, milder: status contexts include the event —
-=Deploy / guard (pull_request)= — so a =status_check_contexts= entry written as
+A fourth, milder: status contexts include the event -- 
+=Deploy / guard (pull_request)= -- so a =status_check_contexts= entry written as
 =e2e= matches nothing, and *fail-closed means the PR blocks with a required check
 that never appears* [E]. Correct behaviour, confusing symptom; glob it as
 =* / e2e (*)= or similar.
@@ -991,9 +991,9 @@ Guard 1 makes staging a singleton. At the 30-minute berth in §Guard 1:
 
 | PRs | Serialized berth time at 30 min | At 10 min |
 |-----+---------------------------------+-----------|
-| 100 | ~50 h — 2 days                  | ~17 h     |
-| 300 | ~150 h — 6+ days                | ~50 h     |
-| 500 | ~250 h — 10+ days               | ~83 h     |
+| 100 | ~50 h -- 2 days                  | ~17 h     |
+| 300 | ~150 h -- 6+ days                | ~50 h     |
+| 500 | ~250 h -- 10+ days               | ~83 h     |
 
 Optimistic, because it ignores the rebase loop: guard 0 means every waiter is
 behind =main= after each merge, so the queue is serial *with a re-verification
@@ -1002,13 +1002,13 @@ step per hop* [I].
 *=spec.org= already predicts the consequence.* §Over-protecting the queue costs
 production safety: =itil:emergency= is the one label that bypasses staging, so
 queue friction converts into *traffic on the path with fewer checks*.
-=gates/simulate-gates.py= puts numbers on it — at a two-hour mean wait roughly a
+=gates/simulate-gates.py= puts numbers on it -- at a two-hour mean wait roughly a
 sixth of changes route to emergency; past four hours it is the majority. At
 several hundred PRs through one berth the mean wait is *days*, far past that
 threshold.
 
 So, stated honestly: *a several-hundred-PR soak of this design as specified does
-not test the guard sequence — it tests the emergency bypass* [I]. That is still
+not test the guard sequence -- it tests the emergency bypass* [I]. That is still
 worth doing; it would be a direct empirical check of =simulate-gates.py='s closed
 form, which has only ever been checked against itself. But it must be framed that
 way, and if the intent is to exercise the guards at volume the berth must widen
@@ -1021,24 +1021,24 @@ The invariant is that no two changes are verified against different assumptions
 about what else is in flight. Three options [I]:
 
 - *Per-group berths* keyed on the =app:*= set. Safe exactly when changes touching
-  disjoint app sets cannot break each other — which is false here, and
+  disjoint app sets cannot break each other -- which is false here, and
   §What this model gets wrong says why: no enforced contract at the router. This
   widens the berth by *assuming the contract that is missing*. It is also
   reopening a closed decision: 0.1 had per-group slots and §Labels removed them.
-- *Ephemeral per-PR environments.* Already modelled — ten ports per worktree.
+- *Ephemeral per-PR environments.* Already modelled -- ten ports per worktree.
   Port space is not the limit: at =10000 + 10n= there is room for ~5,553 blocks
   [E]. Host capacity is: six node processes per environment on a 4-CPU, 15.7 GiB
-  box [E] — perhaps 30–40 idle environments, perhaps 4–8 concurrently *running*
+  box [E] -- perhaps 30–40 idle environments, perhaps 4–8 concurrently *running*
   gate suites. This does not widen the berth; it makes everything *before* it
   parallel, which given the arithmetic is where the time goes.
-- *Sharded queues* — same contract assumption, more machinery.
+- *Sharded queues* -- same contract assumption, more machinery.
 
 Only the second is available without fixing the architecture.
 
 ** Platform capacity
 
 *Gitea* is strongest at this scale for an unglamorous reason: *self-hosted Gitea
-imposes no API rate limit by default* [H]. The model is label-write-heavy — per
+imposes no API rate limit by default* [H]. The model is label-write-heavy -- per
 PR the labeller writes on every push, the queue guard on claim and block, promote
 once, health once, release removes four labels and comments on every waiter. Call
 it 15–30 writes and 10–20 reads per PR; at 300 PRs that is roughly 5,000–15,000
@@ -1046,31 +1046,31 @@ calls for label churn alone. On GitHub that is a real fraction of a 5,000/hour
 budget; self-hosted it is database writes.
 
 *And it surfaces a genuine defect.* =change/release.sh= comments on *every*
-=blocked:queue= waiter on every release — quadratic in queue depth. At 300
+=blocked:queue= waiter on every release -- quadratic in queue depth. At 300
 waiters one release writes 300 comments. That should be capped regardless of
 platform; it is exactly the kind of thing the scale question is for [I].
 
 Runner capacity is the binding constraint [E]: host-mode =act_runner= runs steps
 in the local shell on 4 CPUs, and =runner.capacity= is a plain semaphore
 (=sem := make(chan struct{}, p.cfg.Runner.Capacity)=, default 1) [E]. =capacity:
-1= serializes *everything that runner serves*, across repos — a blunt global
+1= serializes *everything that runner serves*, across repos -- a blunt global
 mutex. Several hundred PRs is a multi-day soak on this host regardless of berth
 width, which is fine but wants to be restartable.
 
 *Jenkins has a documented tension with this requirement, and it is the same
 feature that makes it conformant.* Under =MERGE=, every push to =main=
-re-triggers every open PR — which is C4 working, and which
+re-triggers every open PR -- which is C4 working, and which
 bitbucket-branch-source issue #304 records users asking to disable because *"in
 busy monorepos it retriggers every open PR and overflows build nodes"* [H]. 300
 open PRs × 10 merges/hour ≈ 3,000 builds/hour against 4 cores. =throttle=
 categories are the native defence; =milestone= supersession is per-job so it
 helps within a PR, not across them [I]. *Native guard 4b and several-hundred-PR
-scale are in direct conflict on Jenkins* — probably the most useful thing this
+scale are in direct conflict on Jenkins* -- probably the most useful thing this
 section surfaces.
 
 *AWS* has a hard ceiling: 50 concurrent executions per pipeline in =QUEUED= or
 =PARALLEL=, then =ConcurrentPipelineExecutionsLimitExceededException= [H]. Plus
-the documented one-branch-per-connection limitation — *"only one branch reliably
+the documented one-branch-per-connection limitation -- *"only one branch reliably
 triggers the pipeline"*, workaround being a pipeline per branch [H], which at
 several hundred branches is not a workaround.
 
@@ -1115,9 +1115,9 @@ the difference matters [E, observed 2026-09-13]:
 Podman *is* installed, with =ocijail= and =buildah=. Two constraints follow [I]:
 *rootless is unsupported on FreeBSD*, so nothing container-shaped runs as
 =jwalsh=; and FreeBSD podman runs *FreeBSD jails via =ocijail=*, not Linux OCI
-images — the Linuxulator modules run Linux *binaries*, they are not a backend for
+images -- the Linuxulator modules run Linux *binaries*, they are not a backend for
 Linux container images, so =docker://node:20= is unavailable even with root
-[P — reasoned from the runtime's architecture, not tested].
+[P -- reasoned from the runtime's architecture, not tested].
 
 Working rule: *any platform whose runner model assumes Linux container images is
 paper-only here*, regardless of whether a package exists.
@@ -1133,7 +1133,7 @@ All [E], =pkg search= run 2026-09-13:
 | =py312-python-jenkins-1.8.3=       | yes     | remote API bindings; the audit-read path |
 | =gitea-act_runner-0.4.0_4=         | *yes*   | corrects "must build from source"        |
 | =forgejo-act_runner-12.7.3_7=      | yes     | the Forgejo fork, also packaged          |
-| =gitea-1.27.2_2=                   | yes     | 1.26.1 running; upgrade available — and 1.27 adds reusable workflows |
+| =gitea-1.27.2_2=                   | yes     | 1.26.1 running; upgrade available -- and 1.27 adds reusable workflows |
 | =nginx-1.30.4_7,3=                 | *yes*   | unblocks =spec.org= §Known blockers      |
 | =gitlab-ce-19.3.1_1=               | yes     | also =gitlab-runner-19.3.0_1=            |
 | =py312-buildbot-4.3.0_2=           | yes     | pure Python; config is a Python file, so C10 is as absent as Jenkins's |
@@ -1142,7 +1142,7 @@ All [E], =pkg search= run 2026-09-13:
 | Tekton, Argo                       | *no*    | no match (=argo*= hits are =cargo-*=)     |
 
 =java -version= → OpenJDK *21.0.10* [E], satisfying current Jenkins LTS (which
-now requires Java 21 or 25 — *17 has been dropped* from the newest LTS line [H]).
+now requires Java 21 or 25 -- *17 has been dropped* from the newest LTS line [H]).
 
 *The nginx row is the most valuable line here and it is not about CI.* §Known
 blockers on hydra records "nginx is not installed" as the reason =make router=
@@ -1150,14 +1150,14 @@ and =make dev= cannot run, leaving the port-block model unexercised. *That
 blocker is now resolvable with a package install*, and it belongs in §Known
 blockers rather than in a portability note.
 
-*A package existing is not the platform working* — worth stating because the two
+*A package existing is not the platform working* -- worth stating because the two
 are easy to conflate, and =concourse= is the example.
 
 ** What is exercisable
 
 | Platform     | On hydra                          | Basis                               |
 |--------------+-----------------------------------+-------------------------------------|
-| *Gitea*      | *yes* — 1.26.1 already running [E] | =gitea-act_runner= packaged [E]; =host= mode runs in the local shell [H] |
+| *Gitea*      | *yes* -- 1.26.1 already running [E] | =gitea-act_runner= packaged [E]; =host= mode runs in the local shell [H] |
 | *Jenkins*    | *yes, fully*                      | =jenkins-lts= packaged, JDK 21 present [E]; plain JVM, agents need no containers [H] |
 | GitLab CE    | possible, disproportionate        | packaged [E]; would replace the forge |
 | Buildbot     | possible                          | packaged [E], no container need      |
@@ -1169,10 +1169,10 @@ are easy to conflate, and =concourse= is the example.
 container runtime* [E for the preconditions]. *Gitea is the priority overall*,
 being already running and conformant on C1 and C6.
 
-Prerequisites: =pkg install= needs root, not taken this session.
+Prerequisites: =pkg install= needs root; this session ran without it.
 =/usr/local/etc/gitea/conf/app.ini= is =0600 git:git= [E] and could not be read,
 so the report that it has no =[actions]= section is taken on trust and should be
-re-verified [P]. act_runner has no confirmed prebuilt FreeBSD binary [P] — but it
+re-verified [P]. act_runner has no confirmed prebuilt FreeBSD binary [P] -- but it
 is packaged, which makes that moot.
 
 ** The audit's own portability problem
@@ -1191,27 +1191,27 @@ target cell.* Saying so is the whole reason for keeping four outcomes.
 
 The conformance study's practical output. In order [I]:
 
-1. *C9 — gate-authority separation.* The one capability absent on our platform
+1. *C9 -- gate-authority separation.* The one capability absent on our platform
    and native on exactly one other, and the one the current spec answers
    procedurally. Confirm whether *org-level rulesets* and *required workflows*
    can own the gates for =itil:normal= from outside the repository, so a change
    editing =.github/= cannot weaken what gates it. If they can, that is a real
    strengthening the free-plan box could never have shown.
-2. *C7 — deployment records and environment protection.* Confirm
+2. *C7 -- deployment records and environment protection.* Confirm
    =required_deployment_environments=, environment reviewers, =wait_timer= and
    =deployment_branch_policy= all enforce as documented, and that environment
    secrets are genuinely unreachable from a workflow not deploying to that
    environment. This is the capability whose absence elsewhere is the sharpest
-   degradation; its presence should be verified, not assumed.
-3. *C10 — the audit reads.* Re-run =gates/audit-controls.py= against the
+   degradation; verify its presence.
+3. *C10 -- the audit reads.* Re-run =gates/audit-controls.py= against the
    enterprise repo. The expected result is that the eight =UNAVAILABLE= rows
-   become =ok=, =FINDING= or =ABSENT=. *Until that run happens, §7b's verdict —
-   that none of it is enforced — stands*, and it is a statement about the
-   controls, not about the plan.
-4. *C4 — guard 4b under load.* The capability no ruleset can express, now with a
+   become =ok=, =FINDING= or =ABSENT=. *Until that run happens, §7b's verdict -- 
+   that none of it is enforced -- stands*, and it is a statement about the
+   controls. It says nothing about the plan.
+4. *C4 -- guard 4b under load.* The capability no ruleset can express, now with a
    scale requirement attached. Confirm =main-moved.yml= fires reliably and that
    the divergence classifier is not quadratic in open-PR count.
-5. *C6 — the =gate-selftest= enumeration.* Confirm that
+5. *C6 -- the =gate-selftest= enumeration.* Confirm that
    =repos/{r}/commits/{sha}/check-runs= lists what guard 2 expects, including the
    "self-test never ran, so the green is void" case, which is the check most
    likely to be quietly wrong.
@@ -1219,5 +1219,5 @@ The conformance study's practical output. In order [I]:
 Two corrections to file regardless of platform, both surfaced by this exercise
 rather than by reading the code:
 
-- *=change/release.sh= comments on every waiter* — quadratic in queue depth.
-- *nginx is installable* — a recorded blocker in §Known blockers is now stale.
+- *=change/release.sh= comments on every waiter* -- quadratic in queue depth.
+- *nginx is installable* -- a recorded blocker in §Known blockers is now stale.

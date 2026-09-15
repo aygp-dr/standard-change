@@ -1,10 +1,10 @@
-#+TITLE: Precedence, locks and freezes — what other systems call these
+#+TITLE: Precedence, locks and freezes -- what other systems call these
 #+DATE: 2026-09-13
 
 * The distinction that started this
 
 =itil:emergency= is *not* "I am ready to go out". It is *"if I am ready, I win
-over anything else"*. A precedence claim, not a readiness claim.
+over anything else"*. A precedence claim; readiness is a separate claim.
 
 That matters because the pipeline was using one label for three different
 facts, and only one of them is about the change:
@@ -21,7 +21,7 @@ cannot distinguish 'am I one' from 'is one running'".
 
 * What other systems call each
 
-** 1. Precedence — "I outrank you"
+** 1. Precedence -- "I outrank you"
 
 | system              | term                      |
 |---------------------+---------------------------|
@@ -35,22 +35,22 @@ cannot distinguish 'am I one' from 'is one running'".
 different fields. An emergency change is a type; whether it preempts is a
 priority. We collapsed those, which is the same collapse as class-vs-lifecycle.
 
-** 2. In flight — "something is running, wait"
+** 2. In flight -- "something is running, wait"
 
 | system              | term                      |
 |---------------------+---------------------------|
-| Slack, Etsy, Chef   | *deploy lock* — "who has the lock?", "holding the lock" |
+| Slack, Etsy, Chef   | *deploy lock* -- "who has the lock?", "holding the lock" |
 | Argo CD             | *sync window* |
 | PagerDuty, Nagios   | *maintenance window* |
 | Jenkins             | *Lockable Resources* plugin |
 | databases           | *advisory lock*, *lease* |
-| GitHub Actions      | =concurrency: group= — one run at a time |
+| GitHub Actions      | =concurrency: group= -- one run at a time |
 
 *=lock= is the industry word*, and "holding the deploy lock" is idiom people
 already have. It is also what guard 1 already is: the berth is a lock on the
 path to production, wearing a =deploy:staging= label.
 
-** 3. Suspended — "nothing goes, by policy"
+** 3. Suspended -- "nothing goes, by policy"
 
 | system              | term                      |
 |---------------------+---------------------------|
@@ -77,7 +77,7 @@ answer*:
 
 =deploy:staging= is a lock *and* it is on the PR holding it, so "is the estate
 busy?" is answered by scanning every open PR for a label. That works and it is
-indirect — and it cannot express *"an emergency is deploying, so even the
+indirect -- and it cannot express *"an emergency is deploying, so even the
 things that normally proceed should not"*, because the label is scoped to one
 berth.
 
@@ -88,7 +88,7 @@ about the world, neither is a property of any change.
 
 A held berth says *the path to production is busy*; wait your turn and nothing
 about your change has changed. An emergency deploying says *production is being
-changed outside the normal path* — your staging pass describes a world that is
+changed outside the normal path* -- your staging pass describes a world that is
 being actively rewritten, so guard 4b will invalidate you whether or not you
 wait politely.
 
@@ -97,7 +97,7 @@ the other is "wait and then re-verify".
 
 * Rejected: =hold:staging=
 
-A per-change hold — *"keep this in staging, I want to look"* — shipped as guard
+A per-change hold -- *"keep this in staging, I want to look"* -- shipped as guard
 4c and is *rejected as of 2026-09-13*. Recorded rather than deleted, because
 the reasoning is the useful part.
 
@@ -124,15 +124,15 @@ could be frozen, held, both, or neither, and the four states had no ordering.
 That is the two-writers-one-fact defect in a new place, and it is exactly what
 =itil:*= and =change:*= were split to stop.
 
-*What is lost.* The narrow case =hold:staging= served — *"I approve this, and
-I want to look at staging before it promotes"* — is now expressed by not
+*What is lost.* The narrow case =hold:staging= served -- *"I approve this, and
+I want to look at staging before it promotes"* -- is now expressed by not
 approving until after looking. That is strictly slower and it is honest: the
 approval then means what it says.
 
 * Not decided here
 
 Whether =lock= is worth adding, or whether scanning for =deploy:*= is enough,
-is being determined by the simulator rather than argued — the same treatment
+is being determined by the simulator rather than argued -- the same treatment
 the bare-=emergency= question is getting. The requirement is a concrete state
 where the ambiguity changes a verdict.
 

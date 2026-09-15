@@ -3,10 +3,10 @@
 
 * Why write this
 
-Everything in =docs/changing-the-pipeline.org= is about the pipeline being
+Everything in =research/findings/changing-the-pipeline.org= is about the pipeline being
 unfalsifiable. This is narrower and more practical: *the specific things that
 made testing awkward today*, which a rebuild will hit again because they are
-properties of the shape, not of the mistakes.
+properties of the shape and survive fixing the mistakes.
 
 * 1. A gate's verdict depended on the working directory
 
@@ -20,7 +20,7 @@ build had moved pdp's health path and the main checkout still had the old one.
 
 *On a rebuild*: any gate that takes expectations from the filesystem and
 observations from the network has this. The rule that avoids it is the one
-guard 5 also violates — *prefer a fact the system reports about itself over a
+guard 5 also violates -- *prefer a fact the system reports about itself over a
 fact the caller supplies about it.*
 
 * 2. Nothing distinguished "cannot observe" from "observed to be false"
@@ -30,7 +30,7 @@ non-zero, including when that was because no socket could be opened. A marker
 script reported a *rejection* when the host was unreachable. A =curl= fallback
 of =|| echo 000= concatenated with curl's own output to produce =000000=.
 
-*On a rebuild*: every probe needs three outcomes, not two. Collapsing
+*On a rebuild*: every probe needs three outcomes: true, false, and unreachable. Collapsing
 unreachable into false produces confident wrong answers, and they are wrong in
 the direction of destroying someone else's measurement.
 
@@ -40,13 +40,13 @@ Three in one day:
 
 - a contract test compared =render().routes= to the file =render= reads
 - the labeller oracle asserted =if "staging:passed" not in WORKFLOW.read_text()=
-  — satisfied by the string appearing anywhere, in any step, under any condition
+ -- satisfied by the string appearing anywhere, in any step, under any condition
 - =NoMergeBeforeProduction= was defined in the TLA+ spec and never added to
   =Safety=, so the negative run passed
 
 *On a rebuild*: a test that has never been watched failing is a hypothesis. The
 =gate-selftest= discipline exists for this and it only covers the gates it knows
-about — each of the three above sat outside it.
+about -- each of the three above sat outside it.
 
 * 4. Concurrency the harness did not model
 
@@ -63,7 +63,7 @@ mechanisms and only the loud one has one.
 No GitHub runner can reach the estate, so every gate that matters runs on the
 host and reports by label. That makes labels a proxy for check runs, which makes
 label ownership a correctness concern rather than tidiness (#16, #30), and it
-makes =deploy-staging= — which has never once run successfully (#25) — invisible
+makes =deploy-staging= -- which has never once run successfully (#25) -- invisible
 until someone looked.
 
 *On a rebuild*: decide early whether CI can reach the estate. Everything about
@@ -89,11 +89,11 @@ records.
 The sharpest one. =gates/e2e.sh= was edited by three different changes in one
 afternoon while being the gate that authorised all three. The =mktemp -t=
 portability defect in #21 would have reduced it from 27 checks to *zero on CI
-while exiting cleanly* — caught by reading the diff, not by running it, because
+while exiting cleanly* -- caught by reading the diff, not by running it, because
 running it on the author's host was exactly the environment where it worked.
 
 *On a rebuild*: this is the soak argument in
-=docs/changing-the-pipeline.org=. A control-plane change is not proven by its
+=research/findings/changing-the-pipeline.org=. A control-plane change is not proven by its
 own green run; it is proven by later changes passing through it. Anything else
 is measuring the gate with itself.
 

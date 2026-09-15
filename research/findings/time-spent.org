@@ -8,8 +8,8 @@ is the cost, measured rather than asserted: *105 commits to =main= between
 06:19 and 14:41 local*, one working day, classified by which invariant the
 commit was serving.
 
-Commit counts are a proxy and a poor one — a one-line fix and a subsystem both
-count once. Treat the *shape* as the finding, not the arithmetic.
+Commit counts are a proxy and a poor one -- a one-line fix and a subsystem both
+count once. Treat the *shape* as the finding and the arithmetic as the proxy.
 
 * The distribution
 
@@ -29,7 +29,7 @@ count once. Treat the *shape* as the finding, not the arithmetic.
 
 ** The expensive one is naming, not mechanism
 
-*"One writer per fact" cost the most — 19%, five hours* — and almost none of it
+*"One writer per fact" cost the most -- 19%, five hours* -- and almost none of it
 was building anything. It was:
 
 - =staging:passed= naming no environment, so a pass from one estate satisfied a
@@ -45,10 +45,10 @@ the vocabulary was, and the vocabulary is what every guard branches on.
 
 ** The cheap-looking ones are cheap because they fired early
 
-"Blast radius is declared" cost 2% and stopped at 10:36 — not because it
+"Blast radius is declared" cost 2% and stopped at 10:36 -- not because it
 stopped mattering, but because =shared/**= marking every app was settled once
 and then simply worked. Same for "the oracle must be independent": one commit,
-09:18, and it has been load-bearing ever since.
+09:18, and it has been structural ever since.
 
 *A low number here means the invariant was decided once and held.* That is the
 best possible outcome and it is indistinguishable, in this table, from an
@@ -57,12 +57,12 @@ invariant nobody worked on.
 ** The ones that span the whole day are the ones still not finished
 
 "Observation is not intent" runs 08:00 to 14:08. "Unreachable is not falsified"
-runs 08:22 to 14:34 on *two* commits — one in the morning, one six hours later,
+runs 08:22 to 14:34 on *two* commits -- one in the morning, one six hours later,
 because the same defect reappeared in a different place: first
 =merge-on-healthy= recording unreachable-as-unhealthy, then =preflight= reading
 nineteen never-started check runs as red.
 
-*A wide span with few commits is a defect class, not a task.* It keeps coming
+*A wide span with few commits is a defect class. No single task closes it.* It keeps coming
 back somewhere new.
 
 ** Half the work is not classifiable as an invariant at all
@@ -86,15 +86,15 @@ ones were found by:
   GitHub had stopped scheduling jobs and a never-started check reports the same
   =failure= as a real one
 
-That last is the sharpest number in this document. *One defect class —
-unreachable collapsed into false — cost more wall-clock time in a single
+That last is the sharpest number in this document. *One defect class -- 
+unreachable collapsed into false -- cost more wall-clock time in a single
 episode than most invariants cost all day*, and it cost it by making a correct
 system look broken.
 
 * What I would tell someone starting this
 
 1. *Spend the time on names first.* It was the largest cost and the one that
-   propagated — every guard reads the vocabulary, so an ambiguous label is a
+   propagated -- every guard reads the vocabulary, so an ambiguous label is a
    bug in everything downstream of it.
 2. *Budget for the same defect arriving three times.* Unreachable-is-not-false
    appeared in the merge workflow, in a marker script, and in preflight. Fixing
@@ -102,9 +102,9 @@ system look broken.
 3. *The invariants are not the expensive part.* Half the day was ordinary work.
    The invariants made that half safe; they did not replace it.
 
-* The build, by the numbers — 2026-09-13/14
+* The build, by the numbers -- 2026-09-13/14
 
-Measured, not estimated. Commands are in the git history; the token figures come
+Every figure here is measured. Commands are in the git history; the token figures come
 from the session transcript at
 =~/.claude/projects/-home-jwalsh-ghq-github-com-aygp-dr-slipway/*.jsonl=.
 
@@ -119,7 +119,7 @@ from the session transcript at
 | =shared= | 22 |
 | *total unit* | *162* |
 
-Plus the gate suites, which are a different kind of thing — they assert the
+Plus the gate suites, which are a different kind of thing -- they assert the
 gates can *fail*, not that the apps work: =observation-test= (10 cases + a
 detection case), =audit-selftest=, =labeller-test=, =simulate-gates=,
 =pbt-pipeline=, and =tla/check.sh= (7 TLC runs, both directions).
@@ -134,9 +134,9 @@ findings.
 2. *=issue #1= was repurposed* from the review ledger to the estate state
    holder, and =spec.org= went on pointing deviations at it for hours.
 3. *Approvals were posted by =change/review.py= that manufactured their own
-   verdict* — twenty of them, four on PRs that cannot merge. Found by the
+   verdict* -- twenty of them, four on PRs that cannot merge. Found by the
    review proxy, which refused to use the script.
-4. *Production served an unmerged, unauthorized build twice* — once because
+4. *Production served an unmerged, unauthorized build twice* -- once because
    =settle.sh= reported a merge that failed (#40), once because the driver
    piped a guard through =tail= (#54). Both rolled back.
 5. *=production-green= was taken down* by a deploy from a session whose
@@ -152,12 +152,12 @@ findings.
   missed window cost the wait for the next one; at an hour per cycle somebody
   would build an auto-rebooker, which is how the calendar filled with forty
   reservations nobody was driving.
-- *The manual cost is presence, not process.* Roughly half of ~30 windows
+- *The manual cost is presence; the process held.* Roughly half of ~30 windows
   expired unattempted. The guards refused correctly every time they were asked.
 - *The forge cannot enforce a window*, and bridging it with a mirrored required
   check would put the authority in the stalest component. Acknowledged instead.
 - *Going public fixed CI.* The eight-hour outage was billing on a private repo,
-  reported as =failure= with 0 steps — indistinguishable from a real failure.
+  reported as =failure= with 0 steps -- indistinguishable from a real failure.
 
 ** Token spend
 
@@ -179,25 +179,25 @@ call. See =experiments/017-token-metrics/=; =derive.py= prints both.
 | *total* | *1,182,809,707* |
 | naive row sum, for contrast | 2,259,572,855 (1.91x) |
 
-Model: =claude-opus-5= throughout. *Subagents are not in this total* — a
+Model: =claude-opus-5= throughout. *Subagents are not in this total* -- a
 subagent's calls never enter the coordinator's transcript, and the completion
 notice reports one opaque integer with no cache/output split, so delegated work
 can be counted and not priced. The night's spend is a lower bound.
 
-*Read the shape, not the total.* Cache reads are 99.5% of the tokens and 89.2%
+*Read the shape; the total says little on its own.* Cache reads are 99.5% of the tokens and 89.2%
 of the money; output is 0.16% of the tokens and 7.4% of the money. The
 conversation was re-read on every one of 2,171 calls and paid for once, at 322
-reads per cache write — that is the cheap shape, not a leak. The lever is turns,
+reads per cache write -- that is the cheap shape. Nothing is leaking. The lever is turns,
 not tokens. Per unit merged: 53,764,077 tokens; per production cutover:
 69,577,041.
 
 *The correction is itself the finding.* A number that is the sum of its own
-revisions is =spec.org= defect class 2 — /superseded is not current/ — the same
+revisions is =spec.org= defect class 2 -- /superseded is not current/ -- the same
 shape as guard 2 counting a superseded check run as a verdict, and it got past
 me into a published document.
 
 *The interesting ratio is tokens per finding.* Sixteen scenarios and eight
 defect classes came out of this. Most were found by a human watching a board, by
-mutation-testing a check, or by reading an error message instead of a summary —
+mutation-testing a check, or by reading an error message instead of a summary -- 
 none of which are expensive. The expense was the grind that produced the
 conditions for them.

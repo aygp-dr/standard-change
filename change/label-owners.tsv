@@ -25,7 +25,7 @@
 app:*	labeller	yes	no	no	derived from the diff: the app's own glob, OR any change to shared/ (which every app pins). Recomputed every push. To touch shared/ without redeploying all, use labeler:skip and set them by hand
 itil:standard	labeller	yes	no	no	derived; same
 itil:normal	labeller	yes	no	no	derived; same
-control-plane	labeller	yes	no	no	derived from gates/, change/, .github/ -- NARROWER than itil:normal, which also globs router/ and targets/. Says WHY the change is handled differently: it alters how every future change is verified, so it cannot be verified by the pipeline and must not auto-merge. Soak trigger, docs/changing-the-pipeline.org
+control-plane	labeller	yes	no	no	derived from gates/, change/, .github/ -- NARROWER than itil:normal, which also globs router/ and targets/. Says WHY the change is handled differently: it alters how every future change is verified, so it cannot be verified by the pipeline and must not auto-merge. Soak trigger, research/findings/changing-the-pipeline.org
 labeler:skip	human	yes	yes	yes	the opt-out that transfers ownership of the derived labels
 change:requested	human	no	yes	no	the human's part of starting a change; the pipeline clears it
 change:scheduled	scheduler	no	no	no	set when a window is booked

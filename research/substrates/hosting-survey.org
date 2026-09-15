@@ -1,4 +1,4 @@
-#+TITLE: Hosting survey — the most trivial staging and production for a four-app estate with a router
+#+TITLE: Hosting survey -- the most trivial staging and production for a four-app estate with a router
 #+SUBTITLE: Three questions, fanned out and answered from primary docs on 2026-09-14
 #+AUTHOR: aygp-dr
 #+DATE: 2026-09-14
@@ -6,7 +6,7 @@
 
 * Status
 
-*Research notes. Not spec, not an ADR.* Three researchers answered three
+*Research notes. Neither spec nor an ADR.* Three researchers answered three
 questions against vendor documentation on 2026-09-14; every number below is
 [E from docs] and every "it works" is [H] until run, since none of it has
 been deployed. =research/substrates/deployment-targets.org= prices the Cloudflare shapes;
@@ -16,8 +16,8 @@ production that GitHub Actions can reach?*
 
 The estate: four =node:http= servers (=core=, =plp=, =pdp=, =checkout=),
 each its own deployable, behind one router that proxies by path and sets
-=x-routed-to= and =x-build-sha=. Per-app isolation is the shape — ADR 0001
-§Option A — so a platform earns a row only if each app can be its own
+=x-routed-to= and =x-build-sha=. Per-app isolation is the shape -- ADR 0001
+§Option A -- so a platform earns a row only if each app can be its own
 deployment with its own build identity and its own path to production.
 
 * The answer, first
@@ -34,16 +34,16 @@ Ranks 1 and 2 host nothing new: they connect the runner to estates that
 exist. Ranks 3 to 5 are hosting. Nothing GitHub owns is on the list, for the
 reason in §GitHub.
 
-* GitHub — nothing it owns will run a =createServer=
+* GitHub -- nothing it owns will run a =createServer=
 
 | option | serves dynamic node | headers or version.json | platform record | two envs, promote without rebuild | verdict |
 |--------+---------------------+-------------------------+-----------------+-----------------------------------+---------|
 | Pages | no, static only | =version.json= yes; response headers no (no config surface outside GHES) | yes, twice: Pages deployment status, and a Deployment on the =github-pages= environment | one site per repo; two repos, and a cross-repo artifact download to promote the same bytes | the only GitHub host; the estate must be flattened |
-| the Actions runner itself | yes, for the job | yes | none that outlives the job | no; each job is a new VM, nothing can reach it | a gate, not an environment — and the spec already says in-runner e2e cannot authorize production |
+| the Actions runner itself | yes, for the job | yes | none that outlives the job | no; each job is a new VM, nothing can reach it | a gate, not an environment -- and the spec already says in-runner e2e cannot authorize production |
 | Codespaces, public port | yes | yes | none | two codespaces at two SHAs; the port reverts to private on restart and the codespace dies at four hours | a demo you attend |
 | GHCR + service containers | inside a job only | yes | as the runner | no | the runner with a Dockerfile |
-| Environments | record layer | — | *yes*: deployment object, =environment_url=, reviewers, wait timers | two names; promotion is whatever the host does | use over any host below |
-| Spark, Models | Spark gone 2026-08-31; Models retired 2026-07-30 | — | — | — | nothing |
+| Environments | record layer | -- | *yes*: deployment object, =environment_url=, reviewers, wait timers | two names; promotion is whatever the host does | use over any host below |
+| Spark, Models | Spark gone 2026-08-31; Models retired 2026-07-30 | -- | -- | -- | nothing |
 
 The honest GitHub-only shape is two Pages sites plus Environments, the router
 replaced by a directory layout and the two headers by a =/<app>/version.json=.
@@ -54,9 +54,9 @@ stay, there is no GitHub host.
 
 | option | job runs where | public? | safe on a public repo | keeps =x-build-sha= | free | steps |
 |--------+----------------+---------+-----------------------+---------------------+------+-------|
-| tailscale/github-action + subnet router on hydra | ubuntu-latest, inside the tailnet | *no* | yes — forks get no secrets | yes, no proxy | 1,000 ephemeral minutes/month | 4 |
+| tailscale/github-action + subnet router on hydra | ubuntu-latest, inside the tailnet | *no* | yes -- forks get no secrets | yes, no proxy | 1,000 ephemeral minutes/month | 4 |
 | cloudflared named tunnel + Access service token | ubuntu-latest | via the edge, gated | yes | yes; bypass cache on those hosts or a cached =.js= carries a stale sha | yes | ~5 |
-| actions/runner on the mini (osx-arm64) | on the mini, LAN to both | no | *no* — GitHub: "almost never" on public repos, and fork approval does not fix it | yes | yes | 3 |
+| actions/runner on the mini (osx-arm64) | on the mini, LAN to both | no | *no* -- GitHub: "almost never" on public repos, and fork approval does not fix it | yes | yes | 3 |
 | actions/runner on hydra | Linux jail, bhyve VM, or the Go reimplementation | no | no | yes | yes | 6–10; no FreeBSD build exists (actions/runner#385, open since 2020) |
 | Tailscale Funnel | ubuntu-latest | yes, no auth | no | yes | yes | 3 |
 | ngrok free | ubuntu-latest | yes, interstitial (header bypass) | no | yes | 20k requests/month | 3 |
@@ -77,14 +77,14 @@ workflows locally but reports nothing back.
 | Fly.io | Dockerfile | one app per directory | fifth app over =.internal= | same =--image …@sha256= to the prod app | =fly releases --json= | *no*; about $20/month for ten | auto-stop unless set off |
 | Railway | yes | root directory per service | fifth service | environments exist; promote is a GraphQL mutation, no CLI verb | GraphQL =deployments= | no; $5/month plan | opt-in |
 | Koyeb | yes | =--git-workdir= [H] | per-service routes in one App [H] | =services update --docker …@sha256= | =deployments list= | one free instance | free instance idles after an hour |
-| Render | yes | root directory or =render.yaml= | fifth service | image-backed only, via deploy hook with the digest | =/v1/services/{id}/deploys= | one always-on service; then $7 each | *free tier spins down after 15 min* — fails a health check |
-| Cloudflare Workers | three-line adapter; disk reads become imports and Static Assets | one =wrangler.jsonc= per directory | fifth Worker with service bindings — the best router | version id within a Worker; across staging and prod Workers, re-upload | =versions list= | yes | no |
+| Render | yes | root directory or =render.yaml= | fifth service | image-backed only, via deploy hook with the digest | =/v1/services/{id}/deploys= | one always-on service; then $7 each | *free tier spins down after 15 min* -- fails a health check |
+| Cloudflare Workers | three-line adapter; disk reads become imports and Static Assets | one =wrangler.jsonc= per directory | fifth Worker with service bindings -- the best router | version id within a Worker; across staging and prod Workers, re-upload | =versions list= | yes | no |
 | Deno Deploy | mostly; bundle file reads [H] | app directory, dashboard-set | fifth app by URL | timelines lock a revision; CLI promote undocumented [H] | REST v2 revisions | yes | no |
 | Netlify | *no*: functions need a handler export | base directory [H] | =_redirects= proxy | restore a deploy within one site [H] | =/sites/{id}/deploys= | credits | on demand |
 
 Image by digest, no build on their side: Cloud Run, Fly, Koyeb, Railway via
 the API, Render image-backed. No images at all: Vercel, Netlify, Cloudflare,
-Deno — there the build identity is the platform's deployment or version id,
+Deno -- there the build identity is the platform's deployment or version id,
 which =spec.org= §C6 accepts as long as the platform wrote it.
 
 Single-image hosts with no per-app isolation are left out of the table:
@@ -103,7 +103,7 @@ deploy record is one you write yourself.
 - *Cloud Run.* A =targets/cloudrun/deploy.sh= that builds one image per app
   once, deploys it with =--tag staging --no-traffic=, and promotes with
   =update-traffic=. This is the first target where promotion is by identity
-  and the record is the platform's — both things =research/substrates/deployment-targets.org=
+  and the record is the platform's -- both things =research/substrates/deployment-targets.org=
   says the jails cannot give. The router is a fifth service running
   =router/server.js= as-is.
 - *Vercel.* The apps run unchanged; the router becomes a =vercel.json= of

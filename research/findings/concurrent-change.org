@@ -11,7 +11,7 @@ the pipeline currently has a mechanism for exactly one of them.
 
 * The four kinds
 
-** 1. Textual overlap — two branches edit the same lines
+** 1. Textual overlap -- two branches edit the same lines
 
 *Observed*: #11 and #12 both wrote escaping into =shared/oneui.js=. #12 merged
 first; #11 hit a conflict in exactly those lines and a person resolved it to
@@ -21,11 +21,11 @@ main's =esc()= plus #11's =extra= slot, at 1.1.0 rather than 1.0.1.
 touch =shared/oneui.js=.
 
 *Mechanism*: git. This is the only kind the tooling already handles, it is
-loud, and it is the least dangerous — a conflict stops you.
+loud, and it is the least dangerous -- a conflict stops you.
 
 *Cost*: a rebase and a judgement call about versioning. Real but bounded.
 
-** 2. Semantic overlap — no conflict, and the result is still wrong
+** 2. Semantic overlap -- no conflict, and the result is still wrong
 
 Two changes that touch *different files* and disagree about a fact.
 
@@ -43,7 +43,7 @@ is the same shape and was filed partly to keep the question open: a badge
 rendered by plp and not by pdp is two apps disagreeing with no conflict
 anywhere.
 
-** 3. Resource overlap — two changes want the same environment
+** 3. Resource overlap -- two changes want the same environment
 
 *Observed*: dev blocks. Four agents were given blocks 0, 1, 2 and 5 by hand.
 Nothing enforced that; if two had chosen the same block, the second would have
@@ -56,7 +56,7 @@ allocation, it does not *refuse* a collision. Guard 1 does this properly for
 staging and nothing does it for dev blocks or for the review slot
 (=docs/adr/0001-automatic-promotion.org=, "The review slot is a berth").
 
-** 4. Verdict overlap — an observation outlives the build it describes
+** 4. Verdict overlap -- an observation outlives the build it describes
 
 *Observed*: #11's head moved while a staging run was in flight.
 =staging:e2e= and =staging:smoke= stayed on the PR, recorded against
@@ -87,7 +87,7 @@ choice is a small instance of the whole problem, so it is recorded here.
 |--------+----------------+-------------------------+------------------|
 | env var passed at deploy | yes | *yes* | a deploy argument |
 | header set by the router | yes | one hop removed | the request path |
-| each app derives it | no — four implementations | no | none |
+| each app derives it | no -- four implementations | no | none |
 | *pure function in OneUI* | *yes* | *no* | *none* |
 
 Chosen: a pure function in =shared/oneui.js= mapping a listening port to a
@@ -101,7 +101,7 @@ never built; it cannot hand the process a port it is not actually bound to.
 The router-header option is worse for a subtler reason: it is *true*, but it is
 true because the router says so, and the app has no way to disagree. Deriving
 it locally means a misrouted app reports the environment it is *actually in*
-rather than the one the router believes it routed to — which is exactly the
+rather than the one the router believes it routed to -- which is exactly the
 case you want a footer for.
 
 It also avoids versioning the deploy tooling, which is the practical argument:

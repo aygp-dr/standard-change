@@ -1,13 +1,13 @@
 #+TITLE: How a real storefront deploys, and where this model departs from one
-#+SUBTITLE: Comparison notes — affects no simulator, gate or guard
+#+SUBTITLE: Comparison notes -- affects no simulator, gate or guard
 #+DATE: 2026-09-13
 #+OPTIONS: toc:2 num:t
 
 * Scope
 
 The four apps here are *fixtures*: the product is the gate sequence
-(=spec.org= §Purpose). This note asks a different question — how would an
-actual ecommerce storefront deploy? — purely as a comparison.
+(=spec.org= §Purpose). This note asks a different question -- how would an
+actual ecommerce storefront deploy? -- purely as a comparison.
 
 *Nothing here changes a guard, a gate, a simulator or the spec.* If a claim
 below contradicts =spec.org=, the spec is right and this file is a note.
@@ -22,7 +22,7 @@ Our model treats every change as one unit. A storefront does not:
 |-------------------+-------------+---------------------------------------|
 | product pages     | high        | lost browse traffic, recoverable      |
 | search / browse   | high        | lost discovery, recoverable           |
-| cart              | medium      | *lost baskets* — customer-visible loss |
+| cart              | medium      | *lost baskets* -- customer-visible loss |
 | checkout / payment| *low*       | *lost revenue and trust*, often not recoverable |
 
 This is why real storefronts do not ship one pipeline. Checkout gets change
@@ -36,7 +36,7 @@ changes expensive enough to route around.
 =FREEZE:= in this repo is a calendar event someone sets. In a storefront it is
 a *quarter*: a peak-season code freeze covering weeks, with an exception
 process rather than a label. The interesting difference is that our freeze
-blocks and theirs *raises the approval bar* — a graduated control, not a gate.
+blocks and theirs *raises the approval bar* -- a graduated control where ours is a gate.
 
 ** The rollback that does not exist
 
@@ -66,7 +66,7 @@ storefront is where that gap is most obvious, because its state is money.
 from "the behaviour is live", which is precisely the release-management vs
 deployment-management split ITIL names and this repo keeps only in prose. With
 flags, guard 5's question changes from "is the new build serving?" to "is the
-new build serving with the flag off?" — and rollback stops needing a deploy at
+new build serving with the flag off?" -- and rollback stops needing a deploy at
 all.
 
 * What this model has that a storefront usually does not

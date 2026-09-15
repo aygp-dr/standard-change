@@ -42,7 +42,7 @@ project has cited since =spec.org=. *Two of them differ from the Python copy in
 | =implementing= | completed failed *cancelled*        | completed failed              |
 | =failed=       | *implementing* cancelled            | assessing cancelled           |
 
-The first is minor — guile lets you cancel mid-implementation.
+The first is minor -- guile lets you cancel mid-implementation.
 
 *The second is a policy disagreement and it matters.* guile lets a failed
 change be retried *directly*: =failed → implementing=. The Python copy sends it
@@ -51,12 +51,12 @@ back to =assessing=, requiring re-approval before another attempt.
 Those encode different answers to: *does a failed deployment need
 re-authorisation before you try again?*
 
-- guile says no — the change was approved, the deployment failed, try again
-- =idp.py= says yes — a failure is new information, reassess
+- guile says no -- the change was approved, the deployment failed, try again
+- =idp.py= says yes -- a failure is new information, reassess
 
 Neither is wrong. *What is wrong is that nobody chose.* The Python file says it
 implements guile's machine and does not, and the difference only appears when a
-deployment fails — the moment you least want to discover that two components
+deployment fails -- the moment you least want to discover that two components
 disagree about what happens next.
 
 The service follows *guile*, because it is the cited source and a copy that
@@ -66,10 +66,10 @@ silently edits its source is worse than either policy.
 
 Unresolved, and it interacts with something already decided. =guard 4b= and
 =change/settle.sh= re-check at the moment of reliance, and
-=docs/changing-the-pipeline.org= argues a pipeline change is proven by *use*.
-Under those, a failed deployment has already invalidated its staging pass —
-=main= may have moved, the estate may be mid-cutover — so *=assessing= is
-arguably the honest destination even though guile permits =implementing=*.
+=research/findings/changing-the-pipeline.org= argues a pipeline change is proven by *use*.
+Under those, a failed deployment has already invalidated its staging pass -- 
+=main= may have moved, the estate may be mid-cutover -- so *=assessing= is
+the honest destination even though guile permits =implementing=*.
 
 Trigger to decide: the first deployment that actually fails after approval.
 Until then both are written down and the disagreement is visible, which is
@@ -79,7 +79,7 @@ better than the file quietly having an opinion.
 
 Per-host state: which slots *this* machine granted, which checks *it* saw
 clear. Fifth instance of the rule today, after =ports.tsv=, =front.pid=,
-=targets/node/live= and =ports.tsv= again — each stale the moment it was
+=targets/node/live= and =ports.tsv= again -- each stale the moment it was
 committed, and between them they blocked three rebases and caused a production
 503 when a git operation deleted the file the front reads per request.
 

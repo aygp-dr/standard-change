@@ -34,7 +34,7 @@ under every policy.
 
 * The placeholder variables
 
-Set 2026-09-14 as repository *variables*, not secrets:
+Set 2026-09-14 as repository *variables*. None is a secret:
 
 | name | value | why |
 |------+-------+-----|
@@ -43,9 +43,9 @@ Set 2026-09-14 as repository *variables*, not secrets:
 
 *They are variables because a URL is not a credential.* Putting a hostname in
 =secrets= masks it in the logs, which buys nothing and makes a failing health
-check unreadable — and these are expected to fail. A secret is for a value
+check unreadable -- and these are expected to fail. A secret is for a value
 that would cause harm if read; the harm here would be from a value that can be
-*reached*, which is a network property, not a logging one.
+*reached*, which is a property of the network and never of the log.
 
 They point at loopback, so a runner evaluating them will probe its own
 localhost, find nothing on 9200/9230, and guard 5 will report =UNHEALTHY= or
@@ -57,12 +57,12 @@ only change needed when one exists.
 
 =deploy-production.yml:42= interpolates it into =./targets/${{
 vars.DEPLOY_TARGET }}/deploy.sh=. Unset, that expands to =./targets//deploy.sh=
-and the step dies — which is why the workflow has failed safely 249 times
+and the step dies -- which is why the workflow has failed safely 249 times
 rather than deploying.
 
 Setting it would ARM a production deploy that fires on a label, against an
-estate the runner cannot reach, with =./targets/<t>/rollback.sh= — a script
-that *does not exist for any target* — as its failure path. It stays unset
+estate the runner cannot reach, with =./targets/<t>/rollback.sh= -- a script
+that *does not exist for any target* -- as its failure path. It stays unset
 until the deploy workflows are either fixed or removed (PR #83 proposes
 removal).
 
@@ -81,8 +81,8 @@ Three options, in increasing order of what they give up:
    tunnel and should be argued as one.
 3. *Push instead of pull.* The estate reports its own served build outward to a
    collector; CI reads the collector. This is what =change/marker.sh= already
-   does to the beacon. Weakest attestation — a self-report is not an
-   observation — and =spec.org= is explicit that the jail's =jls= is evidence
+   does to the beacon. Weakest attestation -- a self-report is not an
+   observation -- and =spec.org= is explicit that the jail's =jls= is evidence
    while a self-report is not.
 
 None is free, and the current state is honest: the gates that can run in CI do,

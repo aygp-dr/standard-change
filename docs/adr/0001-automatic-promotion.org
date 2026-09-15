@@ -806,7 +806,7 @@ not been walked at all.
 3. *Is a failed deployment still =change:complete= eligible?* The ITIL machine
    says =implementing → failed=, and =failed → implementing= (guile) or
    =failed → assessing= (our copy). *The two disagree*
-   (=docs/idp-service.org=) and the disagreement only appears on failure.
+   (=research/history/changeflow-state-machine.org=) and the disagreement only appears on failure.
 4. *Does the window survive a failure?* If a deploy fails at 17:05 in a
    17:00–17:30 window, is the remainder still the change's to retry in, or
    forfeited? Nothing decides.

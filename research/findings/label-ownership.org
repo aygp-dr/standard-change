@@ -16,7 +16,7 @@ been told to do, and the result was a label that flickered and a change that
 silently could not proceed. *Thrash is not a bug in either writer. It is the
 absence of an owner.*
 
-* Rule 1 — every label has exactly one writer, and it is the instrument
+* Rule 1 -- every label has exactly one writer, and it is the instrument
 
 An observation label may be written *only by the thing that took the
 measurement*. Not by a person who read the measurement, not by a workflow that
@@ -27,8 +27,8 @@ believes the measurement, not by an agent summarising a terminal.
 | =staging:e2e=          | =gates/e2e.sh --pr=                   | no                     |
 | =staging:smoke=        | =gates/smoke.sh --pr=                 | no                     |
 | =production:healthy=   | =gates/health.sh --pr=                | no                     |
-| =staging:uat=          | *a person* — for acceptance, the person IS the instrument | yes, via =change/observe.sh= |
-| =release=              | a person — it is intent, not a measurement | yes               |
+| =staging:uat=          | *a person* -- for acceptance, the person IS the instrument | yes, via =change/observe.sh= |
+| =release=              | a person -- it is intent, not a measurement | yes               |
 | =hold:staging=         | a person                              | yes                    |
 | =deploy:<env>=         | the workflow doing the deploying      | no                     |
 | =change:*=             | the pipeline, as the record advances  | =change:requested= only |
@@ -37,20 +37,20 @@ believes the measurement, not by an agent summarising a terminal.
 because =health.sh= had no =--pr= flag, unlike =e2e.sh= and =smoke.sh=. A gate
 with no way to record its own verdict forces someone else to record it, and
 that someone is then asserting a measurement they did not take. *A missing
-=--pr= flag is a label-ownership defect, not a convenience gap.*
+=--pr= flag is a label-ownership defect. Convenience has nothing to do with it.*
 
-* Rule 1b — derived labels are owned by the deriver, and ownership transfers by an opt-out, never by an edit
+* Rule 1b -- derived labels are owned by the deriver, and ownership transfers by an opt-out, never by an edit
 
 =app:*= and =itil:standard= are *derived*: the labeller computes them from the
 diff on every push. They are owned by the labeller, absolutely, and hand-editing
-one is not a disagreement the system can see — the next push simply recomputes
+one is not a disagreement the system can see -- the next push simply recomputes
 it and your edit is gone. There is no argument, and no record that one was had.
 
 So the escape hatch is not "edit the label", it is *=labeler:skip=*:
 
 : if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
 
-=labeler:skip= hands the manifest back to a human — for forcing a build the
+=labeler:skip= hands the manifest back to a human -- for forcing a build the
 diff does not imply, or suppressing one it wrongly does. This is the right
 shape for every derived label, and it generalises:
 
@@ -66,7 +66,7 @@ to prefer this pattern anywhere a machine derives a label:
    overwritten =app:*= looks identical to a correctly derived one.
 2. *It is durable.* The skip survives the next push. An edit does not.
 3. *It names the disagreement.* The label says "a human has taken this over",
-   which is a fact worth recording. An edit says nothing — it is indistinguishable
+   which is a fact worth recording. An edit says nothing -- it is indistinguishable
    from the machine's own output, which is precisely how a forged observation
    hides.
 
@@ -75,14 +75,14 @@ The same reasoning is why =hold:staging= is a separate label rather than
 behaviour is editing a measurement. Adding a hold states an intent.
 
 *Corollary.* If you find yourself wanting to hand-edit a derived or observed
-label, the missing thing is an opt-out label, not permission to edit. That is
+label, the missing thing is an opt-out label, and permission to edit is the wrong ask. That is
 the shape of the fix.
 
-* Rule 2 — unreachable is not falsified
+* Rule 2 -- unreachable is not falsified
 
 This is the rule the thrash actually broke.
 
-=merge-on-healthy.yml= is right to distrust the label that triggered it — its
+=merge-on-healthy.yml= is right to distrust the label that triggered it -- its
 own comment says *"do not trust the label that triggered this"*, and
 re-deriving rather than trusting is correct. It then failed, withdrew
 =production:healthy=, and refused the merge.
@@ -97,13 +97,13 @@ not run, and its inability to run was recorded as a negative result.
 Those are different states and collapsing them is what produced the thrash. The
 correct behaviour when an instrument cannot reach its subject is to *abstain*:
 say so, refuse to proceed, and *leave the label alone*. Withdrawing a label you
-could not check is asserting a measurement you did not take — the same defect as
+could not check is asserting a measurement you did not take -- the same defect as
 adding one, in the opposite direction.
 
 *Failing closed is right. Falsifying is not.* The merge should still refuse.
 What it must not do is rewrite the record of somebody else's measurement.
 
-* Rule 3 — an agent owns no observation label
+* Rule 3 -- an agent owns no observation label
 
 Claude, or any agent driving this pipeline, is not an instrument. It runs
 instruments and reads their output.
@@ -126,7 +126,7 @@ The agent's legitimate moves are to run the instrument, to report what it said,
 and to say plainly when it could not run. It may also carry a human's intent
 (=release=, =hold:staging=) when asked, because intent is the human's to give.
 
-* Rule 4 — a label with two writers needs a tiebreak written down
+* Rule 4 -- a label with two writers needs a tiebreak written down
 
 Where two writers genuinely must touch one label, the precedence must be
 explicit, because the alternative is last-write-wins and last is not the same
@@ -141,7 +141,7 @@ as authoritative:
 - a *human hold* outranks every automated pass. =hold:staging= is lifted only by
   a person.
 
-* Rule 5 — a label cannot carry a build, so a guard must not authorize on one
+* Rule 5 -- a label cannot carry a build, so a guard must not authorize on one
 
 Rules 1 to 4 settle *who* may write a label. They say nothing about *what a
 label can hold*, and that is where the next failure came from.
@@ -156,7 +156,7 @@ was true. Every rule above was obeyed. The defect is one level down: *a label
 names the measurement and cannot name the build*. =staging:e2e= says e2e
 passed; it cannot say on what.
 
-The pipeline covered that gap with a cleanup step — the labeller withdraws
+The pipeline covered that gap with a cleanup step -- the labeller withdraws
 every observation on =synchronize=. That makes the guard sound only for as long
 as the cleanup keeps firing, and it fails *open* when it stops. It stopped.
 
@@ -165,7 +165,7 @@ of the measurement itself:
 
 | kind | example | can it be re-taken? | what authorizes |
 |------+---------+---------------------+-----------------|
-| repeatable | =staging:e2e=, =staging:smoke=, =production:healthy= | yes, by a machine | the observation *record* — a PR comment naming environment, instrument, verdict and SHA — whose SHA must equal the head being authorized |
+| repeatable | =staging:e2e=, =staging:smoke=, =production:healthy= | yes, by a machine | the observation *record* -- a PR comment naming environment, instrument, verdict and SHA -- whose SHA must equal the head being authorized |
 | not repeatable | =staging:uat= | no; a person used the site | the record *and* the label, because the label is the person's own signal and a person may withdraw it |
 
 A record does not go stale and so does not need withdrawing. It stays true
@@ -175,7 +175,7 @@ fire for that to hold, which is the whole difference:
 : durable label          "this PR has passed staging e2e"
 : point-in-time record   "the run at 16:06 observed e2e green on 9d85a33"
 
-The labels stay, and they stay useful — they are the *current-run* signal the
+The labels stay, and they stay useful -- they are the *current-run* signal the
 deployment process sets as it goes and clears as it moves on, and they are what
 a person reads at a glance. What they are no longer is the thing a guard
 authorizes on. Written by =change/evidence.sh record=, read by

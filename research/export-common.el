@@ -79,7 +79,9 @@ heading and every other keyword after the master's own header is dropped."
 
 (add-hook 'org-export-before-parsing-functions #'sc-strip-included-keywords)
 (add-hook 'org-export-before-parsing-functions #'sc-wrap-wide-tables 90)
-(setq org-latex-compiler "xelatex"
+(setq org-latex-src-block-backend 'verbatim   ; fvextra wraps verbatim; listings/minted would not
+      org-export-use-babel nil                ; export never evaluates a block (gentle-symbolic-computation)
+      org-latex-compiler "xelatex"
       org-latex-tables-centered nil
       org-confirm-babel-evaluate nil
       org-export-with-broken-links 'mark)

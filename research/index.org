@@ -3,12 +3,22 @@
 #+DATE: 2026-09-15
 #+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
 #+LATEX_CLASS: article
+#+LATEX_CLASS_OPTIONS: [11pt,oneside]
+#+LATEX_COMPILER: xelatex
+# Preamble conventions from jwalsh/build-a-clojure books/the-stripped-jar (the
+# family's one multi-include book) and aygp-dr/gentle-symbolic-computation:
+# article not book (chapters force clearpage and leave a third of the pages
+# white); explicit paper and margin; ragged bottom; hidden link boxes; verbatim
+# that breaks lines; a newunicodechar block because xelatex drops missing
+# glyphs silently. Tables are handled per table by export-common.el.
 #+LATEX_HEADER: \usepackage{fontspec}\setmainfont{STIX Two Text}\setmonofont{Menlo}[Scale=0.82]
-#+LATEX_HEADER: \usepackage[letterpaper,margin=2cm]{geometry}\usepackage{ltablex}\keepXColumns\setlength{\tabcolsep}{3pt}
-#+LATEX_HEADER: \usepackage{xurl}\usepackage[htt]{hyphenat}\sloppy
+#+LATEX_HEADER: \usepackage[letterpaper,margin=2cm]{geometry}\usepackage{microtype}\linespread{1.04}\raggedbottom\sloppy
+#+LATEX_HEADER: \usepackage{ltablex}\keepXColumns\setlength{\tabcolsep}{3pt}
+#+LATEX_HEADER: \usepackage{xurl}\usepackage[htt]{hyphenat}\hypersetup{hidelinks}\setcounter{tocdepth}{2}
+#+LATEX_HEADER: \usepackage{fvextra}\fvset{breaklines=true,breakanywhere=true,fontsize=\footnotesize}
 #+LATEX_HEADER: \makeatletter\def\verbatim@font{\ttfamily\footnotesize}\makeatother
-#+LATEX_HEADER: \usepackage{newunicodechar}\newunicodechar{→}{\ensuremath{\rightarrow}}\newunicodechar{←}{\ensuremath{\leftarrow}}\newunicodechar{↔}{\ensuremath{\leftrightarrow}}\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
-#+LATEX_HEADER: \newunicodechar{≈}{\ensuremath{\approx}}\newunicodechar{≤}{\ensuremath{\leq}}\newunicodechar{≥}{\ensuremath{\geq}}\newunicodechar{≠}{\ensuremath{\neq}}\newunicodechar{⊆}{\ensuremath{\subseteq}}\newunicodechar{∈}{\ensuremath{\in}}\newunicodechar{∉}{\ensuremath{\notin}}\newunicodechar{∧}{\ensuremath{\wedge}}\newunicodechar{∨}{\ensuremath{\vee}}\newunicodechar{¬}{\ensuremath{\neg}}\newunicodechar{×}{\ensuremath{\times}}
+#+LATEX_HEADER: \usepackage{amssymb}\usepackage{newunicodechar}\newunicodechar{→}{\ensuremath{\rightarrow}}\newunicodechar{←}{\ensuremath{\leftarrow}}\newunicodechar{↔}{\ensuremath{\leftrightarrow}}\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+#+LATEX_HEADER: \newunicodechar{≈}{\ensuremath{\approx}}\newunicodechar{≤}{\ensuremath{\leq}}\newunicodechar{≥}{\ensuremath{\geq}}\newunicodechar{≠}{\ensuremath{\neq}}\newunicodechar{⊆}{\ensuremath{\subseteq}}\newunicodechar{∈}{\ensuremath{\in}}\newunicodechar{∉}{\ensuremath{\notin}}\newunicodechar{∧}{\ensuremath{\wedge}}\newunicodechar{∨}{\ensuremath{\vee}}\newunicodechar{¬}{\ensuremath{\neg}}\newunicodechar{×}{\ensuremath{\times}}\newunicodechar{✓}{\ensuremath{\checkmark}}\newunicodechar{✗}{\ensuremath{\times}}
 
 This document is the research directory of the repository, assembled by
 =#+INCLUDE= from =history/=, =substrates/=, =findings/= here and =experiments/= so it can be
@@ -16,7 +26,7 @@ rebuilt as HTML or PDF (=gmake research=). It covers what was read, what was
 tried and what was found. It leaves out the internals: the spec, the scripts,
 the gates, the shell review. A repository with a risk designation, something
 deployable and a pipeline that governs deployment can take the tracking layer
-described in Part V without touching the labels it already has.
+described in Part I without touching the labels it already has.
 
 * Part I: How to read this, and how to adopt it
 #+INCLUDE: "adoption.org" :minlevel 3
@@ -52,8 +62,12 @@ described in Part V without touching the labels it already has.
 #+INCLUDE: "../research/findings/time-spent.org" :minlevel 2
 
 * Part V: The experiments, in order
+#+INCLUDE: "../experiments/001-d4-staging-regression/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/003-scheduled-slots/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/004-rolling-deploy/README.org" :minlevel 3
 #+INCLUDE: "../experiments/014-observation-records/notes.org" :minlevel 3
 #+INCLUDE: "../experiments/016-dora/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/017-token-metrics/notes.org" :minlevel 3
 #+INCLUDE: "../experiments/020-browser-uat/notes.org" :minlevel 3
 #+INCLUDE: "../experiments/022-five-agent-grind/notes.org" :minlevel 3
 #+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 3

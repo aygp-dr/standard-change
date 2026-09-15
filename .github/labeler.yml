@@ -77,7 +77,7 @@ app:mock:
 #
 # The label exists to say WHY this change is handled differently, on the PR,
 # where a reviewer sees it -- rather than leaving itil:normal to imply it.
-# It is the trigger for the soak practice in docs/changing-the-pipeline.org:
+# It is the trigger for the soak practice in research/findings/changing-the-pipeline.org:
 # a pipeline change is proven by USE, across N subsequent deployments, not by
 # its own merge. It is also why such a change must not auto-merge: it is not
 # proven until later changes have shipped through it.
@@ -98,7 +98,7 @@ control-plane:
 #                       reversible, blast radius beyond the deploy, stateful
 #                       and one-shot. A deploy rolls back by serving the
 #                       previous build; a migration that dropped a column does
-#                       not. See docs/research-classification-frameworks.org.
+#                       not. See research/history/classification-frameworks.org.
 #
 # PRECEDENCE, because two globs can match one change: NORMAL WINS. A change
 # containing a migration is a change containing a migration, whatever else it

@@ -5,7 +5,7 @@ APPS     := $(notdir $(wildcard apps/*))
 # external/ is NOT ours: stand-ins for services we do not deploy.
 EXTERNAL := $(notdir $(wildcard external/*))
 
-.PHONY: research build help env env-check run dev router stop test lint gate gate-selftest smoke-selftest \
+.PHONY: research build prose help env env-check run dev router stop test lint gate gate-selftest smoke-selftest \
         lint-shell lint-python shebang-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
         simulate-gates smoke uat idp-mock idp-tui idp-org \
@@ -173,6 +173,9 @@ build: research
 
 research:  ## the history and research as one document, HTML and PDF -> research/build/
 research: ; @$(MAKE) -s -C research build
+
+prose:  ## vale (the wal.sh style) over the research writeup
+prose: ; @vale research/adoption.org research/README.org research/history/*.org research/substrates/*.org research/findings/*.org experiments/023-start-only/notes.org | tail -1
 
 docs:  ## the documents gate
 docs: ; @./gates/docs-lint.py

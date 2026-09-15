@@ -1,12 +1,12 @@
 #+TITLE: A timeline of the deployment pipeline, and where the options for the next ADR come from
-#+SUBTITLE: Research notes — which historical changes altered what a pipeline *means*, and which of our five options each one belongs to
+#+SUBTITLE: Research notes -- which historical changes altered what a pipeline *means*, and which of our five options each one belongs to
 #+AUTHOR: aygp-dr
 #+DATE: 2026-09-14
 #+OPTIONS: toc:2 num:nil
 
 * Status
 
-*Research notes. Not spec, not an ADR, not a proposal.* =spec.org= governs;
+*Research notes. Neither spec nor ADR nor proposal.* =spec.org= governs;
 nothing here amends it. Epistemic labels are =spec.org='s: [E] established,
 [P] provisional, [H] hypothesis, [I] inferred.
 
@@ -18,7 +18,7 @@ the next ADR come from, and what did the industry learn when it tried them?*
 
 The next ADR follows ADR 0001 (automatic promotion, gated by evidence) and ADR
 0003 (the schedule is a separate, deliberately dumb component). Its question is
-how a change gets from /scheduled/ to /implementing/ — who or what starts the
+how a change gets from /scheduled/ to /implementing/ -- who or what starts the
 deployment, and on whose evidence. Five options are on the table:
 
 | # | Option                                                                | Ancestor in the timeline                   |
@@ -43,7 +43,7 @@ changed. A row without a drawer is [H]; every timeline row and reference
 heading carried one as of 2026-09-14. This repo does not carry a
 =.verify/chain.jsonl= ledger; the drawers are the whole record here.
 
-* Timeline — changes that altered pipeline semantics
+* Timeline -- changes that altered pipeline semantics
 :PROPERTIES:
 :CUSTOM_ID: timeline
 :END:
@@ -53,7 +53,7 @@ one of the following words meant something different: /build/, /release/,
 /deploy/, /promote/, /version/. A great many important tools are omitted
 because they made an existing meaning cheaper without changing it.
 
-** 1972 — SCCS
+** 1972 -- SCCS
 :PROPERTIES:
 :CUSTOM_ID: t-1972-sccs
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -65,7 +65,7 @@ because they made an existing meaning cheaper without changing it.
 Rochkind, Bell Labs. A version is a delta on *one file*. There is no notion of
 a tree state; "which build" is not a question the tool can answer.
 
-** 1982 — RCS
+** 1982 -- RCS
 :PROPERTIES:
 :CUSTOM_ID: t-1982-rcs
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -77,7 +77,7 @@ a tree state; "which build" is not a question the tool can answer.
 Tichy, Purdue. Branches and symbolic names, still per file. A "release" is a
 tag applied file by file, which can name a tree that never existed together.
 
-** 1986–1990 — CVS
+** 1986–1990 -- CVS
 :PROPERTIES:
 :CUSTOM_ID: t-1986-cvs
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -91,7 +91,7 @@ Grune's shell scripts (written 1984–85, posted 1986) then Berliner's C rewrite
 checkout over per-file revisions. A tag can still name an inconsistent tree;
 the pipeline's identity problem is inherited whole.
 
-** 1995–2000 — atomic commits: Perforce, then Subversion
+** 1995–2000 -- atomic commits: Perforce, then Subversion
 :PROPERTIES:
 :CUSTOM_ID: t-1997-atomic
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -104,7 +104,7 @@ Perforce changelists (mid-1990s) and Subversion (2000, first release 2004).
 A revision names a *whole tree*. "Which build" becomes answerable for the first
 time. This is the first of the three inflection points.
 
-** 1999–2000 — integrate on every commit
+** 1999–2000 -- integrate on every commit
 :PROPERTIES:
 :CUSTOM_ID: t-1999-ci
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -115,10 +115,10 @@ time. This is the first of the three inflection points.
 
 Beck, /Extreme Programming Explained/ (1999); Fowler, "Continuous Integration"
 (2000, rewritten 2006 and again 2024). The build is the oracle for =main=. What the CI server
-says about a commit *is* the verdict on that commit — the ancestor of every
+says about a commit *is* the verdict on that commit -- the ancestor of every
 gate in =gates/=.
 
-** 2001–2005 — the build server as a component
+** 2001–2005 -- the build server as a component
 :PROPERTIES:
 :CUSTOM_ID: t-2001-cruisecontrol
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -131,7 +131,7 @@ CruiseControl (ThoughtWorks, 2001); Hudson (Kawaguchi, 2005; forked to Jenkins
 2011). The build acquires an identity and a log; it is a thing one can point
 at. Guard 4b's "evidence on the head SHA" presupposes this.
 
-** 2005–2008 — Git, then GitHub
+** 2005–2008 -- Git, then GitHub
 :PROPERTIES:
 :CUSTOM_ID: t-2005-git
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -142,10 +142,10 @@ at. Guard 4b's "evidence on the head SHA" presupposes this.
 
 Git (Torvalds, 2005); GitHub (2008). Content-addressed tree: the SHA *is* the
 build identifier, and it is the same identifier in every environment. Branching
-becomes free, which is what creates the branching-policy problem — every
+becomes free, which is what creates the branching-policy problem -- every
 policy in §Branching policies is a response to Git making branches cheap.
 
-** 2006–2009 — deploy frequency as a design goal
+** 2006–2009 -- deploy frequency as a design goal
 :PROPERTIES:
 :CUSTOM_ID: t-2009-flickr
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -157,9 +157,9 @@ policy in §Branching policies is a response to Git making branches cheap.
 Vogels on Amazon, "you build it, you run it" (ACM Queue interview, 2006);
 Allspaw & Hammond, "10+ Deploys Per Day: Dev and Ops Cooperation at Flickr"
 (Velocity, 2009). Deploy is decoupled from release and made routine. This is
-the ancestor of *Option 3* — small teams, own path to production.
+the ancestor of *Option 3* -- small teams, own path to production.
 
-** 2010 — the deployment pipeline is named
+** 2010 -- the deployment pipeline is named
 :PROPERTIES:
 :CUSTOM_ID: t-2010-cd
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -170,11 +170,11 @@ the ancestor of *Option 3* — small teams, own path to production.
 
 Humble & Farley, /Continuous Delivery/. Stages, gates, *one* build promoted
 through environments. The manual approval step at the end of the pipeline is
-in the book (ch. 5, "Anatomy of the Deployment Pipeline" — the release stage
+in the book (ch. 5, "Anatomy of the Deployment Pipeline" -- the release stage
 is push-button, on a human's decision [needs-citation: page]); it is the
 ancestor of *Option 1*.
 
-** 2010 — git-flow
+** 2010 -- git-flow
 :PROPERTIES:
 :CUSTOM_ID: t-2010-gitflow
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -189,7 +189,7 @@ own 2020 note of reflection says the model was written for versioned software
 shipped to customers and is not the right fit for continuously delivered web
 apps.
 
-** 2011 — GitHub flow; feature flags at scale
+** 2011 -- GitHub flow; feature flags at scale
 :PROPERTIES:
 :CUSTOM_ID: t-2011-github-flow
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -199,9 +199,9 @@ apps.
 :END:
 
 Scott Chacon, "GitHub Flow" (2011): one =master=, short branches, merge after
-review, deploy immediately after merge. GitHub's *later* variant — deploy the
+review, deploy immediately after merge. GitHub's *later* variant -- deploy the
 branch to production first, roll back by deploying =master=, merge only once
-confirmed healthy (Aman Gupta, "Deploying branches to GitHub.com", 2015) — is
+confirmed healthy (Aman Gupta, "Deploying branches to GitHub.com", 2015) -- is
 the ancestor of our production-first rule and of *Option 5*. The 2011 post
 prescribes the opposite order and was mis-cited here until audit. Feature
 flags at scale (Etsy config flags, 2011; Facebook Gatekeeper, documented
@@ -209,7 +209,7 @@ flags at scale (Etsy config flags, 2011; Facebook Gatekeeper, documented
 in 2016. Release is decoupled from deploy: code on production is not code in
 use.
 
-** 2013 — Docker
+** 2013 -- Docker
 :PROPERTIES:
 :CUSTOM_ID: t-2013-docker
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -224,7 +224,7 @@ Second inflection point. Guard 5 (the estate serves the promoted build) is
 only stateable once the deployed thing has an identity independent of the
 source tree.
 
-** 2013–2023 — merge queues
+** 2013–2023 -- merge queues
 :PROPERTIES:
 :CUSTOM_ID: t-2013-bors
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -238,7 +238,7 @@ Bors (Hoare, Rust, 2013) implementing the "not rocket science" rule (Hoare,
 only advances to a state CI has tested with the *exact merged tree*. This is
 guard 0 and guard 4b implemented in the forge.
 
-** 2013–2017 — Kubernetes; trunk-based development named
+** 2013–2017 -- Kubernetes; trunk-based development named
 :PROPERTIES:
 :CUSTOM_ID: t-2014-k8s-tbd
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -252,7 +252,7 @@ scripted deploy. Hammant, "What is Trunk-Based Development?" (2013) and
 trunkbaseddevelopment.com (2017, drawing on practice from the 2000s): the
 counter-model to git-flow.
 
-** 2016 — SRE book; academic framing
+** 2016 -- SRE book; academic framing
 :PROPERTIES:
 :CUSTOM_ID: t-2016-sre
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -267,7 +267,7 @@ McIntosh, "Modern Release Engineering in a Nutshell" (SANER 2016); Savor et
 al., "Continuous Deployment at Facebook and OANDA" (ICSE-SEIP 2016). The
 pipeline becomes a research object.
 
-** 2017–2018 — GitOps
+** 2017–2018 -- GitOps
 :PROPERTIES:
 :CUSTOM_ID: t-2017-gitops
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -276,13 +276,13 @@ pipeline becomes a research object.
 :FINDING: Richardson 2017-08-07 via Wayback; Flux first commit 2016-07-07, 0.1.0 2017-01-27; Argo CD v0.1.0 2018-03-13.
 :END:
 
-Richardson, "GitOps — Operations by Pull Request" (Weaveworks, 2017); Flux
+Richardson, "GitOps -- Operations by Pull Request" (Weaveworks, 2017); Flux
 (2016–17); Argo CD (2018). Git is the desired state; deploy is a *sync*, not a
 push. Third inflection point, and the one that matters most for the ADR:
 reconciliation has no verb for /promote/, so promotion has to be modelled
 separately. Our berth, calendar and activation sit in the gap GitOps opened.
 
-** 2018 — Accelerate
+** 2018 -- Accelerate
 :PROPERTIES:
 :CUSTOM_ID: t-2018-accelerate
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -295,7 +295,7 @@ Forsgren, Humble, Kim. The four DORA metrics as the measure of pipeline
 quality. =research/history/release-standards.org= already records that this frame is
 structurally blind to forfeited windows and revalidation runs.
 
-** 2019–2021 — provenance
+** 2019–2021 -- provenance
 :PROPERTIES:
 :CUSTOM_ID: t-2019-provenance
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -310,7 +310,7 @@ bound to artifacts and signed by the party that produced them. This is the
 only genuinely standardised layer in the space, and it is about builds, not
 deployments.
 
-** 2020 — ITIL 4 Change Enablement
+** 2020 -- ITIL 4 Change Enablement
 :PROPERTIES:
 :CUSTOM_ID: t-2020-itil4
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -319,11 +319,11 @@ deployments.
 :FINDING: ITIL 4 Foundation (2019) said 'change control'; the Change Enablement practice guide is dated 2020-01-09. AXELOS PDF seen via mirror.
 :END:
 
-Standard / normal / emergency change, change authority, change schedule — in
+Standard / normal / emergency change, change authority, change schedule -- in
 the vocabulary most enterprises use. This repo's name and its =itil:*= labels
 are from here.
 
-** 2020–2021 — the forge carries environment state
+** 2020–2021 -- the forge carries environment state
 :PROPERTIES:
 :CUSTOM_ID: t-2020-gh-environments
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -337,7 +337,7 @@ wait timers, deployment branches. Cloudflare Workers versions and gradual
 deployments (beta April 2024, GA September 2024): the version is a first-class
 immutable object with a percentage.
 
-** 2023–2024 — promotion as a modelled object
+** 2023–2024 -- promotion as a modelled object
 :PROPERTIES:
 :CUSTOM_ID: t-2023-kargo
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -351,7 +351,7 @@ per-stage verification. Argo Rollouts analysis; AWS CodePipeline stage
 conditions (2024) with deployment-window rules. The thing GitOps left out is
 being put back as a model. This is the closest ancestor of *Option 2*.
 
-** 2025–2026 — agentic CI
+** 2025–2026 -- agentic CI
 :PROPERTIES:
 :CUSTOM_ID: t-2025-agentic
 :VERIFIED_AT: 2026-09-14T13:15:48Z
@@ -361,7 +361,7 @@ being put back as a model. This is the closest ancestor of *Option 2*.
 :END:
 
 Claude Code, Copilot coding agent. The author of a change may be a machine.
-Who may add =release= becomes a policy question rather than a social one —
+Who may add =release= becomes a policy question rather than a social one -- 
 which is what =research/findings/label-ownership.org= and =change/label-owners.tsv= are
 for. [E: this repo]
 
@@ -370,11 +370,11 @@ for. [E: this repo]
 Everything above collapses to three changes of meaning, and the ADR's options
 sort by which one they respond to:
 
-1. *Atomic commits* — a build is a tree. Without this, "the tested thing is
+1. *Atomic commits* -- a build is a tree. Without this, "the tested thing is
    the deployed thing" is not a statement anyone can make.
-2. *Docker* — the artifact is immutable and its identifier is a digest.
+2. *Docker* -- the artifact is immutable and its identifier is a digest.
    Without this, guard 5 has nothing to read.
-3. *GitOps* — deploy is reconciliation, so /promote/ needs a separate model.
+3. *GitOps* -- deploy is reconciliation, so /promote/ needs a separate model.
    This is the gap the berth and the calendar fill, and the gap Options 1 and
    2 are both proposals for filling.
 
@@ -395,7 +395,7 @@ it feeds.
 
 - *Git-flow* (Driessen 2010). =develop=, =release/*=, =hotfix/*=, =master=;
   release is a merge and a tag. Long-lived branches, merge-heavy; matches
-  versioned products shipped to customers. Feeds no option here — it is the
+  versioned products shipped to customers. Feeds no option here -- it is the
   thing Option 5 replaces.
 - *GitHub flow* (Chacon 2011). One =master=, short feature branches, merge
   after review, deploy after merge. GitHub's own later practice (Gupta 2015)
@@ -405,7 +405,7 @@ it feeds.
   discipline.
 - *GitLab flow* (Sijbrandij 2014). =main= plus environment branches (=pre-production=,
   =production=) or release branches; promotion is a merge into the environment
-  branch. A branch-bound authorization — exactly the silent failure
+  branch. A branch-bound authorization -- exactly the silent failure
   =scenarios.org= C2 names. Named here so nobody proposes it.
 - *Trunk-based development* (Hammant). Commit to =main= or branches shorter
   than a day; release branches cut from trunk with fixes cherry-picked forward;
@@ -416,7 +416,7 @@ it feeds.
   on the branch, not on =main=. The mechanism inside *Option 4*.
 - *Stacked diffs* (Phabricator, Graphite, Sapling). A series of dependent small
   changes reviewed and landed in order; =main= is always deployable, and a
-  change is one diff, not one branch. Orthogonal to all five options; noted
+  change is one diff. The branch is not the unit. Orthogonal to all five options; noted
   because it changes what a *unit* is.
 - *Merge queues* (Bors 2013, Zuul, Mergify, GitHub merge queue 2023). =main=
   only advances to a state CI has tested with the exact merged tree. This is
@@ -459,8 +459,8 @@ it feeds.
 
 | Option | Tried by | What they found | Bearing on the ADR |
 |--------+----------+-----------------+--------------------|
-| 1 manual schedule, automated deploy | Humble & Farley's pipeline with a manual production gate; most enterprises under ITIL | The gate becomes a rubber stamp when it cannot fail on evidence; it becomes a bottleneck when it can. | Only honest if the validation tasks are real gates (ADR 0001 §Option 0's test: a guard that cannot be made to fail is not a guard). The interface — API, skill, CLI — carries no semantics (=README.org= §Interfaces). |
-| 2 integrated scheduler | Kargo, CodePipeline stage conditions, GitHub Environments wait timers | Promotion needs its own model once deploy is a sync; deployment windows are a first-class rule in every one of these. | This is what =change/activate.sh= already is. The ADR's question is whether the scheduler /re-evaluates/ or merely /fires/ — ADR 0003 says re-evaluates. |
+| 1 manual schedule, automated deploy | Humble & Farley's pipeline with a manual production gate; most enterprises under ITIL | The gate becomes a rubber stamp when it cannot fail on evidence; it becomes a bottleneck when it can. | Only honest if the validation tasks are real gates (ADR 0001 §Option 0's test: a guard that cannot be made to fail is not a guard). The interface -- API, skill, CLI -- carries no semantics (=README.org= §Interfaces). |
+| 2 integrated scheduler | Kargo, CodePipeline stage conditions, GitHub Environments wait timers | Promotion needs its own model once deploy is a sync; deployment windows are a first-class rule in every one of these. | This is what =change/activate.sh= already is. The ADR's question is whether the scheduler /re-evaluates/ or merely /fires/ -- ADR 0003 says re-evaluates. |
 | 3 application isolation | Amazon 2006; every microservices migration since | Contention disappears; coordination reappears at the interface. | Dissolves the problem rather than repricing it (ADR 0001 §Option A). The cost is contracts at the router, which is real engineering. |
 | 4 release train | Chrome, Firefox, Facebook web 2008–2016 | Facebook abandoned the branch-and-cherry-pick train when the *coordination* cost stopped scaling, not the batching arithmetic (=research/history/release-strategies.org= §History). Firefox's rapid release did not measurably worsen quality (Khomh et al. 2012) but did shorten the fix window. | Fixes the 1/20 contention; does nothing for emergencies; rollback granularity becomes the train. |
 | 5 mainline deployment | GitHub 2011, trunk-based shops, DORA-elite cohort | "Deploy main" without a verdict on the SHA is branch-bound authorization; with a verdict it costs one run per merge. | Relocates guard 4b, does not remove it (=research/history/release-strategies.org= §Mainline-only does not touch guard 4b). Requires a merge queue to be more than nominal. |
@@ -496,7 +496,7 @@ Each heading carries its drawer; see the :FINDING: for what changed.
 - Kim, G., Humble, J., Debois, P. & Willis, J. /The DevOps Handbook/. IT
   Revolution, 2016.
 - Skelton, M. & Pais, M. /Team Topologies/. IT Revolution, 2019. For ownership
-  boundaries — the organisational side of Option 3.
+  boundaries -- the organisational side of Option 3.
 - Beck, K. /Extreme Programming Explained: Embrace Change/. Addison-Wesley,
   1999.
 
@@ -511,9 +511,9 @@ Each heading carries its drawer; see the :FINDING: for what changed.
 
 - Rochkind, M. J. "The Source Code Control System." /IEEE Transactions on
   Software Engineering/ SE-1(4), 1975.
-- Tichy, W. F. "RCS — A System for Version Control." /Software: Practice and
+- Tichy, W. F. "RCS -- A System for Version Control." /Software: Practice and
   Experience/ 15(7), 1985.
-- Adams, B. & McIntosh, S. "Modern Release Engineering in a Nutshell — Why
+- Adams, B. & McIntosh, S. "Modern Release Engineering in a Nutshell -- Why
   Researchers Should Care." SANER 2016.
 - Savor, T., Douglas, M., Gentili, M., Williams, L., Beck, K. & Stumm, M.
   "Continuous Deployment at Facebook and OANDA." ICSE-SEIP 2016.
@@ -539,7 +539,7 @@ Each heading carries its drawer; see the :FINDING: for what changed.
 - ITIL 4 Change Enablement practice guide (Axelos, 2020).
 - ISO/IEC 20000-1:2018.
 - NIST SP 800-53 rev. 5, CM-3 Configuration Change Control.
-- SLSA v1.0 (2023); in-toto specification v1.0 (2023; v0.9 2018 — 2019 is the
+- SLSA v1.0 (2023); in-toto specification v1.0 (2023; v0.9 2018 -- 2019 is the
   USENIX Security paper, not the spec).
 - OpenSSF Scorecard.
 - IEEE 828-2012, Standard for Configuration Management in Systems and Software
@@ -566,7 +566,7 @@ Each heading carries its drawer; see the :FINDING: for what changed.
   2006-05-01 and 2024-01-18.
 - Hodgson, P. "Feature Toggles (aka Feature Flags)." martinfowler.com,
   2016-02-08; revised 2017-10-09.
-- Richardson, A. "GitOps — Operations by Pull Request." weave.works,
+- Richardson, A. "GitOps -- Operations by Pull Request." weave.works,
   2017-08-07 (Wayback capture of the original; weave.works is gone and the
   Medium repost is dated 2018-09-28).
 - Allspaw, J. & Hammond, P. "10+ Deploys Per Day: Dev and Ops Cooperation at
@@ -574,10 +574,10 @@ Each heading carries its drawer; see the :FINDING: for what changed.
 - Amazon Builders' Library. "Automating safe, hands-off deployments" (Clare
   Liguori, 2020).
 - O'Hanlon, C. "A Conversation with Werner Vogels." /ACM Queue/ 4(4):14–22,
-  May 2006. doi:10.1145/1142055.1142065 — "you build it, you run it". (An
+  May 2006. doi:10.1145/1142055.1142065 -- "you build it, you run it". (An
   interview; the byline is O'Hanlon's, not Vogels's.)
 
-* The final gate — auto-merge once the release is complete
+* The final gate -- auto-merge once the release is complete
 :PROPERTIES:
 :CUSTOM_ID: final-gate-auto-merge
 :END:
@@ -585,7 +585,7 @@ Each heading carries its drawer; see the :FINDING: for what changed.
 Whichever of the five options the ADR takes, the last step is the same: a
 standard change has reached production, the health check has passed, the
 release is complete, and the PR merges to =main=. Today that merge is an
-*active* call — =change/release.sh= runs =gh pr merge --squash= under the
+*active* call -- =change/release.sh= runs =gh pr merge --squash= under the
 workflow's token after re-checking guard 4b at the merge. The question here is
 whether GitHub's native auto-merge can be that final gate instead, so that the
 pipeline never holds a merge token at all.
@@ -599,7 +599,7 @@ From GitHub's own documentation, checked 2026-09-14 [E]:
 
 - "Auto-merge merges a pull request automatically after all required reviews
   and status checks pass." The option "is shown only on pull requests that
-  cannot be merged immediately" — it is meaningless without a protection rule
+  cannot be merged immediately" -- it is meaningless without a protection rule
   or ruleset that makes something *required*.
 - Prerequisite: the repository setting *Allow auto-merge*. "People with write
   permissions to a repository can enable auto-merge for a pull request"; the
@@ -609,7 +609,7 @@ From GitHub's own documentation, checked 2026-09-14 [E]:
   a push by a *writer* does not disable it.
 - =gh pr merge --auto= enables it from the CLI; GraphQL
   =enablePullRequestAutoMerge= takes =pullRequestId=, =mergeMethod=,
-  =authorEmail= and =expectedHeadOid= — the mutation can be pinned to a head
+  =authorEmail= and =expectedHeadOid= -- the mutation can be pinned to a head
   SHA. When the base branch requires a merge queue, "if required checks have
   not yet passed, auto-merge will be enabled. If required checks have passed,
   the pull request will be added to the merge queue."
@@ -629,7 +629,7 @@ production"*, and who is allowed to post it.
 | =release= label added by a person = intent   | the person enables auto-merge = intent, and the merge is attributed to them |
 | =production:healthy= label                    | a *required check run* =change/settled= posted on the head SHA by the settle step |
 | =release.sh= calls =gh pr merge=              | the forge merges; no script holds a merge token                    |
-| guard 4b re-checked in =release.sh= at merge  | *Require branches to be up to date* (strict checks) — see the cost below |
+| guard 4b re-checked in =release.sh= at merge  | *Require branches to be up to date* (strict checks) -- see the cost below |
 | =AUTO_MERGE=0= → comment "ready to merge"     | auto-merge simply not enabled; the check is still posted           |
 
 Three properties make this honest rather than decorative, and all three are
@@ -646,8 +646,8 @@ GitHub's rather than ours:
    attests its own convergence. The check-run's =app= is the attestation of
    who said so.
 3. *The merge is attributed to the person who enabled auto-merge.* =release=
-   is "a person only — intent" (=README.org= §Labels), and the audit trail
-   now records that person as the merger rather than a bot token. [P — GitHub's
+   is "a person only -- intent" (=README.org= §Labels), and the audit trail
+   now records that person as the merger rather than a bot token. [P -- GitHub's
    auto-merge page does not state attribution explicitly; observed behaviour is
    that the merge commit carries the enabling user, and this should be
    confirmed on a live repo before it is relied on.]
@@ -660,20 +660,20 @@ GitHub's rather than ours:
 - *Guard 6 (production-first) and the divergence class are invisible to it.*
   =release.sh= refuses the merge with exit 8 when =main= moved during the
   window and the divergence is =artifact= or =hotfix=, and lets an inert move
-  through. GitHub has one knob — strict status checks — and it is binary:
+  through. GitHub has one knob -- strict status checks -- and it is binary:
   either every stale branch must update, or none must. Updating the branch
   changes the head SHA, which invalidates the deployed verdict, so under strict
   checks *every* concurrent landing on =main= sends a settled change back
   through staging, including the inert ones =divergence.sh= would have waved
   through. Without strict checks, auto-merge would land a tree that predates
-  =main= — the exact defect =release.sh='s comment describes, found in =sim/=
+  =main= -- the exact defect =release.sh='s comment describes, found in =sim/=
   at =berths=2=. Neither setting reproduces the three-valued rule. The
   practical answer is guard 1: with a single berth and =main= frozen to the
   change in flight, the branch cannot be stale at merge, and strict checks are
   a no-op that costs nothing.
 - *The settle step still needs a token that can post a check run.* That is a
-  narrower capability than "merge to main" — =checks:write= rather than
-  =contents:write= — which is the point, but it is not zero.
+  narrower capability than "merge to main" -- =checks:write= rather than
+  =contents:write= -- which is the point, but it is not zero.
 - *Label cleanup and freeing the berth still need something to run after the
   merge.* Auto-merge fires no hook of its own; a =pull_request: closed= workflow
   with =merged == true= does what the tail of =release.sh= does today. That
@@ -692,14 +692,14 @@ returned 403 on a private repo. The repo is now *public*, and today:
 : gh api repos/aygp-dr/standard-change/branches/main/protection --jq '.required_status_checks'
 : {"strict":true,"contexts":[],"checks":[]}
 
-Protection is readable and *strict is already on with no required contexts* —
+Protection is readable and *strict is already on with no required contexts* -- 
 a rule that requires being up to date with =main= and requires nothing to
 pass. =allow_auto_merge= is still off. So the section title in =spec.org= is
 now wrong in the direction of the observation: =main= *can* be protected here,
 and the spec should say so rather than this note. That amendment is out of
 scope for research notes and is left as a finding.
 
-* If auto-merge is applied — can a merge queue carry "released to production"?
+* If auto-merge is applied -- can a merge queue carry "released to production"?
 :PROPERTIES:
 :CUSTOM_ID: merge-queue-released-semantics
 :END:
@@ -709,7 +709,7 @@ does not merge; it *enqueues*. =spec.org= §A merge queue is most of this
 model already shows the queue doing guards 0, 2 and 4b natively and nothing
 after the merge. The question is whether the queue could be given a landing
 policy whose precondition is "this change has been released to production",
-and what happens when the queue *stacks* — groups several PRs into one
+and what happens when the queue *stacks* -- groups several PRs into one
 merge-group build.
 
 ** The mechanics that matter
@@ -733,7 +733,7 @@ From GitHub's merge-queue documentation, checked 2026-09-14 [E]:
   status checks or conflicts with the base branch, the pull request will be
   removed from the queue."
 - It "provides the same benefits as *Require branches to be up to date*"
-  without the author rebasing — i.e. it is guard 0 without the SHA churn that
+  without the author rebasing -- i.e. it is guard 0 without the SHA churn that
   §What it costs above complained about.
 
 ** The conflict, stated
@@ -745,22 +745,22 @@ From GitHub's merge-queue documentation, checked 2026-09-14 [E]:
 =T(c)= and the settle step attested it. A merge queue's required checks run on
 a *merge-group SHA* that no environment has ever served. So the check that
 means "released" cannot be produced by building the merge group; it has to be
-*looked up*. That is legal — a =merge_group= workflow can read the group's
+*looked up*. That is legal -- a =merge_group= workflow can read the group's
 member PRs, find each one's head, and post =change/settled= on the group
 commit iff every member's head carries a settled verdict. It is a policy in
 the sense the question asks, and it is about thirty lines.
 
 The trouble is stacking. Suppose the group is ={A, B}=. Both heads were
-released to production individually — but this repo has *one* production
+released to production individually -- but this repo has *one* production
 surface, so they were released *in sequence*, and production currently serves
 =B='s tree, which was built on a =main= that did not yet contain =A=. The
 group commit =main + A + B= is a third tree. Landing it means =main= now says
-something production has never served, and guard 5 — the estate serves the
-promoted build — is false at the instant of merge, for the same reason
+something production has never served, and guard 5 -- the estate serves the
+promoted build -- is false at the instant of merge, for the same reason
 =research/history/release-strategies.org= §Guard 5 is false by construction during a roll gives
-for rolling deploys. A lookup policy can make the queue *refuse* this — post
+for rolling deploys. A lookup policy can make the queue *refuse* this -- post
 the check only if the group has exactly one member, or only if the newest
-member's =T= equals what production serves — but then the queue never stacks,
+member's =T= equals what production serves -- but then the queue never stacks,
 and a queue that never stacks is guard 1 wearing a different hat.
 
 ** The two coherent designs
@@ -771,13 +771,13 @@ and a queue that never stacks is guard 1 wearing a different hat.
 1. *Queue as the last-mile check, depth 1.* Keep production-before-merge.
    Max group size 1. The =merge_group= workflow looks up the single member's
    settled verdict and re-runs the gates on the group commit, which is =main +
-   c= — the queue supplies guard 0 and the merge-time half of 4b for free, and
+   c= -- the queue supplies guard 0 and the merge-time half of 4b for free, and
    =release.sh='s exit-8 path becomes "removed from the queue". What this buys
    over plain auto-merge is exactly the up-to-date guarantee *without*
    invalidating the deployed SHA, because the rebase happens on the queue's
-   throwaway branch, not the PR head. What it does not buy is batching; with a
+   throwaway branch and the PR head stays put. What it does not buy is batching; with a
    single berth there is nothing to batch.
-2. *Queue as the berth — invert the ordering.* Let the queue stack. The
+2. *Queue as the berth -- invert the ordering.* Let the queue stack. The
    merge-group tree *is* the deploy candidate: =merge_group= triggers the
    staging deploy and the authorizing e2e, production is deployed from the
    group commit, the settle step posts =change/settled= on *that* SHA, and only
@@ -792,8 +792,8 @@ and a queue that never stacks is guard 1 wearing a different hat.
    attributes to nobody without the bisect =research/history/release-strategies.org= prices at
    =log2 N=.
 
-Anything between the two — production-first *and* stacking — is the
-contradiction above and should be refused at the check, not managed.
+Anything between the two -- production-first *and* stacking -- is the
+contradiction above and should be refused at the check rather than managed.
 
 ** Availability
 :PROPERTIES:

@@ -1,5 +1,5 @@
 #+TITLE: Emulating the jail estate on macOS, and the primitives a cloud deploy needs
-#+SUBTITLE: Speculation — what a lightweight-container stand-in for the bastille target must provide, and what CodeDeploy and its peers expose that ours does not
+#+SUBTITLE: Speculation -- what a lightweight-container stand-in for the bastille target must provide, and what CodeDeploy and its peers expose that ours does not
 #+AUTHOR: aygp-dr
 #+DATE: 2026-09-14
 #+OPTIONS: toc:2 num:nil
@@ -15,7 +15,7 @@ as FreeBSD jails, and the owner's laptop is a Mac. What would a lightweight
 container estate on macOS have to provide for the same gates to produce the
 same verdicts? Second: if the estate were AWS CodeDeploy, or Google Cloud
 Deploy, or Kubernetes, which primitives would the pipeline have to read and
-write — and which of those does the local stand-in need to fake so that the
+write -- and which of those does the local stand-in need to fake so that the
 model stays honest about what it has and has not exercised?
 
 * What the jail estate actually is, reduced to primitives
@@ -32,7 +32,7 @@ Read off =targets/bastille/README.org=, =SETUP.org= and =deploy.sh=:
 | *a build identity written by the environment, not the deployer* | =/var/run/version.json= written at deploy, served at =/version.json=; =x-build-sha= header from the apps | [E], but =deploy.sh= writes it from the SHA it was handed. ADR 0001 §Option 0 found guard 5 tautological in manifest mode for exactly this reason |
 | *replicas with real identities* | =sc-prod-1=, =sc-prod-2=, each its own IP, so guard 5's convergence is over a fleet | [E] |
 | *a traffic switch distinct from install* | =front= reads the live colour per request; blue/green at 9210/9220 | [E] |
-| *a rollback target that survives* | the previous jail can be kept stopped rather than destroyed | [P] — proposed, not exercised |
+| *a rollback target that survives* | the previous jail can be kept stopped rather than destroyed | [P] -- proposed, not exercised |
 | *promotion by identity* | absent. =deploy.sh= installs a commit and each environment builds it; staging and production are separate builds of the same source | [E] defect, recorded in =SETUP.org= |
 
 The last two rows are the interesting ones, because a container substrate
@@ -63,7 +63,7 @@ unmodified and its attestation claim is the same claim.
 
 - What the Mac sees: the guest's bridge is not routable from the host by
   default. Either add a route to the guest's =10.0.0.0/24= via the VM's
-  address, or port-forward =:80= of each jail to a distinct host port — which
+  address, or port-forward =:80= of each jail to a distinct host port -- which
   reintroduces the port-block scheme the jail target exists to kill, on the
   host side only.
 - Cost: one VM image to build and keep; FreeBSD guests under
@@ -85,17 +85,17 @@ match to "one jail, one IP": four containers (=front=, =staging=,
 loopback, identical config, addressed directly.
 
 - Attestation: =container ls= and =container inspect= are the daemon's
-  statement, which is the same *kind* of evidence as =jls= — the party that
+  statement, which is the same *kind* of evidence as =jls= -- the party that
   runs the workload says what it is running. The build identity is the image
   digest, which is stronger than =version.json=: the environment cannot
   misreport what it is running because the digest *is* what it is running.
 - Loopback is real: a container's =127.0.0.1= is its own, so the non-VNET
   defect does *not* reproduce. The e2e assertion "only the router is
   routable" becomes true here and false on hydra, which is a cell the matrix
-  must record as a difference, not a pass.
+  must record as a difference and never as a pass.
 - Cost: Linux, not FreeBSD; =app.py= and nginx are portable, so the fixture
   apps do not care, but nothing about FreeBSD packaging is exercised. macOS 26
-  only. [H — the per-container-IP claim is from Apple's announcement, not
+  only. [H -- the per-container-IP claim is from Apple's announcement, not
   observed here.]
 
 ** C. Docker Desktop, Podman machine, or colima
@@ -108,7 +108,7 @@ their own IPs *inside the VM* and their own loopback, but the Mac cannot reach
 container IPs directly; only published ports are visible. So:
 
 - Either publish =front= alone on one host port and let it proxy to the
-  others by container name — which mirrors the estate exactly, since
+  others by container name -- which mirrors the estate exactly, since
   =front= is the only thing that should be routable anyway. The gates then
   run *inside* the VM network (a fifth container running =gates/=), or
   against =front= only.
@@ -118,8 +118,8 @@ container IPs directly; only published ports are visible. So:
   strengths as B.
 - Cost: lowest. Works on any macOS today. The compose file is about forty
   lines. The gates must learn to run from inside the network or accept that
-  staging and production are only reachable through =front= on the host —
-  the latter is arguably *more* faithful to a real estate than hydra is.
+  staging and production are only reachable through =front= on the host -- 
+  the latter is *more* faithful to a real estate than hydra is.
 
 ** D. Nested: jails inside a Linux container
 :PROPERTIES:
@@ -143,9 +143,9 @@ options B and C.
 | =front= reachable from the host | yes, via route or forward | yes, by address | yes, published port |
 | staging and production addressable individually | via route or forward | yes | only from inside the VM, or forwarded |
 | =x-build-sha= from every replica | yes (apps unchanged) | yes | yes |
-| =/version.json= written by the environment | same defect as hydra | entrypoint writes it from the image label — the environment *does* know its own digest | same as B |
+| =/version.json= written by the environment | same defect as hydra | entrypoint writes it from the image label -- the environment *does* know its own digest | same as B |
 | independent "what is running" read for guard 5 | =jls= over ssh | =container inspect= | =docker inspect= |
-| promotion by identity (spec §Cloud mirror) | no | yes — retag/redeploy the digest staging ran | yes |
+| promotion by identity (spec §Cloud mirror) | no | yes -- retag/redeploy the digest staging ran | yes |
 | rollback target survives | previous jail stopped | previous image, previous container stopped | same |
 | non-VNET loopback defect reproduced | yes | no | no |
 | FreeBSD packaging exercised | yes | no | no |
@@ -190,7 +190,7 @@ that it does not. Read off the vendors' own models:
   rollback is itself a new deployment of the previous revision.
 - *What CodeDeploy does not have.* A calendar, a berth, or a change class.
   Those live in Systems Manager Change Manager and Change Calendar, and in
-  CodePipeline's =DeploymentWindow= stage condition — *outside* the deploy
+  CodePipeline's =DeploymentWindow= stage condition -- *outside* the deploy
   service. That is ADR 0003's position, implemented by a vendor: scheduling
   is a separate component and the deployer reads one bit from it.
 
@@ -199,7 +199,7 @@ Mapped to this repo:
 | CodeDeploy | here | gap |
 |------------+------+-----|
 | deployment ID + status enum | the activation lease and =change/state.sh= | our status is labels on a PR; not a closed enum written by the platform |
-| revision (immutable, named by the deployment) | head SHA, =version.json= | jails rebuild per environment — no immutable revision |
+| revision (immutable, named by the deployment) | head SHA, =version.json= | jails rebuild per environment -- no immutable revision |
 | minimum healthy hosts | guard 5 convergence across =sc-prod-1/2= | we have two replicas and no notion of "healthy count during the roll" |
 | =ValidateService= hook | =gates/health.sh=, =gates/e2e.sh= | ours runs from outside; CodeDeploy's runs *on the target* and the agent reports it |
 | =BeforeAllowTraffic= / =AfterAllowTraffic= | =front= switch | we switch, but no hook runs between install and switch |
@@ -214,9 +214,9 @@ Mapped to this repo:
 | provider | unit of promotion | build identity | health oracle | traffic shift | window / calendar | attestation of what is running |
 |----------+-------------------+----------------+---------------+---------------+-------------------+--------------------------------|
 | Google Cloud Deploy | release → rollout, through ordered targets; phases | release names container images by digest | =verify= job (Skaffold) per rollout | canary via service mesh or Cloud Run traffic | deploy policies with =timeWindows=; timed promotion | rollout state from the service |
-| Kubernetes Deployment | a new ReplicaSet | image digest in the pod spec | readiness and liveness probes; =rollout status= | rolling update with =maxSurge= / =maxUnavailable= | none native | =kubectl get pods= — the API server's statement |
+| Kubernetes Deployment | a new ReplicaSet | image digest in the pod spec | readiness and liveness probes; =rollout status= | rolling update with =maxSurge= / =maxUnavailable= | none native | =kubectl get pods= -- the API server's statement |
 | Argo Rollouts | a Rollout step sequence | image digest | =AnalysisRun= against metrics | canary weights, blue/green preview and active services | none native | rollout status |
-| Cloudflare Workers | a version | version ID | none native; external checks | gradual deployment percentages between two versions | none | =wrangler deployments list= — the platform's statement [E: =spec.org= §C6] |
+| Cloudflare Workers | a version | version ID | none native; external checks | gradual deployment percentages between two versions | none | =wrangler deployments list= -- the platform's statement [E: =spec.org= §C6] |
 | Spinnaker Managed Delivery | an artifact into an environment | artifact version | canary constraint (Kayenta) | via the cloud provider | =allowed-times= constraint | environment state |
 | Kargo | Freight into a Stage | Freight ID over image digests and git commits | Stage verification (AnalysisTemplate) | via Argo Rollouts | none native; promotion policies | Stage health from Argo CD |
 
@@ -226,7 +226,7 @@ therefore provide:
 1. *The platform, not the deployer, records what is running.* =jls=,
    =container inspect=, =kubectl get pods=, =deployments list=. The stand-in
    on macOS has this for free from the container runtime. The bastille target
-   has it from =jls=. What neither has yet is a gate that *reads* it — guard
+   has it from =jls=. What neither has yet is a gate that *reads* it -- guard
    5 reads =/version.json= and the header, both written by the thing under
    test. Whichever substrate is chosen, the next gate to write is the one
    that compares the environment's self-report against the runtime's record.
@@ -241,17 +241,17 @@ And three primitives ours lacks that the stand-in should fake explicitly
 rather than omit silently, so that a matrix cell can say "exercised" or
 "not exercised" per primitive:
 
-- *a per-replica, per-hook event stream* — =deploy-run/= should emit one
+- *a per-replica, per-hook event stream* -- =deploy-run/= should emit one
   record per replica per lifecycle step, because that is what every vendor's
   agent does and what a PIR reads;
-- *a metric or alarm input to rollback* — a health check is a point read;
+- *a metric or alarm input to rollback* -- a health check is a point read;
   CodeDeploy, Argo and Cloud Deploy all roll back on a *trend* after the
   point read passed;
-- *a closed status enum for a deployment written by the platform* — ours is
+- *a closed status enum for a deployment written by the platform* -- ours is
   labels, which are a person's or a workflow's assertion, and =spec.org=
   §Domain model already says a self-report is not a record.
 
-* Proposed experiment [H — not filed]
+* Proposed experiment [H -- not filed]
 :PROPERTIES:
 :CUSTOM_ID: proposed-experiment
 :END:
@@ -272,7 +272,7 @@ the cheapest and it exercises promotion by identity, which hydra cannot.
 - *What would refute it.* Any scenario whose verdict differs for a reason
   other than the two named. In particular, if guard 5 passes on macOS only
   because the entrypoint writes =version.json= from the image label, that is
-  the same tautology ADR 0001 found, wearing a digest — and the experiment
+  the same tautology ADR 0001 found, wearing a digest -- and the experiment
   should say so rather than count it.
 
 Option A is a second experiment, not this one, and only if a matrix cell

@@ -1,11 +1,11 @@
-#+TITLE: Release trains and mainline-only deployment — research notes
+#+TITLE: Release trains and mainline-only deployment -- research notes
 #+SUBTITLE: What these two strategies would mean for this repo's guards, measured where possible
 #+DATE: 2026-09-13
 #+OPTIONS: toc:2 num:nil
 
 * Status
 
-*Research notes. Not spec, not an ADR, not a proposal.* Nothing here is
+*Research notes. Neither spec nor ADR nor proposal.* Nothing here is
 adopted and nothing here amends =spec.org=. The question is narrow: the repo
 has a measured pathological result (ADR-0001: twenty changes on one shared
 deployable surface complete *1 of 20* at one berth and *1 of 20* at eight),
@@ -14,7 +14,7 @@ that shape of problem. This file asks what each would actually buy, against
 this repo's own guards and vocabulary, and reports numbers rather than
 intuitions.
 
-Epistemic labels are =spec.org='s. Simulation results are [E] — run on hydra
+Epistemic labels are =spec.org='s. Simulation results are [E] -- run on hydra
 (FreeBSD 14.4-RELEASE-p6 amd64, Python 3.11.15, 2026-09-13) via
 =sim/train_sim.py=, a new file; =sim/pipeline_sim.py= and
 =sim/test_scenarios.py= are unmodified and still pass, and the baseline below
@@ -27,11 +27,11 @@ The conclusion, stated first so nothing below has to be read to get it:
 Release trains *do* fix the 1/20 contention: the simulator measures *23×* less
 revalidation work per shipped change (13.63 → 0.58 validation runs) at a
 one-hour cadence, against an eight-berth per-change pipeline. Mainline-only
-deployment does *not* — it removes a different class of problem. And *neither*
+deployment does *not* -- it removes a different class of problem. And *neither*
 fixes =itil:emergency=, because merging to main records intent and guard 4b
 needs evidence. The throughput-optimal train size is also, on this repo's own
 balance curve, a train whose latency routes essentially all traffic onto the
-one path that skips staging — so the amortization is real and the optimum is
+one path that skips staging -- so the amortization is real and the optimum is
 unreachable.
 #+end_quote
 
@@ -69,7 +69,7 @@ flowchart TB
 ** Mainline-only deployment
 
 Features are independently tested, then merged to main. Every deployment is a
-deployment *of main* — never of a branch.
+deployment *of main* -- never of a branch.
 
 This is a claim about *what the deployable artifact is*, not about when it
 ships. It is orthogonal to trains: you can run a train that departs by merging
@@ -79,15 +79,15 @@ where the two strategies genuinely compose (§Services deployed over time).
 ** Where a verdict can be bound
 
 The two strategies differ in *which* of three objects carries the verdict that
-authorizes a production deployment. C2 — "verdicts bound to a content hash,
-not a branch or a change id" — is what makes this the right question.
+authorizes a production deployment. C2 -- "verdicts bound to a content hash,
+not a branch or a change id" -- is what makes this the right question.
 
 #+begin_src mermaid :eval never-export
 flowchart LR
   A["PR head H(c)<br/><i>guard 2 runs here</i>"]
   B["merge commit main@sha<br/><i>usually NO verdict</i>"]
   C["served artifact<br/><i>guard 5 checks identity,<br/>not safety</i>"]
-  A -->|"merge — an ASSERTION,<br/>not a measurement"| B
+  A -->|"merge -- an ASSERTION,<br/>not a measurement"| B
   B -->|deploy| C
   classDef gap fill:#fff3cd,stroke:#8a6d3b,stroke-width:2px
   class B gap
@@ -103,12 +103,12 @@ statement about =C=, and says nothing about whether =B= has a verdict.
 
 | Guard | Predicate | Per-change (today) | Release train | Mainline-only |
 |-------+-----------+--------------------+---------------+---------------|
-| *0* | =B(c) = T= | one rebase per change, paid again on every forfeit | one rebase per *train*: N changes share it | *unstateable* — the artifact is T by definition. Not "satisfied": there is no base-vs-tip question left |
+| *0* | =B(c) = T= | one rebase per change, paid again on every forfeit | one rebase per *train*: N changes share it | *unstateable* -- the artifact is T by definition. Not "satisfied": there is no base-vs-tip question left |
 | *1* | at most one berth holder | the scarce resource. Adding berths measured not to raise completions (ADR-0001) | one claim per N changes, so berth pressure falls by N. Guard 1 is unchanged; demand for it drops | unchanged. One path, one roll at a time |
 | *2* | =∀g ∈ suite : g(H(c)) = pass= | N suite runs, re-run on every invalidation | one authorizing run on the branch tip. Per-car runs still wanted for fast feedback, but they no longer authorize | unchanged in form. But "deploy main" is *branch-bound authorization*, which is C2's named silent failure moved to the deployment step |
-| *4* | =staged(H(c)) ∨ emergency= | staging per change; staging is the scarce singleton | staging per *train*, and the batch staged is exactly the tree that ships — a strictly stronger statement than today's | staging of =main@sha=; same cost, better-named subject |
+| *4* | =staged(H(c)) ∨ emergency= | staging per change; staging is the scarce singleton | staging per *train*, and the batch staged is exactly the tree that ships -- a strictly stronger statement than today's | staging of =main@sha=; same cost, better-named subject |
 | *4b* | =∀m ∈ merges(B(c),T) : class(m) ∈ {inert,pipeline}= | N verdicts revoked per merge. Measured cost below | one verdict revoked per merge. *The count, not the rule, is what changes* | *unchanged in form and unchanged in force.* See §Mainline-only does not touch guard 4b |
-| *5* | =served_build(production) = H(c)= | H(c) is a PR head sha, which may exist on no long-lived ref | H(c) is the train's merge commit — nameable, and the thing that was staged | H(c) is a main sha. *The only arrangement where "what is running?" has an answer that outlives the branch.* This is mainline-only's real prize |
+| *5* | =served_build(production) = H(c)= | H(c) is a PR head sha, which may exist on no long-lived ref | H(c) is the train's merge commit -- nameable, and the thing that was staged | H(c) is a main sha. *The only arrangement where "what is running?" has an answer that outlives the branch.* This is mainline-only's real prize |
 
 Two entries are the ones to argue with, and both are below: guard 4b under
 mainline-only, and guard 5 under rolling deploys.
@@ -126,7 +126,7 @@ none of them closes the gap.
 1. *Validate the PR pre-merge, then merge and deploy.* The tree with a verdict
    is =PR head ⊕ main@t=. The tree that deploys is =main@t+1=, produced by the
    merge. Those are different trees whenever anything else merged in between,
-   which under a shared artifact surface is the common case, not the rare one.
+   which under a shared artifact surface is the common case.
    This is ADR-0001's 1/20 mechanism verbatim: each change was green against a
    main that has since moved. Mainline-only changes the *name* of what deploys
    and not one thing about the divergence.
@@ -134,24 +134,24 @@ none of them closes the gap.
 2. *Validate main post-merge, deploy the last green sha.* Now the deployed
    tree has a verdict of its own. But the last green sha is behind the tip by
    however many merges landed during the run, so "deploy main" does not mean
-   deploy main — it means deploy a main from some minutes ago. Whether that is
+   deploy main -- it means deploy a main from some minutes ago. Whether that is
    acceptable is exactly guard 4b's classification question: =inert= and
-   =pipeline=, fine; =artifact= and =hotfix=, not fine. The guard is needed in
+   =pipeline=, acceptable; =artifact= and =hotfix=, unacceptable. The guard is needed in
    full.
 
 3. *Validate main post-merge, deploy the tip.* The tip is by construction the
-   sha whose run has not finished. Guard 2's C2 requirement — a verdict bound
-   to *this* hash — is unmet at the moment of reliance.
+   sha whose run has not finished. Guard 2's C2 requirement -- a verdict bound
+   to *this* hash -- is unmet at the moment of reliance.
 
 So the honest statement: *mainline-only relocates guard 4b's subject from a
 branch to a sha, and leaves the predicate intact.* What it genuinely kills is
-guard 0 and a whole class of "which tree is this?" questions — including the
+guard 0 and a whole class of "which tree is this?" questions -- including the
 worst one, which is a production incident where the running artifact
 corresponds to no commit anybody can find. That is not nothing. It is just not
 the 1/20.
 
 The only way to close the gap in arrangement 1 is to validate every merge
-commit before it becomes the tip — that is, one validation run per merge. Which
+commit before it becomes the tip -- that is, one validation run per merge. Which
 is exactly per-change cost, and exactly what a *merge queue* is. A merge queue
 that batches speculatively is a release train relocated from the deploy point
 to the merge point; the amortization arithmetic below is the same arithmetic.
@@ -257,7 +257,7 @@ buys *revalidation efficiency*, and it is paid for in latency.
 
 The other cost is attribution. A red train tells you the *batch* is bad and
 nothing about which member. The model charges =ceil(log2 N)= validation runs to
-isolate one bad car plus one run to revalidate the remainder — which is exactly
+isolate one bad car plus one run to revalidate the remainder -- which is exactly
 what =spec.org='s "one logical step per commit" discipline is buying: it makes
 each bisect step cheap to produce and its verdict meaningful.
 
@@ -269,7 +269,7 @@ probability =p=: [I]
 #+begin_example
 == 6. Analytic crossing: changes shipped per validation run ==
 | p_bad | N=1  | N=2  | N=4  | N=8  | N=16 | N=32 | best N | best yield | vs N=1 | N*·p | P(green train) |
-|  0.00 | 1.00 | 2.00 | 4.00 | 8.00 | 16.00 | 32.00 | (unbounded) | — |     — | 0.00 |           1.00 |
+|  0.00 | 1.00 | 2.00 | 4.00 | 8.00 | 16.00 | 32.00 | (unbounded) | -- | -- | 0.00 |           1.00 |
 |  0.01 | 0.98 | 1.90 | 3.54 | 6.00 | 8.80 | 10.85 |     64 |      11.56 |   11.8x | 0.64 |           0.53 |
 |  0.02 | 0.96 | 1.81 | 3.16 | 4.78 | 6.03 | 6.48 |     32 |       6.48 |    6.7x | 0.64 |           0.52 |
 |  0.05 | 0.90 | 1.58 | 2.37 | 2.92 | 3.04 | 2.87 |     16 |       3.04 |    3.4x | 0.80 |           0.44 |
@@ -280,7 +280,7 @@ probability =p=: [I]
 #+end_example
 
 *Yes, there is a crossing, and it has a clean closed form.* [I] The optimum
-sits at =N*·p ≈ 0.6–0.8= across two orders of magnitude of =p= — that is, the
+sits at =N*·p ≈ 0.6–0.8= across two orders of magnitude of =p= -- that is, the
 throughput-optimal train is sized to carry *slightly under one broken change*.
 Equivalently, and much less comfortably:
 
@@ -293,7 +293,7 @@ That is a real result and it is not an argument for running trains that way.
 It is throughput-optimal and nothing else: it is not latency-optimal, and a
 batch that is red more than half the time is a batch where more than half of
 the people on it are waiting for someone else's defect. §The balance's test
-applies — name what it protects, name who pays — and the answer here is that
+applies -- name what it protects, name who pays -- and the answer here is that
 production gains nothing from the fifteenth car and fourteen people pay for
 the sixteenth.
 
@@ -311,7 +311,7 @@ a cadence of 8–16 hours, where the predicted emergency share is *92–99%*.
 *A cadence long enough to amortize well is a cadence long enough to push
 essentially all traffic onto the one path that skips staging.* [E, given the
 logistic in =simulate-gates.py=, which is itself a model and not an
-observation — so this is [E] about the two models agreeing, and [H] about the
+observation -- so this is [E] about the two models agreeing, and [H] about the
 world.]
 
 The constructive half of the same table is the useful one:
@@ -320,7 +320,7 @@ The constructive half of the same table is the useful one:
   =13.63=. The first two cars capture ~98% of the available amortization,
   because the baseline is so bad.
 - Going from a one-hour to a twenty-four-hour cadence improves
-  validations/ship from =0.58= to =0.32= — a factor of 1.8 — while taking the
+  validations/ship from =0.58= to =0.32= -- a factor of 1.8 -- while taking the
   predicted emergency share from 23% to 100%.
 
 *If a train is ever adopted here, run it short.* The marginal return on cadence
@@ -334,8 +334,8 @@ abolishing it.
 
 "Roll the train back and everyone tries again" is not a recovery, it is a
 deferral: somebody still has to find out which car broke it. Modelling that as
-"dissolve and revalidate every car individually" — per-change cost paid all at
-once — gives: [E]
+"dissolve and revalidate every car individually" -- per-change cost paid all at
+once -- gives: [E]
 
 #+begin_example
 == 8. Bisect vs dissolve: what attribution is worth (cadence 8 slots = 4 h) ==
@@ -348,12 +348,12 @@ once — gives: [E]
 
 At =p = 0.20= the no-attribution train *livelocks*: throughput collapses from
 23.3 to 1.5 per day and a third of the ten-day runs ship nothing at all. The
-gap between the two columns is precisely the value of the commit discipline —
+gap between the two columns is precisely the value of the commit discipline -- 
 =log2 N= versus =N=. A team that batches without being able to bisect has
 bought batch latency and kept per-change cost.
 
 The =ceil(log2 N)= cost model is *this note's own inference* and is marked [H]
-accordingly — see §Batch size and attribution cost, where the search for a
+accordingly -- see §Batch size and attribution cost, where the search for a
 published source joining =git bisect='s binary search to the small-batch
 argument came up empty. What /is/ documented first-party is the underlying
 problem the model prices: "Any of the N changelists between the P and F may
@@ -373,7 +373,7 @@ matters.
 statements transfer without modification:
 
 - *"manifest is derived, never asserted... If it can be asserted, it is not a
-  manifest — it is a wish, and the build ships whatever someone typed."*
+  manifest -- it is a wish, and the build ships whatever someone typed."*
 - *"deployment record is attested, not self-reported. The difference is who
   says it happened: the platform, or the job that wanted it to."*
 
@@ -382,8 +382,8 @@ green verdict on a different tree, believed the combination was ready. It is
 the same shape as a self-reported deployment record and the same shape as a
 hand-edited manifest: a statement by the party that wanted it to be true.
 
-In capability terms the point is sharp. "On main" is *C1* — mutable state on a
-change, and in this case not even owned by automation. It is not *C2* — a
+In capability terms the point is sharp. "On main" is *C1* -- mutable state on a
+change, and in this case not even owned by automation. It is not *C2* -- a
 verdict bound to a content hash. The merge commit is a content hash that
 usually has no verdict at all. And =spec.org= already names this exact failure
 and calls it silent:
@@ -396,14 +396,14 @@ authorizes a deploy."
 
 *"Deploy main" is a branch-bound authorization.* It is C2's named failure mode
 lifted from the gate step to the deployment step. Mainline-only is therefore
-not merely silent about guard 4b — stated carelessly, it re-introduces the
+not merely silent about guard 4b -- stated carelessly, it re-introduces the
 thing C2 exists to forbid. The disciplined form is "deploy =main@<sha>= where
 =<sha>= carries its own verdict", and that form costs one validation per merge,
 which is the cost the train was supposed to amortize away.
 
 ** What each strategy actually does to C5
 
-C5 — verdicts revocable after issue — is one of the two capabilities
+C5 -- verdicts revocable after issue -- is one of the two capabilities
 =spec.org= marks *rare*, and it is guard 4b's. Neither strategy removes the
 need for it. What a train changes is its *economics*: when a hotfix lands under
 a forming branch, there is one verdict to revoke and one run to re-earn it,
@@ -426,7 +426,7 @@ never rides.
 
 ** A train that can be jumped is not a train for the case that matters
 
-By construction, an emergency cannot wait for the cadence — mean wait is =C/2=,
+By construction, an emergency cannot wait for the cadence -- mean wait is =C/2=,
 and an emergency that waits two hours was not an emergency. So every train has
 a bypass, and the bypass is exactly where intent and evidence diverge most:
 
@@ -434,7 +434,7 @@ a bypass, and the bypass is exactly where intent and evidence diverge most:
   emergency is "granted by a person". The intent/evidence split is in the
   spec's own table, as the definition of the two authorization kinds.
 - An emergency PR is *exempt from guard 0*, so it may be behind main.
-- It bypasses guard 4 — staging — which is the only gate that tests the
+- It bypasses guard 4 -- staging -- which is the only gate that tests the
   *combination*.
 - What is left is guard 2 (gates green on the head sha) and guard 5 (the
   served build), which is precisely why =spec.org= refuses to let emergency
@@ -443,8 +443,8 @@ a bypass, and the bypass is exactly where intent and evidence diverge most:
 
 A release train changes none of this. Neither does mainline-only: the
 emergency merges to main, and main now carries a tree that composes with the
-forming batch in a way nobody validated. The train's response — rebuild the
-batch — is the *right* response and is cheap (above), but it is a response to
+forming batch in a way nobody validated. The train's response -- rebuild the
+batch -- is the *right* response and is cheap (above), but it is a response to
 having been jumped, not a way of not being jumped.
 
 Stated plainly, which is what this section exists for:
@@ -453,13 +453,13 @@ Stated plainly, which is what this section exists for:
 |----------+----------------+---------------|
 | Does it reduce guard 4b's *cost*? | *Yes*, by a factor of N. 13.63 → 0.58 validations/ship measured [E] | *No.* Neutral at best; naive form re-introduces C2's failure |
 | Does it reduce guard 4b's *necessity*? | *No.* One subject instead of N, same predicate, same rare C4/C5 | *No.* Same predicate, relocated from a branch to a sha |
-| Does it make a merge into evidence? | *No.* It makes the batch's merge into evidence, which is more than today — but the merge itself is still an assertion until a run covers it | *No.* "On main" stays C1 |
+| Does it make a merge into evidence? | *No.* It makes the batch's merge into evidence, which is more than today -- but the merge itself is still an assertion until a run covers it | *No.* "On main" stays C1 |
 | Does it help =itil:emergency=? | *No.* The emergency jumps by construction; the batch evidence never covers it | *No.* Same |
 | Does it make emergencies *cheaper*? | *Yes*: 1 revocation and 1 rebuild for the batch, +0.10 validations/ship at 8/day [E] | *Marginally*: the revert target is nameable |
 
 * Services deployed continuously over time
 
-This is where the notes matter most, and where the repo's guards are weakest —
+This is where the notes matter most, and where the repo's guards are weakest -- 
 because guard 5 as written assumes an atomic cutover, and a long-lived service
 with rolling deploys does not have one.
 
@@ -471,8 +471,8 @@ with rolling deploys does not have one.
 comparing one =x-build-sha= header against the expected sha. During a rolling
 deploy, some replicas serve the previous sha and some serve =H(c)=, so:
 
-- the predicate is *false for part of the fleet by design*, not by fault;
-- the check *samples* — it reads one replica's answer and generalizes;
+- the predicate is *false for part of the fleet by design*, and no replica is at fault;
+- the check *samples* -- it reads one replica's answer and generalizes;
 - so it will flap, and a flapping safety check is one people learn to re-run.
 
 The restatement a rolling deploy needs is a *different predicate*, not a
@@ -481,13 +481,13 @@ relaxed one: [I]
 : during the roll:   ∀ responses : served_build ∈ {prev, H(c)}    -- and nothing else
 : after deadline D:  ∀ replicas  : served_build = H(c)
 
-The first clause is the one that catches real incidents — a third sha in the
-set means an earlier deploy never finished — and it cannot be expressed at all
+The first clause is the one that catches real incidents -- a third sha in the
+set means an earlier deploy never finished -- and it cannot be expressed at all
 by a guard that compares against a single expected value.
 
 ** "The deployed version" is not one thing, so the record must say so
 
-C6 — a platform-attested deployment record — is the capability guard 4 rests
+C6 -- a platform-attested deployment record -- is the capability guard 4 rests
 on. Under rolling deploys, "artifact X reached environment Y" is ambiguous for
 the duration of the roll, which is exactly the window in which somebody asks.
 A record that carries only a sha cannot answer "was the hotfix live at 14:12?".
@@ -500,13 +500,13 @@ an event that has not happened yet.
 ** Guard 4b needs a third evaluation point
 
 =spec.org= already moved guard 4b from request time to activation, and
-Hypothesis then moved it again to the merge — "activation is not the last point
+Hypothesis then moved it again to the merge -- "activation is not the last point
 of reliance; the merge is." A rolling deploy adds one more: if main moves with
 a =hotfix=-class merge *twenty minutes into a roll*, every replica not yet
 converged is about to be handed a tree that reverts it. The last point of
 reliance is not the start of the roll, and for a long roll it is not the merge
-either. [H] — the simulator has no rolling model, so this is reasoning from the
-guard's own rule, not an observation.
+either. [H] -- the simulator has no rolling model, so this is reasoning from the
+guard's own rule; nothing has been observed.
 
 ** Rollback targets, and the one place the strategies compose
 
@@ -515,20 +515,20 @@ strategies split these:
 
 | | Rollback target is nameable? | Does it have a verdict? | Granularity |
 |--+------------------------------+-------------------------+-------------|
-| Per-change, branch deploys | often not — the running artifact may correspond to no long-lived ref | pre-merge verdict on a different tree | one change |
-| Mainline-only | *yes* — a main sha | pre-merge only, unless merge commits are validated | one merge |
-| Release train | yes — the train's merge commit | *yes* — the batch verdict describes exactly the tree that shipped | *N changes* |
+| Per-change, branch deploys | often not -- the running artifact may correspond to no long-lived ref | pre-merge verdict on a different tree | one change |
+| Mainline-only | *yes* -- a main sha | pre-merge only, unless merge commits are validated | one merge |
+| Release train | yes -- the train's merge commit | *yes* -- the batch verdict describes exactly the tree that shipped | *N changes* |
 | Mainline-only + trains | yes | yes | N changes |
 
 The last row is the only genuine composition in this note. It is also where the
 train's real cost under continuous deployment shows: *you cannot roll back one
 car.* Reverting a single change out of a landed train produces a tree that was
-never validated — a new change needing its own run, during an incident, which
+never validated -- a new change needing its own run, during an incident, which
 is the worst possible moment to be creating untested trees. The train trades
 rollback *precision* for rollback *evidence*, and for a service that is
-deployed continuously that trade is load-bearing in both directions.
+deployed continuously that trade is structural in both directions.
 
-* History — what is verifiable
+* History -- what is verifiable
 
 The prompt for these notes recalled Facebook's release engineering team
 discussing this around 2011: Chuck Rossi, trunk plus a weekly release branch
@@ -547,17 +547,17 @@ source, it says so.
 *** Rossi, and the talks [E]
 
 Chuck Rossi was Facebook's first release engineer, hired 2008, later
-engineering director of Release Engineering — stated on Facebook's own blog,
+engineering director of Release Engineering -- stated on Facebook's own blog,
 /Release engineering and push karma: Chuck Rossi/, 2012-04-05,
 =engineering.fb.com/2012/04/05/production-engineering/release-engineering-and-push-karma-chuck-rossi/=.
 
 The 2011 date in the recollection checks out: the internal tech talk /Pushing
 Millions of Lines of Code Five Days a Week/ was given 2011-05-26; the surviving
 public record is a contemporaneous third-party writeup (Lester Chan,
-2011-06-03, =lesterchan.net=), not a Facebook publication. Verified
+2011-06-03, =lesterchan.net=), with no Facebook publication surviving. Verified
 first-party talks include QCon SF 2012 "Release Engineering at Facebook";
 RELENG 2014 (2nd International Workshop on Release Engineering, 2014-04-11),
-listed on the program as an *invited talk*, not a keynote; USENIX SREcon14
+listed on the program as an *invited talk* rather than a keynote; USENIX SREcon14
 "Releasing at Scale" (panel); and @Scale 2017 "Rapid release at massive scale"
 (2017-09-12).
 
@@ -574,16 +574,16 @@ Facebook's own retrospective states it exactly, and is the citation to use:
 #+begin_quote
 "For many years, we pushed the Facebook front end three times a day using a
 simple master and release branch strategy. Engineers would request
-cherry-picks — changes to the code that had passed a series of automated tests
-— to pull from the master branch into one of the daily pushes from the release
+cherry-picks -- changes to the code that had passed a series of automated tests
+ -- to pull from the master branch into one of the daily pushes from the release
 branch." … "Once a week, we'd cut a new release branch that picked up any
 changes that were not cherry-picked during the week."
 
-— /Rapid release at massive scale/, Facebook Engineering Blog, 2017-08-31
+ -- /Rapid release at massive scale/, Facebook Engineering Blog, 2017-08-31
 #+end_quote
 
-The Sunday cut is right for the web tier circa 2011 — "cut from trunk to RC on
-Sunday 6pm", weekly push "Tuesday 4pm" — but rests on the contemporaneous
+The Sunday cut is right for the web tier circa 2011 -- "cut from trunk to RC on
+Sunday 6pm", weekly push "Tuesday 4pm" -- but rests on the contemporaneous
 third-party writeup above, corroborated for cadence by Ars Technica
 (Ryan Paul, 2012-04-05: "a minor update on every single business day. Major
 updates… once a week, generally on Tuesday afternoons"). For *mobile* the same
@@ -591,7 +591,7 @@ facts are in a peer-reviewed paper and are exact: "For iOS, a Release branch is
 cut from the Master branch by RelEng at a two week cadence every other Sunday
 at 6pm"; Android at a one-week cadence with a Thursday code freeze; and the cut
 date was moved from Thursday to Sunday in August 2015 (Android) and February
-2016 (iOS) — Rossi, Shibley, Su, Beck, Savor, Stumm, /Continuous Deployment of
+2016 (iOS) -- Rossi, Shibley, Su, Beck, Savor, Stumm, /Continuous Deployment of
 Mobile Software at Facebook/, FSE'16, pp. 12–23, DOI 10.1145/2950290.2994157.
 
 "Daily pushes" is a moving target and the recollection fixes it too early: one
@@ -601,7 +601,7 @@ hours" (2017).
 
 *** Push karma [E]
 
-The term is verified, and it is Facebook's own — it is in the *title* of the
+The term is verified, and it is Facebook's own -- it is in the *title* of the
 2012-04-05 post. Rossi, verbatim:
 
 #+begin_quote
@@ -611,7 +611,7 @@ with low push karma have a higher bar to get into the daily push."
 
 One refinement on the recollection: the documented mechanism is that low karma
 *raises the bar for getting your cherry-pick into the push*, and karma degrades
-when an engineer fails to be available to *support* a change during the push —
+when an engineer fails to be available to *support* a change during the push -- 
 not only when a change breaks. Corroborated in an interview (Willie Wheeler,
 2012-12-02/06: "Developers with a history of pushing garbage through get more
 scrutiny. They track this, though any given developer's push karma isn't
@@ -627,7 +627,7 @@ fewer than 10 members" while mobile developers went from "fewer than 100" in
 
 *** Why the branch model was revised [E]
 
-Facebook's stated reason is a *coordination* cost, not a correctness one:
+Facebook's stated reason is a *coordination* cost; correctness goes unmentioned:
 
 #+begin_quote
 "By 2016, we saw that the branch/cherry-pick model was reaching its limit." …
@@ -647,8 +647,8 @@ user reports. (Gatekeeper and Flytrap are independently attested in FSE'16.)
 *The most important correction to the recollection is that "Facebook abandoned
 the release train in 2017" is true only of the web tier.* The same 2017 post
 says, verbatim: "Today we use the same kind of branch/cherry-pick model on
-mobile that we previously used on web." Mobile compressed the train — four
-weeks → two → one for Android — and *kept* the branch-and-cherry-pick model.
+mobile that we previously used on web." Mobile compressed the train -- four
+weeks → two → one for Android -- and *kept* the branch-and-cherry-pick model.
 Collapsing web and mobile is the single most common error in retellings of this
 history, and it inverts the conclusion.
 
@@ -671,13 +671,13 @@ better", and this note should not claim more than it.
 
 ** What the broader literature says, including where it contradicts the note above
 
-*** Trunk-based development — the recollection's "cherry-picking is a smell" is false [E]
+*** Trunk-based development -- the recollection's "cherry-picking is a smell" is false [E]
 
 A case-insensitive search of all 30 pages of =trunkbaseddevelopment.com=
 (Paul Hammant) found *zero* occurrences of "smell", "anti-pattern" or
 "antipattern". The site prescribes cherry-picking as correct practice for
-lower-cadence teams — "The best practice… is to reproduce the bug on the
-trunk, fix it there with a test… then cherry-pick that to the release branch" —
+lower-cadence teams -- "The best practice… is to reproduce the bug on the
+trunk, fix it there with a test… then cherry-pick that to the release branch" -- 
 and condemns only the *reverse* direction ("if you are fixing bugs on the
 release branch and merging them down to the trunk you are doing it wrong") and
 long-lived release branches. Its actual position is cadence-dependent: "Teams
@@ -688,7 +688,7 @@ The defensible version of the recollection is Hammant's own, on his blog rather
 than the site: "The CD-style firehose into production from trunk, should be
 your goal though. i.e. no branches." (2015-12-13).
 
-*** Accelerate / DORA — supports small batches, and is silent on release trains [E]
+*** Accelerate / DORA -- supports small batches, and is silent on release trains [E]
 
 This is the strongest contradiction to how these notes might otherwise be
 argued. Full-text search of the 2016 and 2017 State of DevOps Report PDFs for
@@ -713,16 +713,16 @@ Two consequences for this note, and both are constraints on it:
 
 1. Anyone citing Accelerate as a verdict *on release trains* is over-reading
    it. These notes do not cite it that way.
-2. What DORA does penalize with data — branch lifetime over a day, more than
-   three active branches, code-freeze periods — maps onto a *long-cadence*
+2. What DORA does penalize with data -- branch lifetime over a day, more than
+   three active branches, code-freeze periods -- maps onto a *long-cadence*
    train, whose stabilization window is a code freeze by DORA's definition.
    *That mapping is inference, not a source statement* [I], and it points the
    same way as §The negative result that matters: run it short, or not at all.
 
-*** Google — endorses branch-and-cherry-pick, for a reason this note should take seriously [E]
+*** Google -- endorses branch-and-cherry-pick, for a reason this note should take seriously [E]
 
 /Release Engineering/, ch. 8 of /Site Reliability Engineering/ (O'Reilly 2016),
-*written by Dinah McNutt* — not by the book's editors, who are frequently
+*written by Dinah McNutt* -- not by the book's editors, who are frequently
 miscredited. Verbatim, and this is the passage that matters:
 
 #+begin_quote
@@ -737,7 +737,7 @@ pick method, we know the exact contents of each release.*"
 #+end_quote
 
 The widely-quoted sentence "virtually no releases are built directly from the
-mainline" *does not appear in that chapter* — do not quote it.
+mainline" *does not appear in that chapter* -- do not quote it.
 
 The italicised clause is the interesting one for §Intent is not evidence. Google's
 stated reason for branching is not throughput and not batching economics: it is
@@ -750,12 +750,12 @@ is under-specified.
 Chrome is where the train metaphor comes from, and it is evidence *for* trains:
 "We basically wanted to operate more like trains leaving Grand Central Station
 (regularly scheduled and always on time)… if a given feature is not complete, it
-will simply ride on the the next release train" (Anthony Laforge, Chromium Blog,
+will simply ride on the next release train" (Anthony Laforge, Chromium Blog,
 2010-07-22). The cadence has compressed 6 weeks → 4 weeks (2021-03-04) → 2
 weeks (announced 2026-03-03, effective September 2026), with Google's own
 stated reason being that "their smaller scope minimizes disruption and
 simplifies post-release debugging". *The industry trend is shorter trains, not
-the abolition of scheduled cuts* — which is exactly what §The negative result
+the abolition of scheduled cuts* -- which is exactly what §The negative result
 that matters concludes from the simulator, by a different route.
 
 Chromium's own documentation prices the cherry-pick the way this note prices
@@ -769,8 +769,8 @@ might cherry pick changes into this release branch to address bug fixes"
 *** Batch size and attribution cost [E], with one gap [H]
 
 Reinertsen, /The Principles of Product Development Flow/ (Celeritas, 2009),
-ch. 5 *"Reducing Batch Size"* — note the chapter title, which is often given
-wrongly — contains two principles that are precisely §Debugging a red train:
+ch. 5 *"Reducing Batch Size"* -- note the chapter title, which is often given
+wrongly -- contains two principles that are precisely §Debugging a red train:
 
 - *B10, The Least Common Denominator Principle of Batch Size:* "The entire
   batch is limited by its worst element." (p. 119)
@@ -788,14 +788,14 @@ citations:
 
 - Savor, Douglas, Gentili, Williams, Beck, Stumm, /Continuous Deployment at
   Facebook and OANDA/, ICSE'16 Companion, pp. 21–30, DOI
-  10.1145/2889160.2889223 — a natural experiment in which the *same codebase*
+  10.1145/2889160.2889223 -- a natural experiment in which the *same codebase*
   was deployed continuously internally and in large batches to white-label
   customers whose policies forbade CD: "each deployment in the white-labeled
   product incorporated thousands of changes… *failures identified at deployment
   time were significantly harder to isolate to identify their root cause*.
   Developers had mentally moved on to work on software several generations
   later."
-- Memon et al., /Taming Google-Scale Continuous Testing/, ICSE-SEIP 2017 — the
+- Memon et al., /Taming Google-Scale Continuous Testing/, ICSE-SEIP 2017 -- the
   red-train attribution problem stated first-party: "A milestone is typically
   cut every 45 minutes… *Any of the N changelists between the P and F may have
   caused the breakage*", and "because TAP does not run each affected target at
@@ -814,8 +814,8 @@ borrowed. If it is wrong, it is wrong here and not upstream.
 - The byline of the 2017-08-31 post. The page carries *no byline*; attribution
   to Rossi rests on InfoQ (Hrishikesh Barua, 2017-09-07) and the matching
   @Scale 2017 talk title. Credible, secondary.
-- "4,000–6,000 changes in the weekly Tuesday release" — single secondary source
-  citing an f8 2014 talk, not corroborated. *Do not repeat this figure.*
+- "4,000–6,000 changes in the weekly Tuesday release" -- single secondary source
+  citing an f8 2014 talk, uncorroborated. *Do not repeat this figure.*
 - *"Shadow tiers."* The documented web rollout stages are employees → 2% of
   production → 100%. No source was found describing shadow-traffic tiers for
   facebook.com pushes.
@@ -828,7 +828,7 @@ borrowed. If it is wrong, it is wrong here and not upstream.
 Three things, and none of them is decorative.
 
 1. *The measured reason for abandoning the weekly branch was coordination
-   cost, not correctness* — 500–700 cherry-picks a day is a full-time human
+   cost, not correctness* -- 500–700 cherry-picks a day is a full-time human
    dispatcher, and "push karma" is what a dispatcher builds when the queue
    exceeds their capacity to judge each item on its merits. That is
    §Intent is not evidence in its purest historical form: the gate was a
@@ -841,11 +841,11 @@ Three things, and none of them is decorative.
    compressed 6 → 4 → 2 weeks. Mobile compressed 4 → 2 → 1 weeks and kept
    cherry-picks. Nobody in this record reached per-commit deployment of a
    shared artifact surface. That is independent support for §The negative
-   result that matters' conclusion — the useful move is a *short* train — and
+   result that matters' conclusion -- the useful move is a *short* train -- and
    it is support arrived at by an entirely different route.
 3. *Google's stated reason for branching is the one these notes care about.*
    "Using this branch and cherry pick method, we know the exact contents of
-   each release" is a claim about *evidence*, not throughput. A team that
+   each release" is a claim about *evidence* and says nothing about throughput. A team that
    cannot say what is in a release cannot revoke a verdict on it (C5) and
    cannot name a rollback target (§Services deployed over time). That argument
    survives regardless of which strategy anyone picks.
@@ -855,13 +855,13 @@ Three things, and none of them is decorative.
 | Strategy | Fixes the 1/20 contention? | Fixes =itil:emergency=? | What it costs |
 |----------+----------------------------+---------------------------+---------------|
 | *Release trains* | *Yes.* 13.63 → 0.58 validations per shipped change at a 1 h cadence [E]. One merge, one guard-4b subject | *No.* The emergency jumps by construction; batch evidence never covers it. Cheaper to absorb (+0.10 val/ship at 8/day) but not covered | Batch latency =C/2 + V + H=. Attribution: =log2 N= bisect runs per red train, or livelock without it (23.3 → 1.5/day at =p=0.20= [E]). The throughput optimum is =N·p ≈ 0.7=, i.e. red more often than green, and its latency puts the predicted emergency share at 92–99% |
-| *Mainline-only* | *No.* Guard 4b is relocated from a branch to a sha, predicate intact. Closing it honestly costs one validation per merge — per-change cost | *No.* Same bypass, same exemptions from guards 0 and 4 | Naive form ("deploy main") is branch-bound authorization = C2's named silent failure at the deploy step. Disciplined form ("deploy =main@sha= with a verdict on that sha") costs a run per merge |
+| *Mainline-only* | *No.* Guard 4b is relocated from a branch to a sha, predicate intact. Closing it honestly costs one validation per merge -- per-change cost | *No.* Same bypass, same exemptions from guards 0 and 4 | Naive form ("deploy main") is branch-bound authorization = C2's named silent failure at the deploy step. Disciplined form ("deploy =main@sha= with a verdict on that sha") costs a run per merge |
 | *Both together* | Yes, via the train | No | The above, plus: rollback granularity is the train, not the change |
-| *ADR-0001 Option A — split the surface* | *Dissolves it.* No shared surface, no cross-invalidation, guard 4b unstateable rather than defended | *Partly* — an emergency still bypasses staging, but it can only invalidate its own team's queue | Real engineering on router contracts and per-team paths to production. Larger than any of the above, and the only one that removes the problem rather than repricing it |
+| *ADR-0001 Option A -- split the surface* | *Dissolves it.* No shared surface, no cross-invalidation, guard 4b unstateable rather than defended | *Partly* -- an emergency still bypasses staging, but it can only invalidate its own team's queue | Real engineering on router contracts and per-team paths to production. Larger than any of the above, and the only one that removes the problem rather than repricing it |
 
 The last row is the reason this file is notes and not a proposal. A release
-train is a *very good* repricing of the shared-surface contention — a 23×
-reduction in revalidation work is not a rounding error — and it is still a
+train is a *very good* repricing of the shared-surface contention -- a 23×
+reduction in revalidation work is not a rounding error -- and it is still a
 repricing. =spec.org= §What this model gets wrong, on purpose applies to it
 without modification: the train, like the berth and the queue and guard 4b, is
 machinery for surviving a missing contract. A reader who takes the train home
@@ -869,8 +869,8 @@ without noticing that has taken home the wrong artifact.
 
 §History supplies the empirical version of the same warning. Facebook ran the
 branch-and-cherry-pick train for years and abandoned it for the web when the
-*coordination* cost — 500–700 cherry-picks a day, dispatched by hand, with
-"push karma" as the rationing device — stopped scaling. It was never the
+*coordination* cost -- 500–700 cherry-picks a day, dispatched by hand, with
+"push karma" as the rationing device -- stopped scaling. It was never the
 batching arithmetic that failed. It was that a human was standing where a
 contract should have been.
 
@@ -884,7 +884,7 @@ What would falsify the claims above, in the repo's house style:
 2. A train mode whose measured optimum has =N*·p= outside =[0.4, 1.0]= for
    =p ∈ [0.01, 0.33]=. Would refute the closed form in §Debugging a red train.
 3. A statement of mainline-only under which guard 4b's predicate is
-   *unstateable* rather than merely relocated — as Option A makes it. Would
+   *unstateable*; Option A only relocates it. Would
    refute §Mainline-only does not touch guard 4b.
 4. A deployment arrangement in which an emergency rides the train and still
    reaches production within the emergency's own deadline. Would refute

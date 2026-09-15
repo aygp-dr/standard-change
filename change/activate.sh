@@ -116,7 +116,7 @@ indent() { # indent <command...>
 # The disconnect that costs is documented there.
 #
 # Left in place because activate.sh is not on any working path today
-# (docs/changing-the-pipeline.org measured ZERO invocations of it), and ripping
+# (research/findings/changing-the-pipeline.org measured ZERO invocations of it), and ripping
 # it out is a bigger change than noting it.
 DEPLOY_ID=''
 deploy_open() {  # deploy_open <environment> <description>
