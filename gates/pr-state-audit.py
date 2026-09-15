@@ -22,6 +22,8 @@ Exit 0 clean, 1 findings. Read-only: it opens no PR and writes no label.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 from datetime import datetime, timezone
 import sys
@@ -50,6 +52,14 @@ from pathlib import Path
 #   I4  NO PR is finished AND moving.
 #       A terminal label beside deploy:*, change:start or change:scheduled.
 #       #52 carried change:end through an entire successful deploy and merge.
+#
+#   I6  THE BOOKINGS AND THE LABELS AGREE.
+#       One estate, one calendar: the set of PRs carrying change:scheduled
+#       must equal the set holding an open window. A window with no label is
+#       a slot the calendar is holding for nobody -- and `schedule.sh block`
+#       queues behind it, which is how "next available" ended up four days
+#       out. A label with no window is a change claiming a booking that does
+#       not exist.
 #
 #   I5  THE DECLARED EXCLUSIVE GROUPS HOLD, per PR.
 #       Six of them in label-owners.tsv -- class, lifecycle, and the four
@@ -97,7 +107,7 @@ def decl():
     return groups, retired, names
 
 
-def audit(open_prs, groups, retired, declared):
+def audit(open_prs, groups, retired, declared, booked=None):
     """The five invariants plus two hygiene checks, over a list of PR dicts.
 
     Split out from main() so --selftest can drive it with synthetic states and
@@ -151,6 +161,23 @@ def audit(open_prs, groups, retired, declared):
             got = sorted(p["labels"] & set(labs))
             if len(got) > 1:
                 add("exclusive", f"#{p['n']} breaks `{name}` (max {card}): {got}", [p["n"]])
+    # I6 -- the calendar and the labels are two records of one fact.
+    if booked is not None:
+        labelled = {str(p["n"]) for p in open_prs if "change:scheduled" in p["labels"]}
+        orphan_window = sorted(booked - labelled, key=int)
+        orphan_label = sorted(labelled - booked, key=int)
+        if orphan_window:
+            add("booking-without-label",
+                f"{len(orphan_window)} open window(s) held by a change with no "
+                f"`change:scheduled`: the calendar is holding a slot for nobody, "
+                f"and `schedule.sh block` queues behind it",
+                [int(n) for n in orphan_window])
+        if orphan_label:
+            add("label-without-booking",
+                f"{len(orphan_label)} change(s) claim `change:scheduled` with no "
+                f"open window on the calendar",
+                [int(n) for n in orphan_label])
+
     for lab, why in retired.items():
         carry = [p["n"] for p in open_prs if lab in p["labels"]]
         if carry:
@@ -214,6 +241,23 @@ def selftest(groups, retired, declared) -> int:
     return 1 if bad else 0
 
 
+def windows():
+    """PRs holding an open window, from the calendar.
+
+    Returns None if the calendar could not be read -- which is INDETERMINATE
+    and must not be reported as "no windows". An unreadable calendar and an
+    empty one are different answers (spec.org defect class 1).
+    """
+    try:
+        out = subprocess.run(["./change/schedule.sh", "list", "--open"],
+                             capture_output=True, text=True, timeout=30,
+                             env={**os.environ, "SCHEDULE_QUANTUM": "10"}).stdout
+    except Exception:
+        return None
+    return {m.group(1) for line in out.splitlines()
+            if (m := re.search(r"#(\d+)", line))}
+
+
 def prs():
     out = subprocess.run(
         ["gh", "pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
@@ -235,7 +279,13 @@ def main() -> int:
     if "--selftest" in sys.argv:
         return selftest(groups, retired, declared)
     open_prs = prs()
-    findings = audit(open_prs, groups, retired, declared)
+    booked = windows()
+    findings = audit(open_prs, groups, retired, declared, booked)
+    if booked is None:
+        findings.append({"kind": "calendar-unreadable",
+                         "detail": "the calendar could not be read, so I6 was not "
+                                   "checked -- indeterminate, not clean",
+                         "prs": []})
 
     if "--json" in sys.argv:
         print(json.dumps({"open": len(open_prs), "findings": findings}, indent=2))
