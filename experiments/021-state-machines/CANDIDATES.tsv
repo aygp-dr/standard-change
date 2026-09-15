@@ -1,0 +1,24 @@
+label	namespace	role	asserts	fills_gap	source	verdict
+change:start	change	intent	a person started this change; may reference an external CR ticket	replaces change:requested + release (two human labels, one fact)	spec.org label grammar, decided 2026-09-14	KEEP
+change:superseded	change	annotation	a later change replaced this one before it shipped	closure code exists in 016-dora schema, no label carries it	016-dora/schema.sql change_closure	?
+change:abandoned	change	annotation	nobody is driving this any more; not failed, not cancelled	closure code in the schema with no label	016-dora/schema.sql change_closure	?
+deploy:staging	deploy	intent (pipeline)	begin the deploy process into staging	EXISTS, but never written -- D20	change/queue.sh:47 reads it, nothing adds it	FIX
+deploy:production	deploy	intent (pipeline)	begin the deploy process into production	exists	label-owners.tsv	KEEP
+deploy:rollback	deploy	intent (pipeline)	return production to the previous build	no label names remediation; D19 measures it	scenarios.org D19	?
+staging:deploying	staging	annotation	the deploy into staging is in flight	THE MISSING FRONT HALF: no state between intent and verification	GitHub deployment_status in_progress	?
+staging:deployed	staging	annotation	staging is observed serving this build	gap: deployed is only in the record, never a state	GitHub deployment_status success	?
+staging:indeterminate	staging	annotation	staging could not be observed; this is not a failure	the third value has no label anywhere	spec.org defect class 8	?
+production:deploying	production	annotation	the deploy into production is in flight	missing front half, production side	GitHub deployment_status in_progress	?
+production:deployed	production	annotation	a colour is serving this build, before cutover	gap: deployed-to-idle has no name	targets/node/deploy.sh	?
+production:cutover	production	annotation	the front was switched to this build	the highest-consequence event has no label	targets/node/switch.sh	?
+production:soaking	production	annotation	the hold is running; not yet concluded	soak has no state; it is invisible until it ends	change/soak.sh	?
+production:indeterminate	production	annotation	production could not be observed	guard 5/6 abstain has no label; D18 shows it is the hard floor	scenarios.org D18	?
+berth:held	berth	lease	this change holds the path, with an owner and a deadline	guard 1 reads deploy:staging, conflating intent with the lock	spec.org label grammar; L7 invariant 4	?
+berth:stale	berth	lease	the lease outlived its holder -- nobody is driving	THE STRANDED BERTH. Live on #92. No name exists	HELD-OUT.org H4; found live	?
+gate:void	gate	annotation	gate-selftest did not pass, so no gate verdict counts this run	absence of a verdict is not a verdict; no label says so	spec.org verification contract	?
+gate:indeterminate	gate	annotation	a gate could not reach its subject	in_progress/skipped/unreadable all read as not-green today	gating model, 8 gate states	?
+estate:degraded	estate	estate	a component the pipeline depends on is unreachable	D18: calendar/staging/forge down have different consequences	scenarios.org D18	?
+estate:unobservable	estate	estate	production cannot be read; nothing may promote	D18 hard floor, currently expressed only as a refusal	scenarios.org D18	?
+idle:retained	idle	annotation	the idle colour holds a build nobody shipped	cleared by nothing, ever	environments model S71	?
+change:stranded	change	annotation	deployed, not merged, and the window is gone	spec.org says this state has no name	spec.org Boundary conditions	?
+artifact:attested	artifact	provenance	a build carries observations naming it; entry by provenance	"I already have the image" is inexpressible today	the artifact-entry question	?

@@ -5,23 +5,52 @@ on:
 permissions: {contents: read, pull-requests: write, checks: read}
 jobs:
   promote:
-    if: github.event.label.name == 'staging:passed'
+    # THE RULE: staging:smoke lands deploy:production. staging:passed, the
+    # old trigger, was retired with the staging:* stack (label-owners.tsv), so
+    # nothing has promoted since -- deploy:production was added by hand on
+    # 2026-09-14. smoke is the last instrument on staging; e2e must already be
+    # recorded on the same head, and the gates must be green on it.
+    if: github.event.label.name == 'staging:smoke'
     runs-on: ubuntu-latest
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
       - uses: actions/checkout@v4
       # Guard 2: every gate green on THIS head SHA. No bypass, emergency included.
       - name: require gates green on head SHA
+        # Latest run PER GATE, and a gate still running is "not yet", not
+        # "red": every label event re-triggers gate.yml, and counting an
+        # in-progress duplicate as not green failed promotion on #93 four
+        # seconds after staging:smoke landed (run 34898982935). Wait up to
+        # ten minutes for the latest runs to finish, then require success.
         run: |
           sha="${{ github.event.pull_request.head.sha }}"
-          bad=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
-                 --jq '[.check_runs[] | select(.name|test("^(gate-selftest|lint|test|e2e)")) 
-                        | select(.conclusion != "success")] | length')
-          total=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
-                 --jq '[.check_runs[] | select(.name|test("^gate-selftest$"))] | length')
-          [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha"; exit 1; }
-          [ "$total" -ge 1 ] || { echo "::error::gate-selftest never ran on $sha; gate results are void"; exit 1; }
+          latest() { gh api "repos/${{ github.repository }}/commits/$sha/check-runs?per_page=100" \
+                       --jq '[.check_runs[] | select(.name|test("^(gate-selftest|lint|test|e2e)$"))]
+                             | group_by(.name) | map(max_by(.started_at))'; }
+          for i in $(seq 1 60); do
+            pending=$(latest | jq '[.[] | select(.status != "completed")] | length')
+            [ "$pending" -eq 0 ] && break
+            echo "waiting: $pending gate run(s) still in progress on $sha"; sleep 10
+          done
+          bad=$(latest | jq '[.[] | select(.conclusion != "success")] | length')
+          names=$(latest | jq -r 'map(.name) | join(" ")')
+          [ "$bad" -eq 0 ] || { echo "::error::$bad gate(s) not green on $sha ($names)"; exit 1; }
+          case " $names " in *" gate-selftest "*) ;; *) echo "::error::gate-selftest never ran on $sha; gate results are void"; exit 1 ;; esac
+          echo "gates green on $sha: $names"
+      - name: a person's staging:hold stops this, here, at the moment of promoting
+        run: |
+          labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]|join(" ")')
+          case " $labels " in
+            *" staging:hold "*) echo "::notice::staging:hold is on #$PR -- a person said not yet; deploy:production not landed"; exit 78 ;;
+          esac
+      - name: require staging:e2e on the same change
+        run: |
+          labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]|join(" ")')
+          case " $labels " in
+            *" staging:e2e "*) echo "staging:e2e present" ;;
+            *) echo "::error::staging:smoke without staging:e2e -- smoke alone does not authorize"; exit 1 ;;
+          esac
       - name: promote
         run: |
           gh pr edit "$PR" --add-label deploy:production
-          gh pr comment "$PR" --body "Staging authorizing run passed on \`${{ github.event.pull_request.head.sha }}\`. Promoting to production."
+          gh pr comment "$PR" --body "staging:e2e and staging:smoke recorded on \`${{ github.event.pull_request.head.sha }}\` and the gates are green on it. Landing \`deploy:production\`."

@@ -1,0 +1,519 @@
+#+TITLE: The pull request as a state machine — gating, verdicts and evidence
+#+SUBTITLE: experiments/021-state-machines, lens 1 of 5
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:2 num:t
+
+* What this is
+
+A state machine whose primitive is the *pull request*, modelled through one
+lens: *what does this pipeline know about this build, how did it come to know
+it, and is that knowledge still about the build being proposed*.
+
+Four artefacts, all in this directory:
+
+- [[./states.tsv]] — 64 states
+- [[./transitions.tsv]] — 150 transitions
+- [[./labels.tsv]] — 43 labels, each classified by what it ASSERTS
+- [[./walk.py]] — the structural checks plus a weighted random walk, so the
+  claim "this chain is runnable" is something you run rather than something I
+  say
+
+The hypothesis this model is built to express is =spec.org= §The defect
+taxonomy, class 8: *every question a pipeline asks an external system has at
+least three answers*, and the third one is where the defects live. A model
+that types a verdict as a boolean cannot hold this repository's findings, so
+this one does not.
+
+* Assumptions
+
+1. *A state is a state OF A PR.* Anything estate-global is marked =kind=estate=
+   and carries an =E= id. Guard 1's singleton, the freeze and the estate
+   emergency are the three that matter here, and they are not properties of any
+   change (=spec.org= §Nomenclature).
+2. *A verdict is about a content hash, never about a change.* Every observation
+   state in [[./states.tsv]] implicitly carries a SHA, and the edges that leave
+   it are the ways that SHA can stop being the head.
+3. *Latest-per-name at the moment of reliance* is the reading discipline. Where
+   the model has an edge for the other reading — count the history — it is
+   marked as the defect it is (D15).
+4. *A refusal is a successful outcome.* The states named =*_refused= are not
+   errors in the walk. The error would be a path around them.
+5. The four apps, the ports, the router and the jails are fixtures and do not
+   appear.
+
+* Deliberate exclusions
+
+Four other engineers hold the other lenses. This model does not attempt:
+
+- *deployment lifecycle* — blue/green, switch, soak, rollback mechanics. Guard
+  5 appears only as the instrument that produces =production:healthy= and the
+  record naming what it sampled.
+- *environments* — port tiers, slots, the IDP, checkouts. =G43 berth_held= is
+  as far into the estate as this model goes.
+- *protection and overrides* — rulesets, =strict=, required checks, merge
+  queues, the emergency bypass as a policy question. =itil:emergency= appears
+  only where it changes what a guard reads.
+- *end-to-end narrative* — the seventeen scenarios as sequences. D15, D16, D17
+  and D18 appear as edges, not as stories.
+- The *change schedule* is present only as an oracle with three answers
+  (=G44=), because that is the shape my lens cares about.
+
+Two structural exclusions, stated rather than hidden:
+
+- *The estate machine does not terminate,* and that is correct: =E01..E05= form
+  a strongly connected component with no terminal state. The estate has no
+  closure code. =walk.py= checks it for dead ends and does not walk it to an
+  end.
+- *Two states are reachable only through an edge of weight 0.0* — see §The
+  never-taken edges.
+
+* The central claim: INDETERMINATE is a third value
+
+/Could not check/, /not finished yet/, /never started/ and /superseded/ are
+four different things, none of them is /failed/, and this repository has been
+bitten by each. So the gate suite's verdict over a head SHA is not a boolean
+with an error channel — it is a state, and there are eight of them.
+
+| state | verdict | the question it answers |
+|-------+---------+-------------------------|
+| =G23 suite_green_on_head= | *pass* | every gate ran, could have failed, and did not |
+| =G24 suite_red_on_head= | *fail* | a gate that had proved it can fail, did |
+| =G20 suite_not_yet= | indeterminate — *nothing has run* | the expected state after a push. Not a finding about anything |
+| =G21 suite_pending= | indeterminate — *not finished* | =status=in_progress=, =conclusion=null=. Counted as not-green, never as failed |
+| =G25 suite_absent= | indeterminate — *never started* | =conclusion=skipped= or null. /Did not run is not red/ |
+| =G26 suite_unreadable= | indeterminate — *could not check* | the forge did not answer. =preflight= substitutes the sentinel 99 and exits 4 |
+| =G22 suite_void= | *no verdict* | =gate-selftest= did not pass, so the PASS is void rather than suspect |
+| =G27 suite_history_mixed= | *depends on the reader* | every run ever attached to this SHA is still here |
+
+=G22= is the one worth dwelling on, because it is not a third value — it is the
+*absence of a value*. =gates/report.sh:85-94= is the clearest statement of it in
+the repo: the self-test runs first and, if it fails, the script posts
+=gate-selftest failure= and *reports nothing else*, because "no other result is
+reportable". The suite did not say no. It did not say yes. It did not say
+"I cannot tell". It has not spoken, and a guard downstream must be able to
+represent that.
+
+The same three-valued shape recurs four more times in this model, and each
+occurrence is its own set of edges rather than a shared helper:
+
+| oracle | pass | fail | the third value |
+|--------+------+------+-----------------|
+| the gate suite | =G23= | =G24= | =G20 G21 G22 G25 G26 G27= |
+| the change schedule | window open | outside the window | =G44= — the calendar could not be read. Exit 4 BLOCKS |
+| the reviews endpoint | =G60= | =G62= | =G63= — head UNCONFIRMED, =reviewDecision= still stands, said out loud |
+| the observation stack | =G51= | =G53= | =G50 G52 G54 G55 G56 G57 G58= |
+| guard 5's probe | =G71= | =G73= | =G72= unconverged, and =G74=, which SHOULD be the third value and is not |
+| =deploys(c)= for guard 6 | non-empty | — | =G83= provably empty vs =G84= indeterminate-read-as-exempt |
+
+=G74= is the one place my lens says the repository is still wrong.
+=gates/health.sh:57-63= turns a connection failure into =000 -= and then
+=gates/health.sh:63= counts =code != 200= as a bad sample, so *the estate was
+never observed* is reported as =UNHEALTHY=. That is class 1 inside guard 5
+itself. The repair is in [[./transitions.tsv]] as the only =[H]= edge in the
+file, =G74 -> G44=, at weight 0.0: proposed, not built.
+
+* The states that have no name
+
+The brief asked for these specifically. Four are in the model.
+
+- *=G28 suite_green_on_abandoned_sha=* — the gates are green, the verdict is
+  true, and it is about a build nobody is proposing. =change/evidence.sh:16-20=
+  states the property that makes this safe rather than dangerous: a record from
+  an older build *does not go stale, it stops matching*. The danger is entirely
+  in readers that compare a verdict to a change instead of to a hash.
+- *=G55 obs_untested_instrument=* — a verdict recorded by an instrument that
+  was never itself tested that run. The record names a build, the verdict is a
+  =pass=, and nothing established that the instrument could have said anything
+  else. This is class 7 one level down from =G22=: the suite is void AND it
+  wrote a record before anyone noticed.
+- *=G27 suite_history_mixed=* — the state D15 was found in. Not a verdict at
+  all: two readers looking at the same SHA at the same moment get =green= and
+  =4 not passing= depending on whether they group by name and take the latest.
+- *=G86 deployed_unmerged_window_gone=* — =spec.org= §The one that has no name
+  yet. Production serves a build trunk does not contain and the reservation
+  that authorized it has lapsed. Three facts at once, reached twice here, and
+  the vocabulary has no word for it.
+
+To those I add one the repo does name but does not model as a state:
+
+- *=G84 merge_exempt_unproven=* — guard 6 granting an exemption on the absence
+  of evidence. =gates/production-first.sh:39= is =groups.sh "$pr" 2>/dev/null ||
+  true=, so a forge that could not answer produces the empty set, and
+  =gates/production-first.sh:65-68= exempts it. /Exempt/ and /indeterminate/
+  arrive at the same =exit 0=. =G83= and =G84= are two states because
+  =spec.org=:187-222 says =deploys(c)= is three-valued.
+
+* The never-taken edges, and the 0.0 convention
+
+Two of this pipeline's guards have never refused anything.
+
+| guard | edge | lifetime refusals | why |
+|-------+------+-------------------+-----|
+| 0 — up to date with main | =G40 -> G41= | *0* | the body sits inside =if state = "BEHIND"= and the forge has never returned =BEHIND= here — 0 of 14 open PRs after 163 commits landed on main in one night |
+| 6 — production-first | =G71 -> G82= | *0* | 484 workflow runs, never once triggered by a label |
+
+Both guards are correctly written. Reading either body finds nothing wrong,
+because there is nothing wrong with it: *the trigger condition is supplied by
+an oracle that does not emit that value in this configuration*
+(=scenarios.org= D17, =spec.org= §The defect taxonomy class 7).
+
+So the model needs to say "this edge exists and has never been taken", and it
+says it with =weight = 0.0=:
+
+: weight > 0    observed, or plausibly observable, at this relative rate
+: weight = 0.0  the edge is IN THE CODE and has never been traversed
+
+A normaliser must keep a 0.0 edge as an edge. Deleting it would assert the
+guard does not exist, and re-weighting it would assert it fires — both are
+claims nobody has evidence for. =walk.py= reports the states reachable *only*
+through such edges as =hypothesis-only=, which is the audit question
+=scenarios.org= D17 says to ask of every guard:
+
+#+begin_example
+$ ./walk.py
+states 64  transitions 150  counterfactual=False
+reachable by positive-weight edges: 62
+hypothesis-only (the edge exists and has never been taken): G41, G82
+walks 20000  steps min 1 median 24 max 212
+  G90   complete          40.6%
+  G91   failed            27.9%
+  G93   closed_unmerged   17.6%
+  G92   backed_out        14.0%
+#+end_example
+
+=./walk.py --counterfactual= gives every 0.0 edge an epsilon and walks the
+pipeline *as its authors believed it behaved*. The difference between the two
+runs is the exact size of the gap between the specified control and the
+measured one, and it is currently two states.
+
+* The labels, as semantics
+
+A label is a mutable, queryable, automation-owned fact on a change (capability
+C1). What it *cannot* do is name a build — there is nowhere in a label to put a
+SHA, and inventing one (=deployed:staging-plp-3=) makes it a different label per
+build rather than a fact with a subject. That single limitation is what splits
+the namespace.
+
+** What each prefix means
+
+| prefix | namespace | subject | may a person write it |
+|--------+-----------+---------+-----------------------|
+| =app:= | the *manifest* — which deployable units this diff touches | the change's CONTENT | no, unless =labeler:skip= |
+| =itil:= | *classification* — what KIND of change this is | the change | only =itil:emergency= |
+| =change:= | *lifecycle* — how far the change RECORD has got | the change record | only =change:requested= |
+| =deploy:= | *action in flight* — a workflow is deploying right now | the run | no |
+| =staging:= =production:= | *observation* — an instrument measured this environment | a BUILD in an environment | only =staging:uat= |
+| =blocked:= | *a standing refusal, with its cause* | the change | only removing =blocked:diverged= |
+| =release:= | =release= is intent, =release:start= is action in flight | the change / the run | =release= only |
+| bare (=freeze=, =emergency=) | *the estate* — a property of the world | the estate holder issue | yes, and only a person |
+| =labeler:= | the *opt-out* that transfers ownership of the derived labels | the labeller | yes |
+| =review:= | *consent by delegation*, backed by a record | the change | no |
+| =hold:= | REJECTED. Still read, so a leftover stops a deploy | the change | no |
+
+** Why the split is load-bearing, not tidy
+
+- *=app:*= is safe as a label because it is recomputed, not dated.* It names no
+  build and never needs to: the labeller runs with =sync-labels: true= on every
+  push, so it is a projection of the current head kept true by recomputation.
+  =labeler:skip= flips it from =state= to =intent= — from derived to asserted —
+  and that is exactly the deviation it declares.
+- *=staging:*= and =production:*= cannot be safe the same way,* because their
+  subject is a measurement that cannot be re-derived for free. So the label is
+  demoted to the current-run signal and the *record* — a PR comment naming
+  environment, instrument, verdict and SHA — becomes the thing guards authorize
+  on (=change/evidence.sh:1-39=). A label goes stale. A record stops matching.
+- *=itil:*= and =change:*= are different namespaces about different subjects,*
+  and =change:standard= is the historical residue of collapsing them. It is
+  recorded rather than renamed, because renaming it would rewrite the class of
+  every settled change in the history.
+- *=emergency= and =itil:emergency= are two labels for a reason,* and it is the
+  one =spec.org= §Nomenclature calls the distinction carrying the most weight:
+  hang the CLASS on a PR to represent an estate emergency and the write that
+  closes the estate exempts its own carrier.
+
+* The machine
+
+** The pull request
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction TB
+    [*] --> G01
+    G01 : G01 pr_open
+    G08 : G08 draft_held
+    G01 --> G08
+    G08 --> G01
+    G01 --> G02
+    G02 : G02 manifest_derived
+    G03 : G03 manifest_asserted
+    G01 --> G03
+    G02 --> G04
+    G03 --> G04
+    G04 : G04 class_single
+    G05 : G05 class_undefined
+    G02 --> G05
+    G05 --> G04
+
+    state "the suite over a head SHA" as SUITE {
+        G20 : G20 not_yet
+        G21 : G21 pending
+        G22 : G22 VOID
+        G23 : G23 green
+        G24 : G24 red
+        G25 : G25 absent
+        G26 : G26 unreadable
+        G27 : G27 history_mixed
+        G28 : G28 green_on_abandoned_sha
+        G29 : G29 green_local
+        G20 --> G21
+        G20 --> G25
+        G20 --> G26
+        G20 --> G29
+        G21 --> G22
+        G21 --> G23
+        G21 --> G24
+        G21 --> G27
+        G22 --> G20
+        G24 --> G20
+        G27 --> G23
+        G27 --> G24
+        G28 --> G20
+        G23 --> G28
+    }
+    G04 --> G20
+
+    G23 --> G06
+    G06 : G06 change_requested
+    G07 : G07 emergency_declared
+    G06 --> G07
+    G06 --> G47
+    G47 : G47 window_booked
+    G48 : G48 window_expired
+    G47 --> G48
+    G48 --> G06
+    G47 --> G40
+    G06 --> G40
+    G07 --> G40
+    G29 --> G40
+
+    state "entry to the path to production" as ENTRY {
+        G40 : G40 berth_requested
+        G41 : G41 refused_BEHIND -- never taken
+        G42 : G42 refused_queue
+        G44 : G44 preflight INDETERMINATE
+        G45 : G45 frozen
+        G46 : G46 lock_or_hold
+        G43 : G43 berth_held
+        G40 --> G41
+        G40 --> G42
+        G40 --> G44
+        G40 --> G45
+        G40 --> G46
+        G40 --> G43
+        G41 --> G40
+        G42 --> G40
+        G44 --> G40
+        G45 --> G40
+        G46 --> G40
+    }
+    G25 --> G44
+    G26 --> G44
+    G44 --> G20
+
+    G43 --> G50
+    state "the observation stack on staging" as OBS {
+        G50 : G50 none
+        G51 : G51 current
+        G52 : G52 stale
+        G53 : G53 failed
+        G54 : G54 label_without_record
+        G55 : G55 untested_instrument
+        G56 : G56 contradiction
+        G57 : G57 superseded
+        G58 : G58 uat_withdrawn
+        G50 --> G51
+        G50 --> G52
+        G50 --> G53
+        G50 --> G54
+        G50 --> G55
+        G50 --> G56
+        G50 --> G57
+        G57 --> G51
+        G52 --> G50
+        G53 --> G50
+        G54 --> G50
+        G56 --> G50
+        G51 --> G58
+        G58 --> G50
+    }
+    G55 --> G22
+
+    G51 --> G60
+    G60 : G60 review_approved_on_head
+    G61 : G61 review_proxy_on_head
+    G62 : G62 review_absent
+    G63 : G63 review_unreadable
+    G51 --> G61
+    G51 --> G62
+    G51 --> G63
+    G60 --> G65
+    G61 --> G65
+    G63 --> G65
+    G62 --> G66
+    G65 : G65 authorized_on_head
+    G66 : G66 not_authorized
+    G66 --> G50
+    G66 --> G48
+    G65 --> G70
+
+    state "guard 5 -- the estate, sampled" as HEALTH {
+        G70 : G70 prod_deploy_in_flight
+        G71 : G71 healthy_on_head
+        G72 : G72 UNCONVERGED
+        G73 : G73 unhealthy
+        G74 : G74 unreachable read as unhealthy
+        G75 : G75 label_without_record
+        G70 --> G71
+        G70 --> G72
+        G70 --> G73
+        G70 --> G74
+        G70 --> G75
+        G72 --> G70
+        G73 --> G70
+        G74 --> G70
+        G75 --> G70
+    }
+    G74 --> G44
+    G23 --> G80
+
+    state "guard 6 -- production before main" as PF {
+        G80 : G80 NOT_YET
+        G81 : G81 refused_stale_measurement
+        G82 : G82 refused_prod_other_build -- never taken
+        G83 : G83 exempt_PROVEN
+        G84 : G84 exempt_UNPROVEN
+        G85 : G85 merge_allowed
+        G80 --> G83
+        G80 --> G84
+        G83 --> G85
+        G84 --> G85
+        G81 --> G70
+    }
+    G80 --> G06
+    G71 --> G85
+    G71 --> G81
+    G71 --> G82
+    G75 --> G81
+    G86 : G86 deployed_unmerged_window_gone
+    G71 --> G86
+    G86 --> G85
+
+    G90 : G90 complete
+    G91 : G91 failed
+    G92 : G92 backed_out
+    G93 : G93 closed_unmerged
+    G85 --> G90
+    G66 --> G91
+    G73 --> G92
+    G72 --> G92
+    G86 --> G92
+    G01 --> G93
+    G90 --> [*]
+    G91 --> [*]
+    G92 --> [*]
+    G93 --> [*]
+#+end_src
+
+The diagram draws the edges that carry the argument. [[./transitions.tsv]] is
+the authority — it has 150 and this has fewer.
+
+** The estate
+
+Estate-global, and deliberately without a terminal state. The estate has no
+closure code.
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction LR
+    [*] --> E01
+    E01 : E01 estate_open
+    E02 : E02 estate_frozen
+    E03 : E03 estate_emergency
+    E04 : E04 berth_free
+    E05 : E05 berth_taken
+    E01 --> E02 : a person declares freeze on issue 1
+    E02 --> E01 : lifted
+    E01 --> E03 : a person declares emergency on issue 1
+    E03 --> E01 : settled
+    E01 --> E04
+    E04 --> E05 : a PR claims deploy_staging
+    E05 --> E04 : settle.sh or reap.sh clears it
+    E04 --> E01
+#+end_src
+
+Neither =E02= nor =E03= grants anything to whatever carries it. That is the
+whole reason they are estate labels and not classes.
+
+* Running it
+
+#+begin_example
+$ cd experiments/021-state-machines/gating
+$ ./walk.py                    # structure + 20000 weighted walks
+$ ./walk.py --counterfactual   # the same, with the never-taken edges enabled
+#+end_example
+
+=walk.py= exits non-zero on: an edge naming an unknown state, a non-terminal
+dead end, a state that can only be LEFT by a never-taken edge, a state
+unreachable from every initial state, or a walk that failed to terminate. It
+does not check the citations.
+
+* The three edges I am least sure of
+
+1. *=G63 review_unreadable -> G65 authorized_on_head=*, weight 0.50.
+   =change/guard4.sh:121-123= prints =APPROVED (head unconfirmed: reviews
+   unreadable)= and does *not* set =rc=1=, so an unreadable reviews endpoint
+   authorizes on =reviewDecision= alone. The comment above it argues this
+   correctly — /could not ask/ is not /the head moved/ — but the resolution is
+   to proceed, which is the third value being folded into /yes/ rather than
+   into /no/. Every other unreadable oracle in this pipeline blocks (exit 4).
+   I have modelled what the code does, not what the taxonomy says, and I think
+   one of the two is wrong. *[H]* which.
+
+2. *=G23 suite_green_on_head -> G80 merge_not_yet=*, weight 0.15.
+   Guard 6 re-runs on every label change, so in the forge =G80= is not a
+   successor of anything — it is a check that is red alongside most of these
+   states for most of a PR's life. Modelling it as a state reached from
+   =G23= gives the walk somewhere to put it, and it is the weakest structural
+   claim in the file. A better model probably makes guard 6's verdict an
+   orthogonal region rather than a state.
+
+3. *=G70 prod_deploy_in_flight -> G75 prod_healthy_label_without_record=*,
+   weight 0.05. =gates/health.sh:94-96= sets =rc=7= when the record write
+   fails, so on the current code the label is not set and =G75= should be
+   unreachable. It is the shape issue #16 was found in and the shape
+   =gates/production-first.sh:109-113= still defends against, which is why it is
+   in the model — but its weight is an assertion about a path the code was
+   changed to close, and I have no measurement for it. *[H]*, and arguably it
+   belongs at 0.0 beside =G41= and =G82=.
+
+* What in here is [H]
+
+- Every =weight=. They are relative plausibilities from reading the scripts and
+  the scenarios, not counts from the timeline. The two that are 0.0 are the
+  only measured ones (0 refusals for guard 0, 0 for guard 6 across 484 runs).
+- =G74 -> G44=, marked =[H]= in the evidence column: a proposed repair, not
+  built.
+- =G75='s reachability, above.
+- The claim that =G22 suite_void= carries nothing forward (=G22 -> G20= at
+  1.00). =spec.org=:1816-1819 says the PASS is void; it does not say the run's
+  other artefacts are discarded, and =gates/report.sh:88-90= only declines to
+  POST them. Whether a record already written by an instrument during a void
+  run survives is =G55=, and I could find nothing that withdraws it.
+- The estate machine's weights are entirely invented. It exists to be
+  structurally checkable, not to be sampled.
+
+# Local Variables:
+# org-confirm-babel-evaluate: nil
+# End:

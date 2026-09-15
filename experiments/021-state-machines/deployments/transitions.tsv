@@ -1,0 +1,142 @@
+from	to	trigger	trigger_kind	guard	actor	reversible	weight	evidence
+dep01	dep02	change:requested added	label_add	none: asking is unconditional	human	yes	0.55	change/label-owners.tsv:36
+dep01	dep03	release added	label_add	none: a person may ask for the whole path	human	yes	0.12	change/watch.sh:29
+dep01	dep01	push to the PR; the labeller re-derives app:* and itil:*	forge_event	sync-labels owns the manifest	labeller	no	0.23	.github/workflows/labeller.yml:44
+dep01	dep36	PR closed with no claim ever taken	forge_event	none	human	no	0.10	[H]
+dep02	dep04	schedule.sh block reserves a window; change:scheduled set, change:requested cleared	label_add	no clashing OPEN window on this environment; the slot must be able to hold the work	scheduler	yes	0.72	change/schedule.sh:256
+dep02	dep03	release added on top of a standing request	label_add	none	human	yes	0.10	change/watch.sh:29
+dep02	dep01	the ask is withdrawn before any booking	label_remove	only a person may withdraw their own ask	human	yes	0.08	[H]
+dep02	dep36	PR closed while requested	forge_event	none	human	no	0.10	[H]
+dep03	dep05	watch.sh consumes release, sets change:requested, books if no window covers now, and calls activation	label_remove	the trigger is consumed FIRST so a dead run does not re-fire	scheduler	no	0.72	change/watch.sh:37
+dep03	dep02	release consumed but the change carries no app:* label, so there is nothing to deploy	label_remove	groups.sh returns empty	scheduler	no	0.16	change/watch.sh:41
+dep03	dep06	release consumed and a window could not be booked because staging is busy	label_remove	schedule.sh block refused	scheduler	no	0.12	change/watch.sh:50
+dep04	dep05	the window comes due	timer	reserving is not deploying: every guard is re-derived at this moment	scheduler	no	0.52	change/schedule.sh:265
+dep04	dep26	the window end passes with nothing attempted	timer	end < now among OPEN windows	reaper	no	0.24	change/reap.sh:41
+dep04	dep27	schedule.sh unschedule gives the slot back; closed cancelled, change:scheduled cleared	human	somebody decided; cancelled is not expired	human	yes	0.09	change/schedule.sh:296
+dep04	dep08	a freeze is declared covering the reserved window	label_add	the estate is closed; detected when check runs at activation, not at booking	human	yes	0.07	change/schedule.sh:263
+dep04	dep36	PR closed while booked	forge_event	none	human	no	0.08	[H]
+dep05	dep10	guards 3, 2 and 0 pass, then guard 1 adds deploy:staging	label_add	an open window covers now AND gates green on this head AND not BEHIND AND no other holder	driver	no	0.46	change/activate.sh:268
+dep05	dep06	guard 1: another open PR holds deploy:staging	label_add	holder != this PR	workflow	yes	0.11	change/queue.sh:50
+dep05	dep07	the deployment lock is held by another PR and is younger than 60 minutes	label_add	age_min(started_at) < 60	workflow	yes	0.05	change/lock.sh:49
+dep05	dep08	preflight exit 3: a freeze or an emergency covers this window	label_add	freeze OR emergency on the estate	gate	yes	0.06	gates/preflight.sh:6
+dep05	dep09	preflight exit 4: the change schedule could not be read	gate_verdict	INDETERMINATE. 4 blocks; it does not proceed	gate	yes	0.06	gates/preflight.sh:7
+dep05	dep04	guard 2 refuses: the gates are not green on this head. The window is still open	gate_verdict	latest check run per name, gate-selftest among them	gate	yes	0.11	change/activate.sh:213
+dep05	dep32	itil:emergency is declared on this change	label_add	a person declares the class; the labeller must not pick	human	yes	0.05	spec.org:1228
+dep05	dep25	guard 3 accepts a window that has already lapsed, because schedule.sh current returns 0 for an expired window, and the berth is then claimed	gate_verdict	the guard read a stale reservation as an open one	driver	no	0.03	change/reap.sh:9
+dep05	dep02	activation died for a reason no guard names; the change stops and re-requesting is a human act	deploy_event	none	driver	no	0.12	change/watch.sh:55
+dep06	dep05	the holder settled and release.sh announced the free berth on the queue issue; a person re-requests	human	guard 0 will refuse a branch behind main, so rebase first	human	yes	0.62	change/release.sh:47
+dep06	dep26	this change's own window lapses while it waits	timer	end < now	reaper	no	0.24	change/reap.sh:41
+dep06	dep36	abandoned in the queue	forge_event	none	human	no	0.14	[H]
+dep07	dep05	the lock is released by the holder's always() step, or cleared as stale at 60 minutes	forge_event	release runs in always(); stale clears unconditionally	workflow	no	0.74	change/lock.sh:61
+dep07	dep26	the window lapses while the lock is held	timer	end < now	reaper	no	0.26	change/reap.sh:41
+dep08	dep05	the freeze is lifted from the estate issue	label_remove	only a person may lift a freeze	human	yes	0.48	change/label-owners.tsv:60
+dep08	dep26	the freeze outlasts the window	timer	end < now	reaper	no	0.44	change/reap.sh:41
+dep08	dep32	the change is redeclared an emergency, which passes the freeze	label_add	a person declares the class; the freeze governs the estate, the class governs one change	human	yes	0.08	spec.org:1250
+dep09	dep05	the oracle is polled again within the bound and returns one of the two real answers	gate_verdict	the third value is never a verdict; poll, with a bound	gate	yes	0.55	spec.org:2739
+dep09	dep26	the bound expires with the answer still indeterminate and the window lapses	timer	indeterminate, said out loud, not resolved in either direction	reaper	no	0.38	spec.org:2741
+dep09	dep36	abandoned while nothing can be established	forge_event	none	human	no	0.07	[H]
+dep10	dep11	the deploy places the build and staging answers with this SHA	deploy_event	the SHA must resolve to a commit in this repository; health in manifest mode confirms the deploy took	driver	no	0.58	change/activate.sh:288
+dep10	dep30	the deploy failed and nothing was placed, or the authorizing run refused the estate	deploy_event	the deploy's own exit status, unpiped	driver	yes	0.12	.github/workflows/deploy-staging.yml:31
+dep10	dep25	the deploy reported ok while staging stayed on the old build, or the window lapsed with the berth still held	deploy_event	none: this is the absence of a guard	driver	no	0.09	change/reap.sh:46
+dep10	dep28	an artifact or hotfix merge lands on main underneath the claim	forge_event	divergence class in {artifact, hotfix}; berth KEPT and extended	workflow	no	0.08	change/state.sh:105
+dep10	dep29	a push moves the head; observations are withdrawn on synchronize	forge_event	self-inflicted: release the berth, rejoin the queue	labeller	no	0.08	spec.org:1183
+dep10	dep31	the acceptance suite refuses on entry to staging: the journey is not what was accepted	gate_verdict	acceptance is a record of what was accepted, and the flow is different	gate	no	0.05	scenarios.org:669
+dep11	dep12	the authorizing e2e and smoke pass against the staging slot and record the SHA	gate_verdict	the STAGING-SLOT run authorizes, never the in-runner one	gate	no	0.68	change/activate.sh:294
+dep11	dep30	the authorizing run fails; staging:e2e-failed or staging:smoke-failed is recorded	gate_verdict	a recorded failure outranks any pass beside it	gate	yes	0.22	gates/e2e.sh:202
+dep11	dep31	acceptance refuses the deployed build	gate_verdict	first difference from the accepted journey, which is not necessarily the intended one	gate	no	0.10	scenarios.org:669
+dep12	dep14	a person uses the deployed build and accepts it; the record names the SHA served there	label_add	observe.sh refuses unless the URL serves this PR's head	human	yes	0.38	change/observe.sh:29
+dep12	dep13	the change is held on staging and probed throughout the hold	human	a point measurement is not evidence of survival	driver	no	0.33	change/soak.sh:29
+dep12	dep28	an artifact or hotfix merge lands under a verified change; the pass is withdrawn, the berth extended	forge_event	class in {artifact, hotfix}: your image is no longer what you would deploy	workflow	no	0.11	spec.org:1168
+dep12	dep29	a push moves the head and the staging verdict is dropped	forge_event	a pass observed on an earlier commit authorizes nothing	labeller	no	0.11	.github/workflows/labeller.yml:98
+dep12	dep25	the window lapses with the berth held and staging serving a build nobody is driving	timer	none	reaper	no	0.07	change/reap.sh:46
+dep13	dep12	every probe served this build healthily for the whole hold	gate_verdict	BOTH HTTP 200 and the expected build; a 200 from the previous build is not this change surviving	gate	no	0.58	change/soak.sh:74
+dep13	dep06	probes failed: not promoting, not merging, back of the queue	gate_verdict	bad > 0	gate	no	0.31	change/soak.sh:52
+dep13	dep09	the soak took zero probes, so nothing was observed and there is no verdict	gate_verdict	n < 1 is INDETERMINATE, not a pass	gate	yes	0.11	change/soak.sh:68
+dep14	dep15	guard 4's stack is complete on this head and promote adds deploy:production	label_add	review OR proxy record on this SHA, gates green, every instrument's latest record a pass naming this head, no *-failed standing, no hold	workflow	no	0.56	change/guard4.sh:200
+dep14	dep12	a person withdraws acceptance; the record stands, the label does not	label_remove	the human may withdraw their own signal; the guard refuses on the missing label	human	yes	0.11	change/guard4.sh:178
+dep14	dep28	main moves under an accepted change	forge_event	class in {artifact, hotfix}	workflow	no	0.11	spec.org:1168
+dep14	dep29	a push moves the head; the acceptance was about a different build	forge_event	a person who accepted 7cd3281 has said nothing about 8370c74	labeller	no	0.11	change/guard4.sh:42
+dep14	dep25	the window lapses while waiting to be promoted	timer	none	reaper	no	0.11	change/reap.sh:46
+dep15	dep16	the build is installed on the IDLE colour	deploy_event	never onto the colour serving traffic; the SHA must resolve	driver	yes	0.62	change/activate.sh:341
+dep15	dep28	main-moved withdraws the staging pass and deploy:production from every open PR now behind	forge_event	mergeStateStatus in {BEHIND, BLOCKED, DIRTY}	workflow	no	0.12	.github/workflows/main-moved.yml:18
+dep15	dep09	guard 6 cannot derive the deploy set, or production cannot be reached: abstain, exit 4	gate_verdict	deploys(c) is three-valued; the absence of evidence that it deploys something is not exempt	gate	yes	0.09	spec.org:216
+dep15	dep07	the production lock is held	label_add	age_min < 60	workflow	yes	0.06	.github/workflows/deploy-production.yml:41
+dep15	dep08	production preflight refuses on a freeze	gate_verdict	freeze only; an emergency is exempt from the freeze and from nothing else	gate	yes	0.06	.github/workflows/deploy-production.yml:40
+dep15	dep25	the window lapses holding both deploy labels	timer	none	reaper	no	0.05	change/reap.sh:46
+dep16	dep17	e2e passes against the idle colour with no traffic on it	gate_verdict	the idle colour is verified BEFORE any traffic reaches it	gate	no	0.78	change/activate.sh:347
+dep16	dep35	the idle colour fails e2e; production was never cut over, so there is nothing to undo	gate_verdict	production never had it made live	gate	no	0.17	change/activate.sh:347
+dep16	dep05	redeployed to the idle colour inside the same window	deploy_event	none	driver	yes	0.05	[H]
+dep17	dep18	the atomic cutover: the front is pointed at the verified colour	deploy_event	refuses if the target colour is not answering; confirmed by asking the front, not by reading the file just written	driver	yes	0.84	targets/node/switch.sh:40
+dep17	dep15	the cutover is refused because the target colour is not answering	deploy_event	a cutover to a dead replica is an outage performed deliberately	driver	yes	0.10	targets/node/switch.sh:43
+dep17	dep28	main moves between the idle verification and the cutover	forge_event	class in {artifact, hotfix}	workflow	no	0.06	spec.org:1168
+dep18	dep19	guard 5 sees one build across N samples through the front	gate_verdict	convergence, not liveness; N samples all reporting the expected build	gate	no	0.66	change/activate.sh:355
+dep18	dep20	more than one build answers, or the front serves a build that is not this one	gate_verdict	UNCONVERGED is a real negative observation	gate	yes	0.16	gates/health.sh:71
+dep18	dep09	the probe cannot open a socket at all: HTTP 000	gate_verdict	unreachable is not falsified; the estate was never observed	gate	yes	0.11	.github/workflows/merge-on-healthy.yml:49
+dep18	dep33	a fault is seen that the health check does not name, and the previous colour is still intact	human	none: a person looking	human	yes	0.07	[H]
+dep19	dep21	settle.sh re-derives the served build now, finds the non-repeatable evidence present, and sets change:complete	gate_verdict	production serving this SHA asked just now, plus staging:e2e, staging:smoke and staging:uat present	workflow	no	0.58	change/settle.sh:105
+dep19	dep23	the merge is refused as not cleanly creatable; settlement stops and nothing below it runs	forge_event	gh pr merge failed; exit 8	workflow	no	0.14	change/settle.sh:140
+dep19	dep28	main outran production during the deploy; blocked:diverged and the merge is refused	forge_event	mergeStateStatus in {BEHIND, DIRTY} at settlement	workflow	no	0.14	.github/workflows/merge-on-healthy.yml:17
+dep19	dep20	guard 5 is re-derived at the merge and production is NOT serving this SHA; the label is withdrawn	gate_verdict	reachable and wrong, which is a negative rather than an abstention	workflow	yes	0.07	.github/workflows/merge-on-healthy.yml:53
+dep19	dep24	nothing drives the settlement and the window closes with production serving this build	timer	none	reaper	no	0.07	spec.org:2793
+dep20	dep33	the estate is serving a mixed or wrong population and must be returned	gate_verdict	more than one build seen, or not this build	gate	yes	0.46	gates/health.sh:71
+dep20	dep18	re-probed after the old replica was retired and the estate converged	gate_verdict	8/8 samples on the expected build	gate	yes	0.30	spec.org:2159
+dep20	dep09	re-probing stops answering at all	gate_verdict	unreachable is not the same as unconverged	gate	yes	0.10	spec.org:2722
+dep20	dep35	closed failed without a rollback because production never had this build made live	human	--backed-out is refused without a named rollback target	human	no	0.14	change/abort.sh:42
+dep21	dep22	merged and branch deleted; PIR posted, deployment records written from the observation, window redlined passed, every holding label cleared	forge_event	the merge must succeed before anything below it runs	workflow	no	0.80	change/settle.sh:127
+dep21	dep23	the merge is refused; settlement exits 8 and runs nothing after it	forge_event	mergeable is false	workflow	no	0.20	change/settle.sh:140
+dep23	dep21	the conflict is resolved and the change is re-settled from a host that can see the estate	human	production is still observed serving this build	human	yes	0.42	change/settle.sh:138
+dep23	dep33	the operator decides to roll the front back to a colour whose build IS on main	human	the rollback target must be named	human	yes	0.31	change/settle.sh:138
+dep23	dep24	the window closes while production serves a build trunk does not contain	timer	none	reaper	no	0.27	spec.org:2793
+dep24	dep21	the merge is resolved and settlement is re-run; the window is not re-booked because settling is not deploying	human	production still serving this build, re-derived	human	yes	0.33	change/settle.sh:138
+dep24	dep34	the front is returned to a build main contains and abort.sh --backed-out --to <sha> records the estate action	human	--backed-out is refused without --to <sha>	human	no	0.45	change/abort.sh:42
+dep24	dep27	the reaper closes the window expired and clears the scheduling labels without ever looking at production, so the record understates the world	timer	the reaper does not read the estate	reaper	no	0.22	change/reap.sh:56
+dep25	dep27	the reaper closes the window expired, removes change:scheduled and releases deploy:staging	timer	end < now AND the PR still holds the berth	reaper	no	0.57	change/reap.sh:77
+dep25	dep35	a person aborts the change: the record is posted first, then every holding label is cleared	human	a closure with no cause is not a record	human	no	0.21	change/abort.sh:105
+dep25	dep05	somebody notices and drives it inside a fresh window	human	a new window must be booked; the reaper deliberately does not book one	human	yes	0.22	change/reap.sh:19
+dep26	dep27	the change is left with NO lifecycle label: it was scheduled, it no longer is, and nobody has asked for a new window	label_remove	expired is not failed and not cancelled; automation must not re-assert a human's ask	reaper	no	0.84	change/reap.sh:73
+dep26	dep36	abandoned after the window lapsed	forge_event	none	human	no	0.16	[H]
+dep27	dep02	a person asks again. Asking is a person's act and the reaper will not do it	label_add	none	human	yes	0.66	change/reap.sh:70
+dep27	dep03	a person asks for the whole path now rather than for a slot	label_add	none	human	yes	0.17	change/watch.sh:8
+dep27	dep36	never asked for again	forge_event	none	human	no	0.17	[H]
+dep28	dep05	rebased onto what landed; the deadline was extended and the pass must be re-earned	human	revalidate = true; the berth was never taken away	human	no	0.57	change/state.sh:111
+dep28	dep25	the extension runs out with the berth still held	timer	extend never shortens a hold, and nothing promotes on expiry	reaper	no	0.15	change/reap.sh:46
+dep28	dep23	preempted AFTER the cutover: production serves this build and main has outrun it	forge_event	production is AHEAD of main; this is not recoverable by merging	workflow	no	0.16	change/settle.sh:96
+dep28	dep35	closed failed rather than rebased	human	none	human	no	0.12	change/abort.sh:124
+dep29	dep02	the observations were withdrawn on synchronize; the ask still stands and the change re-enters the lifecycle	label_remove	a new push invalidates every staging verdict	labeller	no	0.58	.github/workflows/labeller.yml:98
+dep29	dep01	the ask is withdrawn too and the change is a plain PR again	label_remove	none	human	yes	0.24	[H]
+dep29	dep27	the berth is released and the window is gone; approved, measured on an old build, unbooked	timer	none	reaper	no	0.18	change/reap.sh:73
+dep30	dep25	staging:failed is set and deploy:staging is NOT removed by the same step, so the berth stays held	label_add	the absence of a guard: nothing releases the claim on a refusal	workflow	no	0.38	.github/workflows/deploy-staging.yml:32
+dep30	dep01	fix and push; the labeller withdraws the failed verdict on synchronize	forge_event	none	human	yes	0.31	.github/workflows/labeller.yml:98
+dep30	dep35	a person aborts; the deployment annotations are cleared and change:failed is set	human	a reason is required	human	no	0.16	change/abort.sh:124
+dep30	dep26	the window lapses while the change sits refused. Refusal is not a hold	timer	expired, not failed: the refusal and the lapse are different facts	reaper	no	0.15	scenarios.org:487
+dep31	dep26	the window is spent, the berth is released, and the change goes back to needing a window	timer	forfeit on entry is an ordinary outcome, not an incident	reaper	no	0.47	scenarios.org:696
+dep31	dep01	the PR carries its acceptance: the diff that changes the flow also changes the journey	forge_event	a review convention, not a guard	human	yes	0.42	scenarios.org:712
+dep31	dep35	closed failed instead of updated	human	none	human	no	0.11	change/abort.sh:124
+dep32	dep16	approved by a change authority with gates green on this head; preflight checks the lock only	label_add	guard 2 has NO bypass; a FREEZE does not block an emergency	workflow	no	0.50	.github/workflows/deploy-production.yml:35
+dep32	dep37	a person declares the emergency and records the debt the change record now owes	label_add	a person adds it when declaring; automation must not clear a debt it did not pay	human	yes	0.24	change/label-owners.tsv:94
+dep32	dep05	refused for want of an approving review	gate_verdict	itil:emergency requires an approving review	workflow	yes	0.16	.github/workflows/deploy-production.yml:37
+dep32	dep35	guard 2 is red on this head; the emergency ships nothing	gate_verdict	an emergency may skip the staging environment; it may not ship red gates	gate	no	0.10	spec.org:1230
+dep33	dep34	the front is cut back to the previous colour and abort.sh --backed-out --to <sha> records it	human	recording a rollback is not performing one; the flag is refused without a target	human	no	0.66	targets/node/switch.sh:17
+dep33	dep18	a fix-forward redeploy converges instead	deploy_event	guard 5 has no bypass either way	driver	yes	0.16	[H]
+dep33	dep24	nobody cuts back and the window closes with production serving an unmerged build	timer	none	reaper	no	0.18	spec.org:2793
+dep33	dep34	the automated rollback step fires on the health check's failure	deploy_event	UNREACHABLE EDGE: targets/node/ and targets/bastille/ ship no rollback.sh, so this step cannot run	workflow	no	0.00	.github/workflows/deploy-production.yml:46
+dep37	dep16	the emergency deploys anyway; the debt blocks nothing	deploy_event	blocking on the record would make the record the emergency	workflow	no	0.78	change/label-owners.tsv:94
+dep37	dep35	the emergency is closed failed with the debt still standing	human	the label is PERSISTENT and survives closure	human	no	0.22	change/label-owners.tsv:94
+est01	est02	freeze added to the estate issue	label_add	a property of the world, blocking everyone including its declarer	human	yes	0.10	change/label-owners.tsv:60
+est01	est03	emergency added to the estate issue	label_add	something is wrong out there; everything stops	human	yes	0.10	change/label-owners.tsv:61
+est01	est01	ordinary change continues	timer	none	scheduler	no	0.80	gates/preflight.sh:147
+est02	est01	freeze removed	label_remove	only a person may lift a freeze	human	yes	0.60	change/label-owners.tsv:60
+est02	est02	the freeze stands	timer	none	scheduler	no	0.40	gates/preflight.sh:147
+est03	est01	emergency removed once the incident is closed	label_remove	only a person	human	yes	0.60	change/label-owners.tsv:61
+est03	est03	the emergency is still in flight	timer	none	scheduler	no	0.40	gates/preflight.sh:147
+est04	est05	a change claims the path to production	label_add	guard 1: at most one holder	workflow	yes	0.50	change/queue.sh:46
+est04	est04	nothing holds the path	timer	none	scheduler	no	0.50	change/queue.sh:46
+est05	est04	the holder settles or aborts and the claim is cleared	label_remove	clearing deploy:staging is the release, not the tidying	workflow	yes	0.45	change/settle.sh:244
+est05	est06	the holder's window lapses and nobody is driving it	timer	guard 1 then refuses everyone with no declared cause	reaper	no	0.20	change/reap.sh:46
+est05	est05	the holder is still driving	timer	none	driver	no	0.35	change/activate.sh:265
+est06	est04	the reaper releases a berth held by a lapsed window	timer	the window is gone and settle is unreachable for a change nobody drove	reaper	no	0.85	change/reap.sh:77
+est06	est06	nobody has swept yet	timer	none	reaper	no	0.15	change/reap.sh:4
+est07	est08	a deploy acquires the lock and records pr, target, run-id and started_at	deploy_event	refused if held by another PR younger than 60 minutes	workflow	yes	0.50	change/lock.sh:55
+est07	est07	no deploy in flight	timer	none	scheduler	no	0.50	change/lock.sh:39
+est08	est07	released in an always() step, or cleared as stale at 60 minutes	deploy_event	a cleanup that cannot run is a berth that cannot be released	workflow	yes	0.70	change/lock.sh:61
+est08	est08	the deploy is still running	timer	none	workflow	no	0.30	change/lock.sh:44

@@ -1,0 +1,44 @@
+label	prefix	semantics	owner	human_add	asserts
+app:core	app:	observation	labeller	no	the diff at this head touches apps/core/ or shared/; core is in the build manifest. Derived every push, never asserted
+app:plp	app:	observation	labeller	no	same, for plp
+app:pdp	app:	observation	labeller	no	same, for pdp
+app:checkout	app:	observation	labeller	no	same, for checkout
+itil:standard	itil:	classification	labeller	no	this change is pre-authorised by its type; the diff is limited to apps/**
+itil:normal	itil:	classification	labeller	no	this change touches the pipeline or the router and needs an approval its type does not grant
+itil:emergency	itil:	classification	human	yes	THIS change is the remedy. It passes a freeze and the berth. It is not the estate being shut
+control-plane	(bare)	classification	labeller	no	this change alters how every FUTURE change is verified, so the pipeline cannot verify it and it must not auto-merge
+labeler:skip	labeler:	intent	human	yes	the manifest is hand-maintained from here. A declared deviation in label form: derived becomes asserted, on purpose
+change:requested	change:	intent	human	yes	a person has asked for this change to begin. The only label a person adds to set one going
+change:scheduled	change:	state	scheduler	no	a window is booked on the change schedule. A record; nothing blocks on it
+change:complete	change:	state	change/settle.sh	no	validation is done and nothing remains to observe. Terminal for validation, cleared at cleanup
+change:failed	change:	state	change/abort.sh	no	TERMINAL closure code. Production never served this build. Nothing to undo
+change:backed-out	change:	state	change/abort.sh	no	TERMINAL closure code. Production DID serve it and the estate was returned. Refused without --to <sha>
+change:backfill-owed	change:	estate	human	yes	a change reached main without the normal evidence and still owes the window, the observations and the reason. Blocks nothing; survives settlement
+change:standard	change:	classification	RETIRED (split to itil:standard 2026-09-13)	no	legacy class in the lifecycle namespace; renaming it would rewrite the class of every settled change
+change:normal	change:	classification	RETIRED (split to itil:normal)	no	legacy class
+change:emergency	change:	classification	RETIRED (split to itil:emergency)	no	legacy class; carried on #2 alongside change:standard, leaving the class undefined
+release	(bare)	intent	human	yes	a person wants this released. A standing trigger the scheduler consumes; left on, it re-fires
+release:start	release:	state	the pipeline	no	ACTION. The release has begun for the booked change request, and names which change is in flight. A person cannot truthfully assert this
+deploy:staging	deploy:	state	workflow	no	THE BERTH. The singleton path to production (:9200) is this change's right now. An action in flight, not a request
+deploy:production	deploy:	state	workflow	no	a production deploy is in flight. deploy-production.yml fires on it, so a change left carrying it stays armed to re-enter production
+staging:in-progress	staging:	state	workflow	no	the staging deploy is running
+staging:e2e	staging:	observation	gates/e2e.sh --pr	no	the e2e instrument measured the staging environment and it served this build
+staging:e2e-failed	staging:	observation	gates/e2e.sh --pr	no	same instrument, same environment, opposite verdict. A recorded failure outranks its own pass in guard 4
+staging:smoke	staging:	observation	gates/smoke.sh --pr	no	smoke measured staging on this build
+staging:smoke-failed	staging:	observation	gates/smoke.sh --pr	no	smoke refused this build on staging
+staging:uat	staging:	observation	human, via change/observe.sh	yes	a PERSON used a named URL and the build served there was this PR's head. The only human-added observation: for acceptance the person IS the instrument
+production:e2e	production:	observation	gates/e2e.sh --pr	no	e2e measured the production address on this build
+production:e2e-failed	production:	observation	gates/e2e.sh --pr	no	e2e refused this build at the production address
+production:smoke	production:	observation	gates/smoke.sh --pr	no	smoke measured the production address on this build
+production:smoke-failed	production:	observation	gates/smoke.sh --pr	no	smoke refused this build at the production address
+production:healthy	production:	observation	gates/health.sh --pr	no	N samples at the production address, every one on this build and exactly one distinct build seen. CONVERGENCE, not liveness
+blocked:queue	blocked:	state	change/queue.sh	no	another open PR holds the berth
+blocked:lock	blocked:	state	change/lock.sh	no	the deployment lock names another run, under 60 minutes old
+blocked:freeze	blocked:	state	gates/preflight.sh	no	a freeze or an estate emergency covers the requested window
+blocked:diverged	blocked:	state	workflow	no	main moved under this change by an artifact or hotfix merge. A human may clear it after rebasing
+freeze	(bare)	estate	human	yes	ESTATE-GLOBAL, on issue #1. Ordinary change is suspended for everyone including the declarer. A property of the WORLD, never of a change
+emergency	(bare)	estate	human	yes	ESTATE-GLOBAL, on issue #1. An emergency is in flight out there. Blocks standard and normal changes and grants NO exemption to whatever PR carries it
+staging:passed	staging:	observation	RETIRED	no	RETIRED: named no measurement and no environment. Replaced by the staging:* stack
+staging:failed	staging:	observation	RETIRED	no	RETIRED: same
+deployed:production	deployed:	state	RETIRED	no	RETIRED: replaced by change:complete plus the deployment record
+hold:staging	hold:	intent	REJECTED 2026-09-13	no	REJECTED SEMANTICS. Covered by freeze (the estate stops for everyone) and itil:emergency (precedence). A third stop with a third scope and no rule for which applied

@@ -94,7 +94,8 @@ jobs:
           rc=0
           for l in staging:passed staging:failed staging:e2e staging:e2e-failed \
                    staging:smoke staging:smoke-failed staging:uat \
-                   staging:in-progress \
+                   staging:in-progress staging:deployed staging:healthy \
+                   production:deployed \
                    production:healthy production:e2e production:e2e-failed \
                    production:smoke production:smoke-failed; do
             case " $have " in *" $l "*) ;; *) continue ;; esac

@@ -1,0 +1,120 @@
+from	to	trigger	trigger_kind	guard	actor	reversible	weight	evidence
+PR_OPEN	PR_CLASSIFIED	labeller derives itil:standard or itil:normal from the diff	label_add	exactly one class results	labeller	yes	0.70	.github/workflows/labeller.yml:43-48
+PR_OPEN	PR_CLASS_UNDEFINED	a person declares itil:emergency over a derived class	label_add	no reconciler exists between derived and declared class	human	yes	0.05	gates/preflight.sh:183-195
+PR_OPEN	PR_MANIFEST_ASSERTED	a person adds labeler:skip	label_add	none -- this is an ownership transfer, not a guard	human	yes	0.10	.github/workflows/labeller.yml:13
+PR_OPEN	EMG_DECLARED	a person declares itil:emergency	label_add	a person must own declaring an emergency; never inferred	human	yes	0.08	change/label-owners.tsv:55
+PR_OPEN	T_ABANDONED	the PR is closed	forge_event	none	human	no	0.02	[H]
+PR_CLASS_UNDEFINED	PR_CLASSIFIED	a person removes the class that is wrong	label_remove	recovery is a declaration, never a derivation	human	yes	0.85	gates/preflight.sh:192-194
+PR_CLASS_UNDEFINED	T_ABANDONED	the PR is closed while its class is undefined	forge_event	none	human	no	0.05	[H]
+PR_MANIFEST_ASSERTED	PR_CLASSIFIED	a person hand-sets app:* and the class	label_add	labeler:skip disables the classify step too, so the class is asserted as well	human	yes	0.85	spec.org:732-742
+PR_MANIFEST_ASSERTED	PR_CLASS_UNDEFINED	hand-set classes collide	label_add	the exclusion is not enforced at write time	human	yes	0.15	change/label-owners.tsv:86
+PR_CLASSIFIED	PR_REQUESTED	a person adds change:requested	label_add	the only label a person adds to set a change going	human	yes	0.80	change/label-owners.tsv:30
+PR_CLASSIFIED	EMG_DECLARED	a person declares this change the remedy	label_add	precedence is claimed, not derived	human	yes	0.10	docs/precedence-and-locks.org:6-8
+PR_CLASSIFIED	T_ABANDONED	the PR is closed	forge_event	none	human	no	0.03	[H]
+PR_REQUESTED	PR_SCHEDULED	the scheduler books a window	label_add	a reservation on a change no gate can judge must be refused at booking	scheduler	yes	0.82	change/schedule.sh:357-363
+PR_REQUESTED	EMG_QUEUE_ESCALATED	the queue wait exceeds patience	timer	none -- this is the bypass being chosen, not refused	human	yes	0.13	gates/simulate-gates.py:186-196
+PR_REQUESTED	T_ABANDONED	the PR is closed while queued	forge_event	none	human	no	0.02	[H]
+PR_SCHEDULED	PR_PREFLIGHT	the window comes due	timer	the window is not inside a freeze at ACTIVATION, not at booking	scheduler	yes	0.80	change/activate.sh:258, change/schedule.sh:264
+PR_SCHEDULED	PR_EXPIRED	the window end passes unattempted	timer	expired is its own closure code; the reaper must not rebook	reaper	no	0.15	change/reap.sh:16-22
+PR_SCHEDULED	EMG_QUEUE_ESCALATED	the booked window is too far out to wait for	timer	none	human	yes	0.05	gates/simulate-gates.py:199-214
+PR_EXPIRED	PR_REQUESTED	the change asks for a new window	label_add	the change is untouched and still eligible	human	yes	0.70	change/reap.sh:19-22
+PR_EXPIRED	EMG_QUEUE_ESCALATED	a second lapse is not waited out	timer	none	human	yes	0.10	gates/simulate-gates.py:173-177
+PR_EXPIRED	T_ABANDONED	the PR is closed after its window lapsed	forge_event	none	human	no	0.06	[H]
+PR_PREFLIGHT	PR_BERTH	every guard passes; the berth is claimed	gate_verdict	exit 0: on the calendar, gates green on this head, berth free, estate open, not draft, no hold	gate	yes	0.32	gates/preflight.sh:305-334, change/queue.sh:56-57
+PR_PREFLIGHT	PR_DRAFT_REFUSED	the author has marked it not ready	gate_verdict	exit 6; checked before the calendar so a draft holds no reservation either	gate	yes	0.05	gates/preflight.sh:206-215
+PR_PREFLIGHT	PR_BEHIND_MAIN	guard 0: the branch is behind main by a pipeline-or-worse change	gate_verdict	exit 6; bypassed entirely when itil:emergency is present	gate	yes	0.08	change/queue.sh:23-43
+PR_PREFLIGHT	EST_BERTH_REFUSED	guard 1: another open PR holds deploy:staging	gate_verdict	exit 5; NOT bypassed by itil:emergency, which never takes the berth at all	gate	yes	0.14	change/queue.sh:46-54, gates/preflight.sh:136-145
+PR_PREFLIGHT	EST_LOCK_REFUSED	the deployment lock is held by another change	gate_verdict	exit 2; guard 3's lock half has NO emergency bypass	gate	yes	0.05	change/lock.sh:43-52
+PR_PREFLIGHT	EST_FREEZE_REFUSED	freeze on the estate holder, a stray open PR, or a scheduled FREEZE window	gate_verdict	exit 3; bypassed by itil:emergency, because an emergency is what a freeze is FOR	gate	yes	0.08	gates/preflight.sh:231-242, 291-296
+PR_PREFLIGHT	EST_FREEZE_UNATTRIBUTED	the same freeze, declared with no actor and no reason	gate_verdict	exit 3; indistinguishable at the guard from an authorised halt	gate	yes	0.04	spec.org:619-644, idp-api/mock/server.mjs:150
+PR_PREFLIGHT	EST_EMERGENCY_REFUSED	the bare emergency label is on the estate holder or a stray open PR	gate_verdict	exit 2; no self-exclusion, so it blocks its own carrier too	gate	yes	0.05	gates/preflight.sh:273-282, 297-303
+PR_PREFLIGHT	EST_OTHERS_ITIL_EMERGENCY	itil:emergency is on another open PR	gate_verdict	exit 2 as stated in preflight's own prose; the code queries the bare label instead	gate	yes	0.04	gates/preflight.sh:152-155 vs gates/preflight.sh:274
+PR_PREFLIGHT	EST_SELF_BLOCKED_BY_OWN_FLAG	this PR is the one carrying the bare emergency label	gate_verdict	exit 2; deliberately no self-exclusion	gate	yes	0.02	gates/preflight.sh:262-267
+PR_PREFLIGHT	EST_INDETERMINATE	the calendar, the forge, the berth query or the estate flags did not answer	gate_verdict	exit 4 BLOCKS; unreachable is not falsified and is not confirmed	gate	yes	0.06	gates/preflight.sh:51-53, 112-113, 138-139, 284-285
+PR_PREFLIGHT	PR_HELD	hold:staging is present	gate_verdict	exit 2; the check is kept although the semantics are REJECTED, because silently ignoring a leftover hold is worse	gate	yes	0.03	gates/preflight.sh:310-319
+PR_PREFLIGHT	EMG_QUEUE_ESCALATED	the accumulated refusals exceed patience	timer	none	human	yes	0.09	gates/simulate-gates.py:199-214
+PR_DRAFT_REFUSED	PR_PREFLIGHT	the author marks the PR ready	forge_event	the author's call, never the pipeline's	human	yes	0.88	gates/preflight.sh:214
+PR_DRAFT_REFUSED	T_ABANDONED	the draft is closed	forge_event	none	human	no	0.04	[H]
+PR_BEHIND_MAIN	PR_REQUESTED	rebase onto main and re-request	forge_event	the rebase IS the re-verification that the two changes compose	human	yes	0.72	change/queue.sh:40-42, spec.org:936-941
+PR_BEHIND_MAIN	EMG_DECLARED	a person declares itil:emergency to ship behind trunk	label_add	permitted; the PIR then records the merge-base divergence	human	yes	0.16	spec.org:1246-1250, spec.org:2254
+PR_BEHIND_MAIN	T_ABANDONED	the PR is closed rather than rebased	forge_event	none	human	no	0.04	[H]
+EST_BERTH_REFUSED	PR_REQUESTED	the holder merges and announces on the queue issue	forge_event	the next claimant must rebase first; guard 0 will refuse a branch that is behind	workflow	yes	0.58	change/release.sh:47-48
+EST_BERTH_REFUSED	EMG_QUEUE_ESCALATED	the wait is longer than the change can bear	timer	none -- itil:emergency skips the berth entirely	human	yes	0.32	gates/simulate-gates.py:161-183
+EST_BERTH_REFUSED	T_ABANDONED	the PR is closed while blocked:queue	forge_event	none	human	no	0.03	[H]
+EST_LOCK_REFUSED	PR_PREFLIGHT	the holding deployment releases the lock in its always() step	deploy_event	release must run in always(), or a berth cannot be released	workflow	yes	0.62	.github/workflows/deploy-production.yml:53-54
+EST_LOCK_REFUSED	PR_PREFLIGHT	the lock is older than 60 minutes and the next acquirer clears it	timer	stale is decided by age, not by whether the run is really dead	gate	yes	0.28	change/lock.sh:46-54
+EST_LOCK_REFUSED	T_ABANDONED	the PR is closed while blocked:lock	forge_event	none	human	no	0.03	[H]
+EST_FREEZE_REFUSED	PR_PREFLIGHT	a person lifts the freeze	label_remove	freeze is human_add yes and human_rm yes; nothing in-tree writes it	human	yes	0.50	change/label-owners.tsv:53
+EST_FREEZE_REFUSED	EMG_DECLARED	a person declares this change itil:emergency	label_add	their call, never the pipeline's; blocking the remedy would mean the freeze prevents its own cure	human	yes	0.36	gates/preflight.sh:294-296
+EST_FREEZE_REFUSED	T_ABANDONED	the PR is closed during the freeze	forge_event	none	human	no	0.04	[H]
+EST_FREEZE_UNATTRIBUTED	EST_FREEZE_REFUSED	the declarer is identified out of band	human	none -- the record still does not say; only the conversation does	human	yes	0.24	spec.org:630-640
+EST_FREEZE_UNATTRIBUTED	PR_PREFLIGHT	the freeze is lifted by whoever can reach the control	label_remove	the lift is as unattributed as the declaration	human	yes	0.34	spec.org:624-628
+EST_FREEZE_UNATTRIBUTED	EMG_DECLARED	a person declares this change itil:emergency rather than find the declarer	label_add	the only recovery that does not require an addressee	human	yes	0.30	gates/preflight.sh:294-296
+EST_FREEZE_UNATTRIBUTED	T_ABANDONED	the PR is closed under an unexplained halt	forge_event	none	human	no	0.04	[H]
+EST_EMERGENCY_REFUSED	PR_PREFLIGHT	the estate emergency settles and a person clears the label	label_remove	recovery is wait, then re-request	human	yes	0.52	gates/preflight.sh:303
+EST_EMERGENCY_REFUSED	PR_STALE_EVIDENCE	the emergency lands under you	deploy_event	guard 4b invalidates your pass whether or not you waited politely	workflow	no	0.26	gates/preflight.sh:300-302, docs/precedence-and-locks.org:87-96
+EST_EMERGENCY_REFUSED	EMG_DECLARED	a person declares this change itil:emergency too	label_add	itil:emergency is evaluated before the estate flags, so it passes this refusal as well	human	yes	0.22	gates/preflight.sh:286-290
+EST_OTHERS_ITIL_EMERGENCY	PR_PREFLIGHT	the other emergency settles	deploy_event	none	workflow	yes	0.55	gates/preflight.sh:303
+EST_OTHERS_ITIL_EMERGENCY	PR_STALE_EVIDENCE	the other emergency merges and moves main	deploy_event	guard 4b: your tree now predates what shipped	workflow	no	0.30	scenarios.org:150-163
+EST_OTHERS_ITIL_EMERGENCY	T_ABANDONED	the PR is closed while outranked	forge_event	none	human	no	0.05	[H]
+EST_SELF_BLOCKED_BY_OWN_FLAG	PR_PREFLIGHT	a person moves the bare emergency label off this PR onto the estate holder	label_remove	the estate's flag belongs on something that cannot be deployed	human	yes	0.80	gates/preflight.sh:217-230, spec.org:2823-2828
+EST_SELF_BLOCKED_BY_OWN_FLAG	T_ABANDONED	the PR carrying the estate flag is closed, taking the flag with it	forge_event	the state vanishes when its carrier closes -- the reason the holder is an issue	human	no	0.06	gates/preflight.sh:224-226
+EST_INDETERMINATE	PR_PREFLIGHT	the read is retried and comes back with one of the two real answers	gate_verdict	poll until the answer is yes or no, with a bound	gate	yes	0.78	spec.org:2738-2743
+EST_INDETERMINATE	EST_FREEZE_REFUSED	the retry resolves to a real freeze	gate_verdict	the third value is never a verdict; it resolves into one	gate	yes	0.12	spec.org:2699-2710
+EST_INDETERMINATE	T_ABANDONED	the PR is closed while nothing can be established about the estate	forge_event	none	human	no	0.03	[H]
+PR_HELD	PR_PREFLIGHT	a person removes hold:staging before the berth is claimed	label_remove	only a person may remove it -- that is what makes it a hold	human	yes	0.45	gates/preflight.sh:317
+PR_HELD	PR_REQUESTED	held at staging: the window closes with result held, the berth stays claimed	gate_verdict	never expires INTO a promotion; the safe direction on expiry is to forfeit	gate	yes	0.35	change/activate.sh:304-332
+PR_HELD	T_ABANDONED	the held PR is closed	forge_event	none	human	no	0.06	[H]
+PR_BERTH	PR_OBSERVED	the instruments run and record against this head	gate_verdict	each record names the environment, the instrument, the verdict and the SHA	gate	yes	0.68	change/guard4.sh:153-181
+PR_BERTH	PR_STALE_EVIDENCE	a push to the PR withdraws every observation	forge_event	a person who accepted one build has said nothing about another	labeller	no	0.10	.github/workflows/labeller.yml:86-107
+PR_BERTH	EST_OTHERS_ITIL_EMERGENCY	an emergency preempts the holder	deploy_event	the holder keeps its queue position and must revalidate; it is not evicted by the script, though the model can be run either way	workflow	no	0.06	sim/label_sim.py:209-215, change/state.sh:128-137
+PR_BERTH	PR_EXPIRED	the window lapses while the berth is still held	timer	a berth held by a dead window blocks everyone via guard 1 with no declared cause	reaper	no	0.11	change/reap.sh:46-50, change/label-owners.tsv:36
+PR_BERTH	T_ABANDONED	the PR is abandoned still holding deploy:staging	forge_event	the wedged queue: settle is unreachable for a change nobody drove	human	no	0.02	scenarios.org:188-199
+PR_OBSERVED	PR_AUTHORIZED	guard 4: every required observation was taken on this head	gate_verdict	review on this head, gates green, repeatable observations from the record, uat record AND label	gate	yes	0.52	change/guard4.sh:200-202
+PR_OBSERVED	PR_HELD	hold:staging is read at the instant guard 4 relies on it	gate_verdict	the subject is a label a person can add at any moment, so it is read at the moment of reliance	gate	yes	0.05	change/guard4.sh:195-197
+PR_OBSERVED	PR_STALE_EVIDENCE	the last record names a different build, or a recorded failure is still present	gate_verdict	a failure observation alongside its pass is a contradiction, not a pass	gate	yes	0.20	change/guard4.sh:161-165, 189-193
+PR_OBSERVED	EMG_AWAITING_APPROVAL	no approving review and no proxy record on this head	gate_verdict	the approval is consent, not a measurement, and it is about THIS build	gate	yes	0.08	change/guard4.sh:124-128
+PR_OBSERVED	PR_EXPIRED	the window ends during verification	timer	schedule.sh current returns 0 for an expired window, so the lapse is only visible to the reaper	reaper	no	0.10	change/reap.sh:9-14
+PR_OBSERVED	T_FAILED	the change is closed out as failed	human	production never served it	driver	no	0.05	change/label-owners.tsv:92
+PR_STALE_EVIDENCE	PR_REQUESTED	rebase and re-run staging; book again	forge_event	the re-run is a real re-run: a rebased tree is one nobody has tested	human	yes	0.58	scenarios.org:158-163
+PR_STALE_EVIDENCE	PR_BERTH	re-observe on the berth, which is held for you	gate_verdict	the berth is never taken away by someone else's merge	workflow	yes	0.22	change/release.sh:23
+PR_STALE_EVIDENCE	EMG_DECLARED	a person declares itil:emergency rather than revalidate	label_add	guard 4b is bypassed by itil:emergency	human	yes	0.10	spec.org:909, change/release.sh:11-13
+PR_STALE_EVIDENCE	T_ABANDONED	the PR is closed rather than rebased	forge_event	none	human	no	0.03	[H]
+PR_AUTHORIZED	PR_PRODUCTION	deploy:production is added and the workflow starts	label_add	guard 2 is re-evaluated here, not only in promote.yml	workflow	yes	0.80	.github/workflows/deploy-production.yml:8-29
+PR_AUTHORIZED	EST_LOCK_REFUSED	lock.sh acquire refuses: another change holds the lock	gate_verdict	the lock is acquired AFTER preflight, so this refusal happens late	gate	yes	0.10	.github/workflows/deploy-production.yml:41
+PR_AUTHORIZED	PR_STALE_EVIDENCE	guard 4b at the merge: main moved during the window	gate_verdict	activation is not the last point of reliance; the merge is	gate	yes	0.10	change/release.sh:6-27
+PR_PRODUCTION	PR_HEALTHY	guard 5: every sample reports the expected build	gate_verdict	convergence, not liveness; N samples per route from one response each	gate	no	0.74	.github/workflows/deploy-production.yml:44
+PR_PRODUCTION	PR_UNHEALTHY	guard 5 refuses	gate_verdict	no bypass exists, for anyone, in any class	gate	no	0.21	.github/workflows/deploy-production.yml:44-46
+PR_PRODUCTION	X_DEPLOYED_UNMERGED_WINDOW_GONE	the deploy lands, the merge does not, and the window closes	deploy_event	nothing in the vocabulary states the conjunction	workflow	no	0.05	spec.org:2793-2797
+PR_HEALTHY	T_COMPLETE	settle records the verdict and the PIR; the labels are cleared	deploy_event	change:complete is terminal and is never cleared	workflow	no	0.74	.github/workflows/deploy-production.yml:47-52, change/label-owners.tsv:32
+PR_HEALTHY	T_COMPLETE_UNPAID	the change landed on the emergency bypass and owes its record	label_add	the merge is when the debt STARTS; only a person may clear it	human	yes	0.11	change/label-owners.tsv:94
+PR_HEALTHY	X_DEPLOYED_UNMERGED_WINDOW_GONE	production is healthy but the merge never happens and the window closes	deploy_event	reached twice in this repo, once by a script that reported the opposite	workflow	no	0.10	spec.org:2793-2797
+PR_HEALTHY	PR_STALE_EVIDENCE	release.sh refuses the merge: main moved during the window	gate_verdict	exit 8; production is deployed but this tree predates main, so merging would revert it	gate	yes	0.05	change/release.sh:14-25
+PR_UNHEALTHY	T_BACKED_OUT	rollback ran and production was returned to a prior state	deploy_event	abort.sh refuses this closure code without --to <sha>	workflow	no	0.48	.github/workflows/deploy-production.yml:45-46, change/label-owners.tsv:93
+PR_UNHEALTHY	T_FAILED	the deploy never made it live; there is nothing to undo	deploy_event	failed and backed-out are different closure codes and the difference is an estate action	driver	no	0.37	change/label-owners.tsv:92
+PR_UNHEALTHY	EMG_GUARD5_REFUSED	the change was on the emergency path	gate_verdict	guard 5 has no emergency bypass	gate	no	0.15	spec.org:913-916
+X_DEPLOYED_UNMERGED_WINDOW_GONE	T_BACKED_OUT	the estate is returned to the build trunk contains	human	must name what it returned to	driver	no	0.38	spec.org:2786
+X_DEPLOYED_UNMERGED_WINDOW_GONE	T_COMPLETE_UNPAID	the change is closed out and the record is owed	label_add	blocks nothing; survives settlement on purpose	human	yes	0.34	change/label-owners.tsv:94
+X_DEPLOYED_UNMERGED_WINDOW_GONE	T_FAILED	closed out as failed although production served it	human	WRONG closure code, and nothing detects it -- the conjunction has no name to refuse by	driver	no	0.28	spec.org:2793-2797
+EMG_DECLARED	EMG_BYPASS_ACTIVE	the declaration takes effect at the next guard evaluation	gate_verdict	itil:emergency is read on THIS PR to grant the exemption	gate	yes	0.85	gates/preflight.sh:167, 286-290
+EMG_DECLARED	PR_CLASS_UNDEFINED	the derived class was never removed	gate_verdict	nothing reconciles a derived class with a declared one	gate	yes	0.15	gates/preflight.sh:169-195
+EMG_QUEUE_ESCALATED	EMG_DECLARED	the change takes the one door that is open	label_add	no guard refuses this; the label is always available to a person	human	yes	0.90	gates/simulate-gates.py:186-196
+EMG_QUEUE_ESCALATED	T_ABANDONED	the change is dropped instead	forge_event	none	human	no	0.03	[H]
+EMG_BYPASS_ACTIVE	EMG_AWAITING_APPROVAL	the emergency path reaches guard 4	gate_verdict	guard 0, guard 3's freeze half, guard 4 and guard 4b are waived; the berth is never taken	gate	yes	0.58	spec.org:903-911, .github/workflows/deploy-production.yml:31-39
+EMG_BYPASS_ACTIVE	EMG_GATE2_REFUSED	guard 2 on the production path finds the gates red	gate_verdict	evaluated twice precisely so the emergency path cannot skip it	gate	yes	0.15	.github/workflows/deploy-production.yml:18-29
+EMG_BYPASS_ACTIVE	EMG_BYPASS_UNNEEDED	the incident closes or the freeze lifts while the label stays	timer	nothing withdraws it: no gate may remove a person's declaration	human	yes	0.22	change/label-owners.tsv:55
+EMG_BYPASS_ACTIVE	T_ABANDONED	the emergency change is closed	forge_event	none	human	no	0.02	[H]
+EMG_BYPASS_UNNEEDED	EMG_AWAITING_APPROVAL	it ships on a bypass it no longer needs	gate_verdict	no guard asks whether the emergency is still an emergency	gate	yes	0.45	[H]
+EMG_BYPASS_UNNEEDED	PR_PREFLIGHT	a person withdraws itil:emergency and the change re-enters the normal path	label_remove	human_rm yes; the only way out	human	yes	0.35	change/label-owners.tsv:55
+EMG_BYPASS_UNNEEDED	T_ABANDONED	the PR is closed still carrying precedence over everything else	forge_event	closing it is what finally stops it blocking the estate	human	no	0.06	[H]
+EMG_AWAITING_APPROVAL	PR_PRODUCTION	a change authority approves on this head	forge_event	the bypass's one condition; the review must name THIS build	human	yes	0.58	.github/workflows/deploy-production.yml:37-39, change/guard4.sh:112-123
+EMG_AWAITING_APPROVAL	EMG_REFUSED_NO_APPROVAL	no approving review is present	gate_verdict	refused; the error names the missing approval	gate	yes	0.30	scenarios.org:112-114
+EMG_AWAITING_APPROVAL	EMG_GATE2_REFUSED	the gates go red on this head while approval is pending	gate_verdict	guard 2, no bypass	gate	yes	0.12	scenarios.org:115-116
+EMG_REFUSED_NO_APPROVAL	EMG_AWAITING_APPROVAL	a change authority approves	forge_event	never the pipeline deciding the emergency was genuine	human	yes	0.60	scenarios.org:114-115
+EMG_REFUSED_NO_APPROVAL	T_FAILED	the emergency is closed out unapproved	human	production never served it	driver	no	0.25	change/label-owners.tsv:92
+EMG_REFUSED_NO_APPROVAL	T_ABANDONED	the emergency PR is closed	forge_event	none	human	no	0.05	[H]
+EMG_GATE2_REFUSED	PR_CLASSIFIED	the tree is fixed and pushed; the gates re-run	forge_event	a push withdraws the observations too	human	yes	0.48	.github/workflows/labeller.yml:86-107
+EMG_GATE2_REFUSED	EMG_AWAITING_APPROVAL	a re-run of the failed checks comes back green	gate_verdict	re-run the FAILED checks, never the whole suite	gate	yes	0.17	gates/simulate-gates.py:139-141
+EMG_GATE2_REFUSED	T_FAILED	the emergency is closed out with red gates	human	the one thing break-glass is blamed for, made structurally impossible	driver	no	0.35	scenarios.org:115-116, spec.org:913-916
+EMG_GUARD5_REFUSED	T_BACKED_OUT	rollback ran on the emergency path	deploy_event	production served it and was returned	workflow	no	0.60	.github/workflows/deploy-production.yml:45-46
+EMG_GUARD5_REFUSED	T_FAILED	the emergency deploy never made it live	deploy_event	nothing to undo	driver	no	0.40	change/label-owners.tsv:92
