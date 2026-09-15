@@ -6,6 +6,7 @@ APPS     := $(notdir $(wildcard apps/*))
 EXTERNAL := $(notdir $(wildcard external/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
+        lint-shell lint-python shebang-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
         simulate-gates smoke uat idp-mock idp-tui idp-org \
         forge forge-list forge-pull forge-check \
@@ -64,10 +65,50 @@ lint:  ## shellcheck the scripts, lint every app, check the labeller oracle
 #
 # shellcheck runs FIRST: a parse error in change/ or gates/ makes every app
 # result meaningless, because those scripts are what would have run them.
-lint: ; @./gates/shellcheck.sh && \
-	  ./router/generate.sh >/dev/null && \
-	  for a in $(APPS); do $(MAKE) -s -C apps/$$a lint || exit 1; done && \
-	  ./gates/labeller-test.py
+#
+# EXIT 4 IS CARRIED, NOT SWALLOWED. Two of the surfaces below can report
+# "I could not check" (docs/exit-codes.org: shfmt absent, no python linter
+# installed). The old chain had no way to express that -- every surface either
+# passed or failed -- so a tool that was not installed produced exactly the
+# output of a tool that found nothing. That is the repo's own defect class 1
+# aimed at its own linter. `lint` now keeps the worst code it saw and names the
+# surface, so a clean run on a host missing a tool exits 4 and says which one.
+# The gates are invoked DIRECTLY, never through $(MAKE). make reports every
+# recipe failure as its own "Error 1" and exits 2, so a sub-make's exit 4 comes
+# back as 2 and the distinction this target exists to preserve is destroyed on
+# the way up. Call the script, read the script's number.
+lint:
+	@rc=0; \
+	./gates/lint-shell.sh; s=$$?; \
+	case $$s in \
+	  0) ;; \
+	  4) rc=4 ;; \
+	  *) echo "lint: STOPPING -- the shell control plane is not clean, so every"; \
+	     echo "      app and oracle result below it would be measured by scripts"; \
+	     echo "      that do not lint. Fix the shell first."; exit 1 ;; \
+	esac; \
+	./router/generate.sh >/dev/null || rc=1; \
+	for a in $(APPS); do $(MAKE) -s -C apps/$$a lint || rc=1; done; \
+	./gates/labeller-test.py || rc=1; \
+	./gates/python-lint.sh; p=$$?; \
+	case $$p in 0) ;; 4) if [ $$rc = 0 ]; then rc=4; fi ;; *) rc=1 ;; esac; \
+	echo; \
+	case $$rc in \
+	  0) echo "lint: shell, apps, labeller oracle and python -- zero findings" ;; \
+	  4) echo "lint: zero findings, but a surface was NOT CHECKED (exit 4 above)."; \
+	     echo "      A linter that is absent is not a linter that found nothing." ;; \
+	  *) echo "lint: findings above" ;; \
+	esac; \
+	exit $$rc
+
+lint-shell:  ## the control plane: shellcheck, the shebang policy, shfmt
+lint-shell: ; @./gates/lint-shell.sh
+
+lint-python:  ## gates/*.py, sim/*.py, apps/**/*.py -- ruff, flake8, pyflakes or py_compile
+lint-python: ; @./gates/python-lint.sh
+
+shebang-selftest:  ## prove the shebang policy can reject each bad form
+shebang-selftest: ; @./gates/shebang.sh --selftest
 
 gate: lint test ; @./gates/e2e.sh $(app) && ./gates/smoke.sh  ## lint, test, e2e and smoke   app=<name>
 smoke:  ## walk the estate as a browser would   url=<base>
@@ -75,6 +116,8 @@ smoke: ; @./gates/smoke.sh $(url)
 uat:  ## the browser journey, AS-IS, in headless Chromium   url=<base>
 uat: ; @./gates/uat.sh $(url)
 gate-selftest: docs-selftest  ## prove every gate can fail, then that it passes  ## prove every gate can fail, then that it passes
+	@./gates/shebang.sh --selftest >/dev/null \
+	  || { ./gates/shebang.sh --selftest; echo "shebang policy cannot reject; its PASS is void"; exit 1; }
 	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s observation-selftest \
 	  && $(MAKE) -s audit-selftest && $(MAKE) -s pr-audit-selftest \
 	  && $(MAKE) -s label-model-selftest
