@@ -61,7 +61,7 @@ triggered by that. Each transition is caused by an observation, not a command
 |----------------------+--------+-----------------------------------------|
 | raise the change     | human  | it is the intent                        |
 | approve =itil:normal= | human | the gates cannot judge a control-plane change |
-| break glass          | human  | =change:emergency= is an authorization, not a measurement |
+| break glass          | human  | =itil:emergency= is an authorization, not a measurement |
 
 Everything else is the system. *The approval gate sits before production, not
 between staging and production* — a change that has earned staging has earned
@@ -718,8 +718,8 @@ a freeze, exit 2 for an emergency in flight.
 | cause                    | declared by                          | exit |
 |--------------------------+--------------------------------------+------|
 | freeze                   | =freeze= on *any* open PR, or a scheduled freeze overlapping the window | 3 |
-| emergency in flight      | =change:emergency= on any *other* open PR | 2 |
-| *exemption*              | *being =change:emergency= yourself*  | *proceeds* |
+| emergency in flight      | =itil:emergency= on any *other* open PR | 2 |
+| *exemption*              | *being =itil:emergency= yourself*  | *proceeds* |
 
 *Why they are one rule and not two.* Not "two risky things at once". A freeze
 says the estate is in a state where normal change is unsafe. An emergency says
@@ -742,12 +742,12 @@ rather than waved through.
 
 *Walked, both directions*: =freeze= on #3 refused #28 (=itil:standard=) with
 exit 3; the same freeze let #2 through once a person declared it
-=change:emergency=, with the freeze named in the output and a note that it
+=itil:emergency=, with the freeze named in the output and a note that it
 lands in the PIR.
 
 *** The defect the walk found: a change with two classes
 
-#2 came out of that test carrying *=itil:standard= and =change:emergency= at
+#2 came out of that test carrying *=itil:standard= and =itil:emergency= at
 once*. The labeller derives the class from the diff; a person declares an
 emergency; *nothing reconciles them*.
 
@@ -758,7 +758,7 @@ runs first.
 Preflight now refuses it (exit 2) rather than picking one. *Picking would mean
 the pipeline deciding whether something is an emergency*, and that is a
 declaration a person makes, never a derivation — =change/label-owners.tsv= gives
-=change:emergency= a human owner for exactly this reason.
+=itil:emergency= a human owner for exactly this reason.
 
 The deeper shape is one this repo keeps finding: *two writers, one fact, no
 reconciliation.* Same as =production:healthy= flipping between a person and a

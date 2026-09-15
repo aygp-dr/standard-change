@@ -110,8 +110,8 @@ share one router and one mock backend.
 
 | step | action                                              | expected                                              |
 |------+-----------------------------------------------------+-------------------------------------------------------|
-|    1 | PR-E1 opened, =change:emergency= added by a human   | labeller still sets =app:*=                           |
-|    2 | =deploy:production= added directly                  | guard 4: no =staging:passed=, but =change:emergency= present → needs approval |
+|    1 | PR-E1 opened, =itil:emergency= added by a human   | labeller still sets =app:*=                           |
+|    2 | =deploy:production= added directly                  | guard 4: no =staging:passed=, but =itil:emergency= present → needs approval |
 |    3 | no approving review yet                             | *refused*, error names the missing approval           |
 |    4 | change authority approves; re-label                 | guard 2 re-checked on head SHA → proceeds             |
 |    5 | =gate-selftest= red on that SHA                     | *refused* — guard 2 has no emergency bypass           |
@@ -135,7 +135,7 @@ The scenario the catalogue was written for.
 | step | action                                                    | expected                                                    |
 |------+-----------------------------------------------------------+-------------------------------------------------------------|
 |    1 | PR-S holds staging, =staging:passed= on SHA =s1=          | =deploy:production= added by promote                        |
-|    2 | Incident. PR-E opened with =change:emergency=             | labeller sets =app:*=; PR-E does *not* request staging      |
+|    2 | Incident. PR-E opened with =itil:emergency=             | labeller sets =app:*=; PR-E does *not* request staging      |
 |    3 | =deploy:production= on PR-E                               | guard 1 not consulted — the emergency path never touches the staging queue |
 |    4 | both PRs now hold =deploy:production=                     | =concurrency: production, cancel-in-progress: false= serializes them |
 |    5 | PR-E deploys, healthy, *merges to main*                   | main now contains the hotfix                                |

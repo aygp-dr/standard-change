@@ -112,6 +112,6 @@ invalidated by someone else's emergency keeps it and gets an extension.
 ## Two meanings of "emergency"
 
 - `EMERGENCY:` **calendar event** — blocks the whole estate. Everyone waits.
-- `change:emergency` **label** — exempts one change from staging.
+- `itil:emergency` **label** — exempts one change from staging.
 
 Same word, opposite direction. Find out which is meant before acting.

@@ -132,7 +132,7 @@ PLAN = {
                           "deploy:staging appears; the scheduler, not a person, adds it"),
  "slot forfeited":       ("merge an apps/** change to main while a window is reserved",
                           "the slot is forfeited, berth HELD, staging pass withdrawn"),
- "emergency break-glass":("add change:emergency + an approving review, then deploy:production",
+ "emergency break-glass":("add itil:emergency + an approving review, then deploy:production",
                           "staging is skipped; guards 2 and 5 still run"),
  "ROLLBACK":             ("deploy, then make /version.json report the OLD sha",
                           "guard 5 UNCONVERGED, rollback to the idle colour, PIR records it"),

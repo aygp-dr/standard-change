@@ -370,7 +370,7 @@ says" for a cadence position is citing half a sentence.* [E]
 *** Error budgets are the instrument our §The balance is groping toward
 
 =spec.org= §The balance ends with: "Watch the emergency rate as the health
-metric. A rising share of =change:emergency= is not an incident trend; it is the
+metric. A rising share of =itil:emergency= is not an incident trend; it is the
 queue reporting that it has become too expensive to use honestly."
 
 That is an error budget, invented locally. The SRE version, [E]:

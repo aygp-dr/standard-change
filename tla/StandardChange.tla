@@ -30,7 +30,7 @@ VARIABLES
     gated,        \* gated[p]: all gates green on p's head SHA
     stagingPass,  \* stagingPass[p]: authorizing e2e passed on this head
     prodLabel,    \* prodLabel[p]: deploy:production present
-    emergency,    \* emergency[p]: change:emergency present
+    emergency,    \* emergency[p]: itil:emergency present
     approved,     \* approved[p]: a change authority approved
     inProd,       \* inProd[p]: production has CONVERGED on this change
     merged,       \* merged[p]: landed on main

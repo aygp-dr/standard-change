@@ -1000,7 +1000,7 @@ behind =main= after each merge, so the queue is serial *with a re-verification
 step per hop* [I].
 
 *=spec.org= already predicts the consequence.* §Over-protecting the queue costs
-production safety: =change:emergency= is the one label that bypasses staging, so
+production safety: =itil:emergency= is the one label that bypasses staging, so
 queue friction converts into *traffic on the path with fewer checks*.
 =gates/simulate-gates.py= puts numbers on it — at a two-hour mean wait roughly a
 sixth of changes route to emergency; past four hours it is the majority. At

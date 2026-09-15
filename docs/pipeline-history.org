@@ -450,7 +450,7 @@ it feeds.
   reslotting to the next cadence is the norm and the calendar is the product.
   =docs/release-strategies.org= measured this: 23× less revalidation work per
   shipped change at a one-hour cadence, and no help at all for
-  =change:emergency=.
+  =itil:emergency=.
 
 * What each option's ancestor found
 :PROPERTIES:

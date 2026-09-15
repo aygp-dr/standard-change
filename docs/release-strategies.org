@@ -28,7 +28,7 @@ Release trains *do* fix the 1/20 contention: the simulator measures *23×* less
 revalidation work per shipped change (13.63 → 0.58 validation runs) at a
 one-hour cadence, against an eight-berth per-change pipeline. Mainline-only
 deployment does *not* — it removes a different class of problem. And *neither*
-fixes =change:emergency=, because merging to main records intent and guard 4b
+fixes =itil:emergency=, because merging to main records intent and guard 4b
 needs evidence. The throughput-optimal train size is also, on this repo's own
 balance curve, a train whose latency routes essentially all traffic onto the
 one path that skips staging — so the amortization is real and the optimum is
@@ -454,7 +454,7 @@ Stated plainly, which is what this section exists for:
 | Does it reduce guard 4b's *cost*? | *Yes*, by a factor of N. 13.63 → 0.58 validations/ship measured [E] | *No.* Neutral at best; naive form re-introduces C2's failure |
 | Does it reduce guard 4b's *necessity*? | *No.* One subject instead of N, same predicate, same rare C4/C5 | *No.* Same predicate, relocated from a branch to a sha |
 | Does it make a merge into evidence? | *No.* It makes the batch's merge into evidence, which is more than today — but the merge itself is still an assertion until a run covers it | *No.* "On main" stays C1 |
-| Does it help =change:emergency=? | *No.* The emergency jumps by construction; the batch evidence never covers it | *No.* Same |
+| Does it help =itil:emergency=? | *No.* The emergency jumps by construction; the batch evidence never covers it | *No.* Same |
 | Does it make emergencies *cheaper*? | *Yes*: 1 revocation and 1 rebuild for the batch, +0.10 validations/ship at 8/day [E] | *Marginally*: the revert target is nameable |
 
 * Services deployed continuously over time
@@ -852,7 +852,7 @@ Three things, and none of them is decorative.
 
 * Closing table
 
-| Strategy | Fixes the 1/20 contention? | Fixes =change:emergency=? | What it costs |
+| Strategy | Fixes the 1/20 contention? | Fixes =itil:emergency=? | What it costs |
 |----------+----------------------------+---------------------------+---------------|
 | *Release trains* | *Yes.* 13.63 → 0.58 validations per shipped change at a 1 h cadence [E]. One merge, one guard-4b subject | *No.* The emergency jumps by construction; batch evidence never covers it. Cheaper to absorb (+0.10 val/ship at 8/day) but not covered | Batch latency =C/2 + V + H=. Attribution: =log2 N= bisect runs per red train, or livelock without it (23.3 → 1.5/day at =p=0.20= [E]). The throughput optimum is =N·p ≈ 0.7=, i.e. red more often than green, and its latency puts the predicted emergency share at 92–99% |
 | *Mainline-only* | *No.* Guard 4b is relocated from a branch to a sha, predicate intact. Closing it honestly costs one validation per merge — per-change cost | *No.* Same bypass, same exemptions from guards 0 and 4 | Naive form ("deploy main") is branch-bound authorization = C2's named silent failure at the deploy step. Disciplined form ("deploy =main@sha= with a verdict on that sha") costs a run per merge |

@@ -73,7 +73,7 @@ production:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
 #
 # The rows above say who may WRITE each label. They cannot say that two labels
 # are mutually exclusive, and that turned out to matter: #2 carried
-# itil:standard AND change:emergency at once, which left its class undefined
+# itil:standard AND itil:emergency at once, which left its class undefined
 # while every rule in preflight branches on the class.
 #
 # Note the rule is NOT "at most one change:*". itil:standard + change:complete

@@ -28,7 +28,7 @@ expressed there *first* and checked before any YAML moves:
 
 This has already caught a guard change that looked fine: splitting deploy from
 merge exposed that *guard 4 had guard 0's flaw* — a change marked
-=change:emergency= after its pass was withdrawn could merge with neither a pass
+=itil:emergency= after its pass was withdrawn could merge with neither a pass
 nor an approval. TLC found it; no workflow would have.
 
 *Limit, and it is a real one:* the model does not model *labels*. It has

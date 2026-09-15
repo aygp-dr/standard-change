@@ -187,7 +187,7 @@ StartDeploy(p) ==
 CompleteMerge(p) ==
     /\ p \in deploying /\ Live(p) /\ mainV < MaxMerges
     \* GUARD 4, AGAIN. Found by TLC once deploy and merge were separate steps:
-    \* a change could be marked change:emergency AFTER its staging pass was
+    \* a change could be marked itil:emergency AFTER its staging pass was
     \* withdrawn and then merge with neither a pass nor an approval, because
     \* guard 4 had only ever been checked at StartDeploy. The same defect guard
     \* 0 had, in a new place, exposed by the same split. Third instance of the

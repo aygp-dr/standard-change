@@ -42,7 +42,7 @@ windows — is an /instrument/. That hierarchy is not decoration, because it
 decides what may be traded away. See =spec.org= §The balance.
 
 The sharp consequence, and the reason this section exists at all:
-=change:emergency= is the *one* label that bypasses staging. So queue friction
+=itil:emergency= is the *one* label that bypasses staging. So queue friction
 does not buy safety at the cost of speed — it *converts into traffic on the
 path with fewer checks*. =gates/simulate-gates.py= puts numbers on it: at a
 two-hour mean berth wait roughly a sixth of changes route to emergency; past
@@ -71,7 +71,7 @@ flowchart TB
     B -->|"fail"| R3["staging:failed<br/>berth released"]
     B -->|"pass"| V["VERIFIED<br/>staging:passed@sha"]
     V -->|"guard 2: gates green on THIS sha"| P["CLEARED<br/>deploy:production"]
-    E["change:emergency<br/>+ approval"] -.->|"bypasses staging ONLY"| P
+    E["itil:emergency<br/>+ approval"] -.->|"bypasses staging ONLY"| P
     P -->|"guard 4b: main moved?"| W["pass withdrawn<br/>berth KEPT + extended"]
     P --> D["production deploy"]
     D -->|"guard 5: x-build-sha"| H{"healthy?"}

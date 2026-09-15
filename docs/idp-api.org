@@ -126,7 +126,7 @@ Two resources that look alike and are governed oppositely:
 | *window*      | one change     | the IDP        | no — a record |
 | *freeze*      | the estate     | the calendar   | *yes*     |
 | *emergency*   | the estate     | the calendar   | *yes*     |
-| =change:emergency= | one change | a human        | exempts   |
+| =itil:emergency= | one change | a human        | exempts   |
 
 Windows are *written* to the calendar so humans can see them; they are not
 *read back* to make decisions. Freezes are read and do block. That asymmetry is
@@ -168,7 +168,7 @@ completed failed rejected cancelled=. =revalidate= on a lease is what the
 
 - *No =complete()=.* See §1.
 - *No priority field.* Priority invites queue-jumping, and the model already
-  has exactly one legitimate jump — =change:emergency= — which is a human
+  has exactly one legitimate jump — =itil:emergency= — which is a human
   authorization with an audit trail, not a number.
 - *No cancel-other-change.* Nothing may evict a berth holder. Preemption
   extends the holder; it does not displace it.
