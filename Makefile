@@ -5,7 +5,7 @@ APPS     := $(notdir $(wildcard apps/*))
 # external/ is NOT ours: stand-ins for services we do not deploy.
 EXTERNAL := $(notdir $(wildcard external/*))
 
-.PHONY: research help env env-check run dev router stop test lint gate gate-selftest smoke-selftest \
+.PHONY: research build help env env-check run dev router stop test lint gate gate-selftest smoke-selftest \
         lint-shell lint-python shebang-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
         simulate-gates smoke uat idp-mock idp-tui idp-org \
@@ -168,9 +168,11 @@ label-model:  ## every declared label must exist in a model first
 label-model: ; @./gates/label-model-coverage.py
 label-model-selftest:  ## prove the coverage gate can reject
 label-model-selftest: ; @./gates/label-model-coverage.py --selftest
+build:  ## alias for research (HTML and PDF of the history and research)
+build: research
+
 research:  ## the history and research as one document, HTML and PDF -> research/build/
-research: ; @mkdir -p research/build && sed 's|^#+INCLUDE: "|#+INCLUDE: "../|' research/index.org > research/build/index.org \
-	&& cd research/build && emacs --batch -l org -l ../export.el 2>&1 | grep -E 'Warning|Error|error' ; ls -la index.html index.pdf
+research: ; @$(MAKE) -s -C research build
 
 docs:  ## the documents gate
 docs: ; @./gates/docs-lint.py

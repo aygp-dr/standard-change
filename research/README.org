@@ -4,7 +4,8 @@ The history and the research, none of the internals, as one document.
 
 - =index.org=: the master; =#+INCLUDE= of =docs/= and =experiments/= plus =adoption.org=.
 - =adoption.org=: how a repository with its own risk designation and deployable labels takes the tracking layer without renaming anything, and every decision with its options.
-- =build/=: =gmake research= writes =index.html= and =index.pdf= here (git-ignored).
+- =build/=: =gmake= here (or =gmake build= at the root) writes =index.html= and =index.pdf=; =gmake html= or =gmake pdf= for one; git-ignored.
+- =export-common.el=, =export-html.el=, =export-pdf.el=: the batch export; the common hook strips the included files' own title keywords so the master's wins.
 
 The included files are not copied; edit them where they live. Adding a
 document is one =#+INCLUDE= line under the right part.

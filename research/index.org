@@ -30,6 +30,7 @@ described in Part V without touching the labels it already has.
 #+INCLUDE: "../docs/storefront-deployments.org" :minlevel 2
 
 * Part III: Substrates, hosting and what a platform can enforce
+#+INCLUDE: "../docs/substrate-mapping.org" :minlevel 2
 #+INCLUDE: "../docs/substrate-emulation.org" :minlevel 2
 #+INCLUDE: "../docs/hosting-survey.org" :minlevel 2
 #+INCLUDE: "../docs/deployment-targets.org" :minlevel 2
