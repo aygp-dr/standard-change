@@ -17,7 +17,7 @@ jobs:
     environment: staging
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: ./change/queue.sh claim "$PR"          # guards 0 and 1
       - run: ./gates/preflight.sh staging           # guard 3
       - run: ./change/lock.sh acquire "$PR" staging
