@@ -19,6 +19,107 @@ The boundary is stated in full in the rebuild issue on namespace boundaries
 replacement: *nothing in the tracking layer adds, removes or repairs a label
 in those two namespaces.*
 
+* The core case, then the scheduled case
+
+Read this before the prefix table. Every row below it is a decision about
+one of these two sequences.
+
+** The core case: one word, then the process
+
+A person opens a pull request. The labeller attaches =app:*= and a class.
+The person adds one label: =release:start=. That is the whole of their part.
+
+What happens next, in order. Each step is written by the thing that knows
+the fact. The person watches it on the PR.
+
+| step                                 | who acts                        | what the person sees on the PR                                                       | where it is documented                           |
+|--------------------------------------+---------------------------------+--------------------------------------------------------------------------------------+--------------------------------------------------|
+| the scheduler hears the word         | scheduler                       | a comment: heard; the berth is free, or held by #N                                   | five-properties P4; 023 §messaging audit         |
+| the driver takes the berth           | driver                          | =release:start= goes, =deploy:staging= arrives                                       | five-properties P1; label-state-machine rule 5   |
+| staging is installed and observed    | driver, then the instruments    | =staging:deployed=, then =staging:healthy=, then =staging:e2e= =staging:smoke= =staging:uat= | 004; 014; label-ownership rule 1; rule 14 |
+| promotion                            | the forge                       | =deploy:production= lands on =staging:smoke= unless =release:hold= is present        | label-state-machine rule 13                      |
+| production is installed and observed | driver, then the instrument     | =production:deployed=, then =production:healthy=                                     | 004                                              |
+| settlement                           | the host that can see production | =change:complete=, the merge, the PIR comment, every marker cleared                 | label-ownership rule 2; rule 16                  |
+
+The merge is the record. A shipped change ends with its =app:*= and class
+labels, a PIR comment, and =mergedAt=. Nothing else stays on.
+
+The process asks the person for one thing after start: a conflict the forge
+cannot merge. A stale head is brought up to =main= by the forge (023 F1).
+A held berth is waited on, and the wait is said once on the PR (023). The
+person never runs a gate, deploys, approves or merges (023 §Verdict).
+
+** Two more words the person may say
+
+=release:hold= says "not further yet". The forge reads it at the moment it
+would promote and lands nothing while it is present. Only the person lifts
+it (label-state-machine rule 13; precedence-and-locks §Rejected).
+
+=release:unaffected= says "the estate is untouched". The scheduler checks it
+against the labeller: any =app:*= beside it is refused. With none, the gates
+run on the head, a reviewer that is not the author approves, and the merge
+is the record. No berth, no window, no observation
+(affected-by-construction; label-state-machine rule 17).
+
+** Ending a release early
+
+=release:end= is the person's word to stop a release that is in flight.
+The pipeline closes the change with a code that names a fact:
+=change:failed= when production never served it, =change:backed-out= when
+it did and a person returned production to a named build. Every marker
+goes. The window closes with the same code. The berth is released. The
+class and =app:*= stay. The person's =release:start= is spent; saying it
+again is a new release. Today the script is =change/abort.sh= and the word
+is not wired; 024 F7 and F8 record what is still wrong on this path.
+
+A release that fails on staging ends the same way, by the driver, with
+nobody saying anything (§Every decision, "a change that failed at staging").
+
+** The scheduled case: a calendar in front of the berth
+
+A repository with a change calendar puts one step before the driver. The
+person says =release:scheduled= instead of =release:start=. The scheduler
+reads the estate first: is the berth free, is there an open window on this
+environment, is the estate frozen. It books the first window that can hold
+the work and writes =change:scheduled= with the window id. When the window
+opens the guards run again, because reserving is not deploying
+(five-properties P2; 003). Then the core case runs unchanged. A window that
+lapses unattempted is closed =expired= by the reaper, =change:scheduled= is
+removed, and the change waits for a person to ask again
+(label-state-machine §Disagreements 3).
+
+Two facts an adopter should carry. Most guards never read the calendar; 003
+counts six of seven. What protects production is evidence bound to a build
+and a singleton berth. And a window is an entitlement rather than an event:
+about half the windows booked on the release night expired because nothing
+drove them (003; time-spent).
+
+** The core case as a sequence
+
+#+begin_src mermaid :eval never-export
+sequenceDiagram
+    autonumber
+    actor P as person
+    participant F as forge
+    participant D as scheduler and driver
+    participant S as staging
+    participant R as production
+    P->>F: release:start on the PR
+    D->>F: read open PRs with release:start, oldest first
+    D-->>F: comment: heard, berth free or held by #N
+    D->>F: consume release:start, add deploy:staging
+    D->>S: install the head
+    S-->>F: staging:deployed then staging:healthy
+    D->>S: e2e, smoke, the accepted journey
+    S-->>F: staging:e2e staging:smoke staging:uat, each record naming the build
+    F->>F: promote.yml lands deploy:production unless release:hold
+    D->>R: install the head
+    R-->>F: production:deployed then production:healthy
+    D->>R: settle asks what is serving now
+    D->>F: change:complete, merge, PIR, clear every marker
+    F-->>P: merged, the record
+#+end_src
+
 * The mapping, not the rename
 
 One table, kept in the repository, says how the tracking layer reads the
@@ -44,7 +145,7 @@ writer.
 
 | prefix                                   | writer                                | members                                                                          |
 |------------------------------------------+---------------------------------------+----------------------------------------------------------------------------------|
-| =release:*=                              | a person only                         | =start=, =hold=, =unaffected=; later words such as =abandon= or =staging= go here |
+| =release:*=                              | a person only                         | =start=, =hold=, =unaffected=, =scheduled=, =end=; any later word goes here      |
 | =change:*=                               | the pipeline only                     | =scheduled=, =complete=, =end= (the act of clearing), the closure codes            |
 | =deploy:*=, =<env>:deployed=             | the driver and the workflows          | the berth and the installs                                                        |
 | =<env>:<instrument>=                     | the instrument that took it           | =healthy=, =e2e=, =smoke=, =uat=; on the next push they go                        |
@@ -59,7 +160,7 @@ wherever "further" is in the adopting repository, where =staging:hold= would
 bind the person's word to one repository's environment names, which change
 with the kind of repository being supported (=history/promotion-models.org=:
 seven kinds behind one word). A person's words are =release:start=,
-=release:hold= and =release:unaffected=. They are said about a branch, which
+=release:hold=, =release:unaffected=, =release:scheduled= and =release:end=. They are said about a branch, which
 is what makes branch deployment legible: the branch is deployed and verified
 on the person's word, and the merge follows the verification (GitHub flow's
 original order, =history/pipeline-history.org= §Branching policies); the
@@ -103,7 +204,7 @@ per row; the rows are independent.
    who clears it, whether a person may. The pattern is
    =change/label-owners.tsv=; a label nobody owns is a label nobody can
    trust (=label-ownership=).
-3. *Give the person one word.* =change:start=. Everything the pipeline needs
+3. *Give the person one word.* =release:start=. Everything the pipeline needs
    after that it derives or observes. A second human word is a second thing
    to explain (023: eleven confusions, most of them words).
 4. *Let the instrument write the observation,* keyed to the build it saw. A
