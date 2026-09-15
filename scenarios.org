@@ -1073,3 +1073,98 @@ not. Its owner acted without opening a script.
 the moment gates/health.sh records production:healthy. Nothing to re-push."/ —
 saying what to do and what not to bother doing. The pipeline knows how to
 write a refusal; the abort and lock paths were not given the same care.
+
+** D23 — ten changes, five owners, no calendar: all ten landed and the evidence was corrupted anyway
+
+*2026-09-15 06:02–06:18Z. Ten one-line changes (#110-#119), five agents, two
+each. No calendar, no window, no booking: the rule was estate free, not
+frozen, no emergency.* All ten merged in sixteen minutes.
+
+*** The speed answer
+
+| | |
+|-+-|
+| fastest, berth free | *1m 11s* (#110) |
+| typical, berth free | 105-120s, remarkably uniform |
+| worst, under contention | 15m 07s (#118, ~7m of waiting across 3 attempts) |
+| berth occupancy | *~100%*, gaps between holders 0-4s |
+
+Once a change held the berth, productive work was *17-20 seconds of staging
+plus about a minute of production*. Everything else in the wall clock was
+waiting. With N agents ahead, wait is very close to N x 110s — the queue is
+deterministic, it is just invisible.
+
+*** The lock is not a mutex, and its success message is a lie
+
+=change/lock.sh acquire= is a non-atomic read-modify-write on an issue body.
+Its own header says so: /"last-write-wins ... a record with a tiebreak, not
+the mutex."/ Observed *five times across three agents*:
+
+: 06:06:12  #111 acquired
+: 06:06:14  acquire for #116 returned rc=0, printed "lock: acquired by #116"
+:           -- and `lock.sh status` read `pr: 111`
+
+Two agents each believed they held the berth. The refusal path works
+correctly; the defect is only in the concurrent-grant window, which is the
+worse half. As one owner put it: */a refusal that tells you nothing is a
+nuisance; a success that tells you something untrue is what produced the next
+finding./*
+
+*** Three instruments passed while measuring two different builds
+
+This is the finding. #116's run recorded =staging:healthy pass d782067= and
+=staging:e2e pass d782067=, then #111 deployed =09d6032= into the same slot
+mid-run, and =staging:smoke= recorded =pass on 09d6032=.
+
+Three green instruments. Two builds. And the stylesheet actually being served
+at that moment was *the base version* — neither change.
+
+*Guard 4 refused it, and guard 4 was the only thing that did.* Its
+per-instrument SHA match is what caught a corrupted evidence stack that every
+individual gate reported as green. This is the clearest vindication the
+project has produced of the rule that *a verdict must name its build*: the
+gates were all honest, all green, and collectively describing an estate that
+never existed.
+
+*** A deploy that returns 0 and leaves nothing serving
+
+=targets/node/deploy.sh staging d782067= printed =staging <- d782067 (block
+20, :9200)= and exited 0 with *nothing listening*. Health, e2e, smoke and
+observe then all failed against a dead slot, and health *withdrew* a
+previously-good label. The slot recovered ten seconds later on a third party's
+build. A false success, under contention, from the one script whose job is to
+place a build.
+
+*** Nothing gates a static file
+
+Two agents answered this independently and agreed.
+
+- =robots.txt=: no gate anywhere fetches it. =e2e.sh= probes three static
+  paths and this is not one; =smoke.sh= spiders =<a href>= and nothing links
+  it; =health.sh= only hits =/__health/=. #115 went dev -> staging ->
+  production -> merge *with no instrument reading the bytes it changed*.
+- =oneui.css=: =e2e.sh= asserts only that it returns 200 and =text/css=.
+  Both diffs were invisible. /"An empty file, the unmodified file, or a
+  stylesheet with the rules inverted would produce an identical 27-check
+  PASS."/
+
+So every green label on those two changes is a true statement about a build
+that happens to contain the change, and *none of them is a statement about the
+change*. 2b pins that a file is served; nothing pins WHICH file.
+
+*** settle.sh reports a release it does not perform
+
+Reproduced *eight times out of ten* across four independent agents. It prints
+=ok berth released=; =lock.sh status= immediately after still names the PR.
+The label side of the release happens; the lock body does not. Every agent had
+to call =lock.sh release= by hand. An operator who trusts the line strands the
+single berth until the 60-minute stale timer.
+
+*** And the briefing was wrong again, which is the honest part
+
+The manual sequence handed to all five agents *never takes the =deploy:staging=
+label* — the actual berth that guard 1 reads. No open PR held it at any point
+during the round. So the real mutex was unclaimed by everyone, and the only
+thing arbitrating the single =:9200= slot was an advisory record with a race
+in it. That is why the double-booking was possible at all, and it was in the
+instructions, not the pipeline.
