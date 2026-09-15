@@ -45,3 +45,4 @@ ports.tsv
 # in the app repo (ports.tsv, front.pid, targets/node/live).
 .idp/
 research/build/
+.DS_Store
