@@ -88,6 +88,25 @@ control-plane:
           - change/**
           - .github/**
 
+# itil:normal -- assessed before it moves.
+#
+# TWO REASONS A CHANGE LANDS HERE, and they are different:
+#
+#   the control plane   router/, gates/, change/, targets/, .github/ -- it
+#                       changes how things ship, or how they are verified.
+#   SCHEMA MIGRATIONS   db/migrate/, apps/*/migrations/ -- not obviously
+#                       reversible, blast radius beyond the deploy, stateful
+#                       and one-shot. A deploy rolls back by serving the
+#                       previous build; a migration that dropped a column does
+#                       not. See docs/research-classification-frameworks.org.
+#
+# PRECEDENCE, because two globs can match one change: NORMAL WINS. A change
+# containing a migration is a change containing a migration, whatever else it
+# also contains. actions/labeler has no precedence of its own -- it adds every
+# label whose glob matches -- so exclusivity is enforced downstream by the
+# `exclusive class` row in change/label-owners.tsv and by
+# gates/pr-state-audit.py I5, not here. That split is deliberate: this file
+# DERIVES, the audit ADJUDICATES.
 itil:normal:
   - changed-files:
       - any-glob-to-any-file:
@@ -96,3 +115,45 @@ itil:normal:
           - change/**
           - targets/**
           - .github/**
+          - db/migrate/**
+          - 'apps/*/migrations/**'
+          - 'apps/*/db/**'
+
+# ---------------------------------------------------------------------------
+# THE OWNERSHIP BOUNDARY -- read before adding a label to this file.
+#
+# `sync-labels: true` means actions/labeler REMOVES a label whose globs stop
+# matching. So appearing in this file is what "the labeller owns it" MEANS, and
+# the boundary is drawn by absence:
+#
+#   in this file      the labeller owns it. It derives, and it takes back.
+#   NOT in this file  somebody else owns it. The labeller cannot touch it.
+#
+# itil:emergency is NOT here, deliberately. It is human-owned
+# (change/label-owners.tsv: human_add=yes, human_rm=yes). A person declares an
+# emergency; a glob cannot, because "this change is the remedy for something
+# already wrong" is a fact about the world and not about the diff.
+#
+# Adding an itil:emergency entry here -- even one that never matches -- hands
+# it to a reconciler that will take it back the moment the globs miss. That is
+# an override that can be overwritten, which is not an override; it is a race.
+# The same shape as Kubernetes field ownership and Terraform's
+# lifecycle{ignore_changes}: a derived value has a declared manager, a human
+# may take it, and the derivation must then STOP RECONCILING rather than fight.
+#
+# OPTIONS, if this boundary needs to move -- stated so the next person picks
+# rather than discovers:
+#
+#   A. Leave it. Enforced by absence. Cheapest, and invisible: nothing reports
+#      a violation, so the protection is a convention a single edit defeats.
+#      (current)
+#   B. Gate it. A check that fails if any human_add=yes label from
+#      label-owners.tsv appears in this file. Makes the boundary executable and
+#      costs one gate. RECOMMENDED if this file grows.
+#   C. Split the file. Derived labels here, human labels in a registry the
+#      action never reads. Strongest, and the most churn.
+#   D. Drop sync-labels. The labeller adds and never removes; stale derived
+#      labels then accumulate and nothing owns clearing them. Rejected -- it
+#      trades a boundary problem for a staleness problem, and we have measured
+#      the staleness one.
+# ---------------------------------------------------------------------------
