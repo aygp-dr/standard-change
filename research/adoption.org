@@ -52,7 +52,14 @@ writer.
 | =freeze=, =emergency= on the estate issue | a person, about the estate            | facts about the world, on something that cannot be deployed; never on a PR        |
 | =app:*=, =itil:*=                        | the labeller; a person for =emergency= | the repository's own, read and never written (§What a repository must already have) |
 
-A person's words are =release:start=, =release:hold= and =release:unaffected=.
+*standard-change provides the =release:*= primitives: a person declares
+their intent about the release, and nothing else.* The words name the
+intent and never the environment: =release:hold= says "not further yet"
+wherever "further" is in the adopting repository, where =staging:hold= would
+bind the person's word to one repository's environment names, which change
+with the kind of repository being supported (=history/promotion-models.org=:
+seven kinds behind one word). A person's words are =release:start=,
+=release:hold= and =release:unaffected=.
 Everything else is written by the thing that knows the fact, and an
 observation is written only by the instrument that measured it
 (=docs/label-ownership.org=, experiments 014 and 023 F4). In this
