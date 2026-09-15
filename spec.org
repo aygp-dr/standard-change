@@ -842,9 +842,53 @@ Three gates run on every PR for every =app:*= group. Each gate exits non-zero on
 
 The e2e gate runs against a worktree-style router inside the runner (block 0 ports, all four apps built from the PR SHA). The same gate reruns against the staging slot URL after =deploy-staging=; the second run is the one that authorizes production.
 
+** The oracle: a gate's expectations come from the build, not from the runner
+
+A gate that sends its requests to a deployed environment must take its
+expectations from that environment too. =gates/e2e.sh= did not: it pointed at
+=ROUTER_URL= and read =router/routes.json= out of the tree the script lived in,
+so the runner's working directory decided the verdict. Observed 2026-09-13
+against one deployed build on =:9200=: 24 checks and =staging:e2e-failed= from
+the main checkout, 27 checks and =staging:e2e= from the PR's worktree. Issue
+=#14=.
+
+The safe-direction failure is the one that was seen. The unsafe one is the same
+mechanism: a runner tree declaring FEWER routes than the deployed build probes
+none of the routes the build added and reports green, because it did not know
+to look.
+
+So the estate reports its own route table. The router answers
+=GET /__estate.json= with =sha=, =block= and the route array it is routing on;
+=gates/oracle.sh= resolves the oracle from that, and the gate then checks the
+build's claim against the build's behaviour. Consequences:
+
+- =/__= is reserved. No app may declare a route under it (=gates/lint-app.mjs=),
+  or an app could shadow the manifest and answer the question "what does this
+  build own?" on the build's behalf.
+- The manifest's sha joins the apps' =x-build-sha= in the one-estate check. A
+  router deployed from a different build than the apps it fronts is an estate
+  whose published contract describes something other than what answers.
+- When no manifest is served, the tree may stand in only if the deployed
+  =x-build-sha= is this tree's HEAD -- the tree is then the build, established
+  rather than assumed.
+- Otherwise the gate REFUSES: exit 4, no label, no verdict in either direction.
+  A gate that cannot name its oracle has not measured anything.
+- =ORACLE_MODE=tree= restores the old behaviour for deliberate inspection, and
+  a run on a caller-supplied oracle records no observation label. It may
+  inform; it may not convict.
+
+An observation label names the environment and the build. It must also name the
+oracle, because the oracle was the variable that decided the verdict.
+
 ** Negative tests for the gates
 
 Each gate script has a fixture under =gates/fixtures/<gate>/fail/= that the gate must reject and =gates/fixtures/<gate>/pass/= it must accept. =make gate-selftest= runs both and fails if either outcome is wrong. This is a separate workflow job, required before the gates' own results count.
+
+The e2e gate's oracle has its negative test in =experiments/014-e2e-oracle/=,
+not in =gate-selftest=: it needs a running estate and a second tree that
+disagrees with it, which the selftest job has neither of. Until that moves into
+=gate-selftest= the oracle's rejection behaviour is verified by hand, on the
+run recorded in that experiment's notes.
 
 * Change enablement
 
