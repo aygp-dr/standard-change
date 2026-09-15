@@ -81,6 +81,7 @@ export const BACKGROUND = '#dff3ff';
 // esc() by whoever puts it here. Routes absent from the table render nothing.
 export const PANELS = {
   '/account': '<p><b>✨ Your account · orders, addresses, payment, all in one place.</b></p>',
+  '/cart': '<h2>Your cart</h2><p>Your cart is empty. Nothing has been added yet.</p>',
 };
 
 export function panel(path) {
