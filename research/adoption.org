@@ -38,22 +38,27 @@ declare an emergency. If it has one, map it and leave it alone.
 
 * The tracking layer that is added
 
-Prefixed however the repository prefers; the words are what matter.
+Prefixed by writer. The prefix tells a reader who wrote a label, and a
+person writes exactly one prefix; a rule that touches a prefix touches one
+writer.
 
-| axis        | labels                                                       | written by                | cleared by                     |
-|-------------+--------------------------------------------------------------+---------------------------+--------------------------------|
-| intent      | =change:start=, =staging:hold=                               | a person                  | the pipeline on consuming them |
-| lifecycle   | =change:scheduled=, =change:complete=                        | the scheduler, settlement | settlement                     |
-| action      | =deploy:<env>=, =<env>:deployed=                             | the driver, a workflow    | settlement, abort, the reaper  |
-| observation | =<env>:<instrument>= (=healthy=, =e2e=, =smoke=, =uat=)      | the instrument that took it | on the next push, settlement |
-| blocked     | =blocked:<reason>=                                           | the guard that refused    | the same guard when it passes  |
-| closure     | =change:failed=, =change:backed-out=, =change:abandoned=, =change:backfill-owed= | abort, a person | nobody                    |
-| end         | =change:end=                                                 | a person or the pipeline  | it is the act of clearing (#122) |
+| prefix                                   | writer                                | members                                                                          |
+|------------------------------------------+---------------------------------------+----------------------------------------------------------------------------------|
+| =release:*=                              | a person only                         | =start=, =hold=, =unaffected=; later words such as =abandon= or =staging= go here |
+| =change:*=                               | the pipeline only                     | =scheduled=, =complete=, =end= (the act of clearing), the closure codes            |
+| =deploy:*=, =<env>:deployed=             | the driver and the workflows          | the berth and the installs                                                        |
+| =<env>:<instrument>=                     | the instrument that took it           | =healthy=, =e2e=, =smoke=, =uat=; on the next push they go                        |
+| =blocked:*=                              | the guard that refused                | cleared by the same guard when it passes                                          |
+| =freeze=, =emergency= on the estate issue | a person, about the estate            | facts about the world, on something that cannot be deployed; never on a PR        |
+| =app:*=, =itil:*=                        | the labeller; a person for =emergency= | the repository's own, read and never written (§What a repository must already have) |
 
-Two words are a person's: =change:start= and =staging:hold=. Everything else
-is written by the thing that knows the fact, and an observation is written
-only by the instrument that measured it (=research/findings/label-ownership.org=,
-experiments 014 and 023 F4).
+A person's words are =release:start=, =release:hold= and =release:unaffected=.
+Everything else is written by the thing that knows the fact, and an
+observation is written only by the instrument that measured it
+(=docs/label-ownership.org=, experiments 014 and 023 F4). In this
+repository's tree on 2026-09-15 the person's word is still spelled
+=change:start= and the hold =staging:hold=; the rename to the table above is
+filed for the two operators to make together.
 
 * Every decision, with its options and where each was watched
 

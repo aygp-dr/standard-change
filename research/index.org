@@ -30,6 +30,7 @@ described in Part I without touching the labels it already has.
 
 * Part I: How to read this, and how to adopt it
 #+INCLUDE: "adoption.org" :minlevel 3
+#+INCLUDE: "findings/the-method.org" :minlevel 3
 
 * Part II: History of the ideas
 #+INCLUDE: "../research/history/pipeline-history.org" :minlevel 2
