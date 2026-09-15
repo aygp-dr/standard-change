@@ -59,7 +59,11 @@ wherever "further" is in the adopting repository, where =staging:hold= would
 bind the person's word to one repository's environment names, which change
 with the kind of repository being supported (=history/promotion-models.org=:
 seven kinds behind one word). A person's words are =release:start=,
-=release:hold= and =release:unaffected=.
+=release:hold= and =release:unaffected=. They are said about a branch, which
+is what makes branch deployment legible: the branch is deployed and verified
+on the person's word, and the merge follows the verification (GitHub flow's
+original order, =history/pipeline-history.org= §Branching policies); the
+default branch never needs a word, because reaching it is the record.
 Everything else is written by the thing that knows the fact, and an
 observation is written only by the instrument that measured it
 (=docs/label-ownership.org=, experiments 014 and 023 F4). In this
