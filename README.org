@@ -49,20 +49,28 @@ when =main= moves underneath you are all real and all deliberately absent here
 stateDiagram-v2
     direction TB
     [*] --> Opened: PR opened, labeller sets app:* and itil:standard
-    Opened --> Requested: a person adds change:requested
-    Requested --> Scheduled: window reserved -> change:scheduled
+    Opened --> Started: a person adds change:start
+    Started --> Scheduled: window reserved -> change:scheduled
     Scheduled --> Implementing: window opens, guards re-run, berth claimed -> deploy:staging
     Scheduled --> Forfeited: window lapses unattempted -> expired
     Implementing --> Deployed: install finished -> staging:deployed
     Deployed --> Healthy: guard 5 on staging -> staging:healthy, the trigger
     Healthy --> Verified: e2e and smoke on the healthy staging -> staging:e2e, staging:smoke
-    Verified --> Held: a person adds staging:hold
-    Held --> Verified: the person lifts it
-    Verified --> Promoted: staging:smoke lands deploy:production (promote.yml), unless held
+    Verified --> Accepted: a person walks the estate -> staging:uat
+    Accepted --> Held: a person adds staging:hold
+    Held --> Accepted: the person lifts it
+    Accepted --> Promoted: staging:smoke lands deploy:production (promote.yml), unless held
     Promoted --> Live: install finished -> production:deployed, then guard 5 -> production:healthy
-    Live --> Complete: settle -> change:complete, merge, PIR, cleanup
-    Complete --> [*]
-    Forfeited --> Requested: re-request
+    Live --> Authorized: guard 4 reads the stack -- a reviewer APPROVED this head, gates green on it, every observation taken on it
+    Authorized --> Complete: settle asks production what it is serving NOW -> change:complete
+    Complete --> Merged: squash merge, branch deleted
+    Merged --> Recorded: PIR posted, while the labels are still there to read
+    Recorded --> Tidied: cleanup clears every transient label, change:complete included, berth released
+    Tidied --> [*]: no tombstone on this path -- the forge's mergedAt is the record
+    Forfeited --> Started: the person states the intent again
+
+    Deployed --> Closed: abort from any state past the berth claim -> change:failed or change:backed-out
+    Closed --> [*]: change:end, written last -- there is no mergedAt here, so the tombstone is the only thing saying this clearing was deliberate
 
     note right of Scheduled
         reserving is not deploying
@@ -76,6 +84,11 @@ stateDiagram-v2
         guard 5 asserts the SERVED build,
         not that something answered
     end note
+    note right of Merged
+        Merged and Tidied are two acts in
+        sequence, not one. The window between
+        them is real and legitimate.
+    end note
 #+end_src
 
 And the same path as a sequence, showing who does what:
@@ -84,6 +97,7 @@ And the same path as a sequence, showing who does what:
 sequenceDiagram
     autonumber
     actor Dev
+    actor Rev as reviewer
     participant GH as forge
     participant IDP as change control
     participant Stg as staging
@@ -91,28 +105,48 @@ sequenceDiagram
 
     Dev->>GH: push -> PR
     GH->>GH: labeller: app:*, itil:standard
-    GH->>GH: gates -> lint, test, e2e (green @sha)
-    Dev->>GH: change:requested
+    GH->>GH: gates -> lint, test, e2e, gate-selftest (green @sha)
+    Dev->>GH: change:start
     Dev->>IDP: reserve a window
     IDP-->>GH: change:scheduled
-    IDP->>Stg: window opens -> activate, re-run guards, deploy changed apps
-    Stg-->>IDP: authorizing e2e green -> staging:passed
-    IDP->>Prod: promote the build staging tested
-    Prod-->>IDP: N probes, one build -> converged
-    IDP->>GH: change:complete, merge, PIR, release the berth
-    GH-->>Dev: shipped
+    IDP->>Stg: window opens -> re-run guards, claim the berth (deploy:staging), deploy changed apps
+    Stg-->>GH: install finished -> staging:deployed
+    Stg-->>GH: guard 5 on staging -> staging:healthy
+    Stg-->>GH: the authorizing runs -> staging:e2e, staging:smoke
+    Dev->>GH: a person walked it and accepted -> staging:uat
+    Rev->>GH: APPROVED, on this head
+    GH->>GH: promote.yml -- gates green, staging:e2e beside smoke, no staging:hold -> deploy:production
+    IDP->>Prod: promote the digest staging tested
+    Prod-->>GH: production:deployed, then guard 5 on N probes -> production:healthy
+    IDP->>GH: guard 4 -- the approval on this head, the gates on this head, every observation on this head
+
+    alt production is serving this head
+        IDP->>Prod: settle: what are you serving, right now?
+        Prod-->>IDP: x-build-sha, colour
+        IDP->>GH: change:complete -- validation done
+        IDP->>GH: merge, squash, delete the branch
+        IDP->>GH: the PIR, posted while the labels are still readable
+        IDP->>GH: cleanup -- clear every transient label, change:complete included, berth released
+        Note over IDP,GH: no change:end here. mergedAt is the record
+        GH-->>Dev: shipped
+    else it did not make it
+        IDP->>GH: the closure record, then change:failed or change:backed-out
+        IDP->>GH: clear every marker, close the window, release the berth
+        IDP->>GH: change:end, last -- nothing else says this clearing was deliberate
+    end
 #+end_src
 
 ** One label starts a change
 
-A person adds *=change:requested=* and that is the whole of their part.
-Everything after is the system acting or observing, and the *name shape* says
-which:
+A person adds *=change:start=* and that is the whole of their part — one
+label, not two: it supersedes =change:requested= plus =release=, which were
+two human-owned labels for one fact. Everything after is the system acting or
+observing, and the *name shape* says which:
 
 | shape                | kind        | example               | added by hand? |
 |----------------------+-------------+-----------------------+----------------|
-| =change:requested=   | request     | someone asked         | *yes*          |
-| =release=            | *request*   | someone said go now   | *yes*          |
+| =change:start=       | intent      | someone said go       | *yes*          |
+| =staging:hold=       | *intent*    | someone said not yet  | *yes*          |
 | =deploy:<env>=       | action      | work is in flight     | no             |
 | =<subject>:<state>=  | observation | *a check came back*   | no             |
 
@@ -142,18 +176,47 @@ deploying right now.
 
 *** Change control owns the cleanup, and the deployment annotation
 
-When a change completes, *change control* — =change/settle.sh= — does three
-things in order, and the order is the content:
+When a change completes, *change control* — =change/settle.sh= — runs five
+discrete acts in order, and the order is the content:
 
-1. *sets =change:complete=* — validation is done
-2. *merges*, then *posts the PIR*
-3. *clears the deployment labels and writes the deployment annotation*
+1. *re-measures production against the head, now.* Not /was healthy once/: it
+   asks the front what it is serving and compares =x-build-sha= to the head.
+   That is guard 5 re-derived from a host that can see the estate, and it is
+   better evidence than any label — so =production:healthy= is deliberately
+   *not* required here.
+2. *sets =change:complete=* — validation is done. Before the merge, because
+   the merge follows completion rather than constituting it, and because this
+   is the label that *drives* the merge and the PIR.
+3. *merges* — squash, branch deleted. A refused merge *stops settlement here*:
+   no PIR, no window redline, no clearing. Production is then serving
+   something =main= does not contain, which is a state with a name and a
+   recovery, not a silent success.
+4. *posts the PIR, and writes the deployment annotation* — while the labels
+   are still on the change to be read into it.
+5. *cleans up* — clears every transient label, =change:complete= included, and
+   with it the berth.
 
-Step 3 is the part worth naming. Clearing =deploy:staging= is not tidying: it
+*Steps 3 and 5 are two acts, in sequence, and the gap between them is real.*
+A change can be merged and not yet tidied: the forge says =MERGED= while
+=deploy:staging= is still claimed. That window is legitimate — it is where the
+PIR is written — and nothing in the model collapses it. The formal model
+carries the distinction explicitly: =tidied= (the cleanup ran) is a different
+variable from =cleaned= (the tombstone label is showing), split on 2026-09-15
+precisely because using one to stand for the other made the merge path
+re-fire.
+
+Step 5 is the part worth naming. Clearing =deploy:staging= is not tidying: it
 is the *release of the berth*, and a change that completes without clearing it
 holds the path to production forever. Every other =staging:*= and
 =production:*= label goes at the same time, because they described where this
 change sat in the process and it is no longer in the process.
+
+*The cleanup on the merge path stops there.* It writes nothing after the
+clearing — see §The merge is the tombstone below. The *abort* path
+(=change/abort.sh=) has the same shape and one more step: the closure record
+first, then the deployment records withdrawn, the window redlined, every
+marker cleared, the closure code (=change:failed= or =change:backed-out=), the
+berth released — and then =change:end=, last.
 
 *The deployment annotation is written here too, and only here.* Not when the
 deploy starts. The deployer used to open a record =in_progress= and resolve it
@@ -177,7 +240,7 @@ cannot be answered from the records — that question belongs to the berth.
 | namespace                    | what it is                                | lifetime                        |
 |------------------------------+-------------------------------------------+---------------------------------|
 | =staging:*=, =production:*=  | build/deploy *annotations* — a fact about a BUILD in an ENVIRONMENT | ephemeral; cleared per change   |
-| =change:*=                   | the *record* — a fact about the CHANGE    | durable; never cleared          |
+| =change:*=                   | the *record* — a fact about the CHANGE    | the closure is durable; the lifecycle states are cleared at cleanup |
 
 *Two namespaces, and they are different kinds of fact.* Mixing them is the
 defect that made "a PR has at most one =change:*=" impossible to state, because
@@ -186,7 +249,7 @@ defect that made "a PR has at most one =change:*=" impossible to state, because
 | namespace  | kind             | members                                              | cardinality |
 |------------+------------------+------------------------------------------------------+-------------|
 | =itil:*=   | *classification* | =itil:standard= · =itil:normal= · =itil:emergency=   | exactly one |
-| =change:*= | *lifecycle*      | =change:requested= → =change:scheduled= → =change:complete= | one active |
+| =change:*= | *lifecycle*      | =change:start= → =change:scheduled= → =change:complete= | one active |
 
 =itil:*= is the ITIL change type and says *what kind of change this is*.
 =change:*= says *where the change record has got to*. A change is classified
@@ -196,7 +259,7 @@ once and moves through the lifecycle many times.
 what a change touches and what kind of change it is — which gates to run,
 which groups to deploy, which rules apply. Neither authorizes anything.
 Permission to deploy is four other things, each from a different source: a
-person's =change:requested=, a reviewer's approval, green gates on the head,
+person's =change:start=, a reviewer's approval, green gates on the head,
 and an open window. A change with every derived label and none of those four
 does not move. The one derived-looking label that changes *precedence* is
 =itil:emergency=, and it is not derived: a person declares it, and it exempts
@@ -209,12 +272,46 @@ that *drives the side effects*: the merge to =main=, the PIR, and whatever
 else must hear that the change shipped (a ticket, a message). Cleanup then
 clears it — once the forge records =MERGED=, the label restates a fact the
 platform owns, and two records of one fact can disagree while the platform's
-cannot — and writes =change:end= as the last act. =change:end= drives
-nothing. It is the tombstone that says the clearing was settlement, since a
-refusal at the lock, the reaper and an eviction also leave a change with no
-labels, and a reader should be able to tell those apart. The person's two
-words are =change:start= and =staging:hold=; =complete= and =end= are the
-pipeline's.
+cannot. The person's two words are =change:start= and =staging:hold=;
+=complete= is the pipeline's, and =end= is the pipeline's on one path only.
+
+*** The merge is the tombstone
+
+/Two records of one fact can disagree; the platform's cannot. A label
+restating a fact the platform already owns is not a second record, it is a
+future contradiction with a timestamp./ That argument is why cleanup clears
+=change:complete=, and it condemns =change:end= on the same path for the same
+reason: the merge already says the change ended, and the forge's =mergedAt=
+says it in a field nothing in this repository can write.
+
+The evidence is not hypothetical. PR #52 carried =change:end= through an
+entire successful deploy *while still open* — the tombstone said the cleanup
+had run on a change that had not started tidying. =mergedAt= cannot do that.
+
+The objection was also a shape objection (the owner, 2026-09-15): clearing
+every label, then adding =change:end= to say the clearing happened, then
+clearing that too is /a bunch of dishes on the counter, then putting all in
+the dishwasher, then putting a postit note indicating that you cleaned up the
+kitchen, then tossing the postit/.
+
+So the rule is split by path, not dropped:
+
+| path                    | what closes it                              | tombstone |
+|-------------------------+---------------------------------------------+-----------|
+| *merged*                | =mergedAt=, written by the forge            | *never*   |
+| *aborted* (closed unmerged) | =change:failed= / =change:backed-out=, by =change/abort.sh= | *=change:end=, last* |
+
+An aborted change has no =mergedAt=. A refusal at the lock, the reaper and an
+eviction all leave a change with no labels too, so on that path =change:end=
+is the only thing separating a deliberate settlement from those — which is the
+case it was invented for, and now the only one it serves. The invariant is
+=NoTombstoneOnMerged= in =tla/Labels.tla=, under constant
+=MergeIsTheTombstone=.
+
+Measured 2026-09-15, because the document should not be read as a report on
+the script: =change/settle.sh= still adds =change:end= after the clearing, and
+all ten of #110–#119 are =MERGED= carrying it. The model and this section
+state the rule; the merge path's write has not been removed yet.
 
 *Neither namespace is a blocker.* A freeze, a held berth and an emergency in
 flight are facts about the *estate*, not about any change — see below.
@@ -262,11 +359,11 @@ the two labels a person adds are opposites in both directions:
 
 | label | added by | removed by |
 |----------------+---------------------------+--------------------------------|
-| =release=      | *a person only* — intent  | *automation* — the scheduler consumes it |
+| =change:start= | *a person only* — intent  | *automation* — the driver consumes it when it claims the berth |
 | =staging:hold= | *a person only* — "not to production yet" | *a person only*; cleanup at settlement |
 | =hold:staging= (superseded) | *a person only* | *a person only*             |
 
-A person must add =release= because it is the intent to ship and no machine
+A person must add =change:start= because it is the intent to ship and no machine
 may infer it. Automation must remove it because a trigger that stays on
 re-fires, and the second firing deploys a change that is already live.
 
@@ -308,7 +405,7 @@ always there and they are earlier:
 
 | to stop                   | do this                        | scope |
 |---------------------------+--------------------------------+-------|
-| it should not go at all   | *do not add =change:requested=* | that change |
+| it should not go at all   | *do not add =change:start=*     | that change |
 | it is not fit to ship     | *do not approve*                | that change |
 | nothing should go now     | *=freeze=*                      | the estate |
 | this outranks everything  | *=itil:emergency=*              | the estate's ordering |
@@ -561,9 +658,10 @@ flowchart TB
     W2 --> E2
     E1 -.->|"cannot promote"| X(("✗"))
     E2 -.->|"cannot promote"| X
-    W1 -->|"change:requested<br/>guards 0 and 1"| S
+    W1 -->|"change:start<br/>guards 0 and 1"| S
     S -->|"authorizing e2e passes<br/>guards 2, 4, 4b"| P
-    P -->|"health check passes"| M["merge to main<br/>labels released"]
+    P -->|"health check passes<br/>settle re-measures NOW"| M["merge to main"]
+    M -->|"then, as a second act"| CU["cleanup<br/>every transient label<br/>berth released"]
     M -.->|"everyone else is now<br/>BEHIND main"| W2
 
     style S fill:#fde68a,stroke:#a16207,color:#000
@@ -755,7 +853,7 @@ one change. The calendar governs everyone; the label governs one.
 | =apps/=         | the four fixture apps                                          |
 | =router/=       | nginx template, routes, Cloudflare Worker                      |
 | =gates/=        | lint, test, e2e, smoke, uat (Playwright, as-is), preflight, health |
-| =change/=       | queue, schedule, reap, activate, settle (PIR), release         |
+| =change/=       | queue, schedule, reap, activate, settle (PIR, cleanup), abort, release |
 | =targets/=      | =bastille= (jails) and =node= deploy backends                  |
 
 * Status
