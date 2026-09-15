@@ -66,6 +66,28 @@ CDN, a gradual two-version split, and promotion by immutable version ID
 (§C6). Worth having *both*, because they fail differently and the model claims
 to be platform-neutral.
 
+** Two Cloudflare shapes, priced 2026-09-14 [E from docs, [H] until run]
+
+Asked as: could Cloudflare host =apps/= plus the front, with GitHub Actions
+hitting the endpoint as staging and production? Yes, two ways, and they
+differ in which primitive the model gets.
+
+| | *Workers* — one Worker per app plus a router Worker | *Containers* — one image: nginx + the four node servers |
+|--+--+--|
+| runs the apps as-is? | nearly. =node:http= servers are supported: =nodejs_compat= + =enable_nodejs_http_server_modules= (automatic from compatibility date 2025-09-01), =httpServerHandler({port})= from =cloudflare:node= wraps =createServer=. The port is a routing key, not a socket | yes, byte for byte: the image is what =targets/bastille= installs, with nginx in front. =sockstat=/=daemon= go away with the Dockerfile |
+| what needs changing | =node:fs= reads: =routes.json= (import it), =shared/oneui.js='s =readFileSync= (import), core's =/statics/= directory (a Static Assets binding). Router: =router/server.js='s =http.request= to upstreams becomes a service binding per app — the shape =spec.org= §Cloud mirror already specifies | a Dockerfile and =targets/cloudflare/deploy.sh=; nothing in =apps/= |
+| build identity | Worker *version id*, immutable; =wrangler versions list= is the platform's record (§C6) | image *digest*; the container is bound to a Worker, so the same version record fronts it |
+| staging → production | =wrangler versions upload= then =wrangler versions deploy= with a percentage: gradual deployment between two versions is native (the two-colour split with a dial instead of a switch) | the same, at the Worker in front; the image behind it promotes by digest |
+| =x-build-sha= | the router Worker sets it from its own version metadata; =gates/health.sh= in =header= mode works unchanged | nginx adds it as today |
+| plan | Free tier for both environments at this traffic; Paid ($5/mo) for larger limits | *Workers Paid required*, $5/mo, with 375 vCPU-min, 25 GiB-h and 200 GB-h included per month; =lite= (1/16 vCPU, 256 MiB, 2 GB) is enough for a fixture estate |
+| what GitHub does | Actions runs =gates/e2e.sh=, =smoke.sh= and =uat.sh= with =ROUTER_URL= at the public hostname, and =report.sh= posts the statuses guard 2 reads. The runner can see the estate, which is the one thing it cannot on hydra — =merge-on-healthy.yml='s "settle from a host that can see the estate" stops being true | same |
+
+The Containers row is the bastille estate on someone else's host with the
+digest primitive the jails lack; the Workers row is the shape the spec wrote
+for this target and costs a small port of the apps. Either one closes the
+gap the README's "What exists" table names: an environment the forge can
+reach. Neither is built; =wrangler= is still not installed on either host.
+
 * Proposed shape [P — not built]
 
 Two jails, clearly named and destroyable, on addresses outside the existing

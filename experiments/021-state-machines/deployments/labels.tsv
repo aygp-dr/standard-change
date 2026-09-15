@@ -1,0 +1,39 @@
+label	prefix	semantics	owner	human_add	asserts
+app:<group>	app:	classification	labeller	no	the build MANIFEST: this diff touches apps/<group>/, or touches shared/ which every app pins. Derived from the diff and recomputed on every push; a hand edit does not survive
+itil:standard	itil:	classification	labeller	no	the ITIL change TYPE: the diff is limited to pre-authorised paths. Says what kind of change this is, never how far it has got
+itil:normal	itil:	classification	labeller	no	the ITIL change TYPE: the diff touches router/, gates/, change/, targets/ or .github/, so it needs a human approval
+itil:emergency	itil:	classification	human	yes	THIS change is the remedy. Passes the freeze and the queue; exempts nothing else. Never derived, because only a person may declare an emergency
+control-plane	(bare)	classification	labeller	no	this change alters how every FUTURE change is verified, so the pipeline cannot verify it. Narrower than itil:normal and a soak trigger
+labeler:skip	labeler:	intent	human	yes	a person is taking the manifest back: app:* becomes asserted rather than derived. A declared deviation in label form
+change:requested	change:	intent	human	yes	a person has raised a change request. The only label a person adds to set a change going, and the whole of their part
+release	(bare)	intent	human	yes	take this one all the way NOW rather than waiting for a slot. Names no environment because it asks for the whole path. The scheduler consumes it; a trigger that stays on re-fires
+change:scheduled	change:	state	scheduler	no	a window has been booked for this change on the change schedule. A record; nothing blocks on it
+release:start	release:	state	the pipeline	no	the release has BEGUN for the booked change request, and names which change is in flight. A person cannot truthfully assert this
+deploy:staging	deploy:	state	workflow	no	ACTION IN FLIGHT plus the BERTH CLAIM guard 1 reads. Not a request to deploy: adding it by hand asserts that the guards were re-checked when nobody checked anything
+deploy:production	deploy:	state	workflow	no	ACTION IN FLIGHT: the workflow is deploying to production right now
+staging:in-progress	staging:	state	workflow	no	the staging deploy is running. Cleared when the run ends, either way
+blocked:queue	blocked:	state	change/queue.sh	no	another open PR holds the berth. Set and cleared by the queue; a fact about the estate rendered onto this change
+blocked:lock	blocked:	state	change/lock.sh	no	the deployment lock is held by another change and is not yet stale
+blocked:freeze	blocked:	state	gates/preflight.sh	no	a freeze or an in-flight emergency covers the requested window
+blocked:diverged	blocked:	state	workflow	no	main moved under a change production is already serving. PRODUCTION IS AHEAD OF MAIN, and not recoverable by merging. A human may clear it after rebasing
+change:complete	change:	state	change/settle.sh	no	TERMINAL for VALIDATION: every guard passed and production was observed serving this build. Set before the merge, because the merge follows completion rather than constituting it
+change:failed	change:	state	change/abort.sh	no	ITIL closure code. The change did not complete: production never served it, or never had it made live. Nothing to undo
+change:backed-out	change:	state	change/abort.sh	no	ITIL closure code. Production DID serve this change and was returned to a named prior state. Refused without --to <sha>, because the word asserts an estate action
+change:backfill-owed	change:	state	change/abort.sh	yes	AN UNPAID CHANGE RECORD: this change reached main without the normal evidence and still owes the window, the observations and the reason. Blocks nothing. Persistent, because the merge is when the debt STARTS
+staging:e2e	staging:	observation	gates/e2e.sh --pr	no	the contracts held on staging, measured by the e2e gate against the staging slot. The AUTHORIZING run is this one, never the in-runner one
+staging:e2e-failed	staging:	observation	gates/e2e.sh --pr	no	the e2e gate measured a failure on staging. A recorded failure outranks a pass beside it
+staging:smoke	staging:	observation	gates/smoke.sh --pr	no	a browser could actually use staging
+staging:smoke-failed	staging:	observation	gates/smoke.sh --pr	no	the smoke gate measured a failure on staging
+staging:uat	staging:	observation	human	yes	THE EXCEPTION: for acceptance the person IS the instrument. Recorded via change/observe.sh, which refuses unless the URL is serving this PR's head. Not repeatable, so the label is durable and a person may withdraw it
+production:e2e	production:	observation	gates/e2e.sh --pr	no	the contracts held in production
+production:e2e-failed	production:	observation	gates/e2e.sh --pr	no	the e2e gate measured a failure in production
+production:smoke	production:	observation	gates/smoke.sh --pr	no	a browser could use production
+production:smoke-failed	production:	observation	gates/smoke.sh --pr	no	the smoke gate measured a failure in production
+production:healthy	production:	observation	gates/health.sh --pr	no	CONVERGENCE: N samples through the front all reported this build. Sampled, never attested; it cannot enumerate replicas. Typed by hand once on #9, which was the ownership defect
+freeze	(bare)	estate	human	yes	ESTATE STATE, on issue #1 and never on a PR: ordinary change is suspended for everyone, including whoever declared it. Only ever READ in-tree, which is why the label auditor cannot see it
+emergency	(bare)	estate	human	yes	ESTATE STATE, on issue #1 and never on a PR: an emergency is in flight somewhere, everything stops, and it grants NO exemption to whatever carries it. Kept separate from itil:emergency so the write that closes the estate cannot exempt its own carrier
+hold:staging	hold:	intent	REJECTED 2026-09-13	no	REJECTED SEMANTICS. A per-change human stop. Its job is covered by freeze (the estate stops) and by the earlier human stops: not requesting, and not approving
+staging:passed	staging:	observation	RETIRED	no	RETIRED: named no measurement and no environment, so it could be satisfied by observing something else. Replaced by the staging:* stack
+staging:failed	staging:	observation	RETIRED	no	RETIRED: same defect as staging:passed
+deployed:production	deployed:	state	RETIRED	no	RETIRED: replaced by change:complete plus the deployment record
+deployed:staging-<group>-<n>	deployed:	observation	workflow	no	SPECIFIED, NOT BUILT: a staging slot deployed this group at this build. spec.org requires it on the head SHA before production; nothing in the tree writes it

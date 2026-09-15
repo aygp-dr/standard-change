@@ -1,0 +1,65 @@
+id	name	kind	terminal	description
+G01	pr_open	lifecycle	no	A pull request exists. No manifest has been derived and no instrument has measured any build of it.
+G02	manifest_derived	lifecycle	no	The labeller read the diff and wrote app:* and itil:standard/normal. The manifest is derived; a human edit to it does not survive the next push.
+G03	manifest_asserted	intent	no	labeler:skip is set. app:* is now hand-maintained: the manifest is a wish rather than a derivation, declared in label form.
+G04	class_single	lifecycle	no	Exactly one itil:* class. Every rule that branches on the class has an arm to take.
+G05	class_undefined	composite	no	Zero or two-or-more itil:* classes. Not a nuance: every downstream rule branches on a class nobody chose. preflight exits 2 and refuses rather than picking.
+G06	change_requested	intent	no	A person added change:requested. The only label a human adds to set a change going; the pipeline clears it.
+G07	emergency_declared	intent	no	itil:emergency. A person claims THIS change is the remedy. Never inferred. Bypasses the freeze and the queue; bypasses neither guard 2 nor guard 5.
+G08	draft_held	intent	no	The author says it is not ready. The one input no guard derives, measures or infers - the pipeline believes it.
+G20	suite_not_yet	observation	no	INDETERMINATE (not yet). No check run exists for this head. The expected state for a fresh push and not a finding about anything.
+G21	suite_pending	observation	no	INDETERMINATE (not finished). Latest run per name is in_progress with conclusion null. Counted as not-green, never as failed.
+G22	suite_void	observation	no	NO VERDICT. gate-selftest did not pass, so the gates could not prove they can fail. Every gate result this run is void - not suspect, void.
+G23	suite_green_on_head	observation	no	PASS. Latest run per gate name is success on the current head SHA, and gate-selftest is among them.
+G24	suite_red_on_head	observation	no	FAIL. Latest run per gate name includes conclusion=failure on this head. A real finding by a gate that had proved it could fail.
+G25	suite_absent	observation	no	INDETERMINATE (skipped). Latest conclusion is skipped or null: the jobs were never started. Did not run is not red.
+G26	suite_unreadable	observation	no	INDETERMINATE (could not check). The forge could not be read at all. preflight substitutes 99 for the count and exits 4 rather than guessing.
+G27	suite_history_mixed	observation	no	UNNAMED. Every run ever attached to this SHA is still here, so old failures sit beside fresh successes. The verdict depends entirely on whether the reader takes latest-per-name.
+G28	suite_green_on_abandoned_sha	observation	no	UNNAMED. The verdict is a pass, it is true, and it is about a build nobody is proposing. The head moved; the record did not go stale, it stopped matching.
+G29	suite_green_local	observation	no	PASS, measured on a host that can reach the estate and carried to the forge as local/ commit statuses. gate-selftest runs first and its result gates the rest.
+G40	berth_requested	intent	no	deploy:staging requested. The berth is an exclusive deadline-bearing lease on the path to production, and this is the claim on it.
+G41	berth_refused_behind	lifecycle	no	Guard 0 refused: the branch is BEHIND main. HYPOTHESIS, NOT CONTROL - zero lifetime refusals, because the forge has never returned BEHIND in this configuration.
+G42	berth_refused_queue	lifecycle	no	Guard 1 refused: another open PR holds the berth. blocked:queue set, deploy:staging withdrawn.
+G43	berth_held	lifecycle	no	This PR holds the berth. Estate-global fact seen from the PR: exactly one PR may be here.
+G44	preflight_indeterminate	composite	no	INDETERMINATE, and it blocks. preflight exit 4: the calendar, the forge, the draft flag or the estate could not be read. I could not check is not it passed and is not it failed.
+G45	preflight_frozen	composite	no	preflight exit 3. A freeze is declared on the estate holder. A property of the world, not of this change.
+G46	preflight_lock_held	composite	no	preflight exit 2/5 family: another deployment holds the lock, or a person left hold:staging, or the estate has an emergency in flight.
+G47	window_booked	lifecycle	no	change:scheduled. An entitlement to the path to production - not permission to deploy and not a promise it will happen.
+G48	window_expired	lifecycle	no	The reservation lapsed unattempted. Its OWN closure code: not failed (nothing was attempted) and not cancelled (nobody decided against it). The change keeps everything else.
+G50	obs_none	observation	no	INDETERMINATE (nothing measured). No observation record exists for any instrument on this environment. evidence.sh latest exits 1 so a caller fails closed rather than reading silence as consent.
+G51	obs_current	observation	no	PASS. The latest record for every required instrument is a pass AND names this head. The only shape that authorizes.
+G52	obs_stale	observation	no	The latest record names a different build. Issue #16: the label survived a push that the measurement did not. Refuse - do not re-stamp.
+G53	obs_failed	observation	no	FAIL. The latest record for an instrument is a failure on this head. Distinct from no record and from a record about another build.
+G54	obs_label_without_record	observation	no	A staging:* or production:* label stands with no observation record behind it. A claim nobody can date, because a label cannot name a build.
+G55	obs_untested_instrument	observation	no	UNNAMED. A record was written by an instrument that was never itself tested that run - the suite is void, so the measurement has a verdict and no warrant.
+G56	obs_contradiction	observation	no	Both staging:e2e and staging:e2e-failed stand. Written by whichever instrument ran last, and last is not authoritative. A recorded failure alongside its pass is a contradiction, not a pass.
+G57	obs_superseded	observation	no	An earlier record for the same environment and instrument has been replaced by a later one. Last wins. Counting both is the defect.
+G58	obs_uat_withdrawn	observation	no	The acceptance record stands and the person took their label back. Non-repeatable observations need both - the record for the build, the label for the consent.
+G60	review_approved_on_head	intent	no	CONSENT, naming this build. An APPROVED review whose commit_id is the head. Not an observation - nobody measured anything.
+G61	review_proxy_on_head	intent	no	A review:proxy record naming this head. A proxy, never a person, and the record says so.
+G62	review_absent	intent	no	No approval and no proxy record on this head, or an approval of an earlier commit. The head moved past the consent.
+G63	review_unreadable	composite	no	INDETERMINATE. The reviews endpoint did not answer, so the head is UNCONFIRMED and reviewDecision still stands, said out loud. Could not ask is not the head moved.
+G65	authorized_on_head	composite	no	Guard 4 green: review, gates and every required observation taken ON THIS HEAD. A stack of named measurements, none able to stand in for another.
+G66	not_authorized	composite	no	Guard 4 red, with the reason named: which instrument, which build, which of the three ways it failed.
+G70	prod_deploy_in_flight	lifecycle	no	deploy:production. An action in flight, not a request and not a result.
+G71	prod_healthy_on_head	observation	no	PASS. N samples per route, all reporting the expected build, one response carrying both facts. Recorded as production:healthy naming the SHA that was sampled.
+G72	prod_unconverged	observation	no	More than one build served across the samples. Not unhealthy: the estate is mixed, which one sample cannot distinguish from converged.
+G73	prod_unhealthy	observation	no	FAIL. Samples came back and did not carry the expected build.
+G74	prod_unreachable_as_unhealthy	observation	no	DEFECT STATE. HTTP 000 - the estate was never observed - is counted as a bad sample and reported UNHEALTHY. Class 1 inside guard 5 itself.
+G75	prod_healthy_label_without_record	observation	no	production:healthy stands with no record behind it. The #16 shape at the merge boundary: a label that cannot say which build converged.
+G80	merge_not_yet	lifecycle	no	Guard 6 NOT YET. production:healthy is absent because nothing has been deployed. Red for most of a PR life, by design, and it says so rather than reading like a broken test.
+G81	merge_refused_stale_measurement	lifecycle	no	Guard 6 FAIL. production:healthy is present and the observation behind it names a different build. A different red from NOT YET, deliberately.
+G82	merge_refused_prod_other_build	lifecycle	no	Guard 6 refused because production serves something else. HYPOTHESIS, NOT CONTROL - 484 runs, never once triggered by a label.
+G83	merge_exempt_proven	lifecycle	no	deploys(c) is PROVABLY empty: the diff was read and touches nothing deployable. Exempt, and the message names which oracle proved it.
+G84	merge_exempt_unproven	lifecycle	no	DEFECT STATE. deploys(c) was indeterminate - groups.sh could not answer and the error was swallowed - and the guard treated the empty set as exempt. Absence of evidence granted as proof.
+G85	merge_allowed	lifecycle	no	Guard 6 green. Production serves this head, so trunk may follow it. The merge is settlement, not authorization.
+G86	deployed_unmerged_window_gone	composite	no	UNNAMED. Production serves a build trunk does not contain, and the reservation that authorized it has lapsed. Three facts at once and no word for it.
+G90	complete	composite	yes	change:complete, then merged. About the change RECORD - nothing remains to observe. It does not expire, because it states what happened rather than what is true.
+G91	failed	composite	yes	ITIL closure code failed. Production never served it, or served it and never made it live. Nothing to undo.
+G92	backed_out	composite	yes	ITIL closure code backed-out. Production DID serve this and was returned to a prior state. The word asserts an estate action and must name what it returned to.
+G93	closed_unmerged	composite	yes	Withdrawn. The change record closes with no deployment and no debt.
+E01	estate_open	estate	no	ESTATE-GLOBAL. No freeze, no emergency in flight. Ordinary change may progress.
+E02	estate_frozen	estate	no	ESTATE-GLOBAL. freeze on the estate holder issue. Blocks everyone including its declarer and grants nothing to whatever carries it.
+E03	estate_emergency	estate	no	ESTATE-GLOBAL. emergency on the estate holder issue. Something is wrong out there and everything stops. Distinct from itil:emergency, which is a class.
+E04	berth_free	estate	no	ESTATE-GLOBAL. No open PR carries deploy:staging. Guard 1 reads the label set, not the workflow concurrency group.
+E05	berth_taken	estate	no	ESTATE-GLOBAL. Exactly one open PR carries deploy:staging, possibly with no run in flight.

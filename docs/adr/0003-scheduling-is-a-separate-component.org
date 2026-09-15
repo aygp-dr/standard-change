@@ -99,6 +99,63 @@ changing the hold moves the floor. A 5m slot cannot hold a 5m soak, and an
 afternoon of bookings lapsed at exactly the point the hold ended before this
 existed. =--short= overrides, loudly.
 
+* Missing a window is a control-flow path, not a failure
+
+*#55 is the canonical case and it is working correctly.* Its window ran
+02:20–02:30Z; the operator was writing up an unrelated defect and never drove
+it. No guard refused, nothing broke, nothing was attempted.
+
+This is not a bad state and the pipeline should not treat it as one.
+
+** The recovery flow, in full
+
+: ./change/reap.sh
+:     window closed: expired
+:     change:scheduled removed -- unscheduled, not failed
+:
+: ./change/schedule.sh block <pr> "<groups>" <minutes>      # next available
+: ./change/schedule.sh block <pr> "<groups>" <minutes> --at <iso>   # a named hour
+
+Four properties make it cheap, and each one is deliberate:
+
+1. *=expired= is its own closure code.* Not =failed= — nothing was attempted, so
+   nothing failed. Not =cancelled= — nobody decided against it. The reservation
+   lapsed, which is a fact about the schedule rather than about the change.
+2. *The change keeps everything else.* Its approval stands, its =itil:= class
+   stands, its observations stand if they were taken on a head that has not
+   moved. Only =change:scheduled= comes off, because it is no longer scheduled.
+3. *It is left approved-and-unbooked* — eligible, owed nothing, needing one
+   command.
+4. *=reap.sh= deliberately does not rebook.* A reaper that rebooks is a
+   scheduler nobody asked for, and it would hide the signal: a change that keeps
+   lapsing is telling you the slots are too short or nobody is watching.
+
+** Why this is safe rather than merely tolerable
+
+*Because deployments are fast, recovery is trivial.* The full cycle — staging
+deploy, soak, walk, UAT, guard 4, idle-colour deploy, cutover, settle — runs in
+about ninety seconds. A missed ten-minute window costs the wait for the next
+one, and nothing else.
+
+That ratio is what makes the whole arrangement work. If a cycle took an hour,
+missing a window would be expensive enough that people would build an
+auto-rebooker, and an auto-rebooker is how a calendar silently fills with
+reservations nobody is driving (D12). *Fast deployments are what let the
+schedule stay dumb.*
+
+** And the developer is expected to be distracted
+
+A person who has booked a slot is doing something else until it opens. That is
+the normal case, not a lapse of discipline — so the recovery has to be safe by
+default, which is why the estate is untouched, the berth is released, and the
+only cost is a re-book.
+
+*#55 also shows where the manual cost genuinely sits.* Its window needed a human
+to run the smoke walk and accept UAT. Until acceptance is automated for
+pre-authorised standard changes, every window needs someone present at the
+moment it opens — and that, not the guards and not the calendar, is what limits
+throughput.
+
 * Consequences
 
 - The queue is FIFO with holes. Anyone who wants a particular hour asks for it.
