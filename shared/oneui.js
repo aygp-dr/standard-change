@@ -184,7 +184,7 @@ h2{margin:22px 0 2px;font-size:17px}
 .e .t{font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .e.dev .t{color:#6b7280}.e.team .t{color:#b45309}.e.protected .t{color:#b91c1c}
 .v{color:#999;font-size:11px;margin-top:22px}
-.b{background:#0e8a16;color:#fff;font-size:11px;padding:2px 6px;border-radius:3px;vertical-align:middle;margin-right:6px}</style>
+.b{background:#22c55e;color:#fff;font-size:11px;padding:2px 6px;border-radius:3px;vertical-align:middle;margin-right:6px}</style>
 <main><h1>${esc(d.app)}</h1>
 <p>served by <b>${esc(d.app)}</b> · path <code>${esc(d.path)}</code> · build <code>${esc(d.sha)}</code></p>
 ${whereLine(d)}
