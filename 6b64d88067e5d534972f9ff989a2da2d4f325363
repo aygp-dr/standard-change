@@ -1,0 +1,10 @@
+Timeline
+- 23:50-23:54Z #104-#108 refused at guard 0 (branched before 3fcd84d); #105 and #108 refused a second time after rebasing because the other operator landed #101 (23:49:51) and #99 (23:53:49) in between.
+- 23:56Z guard 0 rewritten around gh pr update-branch; 23:59Z #104 landed and settled at 00:00:02Z; 00:02Z #105.
+- 00:01Z scheduler restarted to pick up the waiting comment while driver #105 was mid-run: two drivers claimed the lock for #105; the younger was killed. Duplicate observation comments on #105 are that, not the pipeline.
+- Owners' reports (#104: 8 moments, #105: 11) drove the uat, merge-on-healthy and PIR changes.
+
+Reproduction
+  ./change/driver.sh 106        (scheduler-driven; see experiments/023-start-only/scheduler.log)
+  ./gates/uat.sh --pr 105 --env staging http://127.0.0.1:9010 -> "uat accepted (as-is journey held)", staging:uat + record naming Playwright
+  cell: macOS 24.1.0, blocks :9010/:9020
