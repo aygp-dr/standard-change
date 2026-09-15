@@ -1,0 +1,9 @@
+Timeline
+- 00:07:49Z #106 merged; 00:09Z #107 and #108 refused as conflicting (real: same/adjacent line as #97 and #106); owners resolved; #108 merged 00:11:57Z, #107 00:19:23Z.
+- Owner reports (8, 11, 10, 7, 8 moments) sorted into the audit table; three fixes applied mid-run, PIR left as the largest unfixed.
+- Scheduler and poll stopped at 00:2xZ after the fifth settlement.
+
+Reproduction
+  nohup ./change/scheduler.sh >> experiments/023-start-only/scheduler.log &   # the process
+  gh pr edit <n> --add-label change:start                                       # the person
+  cell: macOS 24.1.0, blocks :9010/:9020, other operator live on the same lock
