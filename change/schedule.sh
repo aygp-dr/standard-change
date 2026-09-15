@@ -251,7 +251,7 @@ case "${1:-}" in
     # ITIL 4: assessed and authorized -> SCHEDULED is the transition a booking
     # makes. The lifecycle group is <=1 active, so change:requested comes off --
     # the ask has been answered. CLEARING a human-owned label is allowed where
-    # asserting it is not (docs/label-ownership.org: adding and removing are
+    # asserting it is not (research/findings/label-ownership.org: adding and removing are
     # different acts); the scheduler may answer an ask, it may not invent one.
     gh pr edit "$pr" --repo "$repo" \
       --add-label change:scheduled --remove-label change:requested >/dev/null 2>&1 || true

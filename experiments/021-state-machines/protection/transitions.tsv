@@ -9,7 +9,7 @@ PR_CLASS_UNDEFINED	T_ABANDONED	the PR is closed while its class is undefined	for
 PR_MANIFEST_ASSERTED	PR_CLASSIFIED	a person hand-sets app:* and the class	label_add	labeler:skip disables the classify step too, so the class is asserted as well	human	yes	0.85	spec.org:732-742
 PR_MANIFEST_ASSERTED	PR_CLASS_UNDEFINED	hand-set classes collide	label_add	the exclusion is not enforced at write time	human	yes	0.15	change/label-owners.tsv:86
 PR_CLASSIFIED	PR_REQUESTED	a person adds change:requested	label_add	the only label a person adds to set a change going	human	yes	0.80	change/label-owners.tsv:30
-PR_CLASSIFIED	EMG_DECLARED	a person declares this change the remedy	label_add	precedence is claimed, not derived	human	yes	0.10	docs/precedence-and-locks.org:6-8
+PR_CLASSIFIED	EMG_DECLARED	a person declares this change the remedy	label_add	precedence is claimed, not derived	human	yes	0.10	research/history/precedence-and-locks.org:6-8
 PR_CLASSIFIED	T_ABANDONED	the PR is closed	forge_event	none	human	no	0.03	[H]
 PR_REQUESTED	PR_SCHEDULED	the scheduler books a window	label_add	a reservation on a change no gate can judge must be refused at booking	scheduler	yes	0.82	change/schedule.sh:357-363
 PR_REQUESTED	EMG_QUEUE_ESCALATED	the queue wait exceeds patience	timer	none -- this is the bypass being chosen, not refused	human	yes	0.13	gates/simulate-gates.py:186-196
@@ -52,7 +52,7 @@ EST_FREEZE_UNATTRIBUTED	PR_PREFLIGHT	the freeze is lifted by whoever can reach t
 EST_FREEZE_UNATTRIBUTED	EMG_DECLARED	a person declares this change itil:emergency rather than find the declarer	label_add	the only recovery that does not require an addressee	human	yes	0.30	gates/preflight.sh:294-296
 EST_FREEZE_UNATTRIBUTED	T_ABANDONED	the PR is closed under an unexplained halt	forge_event	none	human	no	0.04	[H]
 EST_EMERGENCY_REFUSED	PR_PREFLIGHT	the estate emergency settles and a person clears the label	label_remove	recovery is wait, then re-request	human	yes	0.52	gates/preflight.sh:303
-EST_EMERGENCY_REFUSED	PR_STALE_EVIDENCE	the emergency lands under you	deploy_event	guard 4b invalidates your pass whether or not you waited politely	workflow	no	0.26	gates/preflight.sh:300-302, docs/precedence-and-locks.org:87-96
+EST_EMERGENCY_REFUSED	PR_STALE_EVIDENCE	the emergency lands under you	deploy_event	guard 4b invalidates your pass whether or not you waited politely	workflow	no	0.26	gates/preflight.sh:300-302, research/history/precedence-and-locks.org:87-96
 EST_EMERGENCY_REFUSED	EMG_DECLARED	a person declares this change itil:emergency too	label_add	itil:emergency is evaluated before the estate flags, so it passes this refusal as well	human	yes	0.22	gates/preflight.sh:286-290
 EST_OTHERS_ITIL_EMERGENCY	PR_PREFLIGHT	the other emergency settles	deploy_event	none	workflow	yes	0.55	gates/preflight.sh:303
 EST_OTHERS_ITIL_EMERGENCY	PR_STALE_EVIDENCE	the other emergency merges and moves main	deploy_event	guard 4b: your tree now predates what shipped	workflow	no	0.30	scenarios.org:150-163

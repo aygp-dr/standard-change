@@ -36,7 +36,7 @@ this repo lives inside that interval.
 
 =(status deployment-event-status set-deployment-event-status!)=
 
-=docs/ci-portability.org= found that *verdicts revocable after issue* (C5) is
+=research/substrates/ci-portability.org= found that *verdicts revocable after issue* (C5) is
 one of the two rare capabilities, native on only Azure and Jenkins among six
 platforms. The ledger makes it a setter. A verdict that cannot be withdrawn
 outlives its own truth, which is the whole of guard 4b.

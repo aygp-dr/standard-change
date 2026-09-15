@@ -5,7 +5,7 @@
 The owner's survey table, then what it says. The table is data as supplied
 (one row per source, a progression left to right, a note on what kind of thing
 the progression is); the classification and the reading below are this
-document's. Companion to =docs/pipeline-history.org= (the timeline of pipeline
+document's. Companion to =research/history/pipeline-history.org= (the timeline of pipeline
 semantics) and =spec.org= §Port tiers (this estate's own progression).
 
 * The survey
@@ -148,5 +148,5 @@ The table is the owner's survey as supplied on 2026-09-15; the rows name their
 sources and are not re-verified here. Where a row is a product's documentation
 example rather than a fixed design (=gcp-cloud-deploy=, =kargo=, =flux=), the
 note says so. Claims in §Seven kinds about specific vendors are readings of the
-rows, not of the vendors' documents; =docs/pipeline-history.org= carries the
+rows, not of the vendors' documents; =research/history/pipeline-history.org= carries the
 verified references for the historical claims.

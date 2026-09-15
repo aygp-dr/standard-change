@@ -40,7 +40,7 @@ open a socket to =192.168.86.0/24= or the jails on =10.0.0.0/24=.
 So a required reviewer on =production= would be satisfied — or bypassed —
 without anything actually deploying, and a deployment that actually happened
 would never encounter it. Same reachability gap as
-=docs/label-ownership.org= rule 2, and the same reason
+=research/findings/label-ownership.org= rule 2, and the same reason
 =merge-on-healthy.yml= must abstain rather than falsify.
 
 *This is not an argument against setting them.* It is an argument for knowing

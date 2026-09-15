@@ -5,7 +5,7 @@
 * Provenance and reconciliation
 
 Produced by a second research agent and filed here verbatim below the line.
-It overlaps =docs/pipeline-history.org= and =docs/five-properties.org=, which
+It overlaps =research/history/pipeline-history.org= and =research/history/five-properties.org=, which
 carry the =:VERIFIED:= drawers from the citation audit; this file carries
 none, and where the two disagree the audited file's drawer is the record and
 this file is the dissent. The disagreements, so nobody has to diff them:

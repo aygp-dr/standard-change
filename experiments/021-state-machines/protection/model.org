@@ -211,7 +211,7 @@ by exactly one actor: a human removing the label. Deliberately *not* resolved:
 - the =labels.tsv= row keeps =owner=REJECTED= and =human_add=no= verbatim, so
   the contradiction is *in* the merged data rather than smoothed out of it.
 
-The rejection argument itself (=docs/precedence-and-locks.org:98-130=) is
+The rejection argument itself (=research/history/precedence-and-locks.org:98-130=) is
 sound: the human stops were always earlier — do not add =change:requested=, do
 not approve — and a fourth mechanism with a fifth scope and no precedence rule
 is a hazard. What the model records is that the argument was won and the code

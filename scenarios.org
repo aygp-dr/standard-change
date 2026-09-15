@@ -354,7 +354,7 @@ Anything failing any condition is *reported and left alone*, never forced.
 The reason to specify it is *the manual cost it would remove*, and that cost is
 the thing being ground out here. Every booking today cost: read the calendar,
 pick a duration that clears the floor, check for a clash, book, watch it not be
-driven, reap it, re-book. See =docs/time-spent.org=.
+driven, reap it, re-book. See =research/findings/time-spent.org=.
 
 *An implementation is only worth it if that cost is measured first.* 001 should
 build the harness before the scheduler.

@@ -215,7 +215,7 @@ collapse — not that your process says they should not. In this repo that
 separation exists today by accident: the proxy reviewer runs as the author's own
 token and GitHub refuses to let an author approve their own pull request, so
 "the refusal is currently the only thing keeping author and reviewer apart, and
-it is doing it by accident" [E, =docs/reviewer-identity.org=].
+it is doing it by accident" [E, =research/findings/reviewer-identity.org=].
 
 *If =conventional=:* the approval rung is emitted and *labelled decorative*.
 The generated script prints, on every run, that nothing enforces the separation.
@@ -281,13 +281,13 @@ relied on. Nothing else in the pipeline, and everything about its shape.
 *If no* — which is this repo's answer — every gate that matters runs on a host
 and reports by observation record. That makes records a proxy for check runs,
 which makes record ownership a *correctness* concern rather than tidiness
-[E, =docs/testing-problems.org= §5]. The generator emits the record carrier, the
+[E, =research/findings/testing-problems.org= §5]. The generator emits the record carrier, the
 one-writer-per-fact declaration, and the audit that enforces it.
 
 *If yes:* the generator emits gate results as platform check runs and skips the
 carrier. Simpler, and you should prefer it if you can have it.
 
-*=docs/testing-problems.org= states the rebuild advice:* "decide early whether CI
+*=research/findings/testing-problems.org= states the rebuild advice:* "decide early whether CI
 can reach the estate. Everything about how evidence is carried follows from that
 answer, and retrofitting it is what produced the label taxonomy."
 
@@ -439,7 +439,7 @@ record* — and that is a real loss, because the forfeit is this repo's dominant
 cost: of roughly thirty windows booked, about half expired unattempted, nobody
 having been watching when they opened [E, =README.org= §2]. ITIL 4 is the only
 body of practice with an object a forfeited window could be an instance of;
-DORA has none [E, secondary — =docs/release-standards.org=].
+DORA has none [E, secondary — =research/history/release-standards.org=].
 
 *If you answer =cas=:* four closure codes, and they are a closed set —
 =passed=, =failed= (attempted, did not complete), =cancelled= (decided against),

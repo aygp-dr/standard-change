@@ -7,7 +7,7 @@
 
 *Research notes. Not spec, not an ADR.* =spec.org= governs. References carry
 =:VERIFIED:= drawers in the annotation model described in
-=docs/pipeline-history.org= §Status; a reference without a drawer is [H].
+=research/history/pipeline-history.org= §Status; a reference without a drawer is [H].
 
 * Statement
 

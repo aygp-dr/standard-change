@@ -115,7 +115,7 @@ done
 # runtime and is invisible to gates/label-audit.py, which reads the SOURCE: it
 # saw a write of the bare prefix and correctly called it undeclared. A label an
 # auditor cannot see is a label with no owner, which is the condition
-# docs/label-ownership.org exists to prevent. So the branch is written out.
+# research/findings/label-ownership.org exists to prevent. So the branch is written out.
 #
 # This comment deliberately does NOT spell the prefix out. The first version
 # did, while explaining the problem, and the audit flagged the COMMENT -- the

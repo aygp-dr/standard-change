@@ -2,7 +2,7 @@
 #+DATE: 2026-09-15
 
 *Research notes, as supplied by the owner on 2026-09-15; not spec, not an ADR.*
-=docs/five-properties.org= states the five properties (P1 berth is a lease, P2
+=research/history/five-properties.org= states the five properties (P1 berth is a lease, P2
 calendar is a serialized store with non-overlap, P3 the runner writes its own
 verdict, P4 the scheduler consumes before acting, P5 the coordinator re-reads
 and has a tail) and their references. This document is the per-substrate
@@ -118,5 +118,5 @@ Unverified [H] as supplied. Claims about specific platform primitives
 (Postgres exclusion constraints, Kubernetes =Lease= and finalizers,
 Cloudflare versions, gradual deployments, Workflows, Browser Rendering) are
 the owner's reading of vendor documentation and carry no drawers yet;
-=docs/five-properties.org= §Standards and references holds the verified
+=research/history/five-properties.org= §Standards and references holds the verified
 references for the properties themselves.

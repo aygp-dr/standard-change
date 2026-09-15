@@ -1,5 +1,5 @@
 #+TITLE: Label vocabularies for staging-and-production deployment — what is standardised, what is convention, and what this repo invented
-#+SUBTITLE: A survey of GitHub's own primitives, 90-odd label strings measured in the wild, and twelve candidate standards graded against docs/release-standards.org's six tiers
+#+SUBTITLE: A survey of GitHub's own primitives, 90-odd label strings measured in the wild, and twelve candidate standards graded against research/history/release-standards.org's six tiers
 #+AUTHOR: aygp-dr
 #+DATE: 2026-09-14
 #+PROPERTY: header-args :mkdirp t
@@ -11,7 +11,7 @@
 are =spec.org='s: [E] observed or read directly, [H] inferred or not checked,
 [E, secondary] read only in a restatement because the primary is paywalled.
 
-This file deliberately does not repeat =docs/release-standards.org=, which
+This file deliberately does not repeat =research/history/release-standards.org=, which
 already established the six-tier taxonomy used throughout, and already read
 CDEvents, OpenTelemetry semconv, SLSA, in-toto, ITIL 4, ISO/IEC 20000-1 and the
 GitHub Deployments API for a *different* question — /what is a deployment
@@ -143,7 +143,7 @@ published GraphQL schema at =docs.github.com/public/fpt/schema.docs.graphql=.
 
 * Part 1 — GitHub's own primitives, and the state machine it actually has
 
-=docs/release-standards.org= §GitHub in particular already established the
+=research/history/release-standards.org= §GitHub in particular already established the
 *epistemic* point — a Deployment is self-reported, "GitHub is never actually
 accessing your servers", and the =state= mirrors the deploy script's exit code
 rather than the target's condition. Not repeated. What follows is the *shape of
@@ -210,7 +210,7 @@ Two operational traps worth recording, both [E] from the doc text:
    same repository and environment name as the created status's deployment. An
    inactive status is only added to deployments that had a =success= state."
    And =production_environment= "Default: true when environment is =production=".
-   =docs/release-standards.org= flagged this as [H] on a literal reading; the
+   =research/history/release-standards.org= flagged this as [H] on a literal reading; the
    doc text is confirmed [E], the *implementation* remains [H]. For a blue/green
    production pair, *nothing retires the old slot for you.*
 
@@ -298,7 +298,7 @@ created".
 
 ** Verdict on GitHub
 
-*Tier 3, vendor contract*, per =docs/release-standards.org='s taxonomy: no
+*Tier 3, vendor contract*, per =research/history/release-standards.org='s taxonomy: no
 conformance test, the platform is the test, and it can change without notice.
 Its deployment state machine is real, enumerable, and *two-valued at every
 decision point that matters* — approve/reject, success/failure, active/inactive
@@ -357,7 +357,7 @@ about.
    *not written by release-please*; the README hands the writer to "publication
    tooling" as "a convention". 32,785 issues carry it, so the convention is
    actually adopted. That is an independent arrival at rule 1 of
-   =docs/label-ownership.org= — the instrument writes its own verdict, and a
+   =research/findings/label-ownership.org= — the instrument writes its own verdict, and a
    tool that did not take the measurement declines to record it.
 
 =release-please:force-run= is the matching *intent* label: a person adds it, the
@@ -563,7 +563,7 @@ when it split =emergency= (estate) from =itil:emergency= (exemption)*, and it is
 the default thing people do.
 
 Where estate-global freezes *do* exist as a first-class object, they are not
-labels and not in the forge. =docs/reference-survey.org= already records the
+labels and not in the forge. =research/history/reference-survey.org= already records the
 three: AWS Systems Manager Change Calendar (iCalendar/RFC 5545 documents that
 are "Open by default" or "Closed by default"), AWS CodePipeline's
 =DeploymentWindow= rule provider, and Google Cloud Deploy's deploy policies with
@@ -571,7 +571,7 @@ are "Open by default" or "Closed by default"), AWS CodePipeline's
 
 * Part 3 — candidate standards, graded
 
-Tiers are =docs/release-standards.org= §A taxonomy: 1 formal standard, 2 open
+Tiers are =research/history/release-standards.org= §A taxonomy: 1 formal standard, 2 open
 specification, 3 vendor contract, 4 framework, 5 research programme, 6 folklore.
 
 ** The summary table
@@ -607,14 +607,14 @@ three and miss a different one:
   deployment *state* that persists after the run ends.
 
 Joined, they would be the standard this repo needs. Nobody has joined them, and
-=docs/release-standards.org= already recorded the adjacent version of the same
+=research/history/release-standards.org= already recorded the adjacent version of the same
 gap: signed provenance stops at the registry, deployment events start at the
 environment, and nothing crosses.
 
 ** CDEvents — names environments perfectly, and cannot say a deployment failed
 
 Read from =cdevents/spec= at =main= (=version.txt= = =0.6.0-draft=; the released
-line is v0.5.1 per =docs/release-standards.org=) [E]. The subjects, verbatim
+line is v0.5.1 per =research/history/release-standards.org=) [E]. The subjects, verbatim
 from =continuous-deployment.md=:
 
 | subject | fields |
@@ -661,7 +661,7 @@ incidents, not about stopping the estate.
 
 ** OpenTelemetry semantic conventions — the one specification that draws this repo's own line
 
-=docs/release-standards.org= §OpenTelemetry already took the /resource/
+=research/history/release-standards.org= §OpenTelemetry already took the /resource/
 attributes (=service.name=, =service.version=, =service.instance.id=,
 =deployment.environment.name= — all Stable, with =staging= and =production=
 among the well-known values). Not repeated. The addition here is the =cicd.*=
@@ -713,15 +713,15 @@ an indeterminate value.*
 
 The stability caveat is real and cuts both ways: =release_candidate= is one step
 below Stable and above Experimental — the names are close to frozen but not
-frozen, so =docs/ci-portability.org='s rule still applies. The *resource*
+frozen, so =research/substrates/ci-portability.org='s rule still applies. The *resource*
 attributes this repo would use for guard 5 (=service.version=,
-=deployment.environment.name=) are Stable [E via =docs/release-standards.org=].
+=deployment.environment.name=) are Stable [E via =research/history/release-standards.org=].
 
 *Tier 2.* Free. *The best adoption candidate in this survey.*
 
 ** SLSA and in-toto — build-side, and they say so; but the VSA has the better idea
 
-=docs/release-standards.org= §Provenance already established that SLSA
+=research/history/release-standards.org= §Provenance already established that SLSA
 "explicitly does not cover deployment" and that in-toto's Statement binds a
 predicate to an artifact digest. Nothing here changes that. SLSA has *levels*,
 not states; there is no state machine to align to. One currency note:
@@ -813,7 +813,7 @@ Contents page shows the 2011→2018 renumbering with strikethrough.
 
 Both numbers that have been used in this repository are correct, for different
 things, and neither the task's framing nor
-=docs/reference-survey.org= was wrong:
+=research/history/reference-survey.org= was wrong:
 
 | 2018 clause | title | replaces (2011) |
 |-------------+-------+-----------------|
@@ -822,7 +822,7 @@ things, and neither the task's framing nor
 | 8.5.2 | Service design and transition | |
 | *8.5.3* | *Release and deployment management* | 9.3 Release and deployment management |
 
-So =docs/reference-survey.org='s "clause 8.5.1" is change management and the
+So =research/history/reference-survey.org='s "clause 8.5.1" is change management and the
 task's "§8.5.3" is release and deployment management. *An earlier draft of this
 file asserted that 8.5.1 was the correction and 8.5.3 was an error. That was
 wrong and is withdrawn.*
@@ -864,7 +864,7 @@ say about the question this file asks.
 ** ITIL 4 change enablement — tier 4, paywalled, and the only source of three of this repo's labels
 
 *Paywalled (AXELOS/PeopleCert); the practice guides were not read.* Claims are
-[E, secondary], consistent with =docs/reference-survey.org='s verbatim quotations
+[E, secondary], consistent with =research/history/reference-survey.org='s verbatim quotations
 of the 9 January 2020 Change Enablement practice guide, which this file takes as
 its secondary source of record.
 
@@ -911,7 +911,7 @@ deploy is a real deployment that authorises nothing", and it is ITIL, not ISO.*
   /standard change/, /emergency change/, /release/ and /deployment/ —
   suggestive, not dispositive.
 
-  *The primary is now harder to reach than when =docs/reference-survey.org= was
+  *The primary is now harder to reach than when =research/history/reference-survey.org= was
   written* [E]: the free AXELOS glossary endpoint returns only the site shell,
   the historic direct PDF link returns HTML, the PeopleCert equivalent redirects
   to a login, and the 34 practice guides sit behind PeopleCert Plus membership
@@ -1059,7 +1059,7 @@ gate failing and a soak observation being negative.
 
 Spinnaker's Managed Delivery does model environments and promotion constraints
 (=depends-on=, =allowed-times=, =manual-judgement=) — already recorded in
-=docs/reference-survey.org=, not repeated.
+=research/history/reference-survey.org=, not repeated.
 
 ** Backstage — a maturity axis wearing an environment's name
 
@@ -1190,11 +1190,11 @@ same idea with two fewer values and should be treated as the fallback.
   "not green", and there is now a published name for it. =timeout= is what
   =change/reap.sh= produces and what =spec.org= calls the =expired= closure code.
 - *Gain, later*: when a deployment record needs a schema —
-  =docs/release-standards.org= recommends CDEvents' shape for that — the gate
+  =research/history/release-standards.org= recommends CDEvents' shape for that — the gate
   verdicts translate without loss, because CDEvents' four values are a subset.
 - *Risk*: =release_candidate= stability, so the strings may still move. Record
   the version read (=model/cicd/registry.yaml= at =main=, 2026-09-14) and re-check
-  before any claim of conformance. =docs/ci-portability.org='s rule applies.
+  before any claim of conformance. =research/substrates/ci-portability.org='s rule applies.
 
 *** 2. Adopt Argo Rollouts' =Inconclusive= as the name for exit 4. Tier 3. Free.
 
@@ -1252,13 +1252,13 @@ tier =CLAUDE.md= forbids.
 
 *** 5. Do not adopt GitHub's deployment state machine as the source of truth.
 
-Already argued in =docs/release-standards.org= (self-reported, not attested) and
-in =docs/github-environments.org= (nothing that deploys this estate runs in
+Already argued in =research/history/release-standards.org= (self-reported, not attested) and
+in =research/substrates/github-environments.org= (nothing that deploys this estate runs in
 Actions). Three additions from this survey that strengthen the case [E]:
 supersession fires no webhook, =auto_inactive= excludes production so a
 blue/green pair retires nothing by itself, and status history is deleted at 90
 days. *Use the Deployments API as a place to write records, as
-=docs/github-environments.org= concludes. Do not read the estate out of it.*
+=research/substrates/github-environments.org= concludes. Do not read the estate out of it.*
 
 *** 6. Adopt nothing from SLSA, SPIFFE, OSCAL or Backstage for this question.
 
@@ -1280,7 +1280,7 @@ Keeping the labels as folklore costs three things, and only the third is serious
    zero: nothing else is trying to.
 2. *No conformance test.* =gates/label-audit.py= and =tla/Labels.tla= are the
    conformance test, and they are better than anything a standard would give,
-   because they check *this* machine (=docs/label-state-machine.org=: 2,336,400
+   because they check *this* machine (=research/findings/label-state-machine.org=: 2,336,400
    states, twelve rules, 13/13 cross-checked). *A repo that model-checks its own
    label machine does not need a standard to tell it the machine is consistent.*
 3. *The two-valued verdict stacks.* This is the real cost, it is the thing
@@ -1290,7 +1290,7 @@ Keeping the labels as folklore costs three things, and only the third is serious
 
 ** Where a standard would have helped and did not exist
 
-Worth recording as the gap, in the shape =docs/release-standards.org= uses:
+Worth recording as the gap, in the shape =research/history/release-standards.org= uses:
 
 #+begin_src mermaid :eval never-export
 flowchart LR
@@ -1314,7 +1314,7 @@ flowchart LR
 #+end_src
 
 *The standards stop at the controller and the labels start at the forge, and
-nothing crosses.* That is the same boundary =docs/release-standards.org= drew
+nothing crosses.* That is the same boundary =research/history/release-standards.org= drew
 between signed provenance and deployment events, one layer up.
 
 * Refutation conditions for this file
@@ -1379,7 +1379,7 @@ Paywalled, claims attributed to secondary restatements [E, secondary]:
   20000 Certification/, 2019 edition; Advisera's clause-indexed
   mandatory-documents list; a PECB whitepaper (2011 edition).
 - *ITIL 4 Change Enablement practice guide* (AXELOS, 9 January 2020) — verbatim
-  definitions taken from =docs/reference-survey.org=, which remains this file's
+  definitions taken from =research/history/reference-survey.org=, which remains this file's
   secondary source of record for them. *The primary is now less reachable than
   when that file was written*: the free AXELOS glossary endpoint returns only
   the site shell, the historic PDF link returns HTML, the PeopleCert equivalent
@@ -1390,15 +1390,15 @@ Paywalled, claims attributed to secondary restatements [E, secondary]:
 Not read, and therefore [H] where cited: SPIFFE and Backstage specifications
 were not fetched; both were assessed from prior knowledge and the projects' own
 repository label sets. The =deployment.environment.name= and =service.*=
-stability claims are [E] via =docs/release-standards.org=, not re-verified here;
+stability claims are [E] via =research/history/release-standards.org=, not re-verified here;
 the =cicd.*= members *were* read directly and are [E]. Whether ITIL 4's own text
 uses the phrase "post-implementation review" is *unresolved* and marked [H]
 throughout.
 
-Prior work in this repository, cited rather than repeated: =docs/release-standards.org=
+Prior work in this repository, cited rather than repeated: =research/history/release-standards.org=
 (the six tiers, CDEvents, OTel, SLSA, in-toto, ITIL, GitHub Deployments as
-self-report), =docs/reference-survey.org= (ITIL verbatim, AWS/GCP deployment
-windows, Spinnaker Managed Delivery), =docs/github-environments.org= (why
-protection rules enforce nothing here), =docs/label-ownership.org= (the
-single-writer rule), =docs/label-state-machine.org= (the model-checked machine),
+self-report), =research/history/reference-survey.org= (ITIL verbatim, AWS/GCP deployment
+windows, Spinnaker Managed Delivery), =research/substrates/github-environments.org= (why
+protection rules enforce nothing here), =research/findings/label-ownership.org= (the
+single-writer rule), =research/findings/label-state-machine.org= (the model-checked machine),
 =docs/exit-codes.org= (why 4 is not 1), =docs/interfaces.org= (=tri()=).

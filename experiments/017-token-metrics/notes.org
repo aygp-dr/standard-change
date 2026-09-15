@@ -27,7 +27,7 @@ what the captured data cannot support.
 
 ** F1 -- the published total was the sum of its own revisions
 
-=docs/time-spent.org= shipped *2,245,451,282* tokens. The true figure is
+=research/findings/time-spent.org= shipped *2,245,451,282* tokens. The true figure is
 *1,182,809,707*. A transcript writes one usage record per streaming update, not
 one per API call: 4,291 rows carry 2,171 distinct message ids, 1.98 rows per
 call. Summing rows counts most calls twice.
@@ -39,7 +39,7 @@ measurement. The structural fix is in =schema.sql=: PRIMARY KEY (ledger_id,
 api_message_id), so the second snapshot is an upsert and the double count is
 unrepresentable.
 
-Corrected in =docs/time-spent.org= rather than left to stand.
+Corrected in =research/findings/time-spent.org= rather than left to stand.
 
 ** F2 -- cost per unit, and it is not where the volume is
 

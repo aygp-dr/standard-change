@@ -41,7 +41,7 @@ jobs:
       #   unreachable            -> ABSTAIN: refuse the merge, touch nothing
       #
       # Abstaining still fails closed, which is right. What it must not do is
-      # falsify. See docs/label-ownership.org, rule 2.
+      # falsify. See research/findings/label-ownership.org, rule 2.
       - name: guard 5, again — do not trust the label that triggered this
         run: |
           SHA=$(gh pr view "$PR" --json headRefOid -q .headRefOid | cut -c1-7)

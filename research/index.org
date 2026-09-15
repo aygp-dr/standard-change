@@ -7,7 +7,7 @@
 #+LATEX_HEADER: \usepackage[margin=2.2cm]{geometry}
 
 This document is the research directory of the repository, assembled by
-=#+INCLUDE= from the documents under =docs/= and =experiments/= so it can be
+=#+INCLUDE= from =history/=, =substrates/=, =findings/= here and =experiments/= so it can be
 rebuilt as HTML or PDF (=gmake research=). It covers what was read, what was
 tried and what was found. It leaves out the internals: the spec, the scripts,
 the gates, the shell review. A repository with a risk designation, something
@@ -15,42 +15,42 @@ deployable and a pipeline that governs deployment can take the tracking layer
 described in Part V without touching the labels it already has.
 
 * Part I: How to read this, and how to adopt it
-#+INCLUDE: "adoption.org" :minlevel 2
+#+INCLUDE: "adoption.org" :minlevel 3
 
 * Part II: History of the ideas
-#+INCLUDE: "../docs/pipeline-history.org" :minlevel 2
-#+INCLUDE: "../docs/release-strategies.org" :minlevel 2
-#+INCLUDE: "../docs/reference-survey.org" :minlevel 2
-#+INCLUDE: "../docs/five-properties.org" :minlevel 2
-#+INCLUDE: "../docs/release-standards.org" :minlevel 2
-#+INCLUDE: "../docs/promotion-models.org" :minlevel 2
-#+INCLUDE: "../docs/label-standards-survey.org" :minlevel 2
-#+INCLUDE: "../docs/precedence-and-locks.org" :minlevel 2
-#+INCLUDE: "../docs/deploy-ledger-comparison.org" :minlevel 2
-#+INCLUDE: "../docs/storefront-deployments.org" :minlevel 2
+#+INCLUDE: "../research/history/pipeline-history.org" :minlevel 2
+#+INCLUDE: "../research/history/release-strategies.org" :minlevel 2
+#+INCLUDE: "../research/history/reference-survey.org" :minlevel 2
+#+INCLUDE: "../research/history/five-properties.org" :minlevel 2
+#+INCLUDE: "../research/history/release-standards.org" :minlevel 2
+#+INCLUDE: "../research/history/promotion-models.org" :minlevel 2
+#+INCLUDE: "../research/history/label-standards-survey.org" :minlevel 2
+#+INCLUDE: "../research/history/precedence-and-locks.org" :minlevel 2
+#+INCLUDE: "../research/history/deploy-ledger-comparison.org" :minlevel 2
+#+INCLUDE: "../research/history/storefront-deployments.org" :minlevel 2
 
 * Part III: Substrates, hosting and what a platform can enforce
-#+INCLUDE: "../docs/substrate-mapping.org" :minlevel 2
-#+INCLUDE: "../docs/substrate-emulation.org" :minlevel 2
-#+INCLUDE: "../docs/hosting-survey.org" :minlevel 2
-#+INCLUDE: "../docs/deployment-targets.org" :minlevel 2
-#+INCLUDE: "../docs/github-environments.org" :minlevel 2
-#+INCLUDE: "../docs/ci-and-the-estate.org" :minlevel 2
-#+INCLUDE: "../docs/ci-portability.org" :minlevel 2
+#+INCLUDE: "../research/history/substrate-mapping.org" :minlevel 2
+#+INCLUDE: "../research/substrates/substrate-emulation.org" :minlevel 2
+#+INCLUDE: "../research/substrates/hosting-survey.org" :minlevel 2
+#+INCLUDE: "../research/substrates/deployment-targets.org" :minlevel 2
+#+INCLUDE: "../research/substrates/github-environments.org" :minlevel 2
+#+INCLUDE: "../research/substrates/ci-and-the-estate.org" :minlevel 2
+#+INCLUDE: "../research/substrates/ci-portability.org" :minlevel 2
 
 * Part IV: What was found
-#+INCLUDE: "../docs/label-ownership.org" :minlevel 2
-#+INCLUDE: "../docs/labels-are-the-only-channel.org" :minlevel 2
-#+INCLUDE: "../docs/concurrent-change.org" :minlevel 2
-#+INCLUDE: "../docs/label-state-machine.org" :minlevel 2
-#+INCLUDE: "../docs/reviewer-identity.org" :minlevel 2
-#+INCLUDE: "../docs/testing-problems.org" :minlevel 2
-#+INCLUDE: "../docs/time-spent.org" :minlevel 2
+#+INCLUDE: "../research/findings/label-ownership.org" :minlevel 2
+#+INCLUDE: "../research/findings/labels-are-the-only-channel.org" :minlevel 2
+#+INCLUDE: "../research/findings/concurrent-change.org" :minlevel 2
+#+INCLUDE: "../research/findings/label-state-machine.org" :minlevel 2
+#+INCLUDE: "../research/findings/reviewer-identity.org" :minlevel 2
+#+INCLUDE: "../research/findings/testing-problems.org" :minlevel 2
+#+INCLUDE: "../research/findings/time-spent.org" :minlevel 2
 
 * Part V: The experiments, in order
-#+INCLUDE: "../experiments/014-observation-records/notes.org" :minlevel 2
-#+INCLUDE: "../experiments/016-dora/notes.org" :minlevel 2
-#+INCLUDE: "../experiments/020-browser-uat/notes.org" :minlevel 2
-#+INCLUDE: "../experiments/022-five-agent-grind/notes.org" :minlevel 2
-#+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 2
-#+INCLUDE: "../experiments/024-five-owners/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/014-observation-records/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/016-dora/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/020-browser-uat/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/022-five-agent-grind/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/024-five-owners/notes.org" :minlevel 3

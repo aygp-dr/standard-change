@@ -55,7 +55,7 @@ Four agents on four dev blocks surfaced: two PRs editing =shared/oneui.js=
 replaces the first), and an observation recorded against a build that a push had
 already replaced (silent, and it authorised a merge).
 
-*On a rebuild*: see =docs/concurrent-change.org=. The kinds need different
+*On a rebuild*: see =research/findings/concurrent-change.org=. The kinds need different
 mechanisms and only the loud one has one.
 
 * 5. The platform could not run the thing under test

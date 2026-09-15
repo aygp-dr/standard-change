@@ -37,7 +37,7 @@ import argparse, collections, itertools, sys
 # INTERFERE is not a rule of the pipeline. It is a rule of the WORLD: any
 # actor -- a human, a CI workflow, a scheduler, another agent -- may add or
 # remove any label at any moment, and none of them can see the others. The
-# labels are the entire channel (docs/labels-are-the-only-channel.org).
+# labels are the entire channel (research/findings/labels-are-the-only-channel.org).
 #
 # With it ON, label-set invariants like OneLifecycle STOP BEING INVARIANTS,
 # because no guard on one writer can prevent a violation produced by a writer

@@ -17,7 +17,7 @@
 (* Every action names the script or workflow it was read from. Where the   *)
 (* declaration (change/label-owners.tsv) and a script disagree, the SCRIPT *)
 (* is modelled and the disagreement is listed in                           *)
-(* docs/label-state-machine.org.                                           *)
+(* research/findings/label-state-machine.org.                              *)
 (*                                                                         *)
 (* Fifteen CONSTANTS, one per rule, so the model can FAIL fifteen ways.    *)
 (* Each is flipped to FALSE by tla/check.sh and TLC must name the invariant *)

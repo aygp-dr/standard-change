@@ -52,7 +52,7 @@ Prefixed however the repository prefers; the words are what matter.
 
 Two words are a person's: =change:start= and =staging:hold=. Everything else
 is written by the thing that knows the fact, and an observation is written
-only by the instrument that measured it (=docs/label-ownership.org=,
+only by the instrument that measured it (=research/findings/label-ownership.org=,
 experiments 014 and 023 F4).
 
 * Every decision, with its options and where each was watched

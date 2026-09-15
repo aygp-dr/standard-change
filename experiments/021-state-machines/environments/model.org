@@ -541,7 +541,7 @@ not a measurement, and the one thing worth reading off the distribution is
 structural rather than numeric: *most of the walk is spent in the
 request–block–re-request loop, not on the deploy path.* =S20_scheduled= is
 entered about 2.3 times per walk. That is consistent with what this repo
-already measured about itself — =docs/release-strategies.org= reports 10–20
+already measured about itself — =research/history/release-strategies.org= reports 10–20
 validation runs per shipped change, and =docs/adr/0002= refuses to put DORA on
 the dashboard precisely because a forfeited window and a revalidation are
 invisible to it. If the weights are ever replaced with measurements, that loop

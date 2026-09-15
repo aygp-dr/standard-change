@@ -10,8 +10,8 @@
 nothing here amends it. Epistemic labels are =spec.org='s: [E] established,
 [P] provisional, [H] hypothesis, [I] inferred.
 
-This file sits beside =docs/release-strategies.org= (which priced release
-trains against mainline-only on the simulator) and =docs/release-standards.org=
+This file sits beside =research/history/release-strategies.org= (which priced release
+trains against mainline-only on the simulator) and =research/history/release-standards.org=
 (which asked what is actually standardised) and does not repeat either. It
 answers a question neither asked: *where did each of the options in front of
 the next ADR come from, and what did the industry learn when it tried them?*
@@ -292,7 +292,7 @@ separately. Our berth, calendar and activation sit in the gap GitOps opened.
 :END:
 
 Forsgren, Humble, Kim. The four DORA metrics as the measure of pipeline
-quality. =docs/release-standards.org= already records that this frame is
+quality. =research/history/release-standards.org= already records that this frame is
 structurally blind to forfeited windows and revalidation runs.
 
 ** 2019–2021 — provenance
@@ -362,7 +362,7 @@ being put back as a model. This is the closest ancestor of *Option 2*.
 
 Claude Code, Copilot coding agent. The author of a change may be a machine.
 Who may add =release= becomes a policy question rather than a social one —
-which is what =docs/label-ownership.org= and =change/label-owners.tsv= are
+which is what =research/findings/label-ownership.org= and =change/label-owners.tsv= are
 for. [E: this repo]
 
 ** The three inflection points
@@ -448,7 +448,7 @@ it feeds.
   that train and eligible for the next. ADR 0003's "no automatic reslotting"
   is the trunk-based position; a train is the *opposite* choice, where
   reslotting to the next cadence is the norm and the calendar is the product.
-  =docs/release-strategies.org= measured this: 23× less revalidation work per
+  =research/history/release-strategies.org= measured this: 23× less revalidation work per
   shipped change at a one-hour cadence, and no help at all for
   =itil:emergency=.
 
@@ -462,8 +462,8 @@ it feeds.
 | 1 manual schedule, automated deploy | Humble & Farley's pipeline with a manual production gate; most enterprises under ITIL | The gate becomes a rubber stamp when it cannot fail on evidence; it becomes a bottleneck when it can. | Only honest if the validation tasks are real gates (ADR 0001 §Option 0's test: a guard that cannot be made to fail is not a guard). The interface — API, skill, CLI — carries no semantics (=README.org= §Interfaces). |
 | 2 integrated scheduler | Kargo, CodePipeline stage conditions, GitHub Environments wait timers | Promotion needs its own model once deploy is a sync; deployment windows are a first-class rule in every one of these. | This is what =change/activate.sh= already is. The ADR's question is whether the scheduler /re-evaluates/ or merely /fires/ — ADR 0003 says re-evaluates. |
 | 3 application isolation | Amazon 2006; every microservices migration since | Contention disappears; coordination reappears at the interface. | Dissolves the problem rather than repricing it (ADR 0001 §Option A). The cost is contracts at the router, which is real engineering. |
-| 4 release train | Chrome, Firefox, Facebook web 2008–2016 | Facebook abandoned the branch-and-cherry-pick train when the *coordination* cost stopped scaling, not the batching arithmetic (=release-strategies.org= §History). Firefox's rapid release did not measurably worsen quality (Khomh et al. 2012) but did shorten the fix window. | Fixes the 1/20 contention; does nothing for emergencies; rollback granularity becomes the train. |
-| 5 mainline deployment | GitHub 2011, trunk-based shops, DORA-elite cohort | "Deploy main" without a verdict on the SHA is branch-bound authorization; with a verdict it costs one run per merge. | Relocates guard 4b, does not remove it (=release-strategies.org= §Mainline-only does not touch guard 4b). Requires a merge queue to be more than nominal. |
+| 4 release train | Chrome, Firefox, Facebook web 2008–2016 | Facebook abandoned the branch-and-cherry-pick train when the *coordination* cost stopped scaling, not the batching arithmetic (=research/history/release-strategies.org= §History). Firefox's rapid release did not measurably worsen quality (Khomh et al. 2012) but did shorten the fix window. | Fixes the 1/20 contention; does nothing for emergencies; rollback granularity becomes the train. |
+| 5 mainline deployment | GitHub 2011, trunk-based shops, DORA-elite cohort | "Deploy main" without a verdict on the SHA is branch-bound authorization; with a verdict it costs one run per merge. | Relocates guard 4b, does not remove it (=research/history/release-strategies.org= §Mainline-only does not touch guard 4b). Requires a merge queue to be more than nominal. |
 
 The table says what the timeline says. Options 1 and 2 are two ways of filling
 the promotion gap and differ only in who presses the button. Options 3, 4 and 5
@@ -757,7 +757,7 @@ surface, so they were released *in sequence*, and production currently serves
 group commit =main + A + B= is a third tree. Landing it means =main= now says
 something production has never served, and guard 5 — the estate serves the
 promoted build — is false at the instant of merge, for the same reason
-=release-strategies.org= §Guard 5 is false by construction during a roll gives
+=research/history/release-strategies.org= §Guard 5 is false by construction during a roll gives
 for rolling deploys. A lookup policy can make the queue *refuse* this — post
 the check only if the group has exactly one member, or only if the newest
 member's =T= equals what production serves — but then the queue never stacks,
@@ -789,7 +789,7 @@ and a queue that never stacks is guard 1 wearing a different hat.
    the model." It costs the production-first rule: a red group is removed
    *before* it reaches =main= but *after* it reached production, so the
    rollback target must be recorded on the group, and a failed group of =N=
-   attributes to nobody without the bisect =release-strategies.org= prices at
+   attributes to nobody without the bisect =research/history/release-strategies.org= prices at
    =log2 N=.
 
 Anything between the two — production-first *and* stacking — is the

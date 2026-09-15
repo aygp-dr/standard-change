@@ -12,8 +12,8 @@ nothing here amends it. Epistemic labels are =spec.org='s: [E] established on a
 named cell, [P] provisional, [H] hypothesis, [I] inferred.
 
 This file sits beside two others and deliberately does not repeat them.
-=docs/release-strategies.org= priced release trains against mainline-only and
-found DORA never studied release trains; =docs/ci-portability.org= asked which
+=research/history/release-strategies.org= priced release trains against mainline-only and
+found DORA never studied release trains; =research/substrates/ci-portability.org= asked which
 platforms provide the capabilities the guards need. This file asks the two
 questions neither of those asked:
 
@@ -74,7 +74,7 @@ said, and the claim is labelled accordingly rather than quietly upgraded.
   below are quoted from *secondary* sources and are labelled [E, secondary] —
   they are consistent across several independent restatements, which is
   corroboration and not verification.
-- *Vendor documentation is not an observation.* =ci-portability.org='s rule
+- *Vendor documentation is not an observation.* =research/substrates/ci-portability.org='s rule
   applies: that GitHub documents a behaviour makes it [H] until we run it. The
   one exception below is the GitHub Pages header finding, which is a documented
   *absence* confirmed by a named GitHub staff member — an absence is the one
@@ -108,7 +108,7 @@ Two consequences worth stating before the detail:
   for a Release and a Deployment are not a standard by any definition, and they
   are nonetheless the contract this repo runs on. Treating a vendor contract as
   a standard is how a model ends up unportable; treating it as optional is how a
-  model ends up unimplementable. =ci-portability.org= exists because of the
+  model ends up unimplementable. =research/substrates/ci-portability.org= exists because of the
   first failure. §GitHub Pages below is an instance of the second.
 - *Tier 5 is not a standard and should stop being quoted as one.* DORA measures
   outcomes. It has no normative content, no conformance notion, and — as below —
@@ -165,7 +165,7 @@ often — and exactly one, plus its rework proxy, is about whether it worked.
 Every one of the five metrics takes *a deployment that reached production* as
 its unit of observation. This repo's dominant cost — 10–20 validation runs per
 shipped change (ADR-0001), or 13.63 per ship at eight berths
-(=docs/release-strategies.org=) — consists entirely of events that are not
+(=research/history/release-strategies.org=) — consists entirely of events that are not
 deployments.
 
 | What we spend money on | Where DORA would record it | Verdict |
@@ -247,7 +247,7 @@ necessarily move the reported band at all.*
 Stated as one sentence, because it is the thing to remember:
 
 #+begin_quote
-=release-strategies.org= priced the release train at *0.58 validations per ship
+=research/history/release-strategies.org= priced the release train at *0.58 validations per ship
 versus 13.63*, costing *2.6 h mean latency versus 12.5 h*. In DORA's frame the
 *cost* is legible (change lead time) and the *benefit* is not. The instrument
 can see the price and not the goods.
@@ -300,7 +300,7 @@ Three things, all [E], and the third is the surprise.
    #+end_quote
 
    That is a release train, described mechanically and called a pitfall, without
-   the name. It *refines* =release-strategies.org='s "DORA never studied release
+   the name. It *refines* =research/history/release-strategies.org='s "DORA never studied release
    trains": DORA never *studied* them — the term is absent from every report —
    but its prescriptive pages name the mechanism and are against it. The mapping
    from "regrouping batches before sending downstream" to "a release train" is
@@ -348,7 +348,7 @@ architecture changes.
 ** Google SRE — lore, and a better instrument than ours for the same job
 
 *Tier 6 with excellent provenance.* The SRE book is a book: no version, no
-conformance test, no normative language. =release-strategies.org= already
+conformance test, no normative language. =research/history/release-strategies.org= already
 handled chapter 8's branch-and-cherry-pick passage and Google's stated reason
 for it ("we know the exact contents of each release"); that is not repeated
 here. Three things it did not cover:
@@ -363,7 +363,7 @@ to production from the resulting pool of builds. Other teams have adopted a
 — /Release Engineering/, §High Velocity
 #+end_quote
 
-Those are the two ends of the argument =release-strategies.org= spent a whole
+Those are the two ends of the argument =research/history/release-strategies.org= spent a whole
 file on, offered side by side as equally normal. *Anyone citing "Google SRE
 says" for a cadence position is citing half a sentence.* [E]
 
@@ -598,7 +598,7 @@ vocabulary we can borrow even though the object it describes is not ours. [I]
 And =builder.id=: "URI indicating the transitive closure of the trusted build
 platform. This is intended to be the sole determiner of the SLSA Build level" —
 with "Consumers MUST accept only specific signer-builder pairs." That is
-=ci-portability.org='s C9 (gate-authority separation) stated as a normative
+=research/substrates/ci-portability.org='s C9 (gate-authority separation) stated as a normative
 requirement by a standards body. Worth knowing, since C9 is one of the two
 capabilities that note found absent on both platforms we use.
 
@@ -740,7 +740,7 @@ must stand on its own.
 *** OpenTelemetry semantic conventions — the standard nouns for "which build is serving"
 
 Guard 5 compares *one* sampled =x-build-sha= against *one* expected value.
-=release-strategies.org= §Guard 5 is false by construction during a roll already
+=research/history/release-strategies.org= §Guard 5 is false by construction during a roll already
 established that this is the wrong shape for a fleet. What it did not have is
 that *the right shape is standardised and stable*. [E]
 
@@ -789,7 +789,7 @@ readable statement that a version range is bad. [I]
 
 ** GitHub in particular
 
-=ci-portability.org= covered whether GitHub *provides* the capabilities. This
+=research/substrates/ci-portability.org= covered whether GitHub *provides* the capabilities. This
 section asks the narrower question the prompt poses: *what do a GitHub Release
 and a GitHub Deployment actually attest?*
 
@@ -817,7 +817,7 @@ By default a Release is *mutable and late-bound*: [E]
   pasted into a mutable =body=.
 
 So: *a default GitHub Release is intent.* It is the same object class as "on
-main" in =release-strategies.org= §Intent is not evidence — a statement by the
+main" in =research/history/release-strategies.org= §Intent is not evidence — a statement by the
 party that wanted it to be true, which can be edited afterwards.
 
 *The exception, and it is a real one.* Immutable releases went to public preview
@@ -1043,7 +1043,7 @@ from*, not the trunk tip: [I]
 
 For this repo =line(c) = main= and 4b' collapses to 4b, which is why the
 distinction has never come up. It is the same generalisation
-=release-strategies.org= needed for the train (the subject moved from N changes
+=research/history/release-strategies.org= needed for the train (the subject moved from N changes
 to one merge commit): *guard 4b's predicate is stable and its subject is the
 thing that varies by shape.*
 
@@ -1089,7 +1089,7 @@ backend, and nothing in the six guards mentions it. [I]
 
 ** 3 — Long-lived services with rolling deploys
 
-=release-strategies.org= §Services deployed continuously over time already
+=research/history/release-strategies.org= §Services deployed continuously over time already
 restated guard 5 for a roll, gave C6 a convergence interval, and found guard 4b
 needs a third evaluation point. *That is not repeated here.* Three things it did
 not have:
@@ -1146,7 +1146,7 @@ stays reachable". That is necessary and it is not sufficient, in two ways:
    the change into three distinct phases: expand, migrate, and contract" [E].
    After the contract phase, redeploying the previous sha produces *a tree that
    was never validated against the current schema.* It is a new, untested change
-   created during an incident, which =release-strategies.org= already identified
+   created during an incident, which =research/history/release-strategies.org= already identified
    as the worst possible moment to be creating untested trees — there for
    batching, here for state.
 
@@ -1174,7 +1174,7 @@ sentence in =spec.org=.
 
 =spec.org= §Targets: "Both targets must emit =x-build-sha= on every response, or
 guard 5 cannot distinguish a fresh deploy from a stale one." And
-=ci-portability.org= C8: "the app must emit its build SHA, and *the target must
+=research/substrates/ci-portability.org= C8: "the app must emit its build SHA, and *the target must
 preserve the header*."
 
 *GitHub Pages cannot set custom response headers.* GitHub staff (Yoann Chaudet),
@@ -1306,7 +1306,7 @@ it* ("a single response header equals a single expected string").
 *Refuted: guard 4b is not the second to break.* It survives libraries with its
 predicate untouched and its subject generalised from "trunk tip" to "tip of the
 line"; it survives rolling deploys with the third evaluation point
-=release-strategies.org= already named. Guard 4b turns out to be the *most*
+=research/history/release-strategies.org= already named. Guard 4b turns out to be the *most*
 portable guard in the set, because it is a statement about commit ancestry and
 divergence class — and those exist wherever there is a version control system,
 independent of what the artifact is or how it ships.
@@ -1446,7 +1446,7 @@ In the repo's house style, what would falsify the claims above:
 
 * Sources
 
-Primary documents read for this note. =release-strategies.org='s sources are not
+Primary documents read for this note. =research/history/release-strategies.org='s sources are not
 repeated.
 
 - DORA: =dora.dev= guides, capability pages, =quickcheck.js= instrument, survey

@@ -5,7 +5,10 @@
 the master's own header so the title is the master's."
   (save-excursion
     (goto-char (point-min)) (forward-line 8)
-    (while (re-search-forward "^#\\+\\(TITLE\\|DATE\\|AUTHOR\\|OPTIONS\\|SUBTITLE\\|LATEX_HEADER\\|LATEX_CLASS\\):.*\n" nil t)
+    (while (re-search-forward "^#\\+TITLE: \\(.*\\)\n" nil t)
+      (replace-match "** \\1\n"))
+    (goto-char (point-min)) (forward-line 8)
+    (while (re-search-forward "^#\\+\\(DATE\\|AUTHOR\\|OPTIONS\\|SUBTITLE\\|LATEX_HEADER\\|LATEX_CLASS\\):.*\n" nil t)
       (replace-match ""))))
 (add-hook 'org-export-before-parsing-functions #'sc-strip-included-keywords)
 (setq org-latex-compiler "xelatex"

@@ -2,7 +2,8 @@
 
 The history and the research, none of the internals, as one document.
 
-- =index.org=: the master; =#+INCLUDE= of =docs/= and =experiments/= plus =adoption.org=.
+- =index.org=: the master; =#+INCLUDE= of =history/=, =substrates/=, =findings/= and =../experiments/*/notes.org=, plus =adoption.org=.
+- =history/=: what was read (timelines, surveys, references). =substrates/=: where it could run and what a platform can enforce. =findings/=: what this repository found. Internals (spec, scripts, gates, ADRs, the shell review) stay in =docs/= and are not included.
 - =adoption.org=: how a repository with its own risk designation and deployable labels takes the tracking layer without renaming anything, and every decision with its options.
 - =build/=: =gmake= here (or =gmake build= at the root) writes =index.html= and =index.pdf=; =gmake html= or =gmake pdf= for one; git-ignored.
 - =export-common.el=, =export-html.el=, =export-pdf.el=: the batch export; the common hook strips the included files' own title keywords so the master's wins.

@@ -3,7 +3,7 @@
 
 * What this asks
 
-=docs/label-standards-survey.org= counted label *strings* GitHub-wide. This
+=research/history/label-standards-survey.org= counted label *strings* GitHub-wide. This
 asks a different question: *what does one team's complete signalling
 vocabulary look like, and how do the pieces relate?* A count tells you
 =deploy:staging= exists 169 times. It does not tell you what sits beside it.

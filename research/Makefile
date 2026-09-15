@@ -3,7 +3,7 @@
 # gmake clean
 .PHONY: all build html pdf clean
 all build: html pdf
-build/index.org: index.org adoption.org $(wildcard ../docs/*.org) $(wildcard ../experiments/*/notes.org)
+build/index.org: index.org adoption.org $(wildcard history/*.org substrates/*.org findings/*.org) $(wildcard ../experiments/*/notes.org)
 	@mkdir -p build && sed 's|^#+INCLUDE: "|#+INCLUDE: "../|' index.org > build/index.org
 html: build/index.org
 	@cd build && emacs --batch -l org -l ../export-html.el 2>&1 | grep -E 'Error|error' || true; ls -la index.html

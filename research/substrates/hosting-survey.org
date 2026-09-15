@@ -9,8 +9,8 @@
 *Research notes. Not spec, not an ADR.* Three researchers answered three
 questions against vendor documentation on 2026-09-14; every number below is
 [E from docs] and every "it works" is [H] until run, since none of it has
-been deployed. =docs/deployment-targets.org= prices the Cloudflare shapes;
-=docs/ci-portability.org= names the ten capabilities the guards need. This
+been deployed. =research/substrates/deployment-targets.org= prices the Cloudflare shapes;
+=research/substrates/ci-portability.org= names the ten capabilities the guards need. This
 file asks only: *what is the least work to give the pipeline a staging and a
 production that GitHub Actions can reach?*
 
@@ -103,7 +103,7 @@ deploy record is one you write yourself.
 - *Cloud Run.* A =targets/cloudrun/deploy.sh= that builds one image per app
   once, deploys it with =--tag staging --no-traffic=, and promotes with
   =update-traffic=. This is the first target where promotion is by identity
-  and the record is the platform's — both things =docs/deployment-targets.org=
+  and the record is the platform's — both things =research/substrates/deployment-targets.org=
   says the jails cannot give. The router is a fifth service running
   =router/server.js= as-is.
 - *Vercel.* The apps run unchanged; the router becomes a =vercel.json= of

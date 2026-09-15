@@ -91,7 +91,7 @@ def main():
                 fails.append(f"{rel}: writes '{label}', which is NOT DECLARED in "
                              f"change/label-owners.tsv. Declare it or stop writing it.")
                 continue
-            # ADDING AND REMOVING ARE DIFFERENT ACTS (docs/label-ownership.org).
+            # ADDING AND REMOVING ARE DIFFERENT ACTS (research/findings/label-ownership.org).
             # The declaration already models this -- human_add and human_rm are
             # separate columns -- and this check ignored the verb it had just
             # parsed, so every legitimate CLEAR read as an illegal write.

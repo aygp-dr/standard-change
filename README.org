@@ -399,7 +399,7 @@ off.
 *** How to stop a change
 
 *=hold:staging= is rejected semantics* as of 2026-09-13
-(=docs/precedence-and-locks.org=). It was a per-change hold and the only human
+(=research/history/precedence-and-locks.org=). It was a per-change hold and the only human
 stop the pipeline modelled, which made it look necessary. The human stops were
 always there and they are earlier:
 

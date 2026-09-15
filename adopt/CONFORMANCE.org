@@ -19,7 +19,7 @@ partial order derived from the guards' stated dependencies, not an order anyone
 has climbed.
 
 Where this file cites a published standard it also cites the tier from
-=docs/release-standards.org=, because "standard" covers six different kinds of
+=research/history/release-standards.org=, because "standard" covers six different kinds of
 object and they differ in exactly one respect that matters: *is there a
 conformance test, and who can change the rules?*
 
@@ -115,7 +115,7 @@ first. In this repo two of the negative fixtures did not fail on the first try.
 *Standards footing:* the build-naming half is =in-toto='s =subject= — tier 2,
 open specification with normative language and a self-asserted conformance test.
 The self-test half is folklore, tier 6: widely practised, never written down
-normatively, and *not standardised by anybody* [E, =docs/release-standards.org=].
+normatively, and *not standardised by anybody* [E, =research/history/release-standards.org=].
 
 ** Rung 2 — Manifested
 
@@ -324,7 +324,7 @@ right two cases and the guard exempted its way past both.
 * Attainability by shape
 
 Read down the column for your deployment shape. Verdicts use
-=docs/release-standards.org='s vocabulary: *holds* as specified, *restated* with
+=research/history/release-standards.org='s vocabulary: *holds* as specified, *restated* with
 a different subject, *vacuous* — stateable but with no content, *unimplementable
 as written*, *fails by construction*.
 
