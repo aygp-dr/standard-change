@@ -54,7 +54,7 @@ export function shippingForm(q) {
     `<p><label>${esc(label)}<br><input name="${esc(n)}" type="${esc(type)}" ` +
     `value="${esc(q.get(n) || '')}" style="width:100%;max-width:22rem;padding:4px"></label></p>`;
   const filled = SHIP.every(([n]) => (q.get(n) || '').trim() !== '');
-  return `<p>Your order comes to <b>${DUE}</b>, including delivery.</p>
+  return `<p>Your order comes to <b>${DUE}</b>, delivery included.</p>
 <h2>Shipping address</h2>
 <form method="get" action="/checkout">
 ${SHIP.map(field).join('\n')}
