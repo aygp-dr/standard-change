@@ -31,9 +31,13 @@ tick() {
          case " $told " in *" $pr "*) ;; *)
            told="$told $pr"
            holder=$(gh pr list --repo "$R" --state open --label deploy:staging --json number -q '[.[].number]|first // empty')
-           gh pr comment "$pr" --repo "$R" --body "Heard \`change:start\`. Waiting: the berth (\`deploy:staging\`) is held by #${holder:-?}. This ticket is retried every ${INTERVAL}s and takes the berth when it is free; nothing is asked of you." >/dev/null 2>&1 || true ;;
+           # The other operator holds the RECORD without the label for most of a run ("#?" on #106).
+           [ -n "$holder" ] || holder=$(./change/lock.sh status | awk '$1=="pr:"{print $2}')
+           gh pr comment "$pr" --repo "$R" --body "Heard \`change:start\`. Waiting: the berth (\`deploy:staging\`) is held by #${holder:-unknown: the record names no PR}. This ticket is retried every ${INTERVAL}s and takes the berth when it is free; nothing is asked of you." >/dev/null 2>&1 || true ;;
          esac
-         log "#$pr waits: lock held"; return 0 ;;
+         # CONTINUE, do not return: returning told only the first waiter, and
+         # #108's owner sat thirteen minutes on change:start with no word.
+         log "#$pr waits: lock held"; continue ;;
       6) log "#$pr refused: behind main" ;;
       *) log "#$pr ended: driver exit $rc" ;;
     esac

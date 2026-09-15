@@ -75,3 +75,105 @@ The clearing at end (=settle.sh=, =abort.sh=, =reap.sh=) runs as whichever
 =gh= account is active on the host: =jwalsh= here, =aygp-dr= on hydra,
 =github-actions[bot]= in a workflow. A machine's removal is indistinguishable
 on the forge from a person's, which is D21's finding from the other side.
+
+** F4 — the driver said a person accepted the build; nobody had
+
+The driver recorded the Playwright journey through =change/observe.sh=,
+whose comment says "a person used http://127.0.0.1:9010 on build X and
+accepted it." Owners of #104 and #105 both asked who the person was: "I
+was the only person on this ticket and I did not use anything." The same
+defect I filed against the other operator in #103, on my side. Fix:
+=gates/uat.sh --pr --env= records its own verdict, the way e2e and smoke
+do, and the record says what ran: the journey a person once accepted,
+replayed by Playwright; no person looked at this build. label-owners.tsv
+names the second writer.
+
+** F5 — two of five conflicted, and that is the one thing left to a person
+
+#107 (checkout) and #108 (pdp) were refused at 00:09Z: the forge could not
+merge =main= into them. Both were real: the other operator's #97 changed
+the same line of the checkout server, and #106 changed the line next to
+#108's in the pdp server. Adjacent one-line changes to the same object
+literal are a conflict git cannot resolve. The ticket says "resolve it,
+push, and say start again", and the owner does. Nothing else in the run
+asked a person for anything after start.
+
+** F6 — operator error, recorded so it is not read as a finding
+
+At 00:01Z the scheduler was restarted to pick up the "heard change:start"
+comment while a driver for #105 was mid-run. The new scheduler saw
+=change:start= still on #105 (the old driver had not yet reached the lock)
+and started a second driver. Both claimed the lock (the record allows the
+same PR twice), both ran the staging instruments, and #105 carries every
+staging observation twice. The younger was killed at 00:02:11Z. The owner
+of #105 reported the duplicates as one of their eleven confusions; that one
+is mine. A scheduler must not be replaced while a driver it started is
+running, or the driver must take the intent before it does anything else
+(it does; the window was the 40 s labeller wait inside guard 0).
+
+* Landings
+
+| PR   | app      | said start (first) | restarts | why                    | landed (production:healthy) | merged    | start→merge on the last try |
+|------+----------+--------------------+----------+------------------------+-----------------------------+-----------+-----------------------------|
+| #104 | core     | 23:45:18Z          | 1        | stale base             | 23:59:47Z                   | 00:00:02Z | 4m24s (waited on the berth) |
+| #105 | plp      | 23:45:27Z          | 2        | stale base ×2          | 00:02:20Z                   | 00:02:35Z | 7m11s (waited on the berth) |
+| #106 | pdp      | 23:45:51Z          | 1        | stale base             | 00:07:30Z                   | 00:07:49Z | 11m45s (waited on #105)     |
+| #108 | pdp      | 23:46:15Z          | 3        | stale base ×2, conflict | 00:11:44Z                  | 00:11:57Z | 1m08s                       |
+| #107 | checkout | 23:46:03Z          | 2        | stale base, conflict   | 00:19:09Z                   | 00:19:23Z | 1m25s                       |
+
+Once a change held the berth on a current head, start-to-merge was 68 to
+85 seconds. Everything else in the wall clock was waiting: for the berth
+(the other operator's loop held it about half the time), and for the owner
+to be refused and to rebase.
+
+** F7 — the conflict is the one decision left to a person, and the ticket left them alone with it
+
+#107's owner: "the instruction 'Resolve it' leaves the resolution entirely
+to me, with no guidance on whether their color or mine should win... nobody
+on the ticket ever commented on that choice." #108's owner resolved wrong
+on the first try and pushed it; nothing but the instruments would have
+caught it, and the bad head was live for ten seconds before they noticed
+themselves. The refusal now names the file and the changes that landed on
+it; it still cannot say which intent should win, and should not.
+
+* What the five owners could not read (the messaging audit)
+
+Every owner listed their moments of not knowing. Sorted by how many of the
+five hit each one:
+
+| moment                                                                   | owners | fixed in this run                                            |
+|--------------------------------------------------------------------------+--------+--------------------------------------------------------------|
+| silence after saying start (5-13 min), no acknowledgement               | 5/5    | scheduler says "heard; berth held by #N" once per wait      |
+| "a person used ... and accepted it" when no person had                  | 5/5    | uat.sh records itself; the text names Playwright            |
+| "Merge refused" then merged seconds later                               | 4/5    | runner says nothing when it has no estate to look at        |
+| "every marker has been cleared, the intent included": marker? intent?   | 4/5    | not fixed; the refusal now names =change:start= in brackets |
+| the PIR reads as a list of things wrong (deviation, sampled, deadbee)   | 4/5    | not fixed; see below                                        |
+| the driver merged main for me after telling me to rebase myself         | 3/5    | F1: it no longer tells anyone to rebase                     |
+| conflict refusal named no file and no other change                      | 2/5    | names both                                                  |
+| =blocked:lock= appeared on a ticket never released, then "swept"        | 1/5    | driver looks at the berth before touching the branch        |
+| "held by #?"                                                            | 1/5    | scheduler reads the lock record                             |
+| complete, then forty seconds of clearing, then end                      | 3/5    | not fixed; by design, README says why                       |
+| the head moved under me and my local branch is behind                   | 3/5    | not fixed; the comment says the new head, not "pull"        |
+
+The PIR is the largest unfixed one. It is written for the pipeline's
+reviewer and read by the change's owner, and to the owner "Deviation:
+deployed outside any change window... the guard was bypassed by not being
+invoked" reads as a charge against them. The deviation is the bare-knuckle
+mode the estate's operator chose, and the PIR should say whose it is.
+Trigger to fix: the first PIR a person other than the operator has to act
+on.
+
+* Verdict
+
+The hypothesis holds on its first clause and fails on its second. All five
+changes reached production and settled with the owner doing nothing after
+start except what a refusal asked: rebase (until F1 removed even that) or
+resolve a conflict. No owner ran a gate, deployed, approved, or merged. But
+the refusals and the record were not in words an owner could read: four of
+five did not know what a marker or an intent was, five of five were told a
+person had accepted a build, four of five read the PIR as a list of things
+wrong with their change. The process took over. Its language did not.
+
+Not a finding of this run: the other operator's loop held the berth about
+half the time and its landings moved =main= every four minutes; that is the
+environment D21 describes, and this run happened inside it.

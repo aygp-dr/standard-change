@@ -64,12 +64,21 @@ git fetch -q origin
 swept=''
 for l in $labels; do
   case "$l" in
-    change:start|staging:hold|change:backfill-owed|app:*|itil:*|control-plane) ;;
+    change:start|staging:hold|change:backfill-owed|blocked:lock|app:*|itil:*|control-plane) ;;
     staging:*|deploy:*|production:*|blocked:*|berth:*|release|release:start|change:*)
       gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 && swept="$swept \`$l\`" ;;
   esac
 done
 [ -z "$swept" ] || { say "Starting clean: markers of a previous release that never ended were cleared by the driver on \`change:start\`:$swept. Nothing they said is evidence about \`$sha\`."; log "swept:$swept"; }
+
+# --- 0c. is the berth free? Look before touching anything ---------------------
+# Guard 0 ran on every retry while the berth was busy and the forge merged
+# main into #106's branch three times before it ever deployed (its owner: "I
+# did not know whether I was still expected to rebase"). Look first; update
+# the branch only when this change is next.
+holder=$(gh pr list --repo "$R" --state open --label deploy:staging --json number -q "[.[].number]|map(select(.!=$PR))|first // empty")
+[ -n "$holder" ] || holder=$(./change/lock.sh status | awk '$1=="pr:" && $2!="'"$PR"'"{print $2}')
+[ -z "$holder" ] || { log "lock held by #$holder"; exit 5; }
 
 # --- 1. guard 0: on top of main, or brought up to it by the forge ---------------
 # First written as a refusal: "rebase and say start again". It livelocked in
@@ -99,7 +108,13 @@ if ! git merge-base --is-ancestor origin/main "origin/$branch" 2>/dev/null; then
     for l in change:start deploy:staging change:scheduled staging:e2e staging:smoke staging:uat staging:deployed staging:healthy; do
       gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
     done
-    say "Refused: \`$sha\` is behind \`main\` and the forge could not merge \`main\` into it (a conflict). Every marker has been cleared, the intent included. Resolve it, push, and say \`change:start\` again."
+    # SAY WHAT CONFLICTED. "#108's owner: the ticket never said what conflicted,
+    # which file, or with whom." The files are the PR's; the changes are what
+    # landed on those files since the branch point.
+    files=$(gh pr view "$PR" --repo "$R" --json files -q '[.files[].path]|join(" ")')
+    base=$(git merge-base origin/main "origin/$branch" 2>/dev/null || true)
+    since=$(git log --format='%s' "${base:-origin/main}..origin/main" -- $files 2>/dev/null | grep -o '(#[0-9]*)' | tr -d '()' | sort -u | tr '\n' ' ')
+    say "Refused: \`$sha\` is behind \`main\` and the forge could not merge \`main\` into it (a conflict). Files of this change: \`$files\`. Landed on them since you branched: ${since:-nothing this driver can name}. Every marker has been cleared, the intent (\`change:start\`) included. Resolve it, push, and say \`change:start\` again."
     log "behind main and conflicting; refused and reset"; exit 6
   fi
 fi
