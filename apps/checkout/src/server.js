@@ -24,7 +24,7 @@ export function render(path) {
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
 // Issue #8 -- the checkout surface renders pink.
-export const BACKGROUND = '#ffa8cc';
+export const BACKGROUND = '#ffb8d4';
 
 // `port` is the port this process is ACTUALLY answering on: the caller takes it
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
