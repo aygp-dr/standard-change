@@ -82,9 +82,9 @@ model has no invariant, and a label with no invariant cannot be shown wrong.
 A model that can only pass proves nothing. Every rule in the label machine
 is a TLA+ constant; =tla/check.sh= flips each to FALSE and TLC must name the
 invariant that rule protects, or the check fails. Seventeen rules,
-seventeen negatives, one positive over the whole space (22.6 million
-distinct states at sixteen rules; the seventeenth is running as this is
-written). The same machine is transcribed a second time in Python
+seventeen negatives, one positive over the whole space; the counts, with
+their dates, are in =findings/evidence-census.org=, because a count quoted
+without its date was the most repeated error this paper had. The same machine is transcribed a second time in Python
 (=sim/label_sim.py=), from the scripts rather than from the declaration,
 and =sim/cross_check.py= requires the two to name the same invariant per
 rule and to count the same states where the simulator can exhaust. Two

@@ -167,7 +167,7 @@ original order, =history/pipeline-history.org= §Branching policies); the
 default branch never needs a word, because reaching it is the record.
 Everything else is written by the thing that knows the fact, and an
 observation is written only by the instrument that measured it
-(=docs/label-ownership.org=, experiments 014 and 023 F4). In this
+(=findings/label-ownership.org=, experiments 014 and 023 F4). In this
 repository's tree on 2026-09-15 the person's word is still spelled
 =change:start= and the hold =staging:hold=; the rename to the table above is
 filed for the two operators to make together.
@@ -215,7 +215,7 @@ per row; the rows are independent.
 * What the models check
 
 The TLA+ module and the simulator (=label-state-machine=) check the tracking
-layer only: fifteen switchable rules, each with an invariant it protects,
+layer only: seventeen switchable rules, each with an invariant it protects,
 over two changes and one estate. The repository's own labels enter as
 constants (the class, the units). A rebuild that keeps the boundary can re-run
 both against its own scripts without modelling the labeller at all.

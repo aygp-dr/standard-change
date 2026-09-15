@@ -111,6 +111,34 @@ is mine. A scheduler must not be replaced while a driver it started is
 running, or the driver must take the intent before it does anything else
 (it does; the window was the 40 s labeller wait inside guard 0).
 
+* Timeline
+
+Two clocks: the owners' starts and the other operator's landings, which
+moved =main= under them. The livelock (F1) is the relationship between them.
+
+#+begin_src mermaid :eval never-export
+gantt
+    title Experiment 023, start only, 2026-09-14/15 UTC
+    dateFormat YYYY-MM-DD HH:mm:ss
+    axisFormat %H:%M
+    todayMarker off
+    section owners say start, once
+    PR 104 core, refused once      :2026-09-14 23:45:18, 2026-09-15 00:00:02
+    PR 105 plp, refused twice      :2026-09-14 23:45:27, 2026-09-15 00:02:35
+    PR 106 pdp, refused once       :2026-09-14 23:45:51, 2026-09-15 00:07:49
+    PR 107 checkout, conflict      :2026-09-14 23:46:03, 2026-09-15 00:19:23
+    PR 108 pdp, conflict           :2026-09-14 23:46:15, 2026-09-15 00:11:57
+    section trunk moves under them (other operator)
+    PR 101 lands                   :milestone, 2026-09-14 23:49:51, 1m
+    PR 99 lands                    :milestone, 2026-09-14 23:53:49, 1m
+    section the driver
+    refuse-and-rebase livelock, F1            :crit, 2026-09-14 23:50:00, 2026-09-14 23:56:00
+    forge update-branch replaces guard 0      :milestone, 2026-09-14 23:56:00, 1m
+    scheduler restarted mid-run, two drivers, F6 :crit, 2026-09-15 00:01:00, 2026-09-15 00:02:11
+    two conflicts handed to a person, F5      :milestone, 2026-09-15 00:09:00, 1m
+    berth on a current head, start to merge 68 to 85s :2026-09-15 00:10:49, 2026-09-15 00:11:57
+#+end_src
+
 * Landings
 
 | PR   | app      | said start (first) | restarts | why                    | landed (production:healthy) | merged    | start→merge on the last try |

@@ -1,0 +1,33 @@
+#+TITLE: The scenario index
+#+DATE: 2026-09-15
+
+Generated from =scenarios.org= at =fd6e740=. L-scenarios are the lifecycle
+catalogue; D-scenarios are the defect and run reports. The paper cites them by
+id; this is the one-line meaning of each.
+
+| id | scenario |
+|----+----------|
+| D1 | several changes to the same app, in sequence |
+| D2 | mixed apps |
+| D3 | break glass, nothing in progress |
+| D4 | emergency interrupts a standard change already in staging |
+| D5 | emergency during another emergency |
+| D6 | health check catches a silent deploy failure |
+| D7 | the queue frees on failure |
+| D8 | labeller and deployment interact |
+| D9 | a change deploys outside its release window |
+| D10 | pre-authorised auto-scheduling. SPECIFIED, NOT BUILT. |
+| D11 | a branch old enough cannot be verified at all |
+| D12 | a scheduler that books faster than anything drives |
+| D13 | settlement reported a merge that did not happen |
+| D14 | a deliberately broken change, and the window that expired refusing it |
+| D15 | superseded check runs counted as current |
+| D16 | the driver walked past a refusal into production |
+| D17 | guard 0 has never fired, because the forge never says BEHIND |
+| D18 | an approved change is refused on entry to staging by the acceptance it did not update |
+| D18 | 100 PRs under two release policies, and four kinds of degraded infrastructure |
+| D19 | 80% deploy success, a 1% unhealthy production, and the cost of rolling forward |
+| D20 | the berth label was never written, so guard 1 never enforced anything |
+| D21 | three identities, one lock, and neither operator could tell |
+| D22 | five owners, one task each, and one landed |
+| D23 | ten changes, five owners, no calendar: all ten landed and the evidence was corrupted anyway |

@@ -44,7 +44,7 @@ One PR is a tuple; two PRs and the estate make a state.
 | settlement | served (a fact), merged, PIR posted, cleaned | health.sh; merge-on-healthy.yml→release.sh or settle.sh:127; settle.sh:150-168; settle.sh:244-252 | served: a push or an abort |
 | estate | freeze, emergency | a person, on issue #1 | a person |
 
-Thirty-one actions, each cited to the line it was read from in
+Thirty-seven actions, each cited to the line it was read from in
 =tla/Labels.tla= and =sim/label_sim.py=. Six history variables -- =badClaim=, =badClass=, =badPromote=, =badVerdict=, =emgWaited= and =refusedDirty= -- record a berth claim that a rule would have refused, so that
 the freeze, estate and class rules -- whose subject can change *after* the
 claim, since a person can freeze or declare mid-flight -- have a state
@@ -52,33 +52,49 @@ predicate to violate.
 
 #+begin_src mermaid :eval never-export
 stateDiagram-v2
-    direction LR
-    [*] --> Opened
-    Opened --> Requested: Request / Watch(release)
-    Requested --> Scheduled: Book
-    Opened --> Scheduled: Book
-    Scheduled --> Opened: Cancel / Reap
-    Scheduled --> Berth: Activate (preflight)
+    direction TB
+    [*] --> Opened: labeller writes app and itil on every push
+    Opened --> Unaffected: a person says release-unaffected and no app label is on
+    Unaffected --> Opened: withdrawn, or the labeller attaches a unit (refused until one goes)
+    Unaffected --> Merged: MergeUnaffected, no berth, no window, no observation
+    Opened --> Requested: a person says start
+    Requested --> Scheduled: Book, window reserved
+    Scheduled --> Requested: Cancel
+    Scheduled --> Forfeited: Reap, window lapsed unattempted, closure expired
+    Forfeited --> Requested: the person states the intent again
+    Scheduled --> Refused: lock or preflight refusal (draft, freeze, estate, two classes)
+    Refused --> Opened: every marker cleared, intent included
+    Scheduled --> Berth: Activate, preflight 0, deploy-staging is the singleton
+    Berth --> Opened: Evict, a ready emergency takes the berth (specified, unbuilt)
     Berth --> StagingDeployed: DeployStaging
-    StagingDeployed --> StagingHealthy: StagingHealthy (guard 5 on staging)
-    StagingHealthy --> StagingHealthy: Observe / Accept / Hold / Push
-    StagingHealthy --> Promoted: Promote (smoke, unless hold)
+    StagingDeployed --> StagingHealthy: guard 5 on staging, this head
+    StagingHealthy --> Verified: e2e and smoke record pass, keyed to the sha
+    StagingHealthy --> Closed: a verdict of fail, then Abort
+    Verified --> Berth: Push, head moved, every observation void
+    Verified --> Accepted: uat record (journey replayed, or a person)
+    Accepted --> Held: a person says hold
+    Held --> Accepted: the person lifts it
+    Accepted --> Promoted: promote lands deploy-production
     Promoted --> ProdDeployed: DeployProduction
-    ProdDeployed --> Healthy: Converge
-    Healthy --> Merged: MergeOnHealthy (release.sh, no record)
-    Healthy --> Complete: Complete (settle.sh)
+    ProdDeployed --> ProdHealthy: Converge, every sample serves this head
+    ProdHealthy --> Complete: settle asks production now, writes change-complete
+    ProdHealthy --> Merged: MergeOnHealthy, no record (disagreement 3)
+    ProdHealthy --> Closed: rollback, change-backed-out
     Complete --> Merged: SettleMerge
-    Merged --> Complete: Complete (settle.sh on a MERGED change)
-    Complete --> Recorded: Pir
-    Recorded --> Cleaned: Cleanup
-    Berth --> Opened: Evict (a ready emergency takes the berth)
-    Berth --> Closed: Abort
-    Scheduled --> Closed: Abort
-    Cleaned --> [*]
-    Closed --> [*]
+    Merged --> Recorded: Pir
+    Recorded --> Cleaned: Cleanup clears every transient label, no tombstone
+    Cleaned --> [*]: mergedAt is the record
+    Berth --> Closed: Abort, change-failed
+    Closed --> [*]: change-end, the tombstone, only on this path
 #+end_src
 
-* The fifteen rules, and what each protects
+The diagram names labels with a hyphen where the label has a colon
+(=deploy-staging= is =deploy:staging=), because the renderer refuses a colon
+inside a transition label. =abandoned= and =superseded= fold into =Closed=.
+This is the machine at commit =fd6e740=, seventeen rules; the README diagram
+is the person's view of the same machine and draws fewer states.
+
+* The seventeen rules, and what each protects
 
 | # | constant | the rule, and where it lives | invariant TLC names when it is off | simulator names |
 |---+----------+------------------------------+------------------------------------+-----------------|
