@@ -3,7 +3,7 @@
    offered over HTTP. Serving it from core means every app that links it is
    down when core is down -- the coupling named in
    docs/cross-cutting-coupling.org, now with a network hop in it. */
-body { background: #fff; font: 14px/1.6 system-ui; margin: 0; padding: 40px }
+body { background: #fff; font: 14px/1.6 system-ui; margin: 0; padding: 44px }
 main { max-width: 40rem }
 code { background: #fff3c4; padding: 2px 6px; border-radius: 3px }
 a    { margin-right: 10px; display: inline-block }
