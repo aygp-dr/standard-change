@@ -21,6 +21,10 @@ INTERVAL="${SCHED_INTERVAL:-20}"
 told=''
 log() { printf '%s  scheduler  %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 tick() {
+  # release:unaffected first: nothing to release, no berth to wait for
+  for pr in $(gh pr list --repo "$R" --state open --label release:unaffected --json number -q 'sort_by(.number)|.[].number'); do
+    log "release:unaffected on #$pr"; ./change/unaffected.sh "$pr" || log "#$pr: unaffected.sh exit $?"
+  done
   for pr in $(gh pr list --repo "$R" --state open --label change:start --json number -q 'sort_by(.number)|.[].number'); do
     log "change:start on #$pr"
     rc=0; ./change/driver.sh "$pr" || rc=$?

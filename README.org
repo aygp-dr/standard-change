@@ -272,8 +272,10 @@ that *drives the side effects*: the merge to =main=, the PIR, and whatever
 else must hear that the change shipped (a ticket, a message). Cleanup then
 clears it — once the forge records =MERGED=, the label restates a fact the
 platform owns, and two records of one fact can disagree while the platform's
-cannot. The person's two words are =change:start= and =staging:hold=;
-=complete= is the pipeline's, and =end= is the pipeline's on one path only.
+cannot. The person's three words are =change:start=, =staging:hold= and
+=release:unaffected= (nothing to release: the only act left is the merge, and
+only if the labeller attached no =app:*=); =complete= is the pipeline's, and
+=end= is the pipeline's on one path only.
 
 *** The merge is the tombstone
 

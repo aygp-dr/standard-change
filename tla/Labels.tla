@@ -19,7 +19,7 @@
 (* is modelled and the disagreement is listed in                           *)
 (* research/findings/label-state-machine.org.                              *)
 (*                                                                         *)
-(* Fifteen CONSTANTS, one per rule, so the model can FAIL fifteen ways.    *)
+(* Seventeen CONSTANTS, one per rule, so the model can FAIL seventeen ways. *)
 (* Each is flipped to FALSE by tla/check.sh and TLC must name the invariant *)
 (* that rule protects. sim/label_sim.py is the same machine in Python and  *)
 (* sim/cross_check.py requires the two to agree, rule by rule.             *)
@@ -49,7 +49,8 @@ CONSTANTS PRs,
           HoldGuard,         \* staging:hold (a person's intent) stops promotion, at the moment of promoting
           HealthyBeforeVerdict,\* an instrument measures staging only once staging:healthy is recorded
           LockResets,        \* refused at the lock: every marker goes, human intent included; the person re-states it
-          MergeIsTheTombstone\* a MERGED change does not keep change:end -- the forge's MERGED is the record (the owner, 2026-09-15)
+          MergeIsTheTombstone,\* a MERGED change does not keep change:end -- the forge's MERGED is the record (the owner, 2026-09-15)
+          UnaffectedMerges   \* release:unaffected: nothing to release, so the only act left is the merge -- and only if the diff touches no unit
 
 Classes   == {"standard", "normal", "emergency"}
 Lifecycle == {"requested", "scheduled", "complete", "abandoned", "superseded"}
@@ -77,6 +78,8 @@ VARIABLES
     pir,          \* pir[p]: the post-implementation review is posted (settle.sh:150-168)
     cleaned,      \* cleaned[p]: the change:end LABEL is present on the PR
     tidied,       \* tidied[p]: the cleanup RAN and cleared every other label (settle.sh:244-252)
+    unit,         \* unit[p]: the labeller attached at least one app:* -- the diff touches something deployable
+    unaffected,   \* unaffected[p]: release:unaffected -- a person's claim that the estate is unaffected
                   \* Split from `cleaned` 2026-09-15. They were one variable, which made
                   \* "the tidying happened" and "the tombstone is showing" inseparable --
                   \* so removing the label from a merged change would have made
@@ -88,12 +91,13 @@ VARIABLES
     badPromote,   \* history: deploy:production landed under a staging:hold
     badVerdict,   \* history: an instrument recorded a staging verdict before staging:healthy
     emgWaited,    \* history: a declared, ready emergency was kept out of staging by a holder
-    refusedDirty  \* history: a change refused at the lock kept a marker
+    refusedDirty, \* history: a change refused at the lock kept a marker
+    badUnaffected \* history: an unaffected change was merged while its diff touched a unit, or took the berth
 
 vars == <<class, life, draft, release, booking, berth, stgDeployed, stgHealthy, hold,
           prodAct, prodDeployed, verdict, uat, healthy, closed, served, merged, pir,
-          cleaned, tidied, freeze, estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
-          refusedDirty>>
+          cleaned, tidied, unit, unaffected, freeze, estateEmg, badClaim, badClass, badPromote,
+          badVerdict, emgWaited, refusedDirty, badUnaffected>>
 
 TypeOK ==
     /\ class     \in [PRs -> SUBSET Classes]
@@ -116,6 +120,8 @@ TypeOK ==
     /\ pir       \in [PRs -> BOOLEAN]
     /\ cleaned   \in [PRs -> BOOLEAN]
     /\ tidied    \in [PRs -> BOOLEAN]
+    /\ unit      \in [PRs -> BOOLEAN]
+    /\ unaffected \in [PRs -> BOOLEAN]
     /\ freeze    \in BOOLEAN
     /\ estateEmg \in BOOLEAN
     /\ badClaim  \in BOOLEAN
@@ -124,6 +130,7 @@ TypeOK ==
     /\ badVerdict \in BOOLEAN
     /\ emgWaited \in BOOLEAN
     /\ refusedDirty \in BOOLEAN
+    /\ badUnaffected \in BOOLEAN
 
 Init ==
     /\ class     = [p \in PRs |-> {}]
@@ -146,6 +153,8 @@ Init ==
     /\ pir       = [p \in PRs |-> FALSE]
     /\ cleaned   = [p \in PRs |-> FALSE]
     /\ tidied    = [p \in PRs |-> FALSE]
+    /\ unit      \in [PRs -> BOOLEAN]        \* what the diff touches is the labeller's finding, fixed per head
+    /\ unaffected = [p \in PRs |-> FALSE]
     /\ freeze    = FALSE
     /\ estateEmg = FALSE
     /\ badClaim  = FALSE
@@ -154,6 +163,7 @@ Init ==
     /\ badVerdict = FALSE
     /\ emgWaited = FALSE
     /\ refusedDirty = FALSE
+    /\ badUnaffected = FALSE
 
 \* Open: still a candidate for the pipeline. A merged change is not, and
 \* neither is one that settle.sh has marked complete.
@@ -176,8 +186,9 @@ Label(p) ==
          class' = [class EXCEPT ![p] = (@ \ {"standard", "normal"}) \cup {c}]
     /\ UNCHANGED <<life, draft, release, booking, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* A person declares an emergency (label-owners.tsv: itil:emergency, human).
 DeclareEmergency(p) ==
@@ -185,8 +196,9 @@ DeclareEmergency(p) ==
     /\ class' = [class EXCEPT ![p] = @ \cup {"emergency"}]
     /\ UNCHANGED <<life, draft, release, booking, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* A person removes the derived class that is wrong (preflight.sh:190).
 ResolveClass(p) ==
@@ -194,8 +206,9 @@ ResolveClass(p) ==
     /\ class' = [class EXCEPT ![p] = {"emergency"}]
     /\ UNCHANGED <<life, draft, release, booking, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* gh pr ready -- the author's act, and the only thing that clears draft.
 MarkReady(p) ==
@@ -203,8 +216,9 @@ MarkReady(p) ==
     /\ draft' = [draft EXCEPT ![p] = FALSE]
     /\ UNCHANGED <<class, life, release, booking, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* A person adds release -- intent (README.org, Adding a label and removing it).
 AddRelease(p) ==
@@ -212,8 +226,9 @@ AddRelease(p) ==
     /\ release' = [release EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, booking, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 (***************************************************************************)
 (* change/watch.sh:37-38 -- consume the trigger FIRST, then record the ask. *)
@@ -228,8 +243,9 @@ Watch(p) ==
                      IF LifecycleExclusive /\ "scheduled" \in @ THEN @ ELSE @ \cup {"requested"}]
     /\ UNCHANGED <<class, draft, booking, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* A person adds change:requested directly (label-owners.tsv: human).
 Request(p) ==
@@ -237,8 +253,9 @@ Request(p) ==
     /\ life' = [life EXCEPT ![p] = @ \cup {"requested"}]
     /\ UNCHANGED <<class, draft, release, booking, berth, stgDeployed, stgHealthy,
                    hold, prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* change/schedule.sh block:257 -- book a window, queued or --at.
 Book(p) ==
@@ -249,8 +266,9 @@ Book(p) ==
                                         ELSE @ \cup {"scheduled"}]
     /\ UNCHANGED <<class, draft, release, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* change/schedule.sh cancel:303 -- a person un-books; still approved, unbooked.
 Cancel(p) ==
@@ -259,8 +277,9 @@ Cancel(p) ==
     /\ booking' = [booking EXCEPT ![p] = "none"]
     /\ UNCHANGED <<class, draft, release, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 (***************************************************************************)
 (* change/reap.sh:74-78 -- the window lapsed. reap.sh:10-14 reads only the *)
@@ -277,8 +296,9 @@ Reap(p) ==
     /\ stgDeployed' = [stgDeployed EXCEPT ![p] = IF ReapFreesBerth THEN FALSE ELSE @]
     /\ stgHealthy'  = [stgHealthy  EXCEPT ![p] = IF ReapFreesBerth THEN FALSE ELSE @]
     /\ UNCHANGED <<class, draft, release, hold, prodAct, prodDeployed, verdict, uat,
-                   healthy, closed, served, merged, pir, cleaned, tidied, freeze, estateEmg,
-                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty>>
+                   healthy, closed, served, merged, pir, cleaned, tidied, unit,
+                   unaffected, freeze, estateEmg, badClaim, badClass, badPromote,
+                   badVerdict, emgWaited, refusedDirty, badUnaffected>>
 
 (***************************************************************************)
 (* gates/preflight.sh, then change/activate.sh:271-275 -- the window opens,*)
@@ -289,6 +309,7 @@ Reap(p) ==
 (* badClass is recorded at the claim too.                                  *)
 (***************************************************************************)
 Refused(p) ==
+    \/ unaffected[p]
     \/ draft[p]
     \/ booking[p] = "none"
     \/ (freeze /\ ~IsEmergency(p))
@@ -302,6 +323,7 @@ Permitted(p) ==
     /\ (FreezeGuard => (freeze => IsEmergency(p)))
     /\ (EstateGuard => (estateEmg => IsEmergency(p)))
     /\ (BerthGuard  => (Holder \ {p}) = {})
+    /\ (UnaffectedMerges => ~unaffected[p])
 
 Activate(p) ==
     \* activate.sh can be run by hand on any open change; whether it is BOOKED
@@ -311,10 +333,11 @@ Activate(p) ==
     /\ berth'    = [berth   EXCEPT ![p] = TRUE]
     /\ badClaim' = (badClaim \/ Refused(p))
     /\ badClass' = (badClass \/ Cardinality(class[p]) > 1)
+    /\ badUnaffected' = (badUnaffected \/ unaffected[p])
     /\ UNCHANGED <<class, life, draft, release, booking, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badPromote, badVerdict,
-                   emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badPromote, badVerdict, emgWaited, refusedDirty>>
 
 (***************************************************************************)
 (* THE LOCK. deploy:staging IS the environment lock (the owner, 2026-09-14). *)
@@ -346,8 +369,9 @@ LockRefusal(p) ==
        ELSE /\ UNCHANGED <<life, booking, release, hold, verdict, uat, stgDeployed, stgHealthy>>
             /\ refusedDirty' = (refusedDirty \/ Markers(p))
     /\ UNCHANGED <<class, draft, berth, prodAct, prodDeployed, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   badUnaffected>>
 
 (***************************************************************************)
 (* THE INSTALL AND ITS HEALTH. deploy:staging is the berth; staging:deployed *)
@@ -364,16 +388,18 @@ DeployStaging(p) ==
     /\ stgDeployed' = [stgDeployed EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 StagingHealthy(p) ==
     /\ Open(p) /\ stgDeployed[p] /\ ~stgHealthy[p]
     /\ stgHealthy' = [stgHealthy EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* staging:hold -- a person says "not to production yet"; only a person lifts it.
 Hold(p) ==
@@ -381,8 +407,9 @@ Hold(p) ==
     /\ hold' = [hold EXCEPT ![p] = ~@]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, prodAct, prodDeployed, verdict, uat, healthy, closed,
-                   served, merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   served, merged, pir, cleaned, tidied, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 \* gates/e2e.sh --pr and gates/smoke.sh --pr -- the instrument labels its own
 \* result; a new verdict replaces the old (exclusion group staging-verdict).
@@ -393,8 +420,9 @@ Observe(p) ==
     /\ \E v \in {"pass", "fail"} : verdict' = [verdict EXCEPT ![p] = v]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, uat, healthy, closed,
-                   served, merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, emgWaited, refusedDirty>>
+                   served, merged, pir, cleaned, tidied, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badPromote, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* change/observe.sh:44 -- a person accepts staging; the person is the instrument.
 Accept(p) ==
@@ -402,8 +430,9 @@ Accept(p) ==
     /\ uat' = [uat EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, healthy, closed,
-                   served, merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   served, merged, pir, cleaned, tidied, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 (***************************************************************************)
 (* promote.yml -- staging:smoke (a passing verdict) lands deploy:production; *)
@@ -420,16 +449,18 @@ Promote(p) ==
     /\ prodAct' = [prodAct EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodDeployed, verdict, uat, healthy, closed,
-                   served, merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badVerdict, emgWaited, refusedDirty>>
+                   served, merged, pir, cleaned, tidied, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 DeployProduction(p) ==
     /\ Open(p) /\ prodAct[p] /\ ~prodDeployed[p]
     /\ prodDeployed' = [prodDeployed EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* gates/health.sh --pr --env production:99 -- guard 5 converged on this head.
 Converge(p) ==
@@ -438,8 +469,9 @@ Converge(p) ==
     /\ served'  = [served  EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, closed,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 (***************************************************************************)
 (* THE ESTATE CLOSES FOR AN EMERGENCY (README §5b). EstateGuard already     *)
@@ -464,8 +496,9 @@ Evict(e, h) ==
     /\ verdict' = [verdict EXCEPT ![h] = "none"]
     /\ uat'     = [uat     EXCEPT ![h] = FALSE]
     /\ UNCHANGED <<class, draft, release, hold, prodAct, prodDeployed, healthy, closed,
-                   served, merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   served, merged, pir, cleaned, tidied, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 EmergencyWaits(e) ==
     /\ ~EmergencyPreempts
@@ -474,8 +507,9 @@ EmergencyWaits(e) ==
     /\ emgWaited' = TRUE
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
-                   closed, served, merged, pir, cleaned, tidied, freeze, estateEmg, badClaim,
-                   badClass, badPromote, badVerdict, refusedDirty>>
+                   closed, served, merged, pir, cleaned, tidied, unit, unaffected,
+                   freeze, estateEmg, badClaim, badClass, badPromote, badVerdict,
+                   refusedDirty, badUnaffected>>
 
 (***************************************************************************)
 (* SETTLEMENT is four writes in a stated order, and two paths reach the    *)
@@ -521,8 +555,9 @@ MergeOnHealthy(p) ==
             /\ booking' = [booking EXCEPT ![p] = "none"]
             /\ hold'    = [hold    EXCEPT ![p] = FALSE]
        ELSE UNCHANGED <<life, pir, cleaned, tidied, release, verdict, uat, booking, hold>>
-    /\ UNCHANGED <<class, draft, closed, served, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+    /\ UNCHANGED <<class, draft, closed, served, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* settle.sh:70 re-measures production against the head; :105 writes complete.
 Complete(p) ==
@@ -530,8 +565,9 @@ Complete(p) ==
     /\ life' = [life EXCEPT ![p] = @ \cup {"complete"}]
     /\ UNCHANGED <<class, draft, release, booking, berth, stgDeployed, stgHealthy,
                    hold, prodAct, prodDeployed, verdict, uat, healthy, closed, served,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* settle.sh:124-140 -- merge unless the forge already says MERGED.
 SettleMerge(p) ==
@@ -539,8 +575,9 @@ SettleMerge(p) ==
     /\ merged' = [merged EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
-                   closed, served, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   closed, served, pir, cleaned, tidied, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 \* settle.sh:150-168 -- the PIR, posted while the labels are still there to read.
 Pir(p) ==
@@ -548,8 +585,9 @@ Pir(p) ==
     /\ pir' = [pir EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
-                   closed, served, merged, cleaned, tidied, freeze, estateEmg, badClaim,
-                   badClass, badPromote, badVerdict, emgWaited, refusedDirty>>
+                   closed, served, merged, cleaned, tidied, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 \* settle.sh:244-252 -- cleanup. Every transient label, change:complete included.
 Cleanup(p) ==
@@ -574,8 +612,9 @@ Cleanup(p) ==
             /\ hold'    = [hold    EXCEPT ![p] = FALSE]
        ELSE UNCHANGED <<life, berth, prodAct, release, verdict, uat, healthy, booking,
                         stgDeployed, stgHealthy, prodDeployed, hold>>
-    /\ UNCHANGED <<class, draft, closed, served, merged, pir, freeze, estateEmg,
-                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty>>
+    /\ UNCHANGED <<class, draft, closed, served, merged, pir, unit, unaffected, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 \* change/abort.sh:95-114 -- the change did not make it. Not the eviction.
 Abort(p) ==
@@ -602,8 +641,57 @@ Abort(p) ==
     /\ stgDeployed'  = [stgDeployed  EXCEPT ![p] = FALSE]
     /\ stgHealthy'   = [stgHealthy   EXCEPT ![p] = FALSE]
     /\ prodDeployed' = [prodDeployed EXCEPT ![p] = FALSE]
-    /\ UNCHANGED <<class, draft, merged, pir, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+    /\ UNCHANGED <<class, draft, merged, pir, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
+
+(***************************************************************************)
+(* UNAFFECTED. release:unaffected is a person's claim that the deployable   *)
+(* estate is not touched by this change: nothing to install, nothing to     *)
+(* observe, so the only act left is the merge (the owner, 2026-09-15: "can  *)
+(* that just merge to the default branch without additional intervention"). *)
+(* The claim is checked against the labeller's finding: a change that says  *)
+(* unaffected while carrying app:* is the two-classes defect in another     *)
+(* namespace -- refused, and a person removes the label that is wrong. It   *)
+(* never takes the berth. The merge records: no deployment, by declaration, *)
+(* and the labeller agreed. [UnaffectedMerges]                              *)
+(***************************************************************************)
+DeclareUnaffected(p) ==
+    /\ Open(p) /\ ~unaffected[p]
+    /\ unaffected' = [unaffected EXCEPT ![p] = TRUE]
+    /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
+                   stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
+                   closed, served, merged, pir, cleaned, tidied, unit, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
+
+\* A person withdraws the claim (the labeller says the diff touches a unit).
+WithdrawUnaffected(p) ==
+    /\ Open(p) /\ unaffected[p]
+    /\ unaffected' = [unaffected EXCEPT ![p] = FALSE]
+    /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
+                   stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
+                   closed, served, merged, pir, cleaned, tidied, unit, freeze,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
+
+MergeUnaffected(p) ==
+    /\ Open(p) /\ unaffected[p] /\ ~draft[p] /\ ~berth[p]
+    /\ (UnaffectedMerges => ~unit[p])
+    /\ badUnaffected' = (badUnaffected \/ unit[p])
+    /\ merged'  = [merged  EXCEPT ![p] = TRUE]
+    /\ pir'     = [pir     EXCEPT ![p] = TRUE]       \* the record: no deployment, by declaration
+    /\ tidied'  = [tidied  EXCEPT ![p] = TRUE]
+    /\ cleaned' = [cleaned EXCEPT ![p] = ~MergeIsTheTombstone]
+    /\ life'    = [life    EXCEPT ![p] = {}]
+    /\ release' = [release EXCEPT ![p] = FALSE]
+    /\ booking' = [booking EXCEPT ![p] = "none"]
+    /\ hold'    = [hold    EXCEPT ![p] = FALSE]
+    /\ verdict' = [verdict EXCEPT ![p] = "none"]
+    /\ uat'     = [uat     EXCEPT ![p] = FALSE]
+    /\ UNCHANGED <<class, draft, berth, stgDeployed, stgHealthy, prodAct, prodDeployed,
+                   healthy, closed, served, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty>>
 
 \* labeller.yml:101 on synchronize -- a push withdraws every label about the
 \* old head: observations, and the deployed/healthy facts too.
@@ -618,23 +706,26 @@ Push(p) ==
     /\ stgHealthy'   = [stgHealthy   EXCEPT ![p] = FALSE]
     /\ prodDeployed' = [prodDeployed EXCEPT ![p] = FALSE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, hold, prodAct, closed,
-                   merged, pir, cleaned, tidied, freeze, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   merged, pir, cleaned, tidied, unit, unaffected, freeze, estateEmg,
+                   badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
+                   badUnaffected>>
 
 \* The estate: a person toggles freeze and emergency on issue #1.
 Freeze ==
     /\ freeze' = ~freeze
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
-                   closed, served, merged, pir, cleaned, tidied, estateEmg, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   closed, served, merged, pir, cleaned, tidied, unit, unaffected,
+                   estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 Estate ==
     /\ estateEmg' = ~estateEmg
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
-                   closed, served, merged, pir, cleaned, tidied, freeze, badClaim, badClass,
-                   badPromote, badVerdict, emgWaited, refusedDirty>>
+                   closed, served, merged, pir, cleaned, tidied, unit, unaffected,
+                   freeze, badClaim, badClass, badPromote, badVerdict, emgWaited,
+                   refusedDirty, badUnaffected>>
 
 Next ==
     \/ \E p \in PRs : Label(p) \/ DeclareEmergency(p) \/ ResolveClass(p) \/ MarkReady(p)
@@ -645,6 +736,7 @@ Next ==
                    \/ MergeOnHealthy(p) \/ Complete(p) \/ SettleMerge(p)
                    \/ Pir(p) \/ Cleanup(p)
                    \/ Abort(p) \/ Push(p) \/ EmergencyWaits(p)
+                   \/ DeclareUnaffected(p) \/ WithdrawUnaffected(p) \/ MergeUnaffected(p)
     \/ \E e, h \in PRs : Evict(e, h)
     \/ Freeze \/ Estate
 
@@ -720,9 +812,14 @@ VerdictOnHealthy == badVerdict = FALSE
 \* a change refused at the lock carries no marker afterwards        [LockResets]
 LockRefusalResets == refusedDirty = FALSE
 
+\* an unaffected change never takes the berth, and never merges while its diff
+\* touches a unit                                                 [UnaffectedMerges]
+UnaffectedNeverDeploys == badUnaffected = FALSE
+
 Safety ==
     /\ TypeOK /\ NoDeployWithTwoClasses /\ OneLifecycle /\ NoDraftDeployed
     /\ NoUnbookedDeploy /\ AtMostOneHolder /\ NoRefusedClaim /\ BerthHasCause
     /\ CleanIsClean /\ MergedHasRecord /\ EmergencyNeverWaits
     /\ NoPromoteUnderHold /\ VerdictOnHealthy /\ LockRefusalResets
+    /\ NoTombstoneOnMerged /\ UnaffectedNeverDeploys
 =============================================================================

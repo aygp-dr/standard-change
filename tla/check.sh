@@ -94,8 +94,9 @@ labels_negative HoldGuard          NoPromoteUnderHold
 labels_negative HealthyBeforeVerdict VerdictOnHealthy
 labels_negative LockResets         LockRefusalResets
 labels_negative MergeIsTheTombstone NoTombstoneOnMerged
+labels_negative UnaffectedMerges   UnaffectedNeverDeploys
 
-printf '== labels positive: all sixteen rules on .................... '
+printf '== labels positive: all seventeen rules on .................... '
 if run Labels | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; run Labels | grep -E 'Error' | head -5; exit 1; fi
 

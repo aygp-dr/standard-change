@@ -28,8 +28,8 @@ Two checks, and they are different kinds of evidence:
                (lifecycle, action labels, observations, flags) -- so README's
                lifecycle diagram can be checked against what is reachable.
 
-Fifteen RULES, each switchable with --disable so the checker can FAIL
-fifteen ways. sim/cross_check.py flips each one here and in TLC and requires
+Seventeen RULES, each switchable with --disable so the checker can FAIL
+seventeen ways. sim/cross_check.py flips each one here and in TLC and requires
 the same invariant to be named.
 """
 import argparse, collections, itertools, sys
@@ -53,24 +53,27 @@ import argparse, collections, itertools, sys
 RULES = ["Interfere", "DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
          "ClassGuard", "LifecycleExclusive", "ReapFreesBerth", "SettleClears",
          "ReapSparesInFlight", "RecordOnMerge", "EmergencyPreempts",
-         "HoldGuard", "HealthyBeforeVerdict", "LockResets"]
+         "HoldGuard", "HealthyBeforeVerdict", "LockResets", "UnaffectedMerges"]
 
 PRS = ("p1", "p2")
 
 PR = collections.namedtuple("PR", "cls life draft release booking berth sdep shealthy hold prod pdep "
-                                  "verdict uat healthy closed served merged pir cleaned")
-State = collections.namedtuple("State", "prs freeze emg bad badcls badpromote badverdict emgwaited refuseddirty")
+                                  "verdict uat healthy closed served merged pir cleaned unit unaff")
+State = collections.namedtuple("State", "prs freeze emg bad badcls badpromote badverdict emgwaited refuseddirty badunaff")
 
-def fresh(draft):
+def fresh(draft, unit):
     return PR(cls=frozenset(), life=frozenset(), draft=draft, release=False, booking="none",
               berth=False, sdep=False, shealthy=False, hold=False, prod=False, pdep=False,
               verdict="none", uat=False, healthy=False, closed=False,
-              served=False, merged=False, pir=False, cleaned=False)
+              served=False, merged=False, pir=False, cleaned=False, unit=unit, unaff=False)
 
 def inits():
+    # draft is the author's; unit is the labeller's finding (the diff touches an app:*), fixed per head
     for d in itertools.product([False, True], repeat=len(PRS)):
-        yield State(prs=tuple(fresh(x) for x in d), freeze=False, emg=False,
-                    bad=False, badcls=False, badpromote=False, badverdict=False, emgwaited=False, refuseddirty=False)
+        for u in itertools.product([False, True], repeat=len(PRS)):
+            yield State(prs=tuple(fresh(x, y) for x, y in zip(d, u)), freeze=False, emg=False,
+                        bad=False, badcls=False, badpromote=False, badverdict=False, emgwaited=False,
+                        refuseddirty=False, badunaff=False)
 
 def is_open(q):       return not q.closed and not q.merged and "complete" not in q.life
 def active(q):        return q.life - {"complete"}
@@ -165,9 +168,10 @@ def actions(st, R):
         # Peer standard-change-002 names the general case F-15.
         if not q.berth:
             others = holder(st) - {i}
-            refused = (q.draft or q.booking == "none" or (st.freeze and not is_emg(q))
+            refused = (q.unaff or q.draft or q.booking == "none" or (st.freeze and not is_emg(q))
                        or (st.emg and not is_emg(q)) or bool(others))
-            permitted = ((not R["ClassGuard"] or len(q.cls) <= 1)
+            permitted = ((not R["UnaffectedMerges"] or not q.unaff)
+                         and (not R["ClassGuard"] or len(q.cls) <= 1)
                          and (not R["DraftGuard"] or not q.draft)
                          and (not R["WindowGuard"] or q.booking != "none")
                          and (not R["FreezeGuard"] or not st.freeze or is_emg(q))
@@ -175,7 +179,8 @@ def actions(st, R):
                          and (not R["BerthGuard"] or not others))
             if permitted:
                 yield f"Activate({p})", put(st, i, q._replace(berth=True),
-                                            bad=st.bad or refused, badcls=st.badcls or len(q.cls) > 1)
+                                            bad=st.bad or refused, badcls=st.badcls or len(q.cls) > 1,
+                                            badunaff=st.badunaff or q.unaff)
         # THE LOCK: deploy:staging is the environment lock. Refused while another
         # holds it, a change loses every marker, human intent included; the
         # person re-states it (rule LockResets).
@@ -217,6 +222,18 @@ def actions(st, R):
         if "scheduled" in q.life or q.berth:
             yield f"Abort({p})", put(st, i, q._replace(closed=True, life=q.life - {"scheduled"}, berth=False,
                                                       release=False, **CLEAR_BUILD))
+        # release:unaffected -- a person's claim that the estate is untouched; the only
+        # act left is the merge, and only when the labeller agrees (no app:*).
+        # A claim that contradicts the labeller is withdrawn by a person. [UnaffectedMerges]
+        if not q.unaff:
+            yield f"DeclareUnaffected({p})", put(st, i, q._replace(unaff=True))
+        if q.unaff:
+            yield f"WithdrawUnaffected({p})", put(st, i, q._replace(unaff=False))
+        if q.unaff and not q.draft and not q.berth and (not R["UnaffectedMerges"] or not q.unit):
+            yield f"MergeUnaffected({p})", put(st, i, q._replace(merged=True, pir=True, cleaned=True, life=frozenset(),
+                                                                 release=False, booking="none", hold=False,
+                                                                 verdict="none", uat=False),
+                                               badunaff=st.badunaff or q.unit)
         # labeller.yml:101 on synchronize: everything about the old head
         if q.verdict != "none" or q.uat or q.healthy or q.sdep or q.shealthy or q.pdep:
             yield f"Push({p})", put(st, i, q._replace(**CLEAR_BUILD))
@@ -273,6 +290,7 @@ def invariants():  # same order as tla/Labels.cfg
     yield "NoPromoteUnderHold", lambda st: not st.badpromote
     yield "VerdictOnHealthy", lambda st: not st.badverdict
     yield "LockRefusalResets", lambda st: not st.refuseddirty
+    yield "UnaffectedNeverDeploys", lambda st: not st.badunaff
 
 def violated(st):
     for name, inv in invariants():
@@ -287,7 +305,8 @@ def shape(q):
                            ("production:deployed", q.pdep)) if v]
     obs = [n for n, v in (("staging:healthy", q.shealthy), (f"staging:{q.verdict}", q.verdict != "none"),
                           ("staging:uat", q.uat), ("production:healthy", q.healthy)) if v]
-    flags = [n for n, v in (("hold", q.hold), ("merged", q.merged), ("pir", q.pir), ("cleaned", q.cleaned)) if v]
+    flags = [n for n, v in (("hold", q.hold), ("merged", q.merged), ("pir", q.pir), ("cleaned", q.cleaned),
+                            ("unit", q.unit), ("unaffected", q.unaff)) if v]
     return (life, " ".join(acts) or "-", " ".join(obs) or "-", " ".join(flags) or "-")
 
 def explore(R, bound, census=None):
@@ -342,7 +361,7 @@ def random_walks(R, bound, walks, length):
 def show(q):
     return (f"cls={sorted(q.cls)} life={sorted(q.life)} draft={q.draft} book={q.booking} berth={q.berth} "
             f"sdep={q.sdep} shealthy={q.shealthy} hold={q.hold} prod={q.prod} pdep={q.pdep} v={q.verdict} "
-            f"uat={q.uat} healthy={q.healthy} merged={q.merged} pir={q.pir} closed={q.closed}")
+            f"uat={q.uat} healthy={q.healthy} merged={q.merged} pir={q.pir} closed={q.closed} unit={q.unit} unaff={q.unaff}")
 
 def main():
     ap = argparse.ArgumentParser()
