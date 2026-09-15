@@ -89,6 +89,91 @@ def decl():
     return groups, retired, names
 
 
+def audit(open_prs, groups, retired, declared):
+    """The five invariants plus two hygiene checks, over a list of PR dicts.
+
+    Split out from main() so --selftest can drive it with synthetic states and
+    no network. A gate that cannot be shown rejecting its own fail fixture
+    produces no verdict (spec.org, Verification contract).
+    """
+    findings = []
+
+    def add(kind, detail, prs_):
+        findings.append({"kind": kind, "detail": detail, "prs": sorted(prs_)})
+
+    for lab, what in ESTATE_SINGLETON.items():
+        held = [p["n"] for p in open_prs if lab in p["labels"]]
+        if len(held) > 1:
+            add("singleton", f"{len(held)} open PRs carry `{lab}` -- {what} admits one", held)
+    for lab in sorted(TERMINAL):
+        carry = [p["n"] for p in open_prs if lab in p["labels"]]
+        if carry:
+            add("terminal-on-open",
+                f"`{lab}` asserts the change is finished, on {len(carry)} OPEN PR(s)", carry)
+    for p in open_prs:
+        t, f = p["labels"] & TERMINAL, p["labels"] & IN_FLIGHT
+        if t and f:
+            add("finished-and-moving",
+                f"#{p['n']} carries {sorted(t)} (finished) and {sorted(f)} (moving)", [p["n"]])
+    for name, labs, card in groups:
+        for p in open_prs:
+            got = sorted(p["labels"] & set(labs))
+            if len(got) > 1:
+                add("exclusive", f"#{p['n']} breaks `{name}` (max {card}): {got}", [p["n"]])
+    for lab, why in retired.items():
+        carry = [p["n"] for p in open_prs if lab in p["labels"]]
+        if carry:
+            add("retired", f"`{lab}` is declared {why} and is on {len(carry)} open PR(s)", carry)
+    ns = ("change:", "deploy:", "staging:", "production:", "blocked:", "itil:",
+          "release", "berth:", "review:", "deployed:")
+    seen = defaultdict(list)
+    for p in open_prs:
+        for lab in p["labels"]:
+            if lab.startswith(ns) and lab not in declared:
+                seen[lab].append(p["n"])
+    for lab, carry in sorted(seen.items()):
+        add("undeclared", f"`{lab}` is on {len(carry)} open PR(s) and in no declaration", carry)
+    return findings
+
+
+def selftest(groups, retired, declared) -> int:
+    """Each invariant gets a state that MUST be rejected, and a clean control.
+
+    The control matters as much as the failures: an audit that refuses
+    everything is as useless as one that refuses nothing.
+    """
+    def P(n, *labs):
+        return {"n": n, "draft": False, "title": "", "labels": set(labs)}
+
+    cases = [
+        ("I1 two PRs hold the berth", "singleton",
+         [P(1, "deploy:staging"), P(2, "deploy:staging")]),
+        ("I2 two PRs hold production", "singleton",
+         [P(1, "deploy:production"), P(2, "deploy:production")]),
+        ("I3 a tombstone on an open PR", "terminal-on-open", [P(1, "change:end")]),
+        ("I4 finished and moving at once", "finished-and-moving",
+         [P(1, "change:end", "deploy:staging")]),
+        ("I5 two classes on one PR", "exclusive",
+         [P(1, "itil:standard", "itil:normal")]),
+        ("H1 a RETIRED label in use", "retired", [P(1, "staging:passed")]),
+        ("H2 an undeclared pipeline label", "undeclared", [P(1, "staging:invented")]),
+    ]
+    bad = 0
+    for name, kind, state in cases:
+        got = {f["kind"] for f in audit(state, groups, retired, declared)}
+        ok = kind in got
+        print(f"  {'ok  ' if ok else 'BAD '} {name:<38} -> {kind if ok else sorted(got) or 'nothing'}")
+        bad += 0 if ok else 1
+    clean = [P(1, "app:core", "itil:standard"), P(2, "app:plp", "itil:normal", "deploy:staging")]
+    got = audit(clean, groups, retired, declared)
+    ok = not got
+    print(f"  {'ok  ' if ok else 'BAD '} {'CONTROL: a clean estate is accepted':<38} -> "
+          f"{'no findings' if ok else [f['kind'] for f in got]}")
+    bad += 0 if ok else 1
+    print(f"  pr-state-audit self-test: {len(cases)+1} cases, {bad} wrong")
+    return 1 if bad else 0
+
+
 def prs():
     out = subprocess.run(
         ["gh", "pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
@@ -100,57 +185,10 @@ def prs():
 
 def main() -> int:
     groups, retired, declared = decl()
+    if "--selftest" in sys.argv:
+        return selftest(groups, retired, declared)
     open_prs = prs()
-    findings = []
-
-    def add(kind, detail, prs_):
-        findings.append({"kind": kind, "detail": detail, "prs": sorted(prs_)})
-
-    # 1. ESTATE SINGLETONS. More than one open PR holding the berth is guard 1
-    #    violated, not merely unenforced.
-    for lab, what in ESTATE_SINGLETON.items():
-        held = [p["n"] for p in open_prs if lab in p["labels"]]
-        if len(held) > 1:
-            add("singleton", f"{len(held)} open PRs carry `{lab}` -- {what} admits one", held)
-
-    # 2. TERMINAL ON AN OPEN PR. A tombstone says cleanup ran and the record is
-    #    closed. On an open PR it is a claim about a state the change is not in.
-    for lab in sorted(TERMINAL):
-        carry = [p["n"] for p in open_prs if lab in p["labels"]]
-        if carry:
-            add("terminal-on-open",
-                f"`{lab}` asserts the change is finished, on {len(carry)} OPEN PR(s)", carry)
-
-    # 3. TERMINAL AND IN-FLIGHT TOGETHER on one PR: finished and moving at once.
-    for p in open_prs:
-        t, f = p["labels"] & TERMINAL, p["labels"] & IN_FLIGHT
-        if t and f:
-            add("finished-and-moving",
-                f"#{p['n']} carries {sorted(t)} (finished) and {sorted(f)} (moving)", [p["n"]])
-
-    # 4. DECLARED EXCLUSIVE GROUPS, applied per PR.
-    for name, labs, card in groups:
-        for p in open_prs:
-            got = sorted(p["labels"] & set(labs))
-            if len(got) > 1:
-                add("exclusive", f"#{p['n']} breaks `{name}` (max {card}): {got}", [p["n"]])
-
-    # 5. RETIRED / REJECTED labels still present.
-    for lab, why in retired.items():
-        carry = [p["n"] for p in open_prs if lab in p["labels"]]
-        if carry:
-            add("retired", f"`{lab}` is declared {why} and is on {len(carry)} open PR(s)", carry)
-
-    # 6. UNDECLARED labels in a pipeline namespace.
-    ns = ("change:", "deploy:", "staging:", "production:", "blocked:", "itil:",
-          "release", "berth:", "review:", "deployed:")
-    seen = defaultdict(list)
-    for p in open_prs:
-        for lab in p["labels"]:
-            if lab.startswith(ns) and lab not in declared:
-                seen[lab].append(p["n"])
-    for lab, carry in sorted(seen.items()):
-        add("undeclared", f"`{lab}` is on {len(carry)} open PR(s) and in no declaration", carry)
+    findings = audit(open_prs, groups, retired, declared)
 
     if "--json" in sys.argv:
         print(json.dumps({"open": len(open_prs), "findings": findings}, indent=2))

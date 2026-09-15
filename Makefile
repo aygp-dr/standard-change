@@ -76,7 +76,7 @@ uat:  ## the browser journey, AS-IS, in headless Chromium   url=<base>
 uat: ; @./gates/uat.sh $(url)
 gate-selftest: docs-selftest  ## prove every gate can fail, then that it passes  ## prove every gate can fail, then that it passes
 	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s observation-selftest \
-	  && $(MAKE) -s audit-selftest
+	  && $(MAKE) -s audit-selftest && $(MAKE) -s pr-audit-selftest
 
 # The two guards that authorize on observations, run against recorded PR state,
 # offline. Both directions: they must refuse a measurement taken on a different
@@ -108,6 +108,10 @@ audit-selftest:
 	@echo "pbt-pipeline: both directions confirmed"
 audit:  ## are this repo controls enforced
 audit: ; @./gates/audit-controls.py
+pr-audit:  ## the five minimal invariants, against the live forge
+pr-audit: ; @./gates/pr-state-audit.py
+pr-audit-selftest:  ## prove the PR-state audit can reject each invariant
+pr-audit-selftest: ; @./gates/pr-state-audit.py --selftest
 docs:  ## the documents gate
 docs: ; @./gates/docs-lint.py
 # Forge through batch emacs, so it works whether or not emacs is running.
