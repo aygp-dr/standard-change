@@ -5,7 +5,7 @@ APPS     := $(notdir $(wildcard apps/*))
 # external/ is NOT ours: stand-ins for services we do not deploy.
 EXTERNAL := $(notdir $(wildcard external/*))
 
-.PHONY: help env env-check run dev router stop test lint gate gate-selftest \
+.PHONY: help env env-check run dev router stop test lint gate gate-selftest smoke-selftest \
         lint-shell lint-python shebang-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
         simulate-gates smoke uat idp-mock idp-tui idp-org \
@@ -120,7 +120,15 @@ gate-selftest: docs-selftest  ## prove every gate can fail, then that it passes 
 	  || { ./gates/shebang.sh --selftest; echo "shebang policy cannot reject; its PASS is void"; exit 1; }
 	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s observation-selftest \
 	  && $(MAKE) -s audit-selftest && $(MAKE) -s pr-audit-selftest \
-	  && $(MAKE) -s label-model-selftest
+	  && $(MAKE) -s label-model-selftest && $(MAKE) -s smoke-selftest
+
+# The smoke crawl's negative test, and the reason it exists. wget prints
+# "Found no broken links." after crawling NOTHING at all, so against a host
+# that refused every connection this gate scored a pass -- measured on port
+# 9077, spec.org defect class 7. smoke was the one gate absent from the list
+# above, which is precisely where the vacuous check was.
+smoke-selftest:
+	@./gates/smoke.sh --selftest
 
 # The two guards that authorize on observations, run against recorded PR state,
 # offline. Both directions: they must refuse a measurement taken on a different

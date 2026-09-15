@@ -25,6 +25,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --pr)  PR="${2:?--pr needs a number}"; shift 2 ;;
     --env) ENV_="${2:?--env needs a name}"; shift 2 ;;
+    --selftest) SELFTEST=1; shift ;;
     *)    break ;;
   esac
 done
@@ -33,6 +34,75 @@ cd "$(dirname "$0")/.."
 rc=0; pass=0
 say()  { printf '  %-34s %s\n' "$1" "$2"; }
 fail() { printf '  FAIL %s\n' "$*"; rc=1; }
+
+# The verdict on one wget spider log, as a function so it can be driven offline
+# against fixtures. A gate with no negative test is how the defect below
+# survived here: `make gate-selftest` proves every other gate can fail, and
+# smoke was never in that list.
+crawl_verdict() {
+  _sp=$1
+  _broken=$(grep -E "^ERROR [0-9]+|Found [0-9]+ broken link" "$_sp" | head -20 || true)
+  # `|| echo 0` was wrong twice over: grep -c ALREADY prints 0 when it matches
+  # nothing, and it exits 1 while doing so, so the fallback fired on top of a
+  # value already captured and urls became the two-line string "0\n0".
+  # Measured -- which is how we know nobody had ever run this path.
+  _urls=$(grep -c "URL:" "$_sp" 2>/dev/null) || _urls=0
+
+  # THE CRAWL MUST PROVE IT RAN. wget prints "Found no broken links." when it
+  # crawled nothing whatsoever. Measured against a dead port 9077, the spider
+  # log is exactly:
+  #
+  #     failed: Connection refused.
+  #     Found no broken links.
+  #
+  # -- and this gate scored that a PASS. Zero broken links out of zero URLs is
+  # a vacuous truth: spec.org defect class 7, a check that cannot fail produces
+  # no verdict. The reachability precheck below does NOT cover it, because that
+  # probes "$base/" with curl while the crawl is a separate wget over the whole
+  # estate; every app behind a live router can be down between the two.
+  #
+  # `_urls` is the term that MUST appear if the crawl happened, so its absence
+  # is a refusal rather than a pass. Peer standard-change-002 reached the same
+  # rule from a FreeBSD `ss` that was never installed: read total silence as
+  # "the command failed", never as "the set is empty".
+  if [ "$_urls" -eq 0 ]; then
+    fail "the crawl visited 0 urls -- 'no broken links' here is vacuous, not a pass"
+    sed 's/^/       /' "$_sp" | head -5
+  elif [ -n "$_broken" ]; then
+    echo "$_broken" | sed 's/^/  FAIL /'
+    rc=1
+  else
+    say "no broken links" "$_urls urls crawled"
+    pass=$((pass + 1))
+  fi
+}
+
+# --selftest: prove the crawl verdict can fail, in BOTH of its failing
+# directions, before any run of it is allowed to count.
+if [ "${SELFTEST:-0}" = 1 ]; then
+  st=0
+  _log=$(mktemp -t smoke-selftest)
+  for _case in pass:0 fail:1 broken:1; do
+    _dir=${_case%:*}; _want=${_case#*:}
+    rc=0; pass=0
+    # NOT $( ): a command substitution is a subshell, so the rc=1 the verdict
+    # sets would never reach this loop and every case would score 0. The first
+    # run of this selftest did exactly that -- printing the right FAIL lines
+    # while reporting them as passes. Redirect to a file instead; that stays in
+    # this shell.
+    crawl_verdict "gates/fixtures/smoke/$_dir/spider.txt" > "$_log" 2>&1
+    if [ "$rc" = "$_want" ]; then
+      printf '  ok    %-8s rc=%s\n' "$_dir" "$rc"
+    else
+      printf '  FAIL  %-8s rc=%s want=%s\n' "$_dir" "$rc" "$_want"
+      sed 's/^/          /' "$_log"
+      st=1
+    fi
+  done
+  rm -f "$_log"
+  [ "$st" = 0 ] && echo "  smoke crawl: both directions confirmed"
+  exit "$st"
+fi
 
 # Always ask as a browser. A JSON-only estate passes every contract test and is
 # unusable, which is exactly what the bastille jails turned out to be.
@@ -126,15 +196,7 @@ wget --spider --recursive --level=3 --no-verbose --no-directories \
 # wget prints "Found no broken links." on SUCCESS and "Found 3 broken links."
 # on failure, so matching the substring "broken link" reports a pass as a
 # failure -- which is what the first run of this gate did. Match the count.
-broken=$(grep -E "^ERROR [0-9]+|Found [0-9]+ broken link" "$spider" | head -20 || true)
-urls=$(grep -c "URL:" "$spider" 2>/dev/null || echo 0)
-if [ -n "$broken" ]; then
-  echo "$broken" | sed 's/^/  FAIL /'
-  rc=1
-else
-  say "no broken links" "$urls urls crawled"
-  pass=$((pass + 1))
-fi
+crawl_verdict "$spider"
 rm -f "$spider"
 
 echo
