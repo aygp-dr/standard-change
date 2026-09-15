@@ -1,0 +1,148 @@
+#+TITLE: Scheduled deployment slots — running notes
+
+* 2026-09-13 — post-implementation review, five scheduled slots
+
+Written at the close of slot 5. Appended, not overwritten.
+
+** Outcome
+
+| slot | time  | change | class of trunk movement | outcome |
+|------+-------+--------+-------------------------+---------|
+| 1 | — | — | =artifact= | forfeited |
+| 2 | — | — | — | forfeited |
+| 3 | — | — | — | forfeited |
+| 4 | 18:30 | #33 =feat/shared-default-styles= | =pipeline= | *activated*, stand-in passed |
+| 5 | 19:00 | #21 =fix/e2e-oracle= | =artifact= | forfeited |
+
+*One of five activated.* Slots 1 and 5 forfeited on =artifact=; slot 4 proceeded
+on =pipeline= and =gmake gate-selftest= returned 0 twice.
+
+** Why slot 5 was forfeited
+
+- *Fact.* =./change/divergence.sh d4a94dd origin/main= → *=artifact=*. #21 is 73
+  commits behind its merge base, and *13 files under =apps/=* landed on main in
+  that span — =core=, =plp=, =pdp= and =checkout= server sources, routes and
+  tests. =apps/**= is the deployable entity, so deploying #21's tree would ship
+  an artifact missing everything that landed after it.
+- *Cost.* The slot is gone; the estate is unchanged. #21 keeps its approval and
+  its =local/= gate statuses. The window closed =cancelled= — somebody decided
+  — rather than =expired=.
+- *Recovery.* Rebase =fix/e2e-oracle= onto =origin/main=, re-run
+  =gates/report.sh 21= against the new head, and re-book. The 73-commit gap
+  means the rebase is the work, not the booking.
+
+Worth recording: *#21 itself touches no =apps/= file at all.* It changes
+=gates/=, =router/server.js=, =spec.org= and =CLAUDE.md=. The =artifact= class
+is a fact about *what moved underneath it*, not about what it proposes — which
+is the distinction =divergence.sh= exists to make, and it made it correctly.
+
+** Was the quantum or the guards the binding constraint?
+
+*Neither. The binding constraint was that nothing drove the changes.*
+
+This is the honest answer and it is not the one the question anticipates.
+
+*** The quantum was not binding
+
+The 30-minute default was never reached. What did bite was a *five-minute*
+booking, chosen because it looked tidy: a 5m slot cannot hold a 5m soak plus
+the walk, so an afternoon of bookings lapsed at exactly the moment the hold
+ended. That produced =change/schedule.sh='s duration floor — deploy and settle
+3m + soak + 1m per extra app + 10m for control-plane — which caught three live
+bookings under their floor.
+
+So the quantum was not the constraint; *choosing a duration from the calendar
+rather than from the work* was. #28 was trimmed 30m → 15m purely to fit past a
+clash, which is the same error in the other direction.
+
+*** The guards were not binding either
+
+Every guard that refused, refused correctly, and each refusal was cheap:
+
+- slot 5, =artifact= — correct, and the recovery is a rebase
+- #44 out of window — =preflight= exit 4, correct
+- #50 booked with no deployable artifact — =preflight= said so *before* the
+  booking and the operator (me) ignored it
+- two and three simultaneous =itil:= classes — refused, after a fix; the
+  two-class case with no emergency had been passing silently
+
+No guard blocked a change that should have shipped.
+
+*** What actually bound
+
+Of ~10 windows booked today, *most expired unattempted*. Not refused — nobody
+ran the staging leg inside them. The reaper closed them =expired=, which is a
+distinct closure code precisely so this is visible rather than looking like
+failure.
+
+The three real constraints, in order:
+
+1. *No automation drives a booked change.* A window is an entitlement; something
+   still has to deploy inside it. Every activation today was a person typing.
+   Issue #51 records the trigger for when this changes.
+2. *The labeller has not run since GitHub stopped scheduling jobs (#34).* Five
+   of eight booked changes carried *no =app:*= label*, so =preflight= reported
+   "this deploys NOTHING" and the class chip read =UND= — a change with no
+   class satisfies every rule that branches on the class.
+3. *Nothing reached production.* Processes started from an agent tool call do
+   not outlive it, so a cutover would leave the front pointing at dead replicas.
+   Confirmed the hard way: =production-green= was taken down and restored.
+
+** The calendar's own verdict
+
+The schedule did its job and the job was smaller than expected. Six of seven
+guards do not read it; what protects production is evidence bound to a build
+and a singleton berth. The calendar's value today was *visibility* — the stale
+reservation, the five undefined classes and the lapsed windows were found by
+looking at a board, not by reading scripts.
+
+Slots activated: *1 of 5*. Changes reaching production: *0*.
+
+** Correction to slot 5, made minutes after the forfeit
+
+*The forfeit was wrong, and it was wrong on the same premise error that booked
+#50 a window it could not use.*
+
+=divergence.sh='s =artifact= class asks: /would deploying your tree revert what
+landed on main?/ It answered =artifact= for #21 because 13 files under =apps/=
+moved underneath it.
+
+But *#21 deploys nothing*. Zero files under =apps/=, no =app:*= label,
+=change/groups.sh 21= returns empty. There is no artifact to ship, so there is
+nothing to revert *with*. The question the class asks does not apply.
+
+The honest class for a change that deploys no entity is =pipeline=: 32
+control-plane paths moved on main under #21, so main changed *how #21 is
+verified*, which demands re-verification — not a revert, and not a forfeit.
+Re-booked as =CHG-20260913T2330-21.1=.
+
+*** The finding
+
+*=divergence.sh= assumes the change under test gets deployed.* Every class it
+returns is a statement about a deployable artifact, and for a control-plane
+change with no =app:*= label that premise is false. Two consequences:
+
+1. =artifact= is unreachable-in-principle for such a change and should never be
+   returned for one. The relevant guard for a 73-commit gap is *guard 0* — "you
+   are behind main, rebase" — which is true, cheap to state, and does not
+   forfeit a window.
+2. The class was computed from *trunk movement alone*, never consulting whether
+   the subject could ship. A guard that does not look at its own subject can
+   only be right by luck.
+
+Same shape as the #50 booking an hour earlier: both treated a control-plane
+change as if it travelled the artifact road. The pipeline has one road, and
+=docs/changing-the-pipeline.org= already says control-plane changes are proven
+by *use across later deployments* rather than by a deployment of their own —
+but nothing implements that path, so everything is routed through the one built
+for artifacts.
+
+*** Revised slot tally
+
+| slot | outcome | note |
+|------+---------+------|
+| 4 | activated | =pipeline=, stand-in passed |
+| 5 | forfeited, then *reversed* | =artifact= returned on a false premise |
+
+Activated: *1 of 5*, with slot 5 re-booked rather than lost. Changes reaching
+production: *0*, unchanged.

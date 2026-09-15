@@ -1,0 +1,400 @@
+#+TITLE: 016 — DORA metrics for the 2026-09-13/14 release night
+#+DATE: 2026-09-13
+#+PROPERTY: header-args :mkdirp t
+
+* Hypothesis
+
+/The four DORA metrics can be derived from what this repo already records,
+without estimating any of them./
+
+*Falsifiable as stated.* It is refuted if any of the four requires a number
+nobody measured. It is *partly* refuted — change failure rate and time to
+restore are derivable and defensible; *authorization* and *blast radius* are
+not, and the reason is structural rather than an oversight. See §What the data
+cannot tell us.
+
+*Success criterion.* Every figure below traces to a row in =data/=, and the
+derivation re-runs to the same numbers from the committed snapshots.
+
+*Run it:*
+
+#+begin_src sh
+python3 experiments/016-dora/derive.py
+#+end_src
+
+Read-only throughout. Nothing on the estate was deployed, merged, booked,
+started or stopped; =.idp/dashboard.sqlite= was copied before reading because
+the live poller holds a write lock on it.
+
+* Sources of record, and which one wins
+
+| source | what it witnesses | trusted for |
+|--------+-------------------+-------------|
+| =.idp/dashboard.sqlite= =snapshot=/=env_seen= | the front, polled ~1/s | *what production actually served* |
+| PIR comments on each PR | settlement: build, colour, rollback target | the cutover ledger, 17 rows |
+| =deployments/*/statuses= (forge) | deployment records and withdrawals | *failed* deployment attempts |
+| =refs/idp/schedule= (=schedule.sh list=) | 326 windows with closure codes | reservations, not deployments |
+| =pulls/N/commits= | author and committer dates | lead-time origin |
+
+The ordering matters and it is the night's own lesson. Twice in the three hours
+the mirror *was* running, the pipeline's self-report and the estate disagreed,
+and the estate was right (D13, D16). So where the mirror covers an event it is
+the authority; the PIR is the fallback, and is marked as such.
+
+* 1. Deployment frequency
+
+*17 production cutovers that served. 18 production deployment attempts.*
+
+- window: =2026-09-13T15:42:05Z= .. =2026-09-14T02:11:09Z= = *10h29m04s*
+- rate: *1.62 per hour*, one every *37.0 minutes*
+- median gap between consecutive cutovers: *12m32s*
+- by UTC calendar day: *11* on 2026-09-13, *6* on 2026-09-14
+
+Counted as *cutovers, not merges*, per the brief. The unit is "the front was
+pointed at a new build", which is the moment a build begins serving. That is
+also why the count is 17 and not 19: two *staging* windows closed =passed=
+(=CHG-20260913T2030-40.1=, =CHG-20260913T2030-42.1=) without any production
+cutover following them. A green staging window is not a deployment.
+
+*The clock.* The PIR timestamp is the fallback, because it is the only record
+present for all 17. It is posted at *settlement*, a few seconds after the front
+actually flips — measured, not assumed: across the *7* cutovers the mirror
+witnessed, the PIR trails the flip by *5.4s to 10.5s*, median *9.4s*. Where the
+mirror covers the event its timestamp is used instead, so 7 of the 17 rows below
+are instrument-timed and 10 are settlement-timed with that ~9s bias baked in.
+One outlier is worth naming: #9's PIR is at 15:42:05Z but its cutover
+comment is at *15:32:14Z*, 9m51s earlier, because the =production:healthy=
+withdrawal loop ran four times before settling. #9's lead time below is
+therefore ~10 minutes long.
+
+*An anomaly in the ledger, recorded not smoothed.* #39 (19:10Z) and #43
+(19:22Z) both cut over to *blue*. Blue/green is supposed to alternate, and the
+PIRs show it: #43's rollback target is =73423f0= on green, the same target #39
+named. Two consecutive deploys to the live colour means #43 had no clean
+rollback target of its own — the build it would have returned to was the one it
+had just overwritten. Nothing failed as a result. It is in the data and the
+schema below can express it; the current one cannot.
+
+* 2. Lead time for changes
+
+*Median 2h40m59s. Mean 3h06m27s. p90 6h10m38s. Range 5m51s .. 10h00m36s.*
+
+Measured from the *earliest author date* among the PR's commits, to the
+production-serving moment above. n = 17.
+
+** Which commit, and why
+
+The brief says several branches were rebased, "which resets author date but not
+the work". *The data says the opposite, and it is worth correcting because it
+changes which column you measure.*
+
+Seven branches — #6, #28, #33, #38, #40, #42, #44 — carry *committer* dates
+inside a twelve-second band at =23:35:55Z=..=23:36:07Z=, while their *author*
+dates span =13:41:03Z=..=19:37:33Z=. That is an ordinary =git rebase=: author
+date preserved, committer date rewritten. The rebase is what happened at
+23:35Z; the author dates are what happened during the day.
+
+So *author date measures the work and committer date measures the rebase*, and
+using committer date would produce this:
+
+| PR | from author date | from committer date |
+|----+------------------+---------------------|
+| #6 | 10h00m36s | 5m44s |
+| #33 | 6h10m38s | 25m16s |
+| #38 | 5h09m57s | 15m13s |
+| #28 | 6h28m40s | 2h15m58s |
+
+— a median of about 45 minutes instead of 2h41m, achieved by deleting the day.
+Neither column is *wrong*; one of them answers the DORA question.
+
+** Per change
+
+| PR | first commit authored | production serving | lead time |
+|----+-----------------------+--------------------+-----------|
+| #31 | 17:23:06Z | 17:28:57Z | 5m51s |
+| #43 | 19:11:04Z | 19:22:40Z | 11m36s |
+| #19 | 16:38:59Z | 16:54:42Z | 15m43s |
+| #39 | 18:47:17Z | 19:10:08Z | 22m51s |
+| #11 | 15:43:19Z | 16:13:46Z | 30m27s |
+| #36 | 18:12:26Z | 18:58:33Z | 46m07s |
+| #20 | 16:43:50Z | 17:40:20Z | 56m30s |
+| #9 | 14:30:40Z | 15:42:05Z | 1h11m25s |
+| #53 | 23:20:13Z | 02:01:12Z | 2h40m59s |
+| #54 | 23:20:22Z | 02:11:09Z | 2h50m47s |
+| #44 | 19:37:33Z | 00:21:17Z | 4h43m44s |
+| #40 | 19:37:31Z | 00:41:11Z | 5h03m40s |
+| #38 | 18:41:15Z | 23:51:12Z | 5h09m57s |
+| #42 | 19:11:01Z | 00:31:15Z | 5h20m14s |
+| #33 | 17:50:39Z | 00:01:17Z | 6h10m38s |
+| #28 | 17:03:44Z | 23:32:24Z | 6h28m40s |
+| #6 | 13:41:03Z | 23:41:39Z | 10h00m36s |
+
+DORA band: *Elite* (< 1 day) on every single change. The distribution is
+bimodal and the split is not about the changes — everything before 19:30Z runs
+in under 1h15m, everything after sits for hours. The long tail is *queue
+time*, not work time: the 22:55Z emergency froze the estate for twelve minutes
+and the backlog behind it drained one ten-minute window at a time.
+
+* 3. Change failure rate
+
+*3 of 18 production deployment attempts = 16.7%.*
+
+** The definition, and the defence
+
+#+begin_quote
+A *change failure* is a production deployment that required *unplanned
+remediation* — the front was rolled back, or the deployment record was
+withdrawn because the build never served. The denominator is production
+deployment *attempts*.
+#+end_quote
+
+Four decisions in that sentence, each of which could have gone the other way.
+
+*1. The denominator is production deployments, not merges and not windows.*
+DORA's ratio is about deployments. 21 PRs merged tonight and only 17 reached
+production; counting merges would measure something else and flatter the rate.
+
+*2. An expired window is not a failed change.* =spec.org= §Boundary conditions
+is unambiguous — /expired: a reservation lapsed unattempted. *not a failure.*
+Its own closure code; the change keeps everything else/ — and =reap.sh= says it
+in every comment it posts. *13 windows expired tonight* and not one of them
+enters either side of the ratio: nothing was attempted, so nothing failed, and
+no deployment happened, so there is no denominator entry either. Folding them
+in would give 16/34 = 47%, which would describe the *slot length* and call it
+the software's quality. Keeping them out is the whole reason =expired= is a
+distinct closure code, and the schema below refuses to let them merge.
+
+*3. Cancelled is not failed either, and mostly is not even a decision.* 277
+windows closed =cancelled=, but *229 of them belong to three PRs* (#6: 81,
+#42: 78, #28: 70) — the runaway booker of scenario D12, re-booking faster than
+anything could drive. That is queue churn. Treating it as change outcomes would
+make the night look catastrophic while measuring a loop.
+
+*4. The four =failed= windows are staging, and a gate that refuses is the
+control working.* All 326 windows are =env=staging=. A staging gate catching a
+bad build *before* production is the pipeline succeeding, and #56 — the
+deliberately broken change of D14 — is the clearest case: refused, window
+lapsed, nothing deployed. Counting it as a change failure would penalise the
+repo for its central claim holding.
+
+** The three that count
+
+| # | PR | build | when | what happened |
+|---+----+-------+------+---------------|
+| 1 | #42 | =2567015= | 09-13T19:43:50Z | production deployment record opened, =success= posted at 19:43:59 "observed by gates/health.sh", then =failure= at *19:44:34Z*: /WITHDRAWN: 2567015 is not serving anywhere in the estate./ A deployment that reported success and placed nothing. |
+| 2 | #40 | =43646f9= | 09-14T00:41:11Z | cut over, then *failed to merge* while =settle.sh= reported success (D13). Production served a build =main= does not contain — §Boundary conditions' /deployed, not merged/. Rolled back at *00:42:23Z*. |
+| 3 | #54 | =df22f7a= | 09-14T02:11:09Z | the driver piped =guard4.sh= to =tail=, so =set -e= saw =tail='s exit status and walked past a =NOT authorized= into production (D16). Rolled back at *02:11:57Z*. |
+
+** The two that deliberately do not count
+
+*The emergency.* =emergency= was declared on the estate at *22:55:13Z* and
+cleared at *23:07:11Z* — *11m58s*, during which =preflight.sh= refused every
+standard and normal change, verified live in the record on issue #1. #50 was
+reclassified =itil:emergency= and merged at 23:04Z. It is *not* in either side
+of the ratio, because *#50 deployed nothing*: =change/groups.sh 50= returns
+empty, it touches no file under =apps/=, and =production-first.sh= exempts it.
+It is a control-plane change, and for one of those production *is* =main=.
+An emergency is a classification, not an outcome; the estate flag that stopped
+everyone else is a property of the *world*, not of #50. Conflating the two is
+the exact defect =spec.org= §Nomenclature says took longest to find.
+
+(There is an earlier =emergency= on/off pair at 21:07:24Z → 21:08:27Z, 63
+seconds, with no change attached — a dashboard exercise, not an event.)
+
+*Three variants of the number, so the choice is visible:*
+
+| framing | value |
+|---------+-------|
+| unplanned remediation / attempts (*chosen*) | *3/18 = 16.7%* |
+| rollbacks / cutovers that served | 2/17 = 11.8% |
+| user-visible degradation / attempts | *0/18 = 0.0%* |
+
+The last one is real and should be said plainly: *no user-facing defect reached
+production tonight.* #54 was one CSS rule; #40's build was fine and its problem
+was trunk divergence; #42's build never served at all. What failed all three
+times was the *control*, not the software — and that is precisely what a change
+failure rate over a gated pipeline ought to be measuring, which is why 16.7% is
+the headline and not 0%.
+
+* 4. Time to restore service
+
+*Two real rollbacks. 72.1s and 47.1s; mean 59.6s.* DORA band: *Elite*.
+
+Measured from =snapshot.live_sha= in the dashboard mirror, which polls the front
+about once a second, so each figure is good to ±1s. This is the one metric
+tonight with an *independent instrument* behind it rather than a self-report.
+
+| build | PR | began serving | restored | TTR | returned to |
+|-------+----+---------------+----------+-----+-------------|
+| =43646f9= | #40 | 00:41:11.575Z | 00:42:23.687Z | *72.1s* | =d720341= (blue) |
+| =df22f7a= | #54 | 02:11:09.999Z | 02:11:57.073Z | *47.1s* | =9583730= (green) |
+
+*Both were front switches, and neither removed the bad build.* =env_seen= shows
+=production-green= still holding =43646f9= after the first restore, and
+=production-blue= still holding =df22f7a= now. The estate was returned to a good
+build and left *one command away* from the bad one. =43646f9= was only
+displaced at 02:01Z when #53 deployed over it — 79 minutes later, and
+incidentally, not as remediation.
+
+*A correction to =scenarios.org= D16.* It records #54's exposure as "roughly
+ninety seconds". The mirror says *47.1 seconds* — first sighting 02:11:09.999Z,
+last sighting 02:11:56.064Z, restored 02:11:57.073Z, with ~1s polls throughout
+and no gap. The narrative number is high by a factor of two. Recorded here
+rather than edited into D16, because the observation belongs to whoever amends
+the spec.
+
+*What cannot be measured:* #42's withdrawn deployment at 19:43Z has no
+restore time, because there was nothing to restore — the build never served.
+"Time to withdraw the false record" was 44s (19:43:50 → 19:44:34), which is a
+different quantity and is not reported as TTR.
+
+* What the data cannot tell us
+
+Three things, none of which is a gap in effort.
+
+** 1. Whether any production deployment was authorized
+
+*Every one of the 326 windows is =env=staging=.* There is no production
+reservation anywhere in =refs/idp/schedule=. So the question DORA cares least
+about and change management cares most about — /was this cutover inside an
+approved window, and who approved it?/ — *cannot be answered by a query*, only
+by reading prose.
+
+Worse, and this is the finding: *guard verdicts are printed, never persisted*.
+Guard 4 refused #54 at 02:10Z and the refusal exists nowhere but a terminal and
+a scenario write-up. In the stored record, #54's cutover is byte-for-byte
+indistinguishable from an authorized one. An audit run against this data would
+report 17/17 clean. The =change_authorization= table and the
+=bc_refusal_ignored= view below exist entirely to make that state writable.
+
+** 2. Whether anything went wrong before 23:45:58Z
+
+The dashboard mirror — the only independent witness to what production actually
+served — starts at =2026-09-13T23:45:58Z=. *Eleven of the seventeen cutovers
+happened before it was running*, and rest on PIR self-report alone.
+
+That is not a small caveat, because in the ~2h54m the mirror *was* running, PIR
+self-report was wrong *twice* (D13 claimed a merge that did not happen; D16
+reported a refused cutover as success). A rollback before 23:45Z would leave no
+trace in any source I have. *The 16.7% is a lower bound*, and if the earlier
+hours resembled the later ones it is a substantial underestimate.
+
+** 3. Blast radius, for the changes that most needed it
+
+=app:*= labels are the blast-radius signal, and *#40 and #44 reached production
+with none* — their evidence-at-completion lines read =itil:standard
+change:scheduled staging:* review:proxy= and nothing more. Both are =noop/*=
+branches that later grew real content. So for 2 of 17 cutovers the radius is
+*unrecordable*, not zero — and =CLAUDE.md= defines a unit as "one pull request
+carrying at least one =app:*= label", which neither was.
+
+Separately, classification is recorded in *two vocabularies*: #9, #11, #19 and
+#31 carry =change:standard= / =change:normal=, everything after 17:40Z carries
+=itil:standard= / =itil:normal=. I normalised them in =derive.py=, which is a
+report-time judgement that a store should never have required.
+
+* The schema
+
+=schema.sql=, PostgreSQL 14+. *[H] — the DDL has not been executed; no
+PostgreSQL is installed on hydra.* Table ordering and forward references were
+checked mechanically; the constraint bodies are unverified and stay =[H]= until
+a cell runs.
+
+It is built on =docs/interfaces.org= §7 and keeps most of it.
+
+** Where §7 is right and this keeps it verbatim
+
+- *=classification= and =lifecycle= as separate columns.* Different subjects,
+  different questions. Tonight proves it: #50 was =itil:emergency= (a class) and
+  =complete= (a lifecycle) and the estate was in =emergency= (a third subject
+  entirely, on =estate_flag=, attached to nothing deployable).
+- *=closure_code= closed, with =expired= ≠ =failed=.* The single most
+  load-bearing decision for change failure rate. 13 rows tonight depend on it.
+- *The window non-overlap constraint, enforced in the store.* §7 says the caller
+  is two agents racing; the 277 cancelled windows are what that looks like.
+- *=(change_id, instrument, sha)= as the guard's lookup key*, not
+  =(change_id, instrument)=. That is taxonomy class 4 and it is correct.
+- *Append-only observations; a withdrawal is a new row.* Kept, with =retracts=
+  as an explicit self-FK so the retraction names its subject.
+- *No boolean =healthy=; no priority column; no cascade delete; no
+  =deployed_by= on CHANGE.* All kept. A build is deployed, not a change.
+
+** Where I would change it
+
+*1. Add =deployment=. §7's biggest gap.* §7 has =ENVIRONMENT= (declared) and
+=RUN= (observed) and nothing for an *attempt*. With only those two, #42's
+19:43Z event is *unwritable*: a deployment ran, asserted success, placed
+nothing, and was retracted 44 seconds later. In §7 that is a =RUN= row that
+never appeared — indistinguishable from a deployment nobody started. A failed
+deployment needs to be a row, with =outcome ∈ (succeeded, failed, withdrawn,
+indeterminate)= and =withdrawn_at= / =withdrawn_reason= as separate facts.
+
+*2. Add =cutover=, distinct from =deployment=.* Under blue/green, placing a
+build on the idle colour and pointing the front at it are *different acts with
+different risk*, and both rollbacks tonight were cutovers with no deployment at
+all. Collapsing them makes a rollback indistinguishable from a redeploy — the
+same objection §7 raises against =deployed_by= on CHANGE, applied one level
+down. =rolls_back= names what it undid, =to_sha= names what it returned *to*,
+and =bad_build_still_resident= records the thing both of tonight's rollbacks
+left true and nobody wrote down.
+
+*3. Add =change_authorization=.* §7 has =OBSERVATION= with =instrument= and
+=observed_by=, which is right for *evidence* and says nothing about *consent*.
+D16 needs =guard=, =guard_verdict=, and =honored= — a boolean whose =false=
+means /a guard refused and the step proceeded anyway/. §7 cannot express it, so
+a pipeline built on §7 would have recorded #54 as a clean deployment.
+=actor_kind= plus =on_behalf_of= is how the =jwalsh= review proxy is told apart
+from JW, which the =review:proxy= label already gestures at.
+
+*4. Split =WINDOW.result= from =CHANGE.closure_code=.* §Nomenclature lists one
+closure-code enum — =passed/failed/cancelled/expired/backed-out= — covering
+both, and §7 puts =closure_code= on CHANGE while WINDOW has =result=. Those are
+two enums doing one job. =expired= can only ever be true of a *reservation*;
+=backed_out= can only ever be true of a *change*. Two types, no overlap.
+
+*5. Split =forfeited= out of =cancelled=.* Tonight's =cancelled= rows mix "a
+person moved it to the 19th" (#71) with "a guard refused at activation" and with
+229 rows of a booking loop. Those have different owners and only one is a
+signal. §7 does not distinguish them.
+
+*6. Make blast radius rows, and make "undeclared" distinct from "empty".*
+=change_app= gives the count *and* which apps. =change_radius_declaration=
+exists because #40 and #44 shipped with no =app:*= label, and *"the labeller
+said zero"* and *"nobody asked the labeller"* are exactly the two answers
+taxonomy class 1 insists must refuse differently. §7 has no radius concept.
+
+*7. =backfill_owed= / =backfilled_at= on CHANGE.* The repo already has a
+=change:backfill-owed= label (=7e6785f=, "PERSISTENT"); a label is working
+state and this is a debt that must outlive it. Constrained so only an
+=emergency= can owe one.
+
+** Named at last: the state with no name
+
+=spec.org= §"The one that has no name yet" describes *deployed, not merged, and
+the window is gone* and says a rebuild needs a word for it. The schema offers
+=bc_stranded=, a view over =bc_deployed_not_merged= joined to a window whose
+result is =expired=, =forfeited= or =cancelled=. *Stranded*: the estate serves
+a build trunk does not contain, and the entitlement to do anything about it has
+lapsed. #40 was in exactly this state between 00:41Z and its rollback.
+
+** Every boundary condition, as a query
+
+=schema.sql= ends with one view per row of §Boundary conditions —
+=bc_deployed_not_merged=, =bc_merged_not_deployed=, =bc_expired_windows=,
+=bc_refused=, =bc_refusal_ignored=, =bc_backed_out=, =bc_stale_evidence=,
+=bc_stranded= — plus =dora_*= views for the four metrics. That is the grading
+criterion §Boundary conditions sets: a rebuild is graded on whether it can
+*name* each state. Naming it as a view you can =SELECT= from is the strongest
+form of naming available to a schema.
+
+* Deviations
+
+- =notes.org= is Markdown-free per repo convention, but the =data/= snapshots
+  are JSON and TSV rather than org tables; they are machine inputs to
+  =derive.py=, not documentation.
+- =derive.py= normalises =change:standard= to =itil:standard= at report time.
+  This is a judgement made in the reporting layer and it should not be
+  necessary; it is called out in §What the data cannot tell us rather than
+  hidden in the code.
+- The correction to =scenarios.org= D16's "roughly ninety seconds" is recorded
+  here and *not* applied to D16.

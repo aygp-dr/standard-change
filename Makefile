@@ -7,7 +7,8 @@ EXTERNAL := $(notdir $(wildcard external/*))
 
 .PHONY: help env env-check run dev router stop test lint gate gate-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
-        simulate-gates smoke \
+        simulate-gates smoke uat idp-mock idp-tui idp-org \
+        forge forge-list forge-pull forge-check \
         port-alloc port-free ports clean
 
 help:  ## show this list
@@ -71,6 +72,8 @@ lint: ; @./gates/shellcheck.sh && \
 gate: lint test ; @./gates/e2e.sh $(app) && ./gates/smoke.sh  ## lint, test, e2e and smoke   app=<name>
 smoke:  ## walk the estate as a browser would   url=<base>
 smoke: ; @./gates/smoke.sh $(url)
+uat:  ## the browser journey, AS-IS, in headless Chromium   url=<base>
+uat: ; @./gates/uat.sh $(url)
 gate-selftest: docs-selftest  ## prove every gate can fail, then that it passes  ## prove every gate can fail, then that it passes
 	@./gates/labeller-test.py && ./tla/check.sh && $(MAKE) -s observation-selftest \
 	  && $(MAKE) -s audit-selftest
@@ -108,12 +111,20 @@ audit: ; @./gates/audit-controls.py
 docs:  ## the documents gate
 docs: ; @./gates/docs-lint.py
 # Forge through batch emacs, so it works whether or not emacs is running.
+# `--batch' already implies no init file and no frame; adding `-nw' would not
+# make it stricter, and the entry points print rather than pop a buffer at
+# nobody. Each one sets its own exit status: batch exits 0 through an error
+# raised in a process filter, which is where an async forge pull reports.
 forge-list:  ## list PRs from the forge database
 forge-list: ; @emacs --batch -l standard-change.el -f standard-change-forge-list
 forge-pull:  ## refresh the forge database
 forge-pull: ; @emacs --batch -l standard-change.el -f standard-change-forge-pull
-forge:           forge-pull forge-list  ## pull then list PRs through emacs
-forge-check:     ; @emacs --batch -l standard-change.el -f standard-change-forge-check
+# Sequenced by recipe, not by prerequisites: under -j the two would run at
+# once and the list would print the database the pull is still writing.
+forge:  ## pull then list PRs through emacs
+forge: ; @$(MAKE) -s forge-pull && $(MAKE) -s forge-list
+forge-check:  ## can forge see this repo PRs
+forge-check: ; @emacs --batch -l standard-change.el -f standard-change-forge-check
 
 pbt:  ## exhaustive model of the promotion guards
 pbt: ; @./gates/pbt-pipeline.py --exhaustive
@@ -132,3 +143,9 @@ clean: ; @rm -rf .run .env .env.ports
 
 dashboard:  ## the estate: queue, protected, team
 	@./dashboard
+idp-mock:  ## the IDP contract (idp-api/openapi.yaml) as an in-memory mock on :9998
+idp-mock: ; @node idp-api/mock/server.mjs
+idp-tui:  ## the IDP from a terminal, against the mock   IDP_URL=<base>
+idp-tui: ; @python3 idp-api/mock/tui.py
+idp-org:  ## the IDP with org-mode as the store: tangle and run the eviction demo
+idp-org: ; @cd idp-api && emacs --batch -l org --eval '(org-babel-tangle-file "idp.org")' >/dev/null 2>&1 && cd .. && emacs --batch -l idp-api/idp.el -f idp-org-demo 2>/dev/null

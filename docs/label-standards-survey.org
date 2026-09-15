@@ -1,0 +1,1404 @@
+#+TITLE: Label vocabularies for staging-and-production deployment — what is standardised, what is convention, and what this repo invented
+#+SUBTITLE: A survey of GitHub's own primitives, 90-odd label strings measured in the wild, and twelve candidate standards graded against docs/release-standards.org's six tiers
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:3 num:t
+
+* Status
+
+*Research notes.* =spec.org= governs; nothing here amends it. Epistemic markers
+are =spec.org='s: [E] observed or read directly, [H] inferred or not checked,
+[E, secondary] read only in a restatement because the primary is paywalled.
+
+This file deliberately does not repeat =docs/release-standards.org=, which
+already established the six-tier taxonomy used throughout, and already read
+CDEvents, OpenTelemetry semconv, SLSA, in-toto, ITIL 4, ISO/IEC 20000-1 and the
+GitHub Deployments API for a *different* question — /what is a deployment
+record/. This file asks the question that one did not:
+
+#+begin_quote
+*Is there a standard, or even a convention, for the LABELS?* Not for the
+deployment record — for the vocabulary a change carries while it moves between a
+staging environment and a production one. And in particular: does anyone else
+separate "please deploy this" from "this is deployed", and does anyone else have
+a third value for "I could not tell"?
+#+end_quote
+
+** The answers, stated first
+
+#+begin_quote
+*1. There is no standard for deployment labels, at any tier, and there is no
+plausible candidate.* Labels are a GitHub-specific UI affordance with no schema,
+no registry and no conformance notion; nothing at tier 1 or tier 2 mentions
+them. Every label vocabulary found in the wild — including this repo's — is
+*tier 6, folklore*.
+
+*2. The intent/state split this repo cares most about is independently attested,
+under the same two prefixes, and by an unrelated party.* =nyrkio/nyrkio= ships
+=deploy:staging= described as "Initiates deployment on staging" and
+=deployed:staging= described as "State of successful staging deployment" [E].
+That is =deploy:*= for intent and =deployed:*= for state, arrived at
+independently. It is convergent design, not a standard, and it is the single
+strongest external corroboration in this survey.
+
+*3. The two label vocabularies that are actually widespread are both
+environment-blind.* =released= (semantic-release, 2,740,897 issues/PRs) and the
+=autorelease: {pending, tagged, published, snapshot, snoozed, triggered}= family
+(release-please, 738,000+ combined) are by far the largest machine-owned label
+state machines on GitHub — and neither names an environment at all. They model
+/the package registry/, where there is only one destination. *The moment there
+are two environments, the convention stops.*
+
+*4. Three-valuedness is the sharpest discriminator, it splits the field cleanly,
+and one tier-2 specification draws exactly this repo's line.* OpenTelemetry's
+=cicd.pipeline.result= defines =failure= as "usually detected by non-zero exit
+codes of the tools executed in the pipeline run" and =error= as "an error in the
+CI/CD system, eg. due to the worker being killed" [E, verbatim]. *That is
+=docs/exit-codes.org='s 1-versus-4, with the same criterion, written by a
+standards body* — plus =timeout=, =cancellation= and =skip=, and the repo has no
+code for =skip=, which is the 19-skipped-check-runs incident exactly. The
+orchestrators agree: Kubernetes =ConditionUnknown=, Argo CD =HealthStatusUnknown=
+and =SyncStatusCodeUnknown=, and above all Argo Rollouts
+=AnalysisPhaseInconclusive=, a terminal phase beside =Failed= and =Error= [E].
+The forge-side vocabularies do not: GitHub's REST deployment states have no
+indeterminate value (only the read-only, GraphQL-only =ABANDONED=), CDEvents'
+deployment events have no outcome field at all, and *no label vocabulary found
+anywhere has a third value.* The two verdict formats that might have had one do
+not: in-toto's VSA is =PASSED=/=FAILED= and OSCAL's finding status is a closed
+=satisfied=/=not-satisfied= [E].
+
+*7. The only three-valued CLOSURE vocabulary belongs to a vendor, and this repo
+is one value short of it.* ServiceNow mandates =Successful= / =Successful with
+issues= / =Unsuccessful= on its =Review= state [E, secondary]. That is tier 3
+and *not* ITIL's, which matters because this repo has been treating the PIR
+requirement as ITIL's. "Successful with issues" — production serves the new
+build and something is still wrong — currently has to be recorded here as
+=change:complete= plus prose. Whether that is a gap or a deliberate refusal (it
+is one step from the warning tier =CLAUDE.md= forbids) is an ADR question, and
+this file does not answer it.
+
+*5. The observation labels that name a build are NOT unusual — the prediction is
+refuted.* =openstax/rex-web= carries =in-staging=, =in-production= and 34
+=in-release-<N>= labels naming specific builds [E]. That is the same shape as
+=deployed:staging-<group>-<n>=, in a real repo, at scale.
+
+*6. The estate-global =freeze= IS unusual — the prediction is confirmed, and
+more sharply than expected.* No label meaning "the estate is stopped for
+everyone" was found in any repository surveyed. The bare =freeze= label
+(1,376 issues) is overwhelmingly *UI-freeze bug reports* [E, sampled]. The only
+=code-freeze= labels found carry the *opposite* semantics to this repo's:
+=camunda/camunda-platform-helm= defines =code-freeze= as "Issue eligible for
+work during the code freeze" [E] — a per-change *exemption*, which is exactly
+the collapse =spec.org= §Nomenclature warns against ("freeze /is/ a property of
+the WORLD… /is NOT/ a property of a change").
+#+end_quote
+
+** Two claims withdrawn after first commit
+
+Recorded rather than silently edited, per =CLAUDE.md=: a run that refutes a
+claim amends it in the direction of the observation.
+
+1. *"Change control is clause 8.5.1, not 8.5.3."* Wrong. ISO's own free redline
+   preview shows 8.5.1 = Change management and *8.5.3 = Release and deployment
+   management* [E]. Both numbers already in use in this repository are correct,
+   for different clauses. §ISO/IEC 20000-1 carries the table.
+2. *"OSCAL's findings vocabulary does admit an indeterminate outcome."* Wrong,
+   and it was marked [H] when written. The status enum is *closed* at
+   =satisfied= / =not-satisfied= [E, read from the metaschema]. §OSCAL.
+
+A third claim is *unresolved and stays [H]*: whether ITIL 4's own text uses the
+phrase "post-implementation review". The primary is behind PeopleCert Plus and
+the free AXELOS glossary endpoint no longer serves the document.
+
+** Method, and what the numbers do and do not mean
+
+All counts were taken on 2026-09-14 against =GET /search/issues= with
+=q=label:"<exact string>"=, authenticated as =aygp-dr=, read-only. No write of
+any kind was made to any repository.
+
+*Three caveats, and the third is fatal to half the table.*
+
+1. *The unit is an issue or pull request, not a repository.* A single active
+   repo produces thousands. Where it mattered, the top repositories per label
+   were pulled separately and are reported beside the count.
+2. *Label search is exact on the name, case-insensitively.* =deploy:staging= and
+   =deploy-staging= are counted separately, correctly.
+3. *Bare English words are uninterpretable and must not be read as evidence.*
+   =production= (42,062), =staging= (15,450), =live= (6,645), =blocked=
+   (99,870), =release= (274,336), =scheduled= (6,661) and =freeze= (1,376) are
+   dominated by labels meaning something else entirely — a component area, a
+   triage state, or a bug about the UI locking up. Sampling =freeze= returned
+   twenty issues of which none concerned a change freeze [E]. *Only prefixed or
+   compound strings carry a readable signal*, and the analysis below uses only
+   those.
+
+Primary sources were read from the projects' own source trees via the GitHub
+contents API wherever an enum was at stake, rather than from documentation —
+=argoproj/argo-rollouts=, =kubernetes/api=, =argoproj/gitops-engine=,
+=argoproj/argo-cd=, =fluxcd/pkg=, =spinnaker/orca=, =cdevents/spec=,
+=googleapis/release-please=. Those are marked [E] and the file path is named.
+GitHub's own API semantics were read from =docs.github.com= and from the
+published GraphQL schema at =docs.github.com/public/fpt/schema.docs.graphql=.
+
+* Part 1 — GitHub's own primitives, and the state machine it actually has
+
+=docs/release-standards.org= §GitHub in particular already established the
+*epistemic* point — a Deployment is self-reported, "GitHub is never actually
+accessing your servers", and the =state= mirrors the deploy script's exit code
+rather than the target's condition. Not repeated. What follows is the *shape of
+the state machine*, which that note did not enumerate.
+
+** The REST enum is seven values and the GraphQL enum is eleven
+
+The writable REST =state= on a deployment status, verbatim from
+=docs.github.com/en/rest/deployments/statuses= [E]:
+
+#+begin_quote
+"The state of the status. When you set a transient deployment to =inactive=, the
+deployment will be shown as destroyed in GitHub. Can be one of: =error=,
+=failure=, =inactive=, =in_progress=, =queued=, =pending=, =success="
+#+end_quote
+
+GraphQL exposes *two* enums where REST has one, and the difference is the whole
+finding [E, read from the published schema]:
+
+| enum | values | writable? |
+|------+--------+-----------|
+| =DeploymentStatusState= | =ERROR=, =FAILURE=, =INACTIVE=, =IN_PROGRESS=, =PENDING=, =QUEUED=, =SUCCESS=, =WAITING= | yes, except =WAITING= |
+| =DeploymentState= | the above *plus* =ACTIVE=, =ABANDONED=, =DESTROYED= | *no* — derived |
+
+The three GraphQL-only values are the interesting ones, with the schema's own
+descriptions:
+
+- =ACTIVE= — "The deployment is currently active."
+- =DESTROYED= — "An inactive transient deployment."
+- =ABANDONED= — *"The pending deployment was not updated after 30 minutes."*
+
+*=ABANDONED= is the only indeterminate value in GitHub's entire deployment
+model, it is read-only, and REST cannot see it.* [E] It is not a failure and not
+a success; it is a timeout. Nothing else in the model distinguishes "we do not
+know" from "it did not work".
+
+** =inactive= is supersession, not failure — and it is silent
+
+The docs never describe =inactive= as a failure. Three doc statements settle it
+[E]:
+
+- "A deployment can accumulate multiple statuses over time as it progresses, for
+  example from =pending= to =in_progress= to =success=. *GitHub tracks the most
+  recent status for each deployment and uses it to display the deployment's
+  current state.*"
+- On deleting a deployment: "Mark the active deployment as inactive by adding
+  *any non-successful deployment status*" — so =inactive= is one of several ways
+  to stop being active, alongside =failure= and =error=.
+- "This ensures that repositories with multiple deployments will always have an
+  active deployment."
+
+So =inactive= and =failure= differ in *cause*, not in effect: both end
+activeness. =inactive= says "superseded"; =failure= says "it broke". A consumer
+reading only the current state cannot tell a retired-but-good build from a
+broken one without walking the status chain.
+
+Two operational traps worth recording, both [E] from the doc text:
+
+1. *Supersession emits no webhook.* "A webhook event is not fired for deployment
+   statuses with an =inactive= state." A listener cannot observe a build ceasing
+   to be current; it must poll.
+2. *=auto_inactive= excludes production.* Verbatim: "Adds a new inactive status
+   to all prior *non-transient, non-production* environment deployments with the
+   same repository and environment name as the created status's deployment. An
+   inactive status is only added to deployments that had a =success= state."
+   And =production_environment= "Default: true when environment is =production=".
+   =docs/release-standards.org= flagged this as [H] on a literal reading; the
+   doc text is confirmed [E], the *implementation* remains [H]. For a blue/green
+   production pair, *nothing retires the old slot for you.*
+
+Also: "GitHub retains records of previous deployment statuses for *90 days*" [E].
+Any settlement evidence older than that is gone from both APIs.
+
+** How GitHub says "environment X is serving build Y": it does not, quite
+
+There is no field for it. The Environment object — REST =({id, node_id, name,
+url, html_url, created_at, updated_at, protection_rules[],
+deployment_branch_policy})= and GraphQL =({databaseId, id, isPinned,
+latestCompletedDeployment, name, pinnedPosition, protectionRules})= — has no
+current-deployment pointer [E].
+
+The nearest two things, and neither is what it looks like:
+
+| candidate | what it actually means |
+|-----------+------------------------|
+| =Deployment.state = ACTIVE= (GraphQL) | nobody has posted a superseding or failing status. A claim about GitHub's records, not about the estate |
+| =Environment.latestCompletedDeployment= | "The latest completed deployment with status *success, failure, or error*" — the most recent attempt that *finished*, which may well be a failure |
+
+*The reduction "current build = the most recent deployment for that environment
+whose latest status is =success= and which has not since been marked
+=inactive=" is an inference* [H] assembled from those three doc sentences. No
+single doc sentence states it.
+
+** Protection rules gate entry, not outcome
+
+Verbatim [E]: "Deployment protection rules require specific conditions to pass
+before a job referencing the environment can proceed." The rule types, exactly:
+=wait_timer= (1–43,200 minutes per the Actions docs; "0 and 43,200" per the REST
+docs — *the two pages disagree on the lower bound* [E]), =required_reviewers=
+(≤6 users or teams, "Only one of the required reviewers needs to approve",
+optional =prevent_self_review=), =branch_policy= (=branch= | =tag= name
+patterns, "Wildcard characters will not match =/="), and GitHub-App *custom
+deployment protection rules* (public preview; max 6 enabled per environment).
+
+While waiting, the *job* status is =Waiting=, the GraphQL deployment state is
+=WAITING=, and there is *no REST deployment-status value for it* [E]. "If a job
+is not approved within 30 days, it will automatically fail."
+
+The approval verdict is two-valued: =DeploymentReviewState= is exactly
+={APPROVED, REJECTED}=, and the =pending_deployments= review API takes =state=
+of =approved= or =rejected= [E]. There is no "cannot determine".
+
+*The one place GitHub allows a verdict-free report*, and it is buried in the
+custom-protection-rule docs [E]: "to add a status report without taking any
+other action to GitHub, send a POST … In the request body, *omit the =state=*…
+You can post a status report on the same deployment up to 10 times." That is the
+only slot in the whole platform for "I have looked and I am not answering yet" —
+and it exists only for GitHub Apps on custom protection rules, which are in
+public preview and unavailable to this repo (=spec.org= §Open items: rulesets
+already 403 on this plan).
+
+** Freeze: GitHub has no such primitive at any scope
+
+Repository, organisation, enterprise — none [H, an argued absence: no
+documentation page names such a feature, which proves no doc names it, not that
+none exists]. GitHub's own docs point outward for exactly this use case, naming
+"Datadog, Honeycomb, and ServiceNow" for "automated approvals" and an ITSM case
+of "service readiness by validating quality, security, and compliance
+processes".
+
+The compositional substitutes are all per-environment, and each has a defect
+against =spec.org='s definition of a freeze as a property of the world:
+
+| substitute | why it is not a freeze |
+|------------+------------------------|
+| custom protection rule app that rejects everything | per-environment, ≤6 rules, public preview, and unavailable below Enterprise on private repos |
+| required reviewers who decline | per-environment; indistinguishable from a review that has not happened |
+| deployment branch policy narrowed to nothing | per-environment; also blocks the emergency that should pass |
+| disabling Actions org-wide | stops CI too, so the gates cannot run either — it freezes the instruments, not the estate |
+
+*None of them is a single writable fact that every guard reads.* That is exactly
+what =freeze= is here, and the platform has no place to put it.
+
+** Webhook surface, for completeness
+
+Four events, with their action types [E]: =deployment= (=created=),
+=deployment_status= (=created=), =deployment_review= (=approved=, =rejected=,
+=requested= — GitHub Apps only), =deployment_protection_rule= (=requested= —
+GitHub Apps only). The last carries =deployment_callback_url= and a =sha= that
+is "Always populated from the check suite, regardless of whether a deployment is
+created".
+
+** Verdict on GitHub
+
+*Tier 3, vendor contract*, per =docs/release-standards.org='s taxonomy: no
+conformance test, the platform is the test, and it can change without notice.
+Its deployment state machine is real, enumerable, and *two-valued at every
+decision point that matters* — approve/reject, success/failure, active/inactive
+— with a single read-only timeout value (=ABANDONED=) as the sole gesture at
+indeterminacy. It has no freeze, no intent/state distinction beyond =task= and
+=payload= as free-form strings, and no per-SHA "this is what staging is serving".
+
+* Part 2 — real repositories: what people actually write
+
+** The strings, with counts
+
+Issues and pull requests carrying each exact label name, GitHub-wide,
+2026-09-14 [E]. Bare-word labels are excluded per §Method; every string below is
+prefixed or compound and therefore readable. =I= = intent, =S= = state, =?= =
+both or neither.
+
+*** Machine-owned release-state families — the only vocabularies at real scale
+
+| label | count | kind | writer |
+|-------+-------+------+--------|
+| =released= | 2,740,897 | S | semantic-release |
+| =autorelease: tagged= | 618,874 | S | release-please |
+| =autorelease: pending= | 74,067 | S | release-please |
+| =autorelease: published= | 32,785 | S | *publication tooling, by convention* |
+| =autorelease: snapshot= | 9,723 | S | release-please |
+| =autorelease: triggered= | 2,956 | S | release-please |
+| =release-please:force-run= | 246 | *I* | a person |
+| =autorelease: snoozed= | 17 | S | a person |
+
+release-please's README states the model outright [E]:
+
+#+begin_quote
+"You can tell where the Release PR is in its lifecycle by the status label on
+the [pull request]…
+
+- =autorelease: pending= is the initial state of the Release PR before it is
+  merged
+- =autorelease: tagged= means that the Release PR has been merged and the
+  release has been tagged in GitHub
+- =autorelease: snapshot= is a special state for snapshot version bumps
+- =autorelease: published= means that a GitHub release has been published based
+  on the Release PR (/release-please does not automatically add this tag, but we
+  recommend it as a convention for publication tooling/)."
+#+end_quote
+
+Three things to take from that, and the third is the one this repo will care
+about.
+
+1. *It is a lifecycle state machine expressed as labels, machine-owned, with a
+   single writer per state.* It is the same construction as =change:*=.
+2. *It names no environment.* There is one destination — the registry — so the
+   environment axis never arises. This is why the convention scales: it is
+   solving a one-environment problem.
+3. *It hits the ownership question this repo's =change/label-owners.tsv= exists
+   for, and answers it explicitly.* =autorelease: published= is deliberately
+   *not written by release-please*; the README hands the writer to "publication
+   tooling" as "a convention". 32,785 issues carry it, so the convention is
+   actually adopted. That is an independent arrival at rule 1 of
+   =docs/label-ownership.org= — the instrument writes its own verdict, and a
+   tool that did not take the measurement declines to record it.
+
+=release-please:force-run= is the matching *intent* label: a person adds it, the
+bot consumes it. Same shape as this repo's =release=.
+
+*** Environment-bearing labels: the long tail
+
+| label | count | kind | notable users |
+|-------+-------+------+---------------|
+| =deploy-preview= | 2,673 | I | lacolaco/blog.lacolaco.net, linuxfoundation/lfx-self-serve |
+| =deploy:dev= | 2,332 | I | climatepolicyradar/navigator-backend |
+| =awaiting-deploy= | 2,137 | I/S | mysociety/alaveteli (100/100 sampled) |
+| =env:production= | 1,507 | ? | sigstore/sigstore-probers, CivicPatch/open-data |
+| =deployment-failed= | 1,406 | S | — |
+| =auto-deploy= | 1,399 | I | — |
+| =deployed:staging= | 639 | *S* | shakirena/*, nyrkio/nyrkio, fedora-infra/anitya |
+| =deploy-failed= | 557 | S | — |
+| =production-ready= | 475 | ? | — |
+| =env:staging= | 375 | ? | sigstore/sigstore-probers |
+| =deployed:prod= | 374 | *S* | fedora-infra/anitya |
+| =in-staging= | 350 | *S* | openstax/rex-web |
+| =in-production= | 3,246 | *S* | openstax/rex-web (93/100 sampled) |
+| =state:deployed= | 330 | S | — |
+| =release:pending= | 308 | S | — |
+| =status:deployed= | 264 | S | app-vitals/shipwright |
+| =deployed-to-production= | 221 | S | EuroPython/djep, Zigbee-Student-Developers-Club |
+| =deploying= | 196 | S | — |
+| =deploy:staging= | 169 | *I* | nyrkio/nyrkio, climatepolicyradar, damnitsfun |
+| =on-staging= | 166 | *S* | mysociety/alaveteli |
+| =deploy-staging= | 155 | I | mloitzl/vinyl-vault, alfredoreduarte/timetrack |
+| =deploy:qa= | 57 | I | — |
+| =code-freeze= | 53 | ? | camunda/camunda-platform-helm, celo-org |
+| =deploy-production= | 50 | I | — |
+| =needs-deploy= | 47 | I | — |
+| =staging-ready= | 37 | I | — |
+| =deploy:production= | 22 | I | danielbmeireles/cloud-solutions-inc |
+| =deploy to staging= | 19 | I | — |
+| =deployed:production= | 16 | *S* | shakirena/elektron, fedora-infra |
+| =deploy-blocked= | 13 | S | — |
+| =pending-deployment= | 10 | S | — |
+| =environment:staging= | 9 | ? | — |
+| =do-not-deploy= | 9 | I | — |
+| =deploy-freeze= | 4 | ? | — |
+
+*The distribution is the finding.* Every one of these is a single-repository
+habit. =awaiting-deploy= is 100% one repo. =in-production= is 93% one repo.
+=deploy:staging=, at 169 issues across the whole of GitHub, is spread over a
+dozen unrelated repos with a handful each. *There is no convention here; there
+are several hundred private conventions that happen to rhyme.*
+
+** The three repositories worth reading in full
+
+*** =nyrkio/nyrkio= — the intent/state split, independently invented [E]
+
+Three labels, with the maintainer's own descriptions read from the repository's
+label API:
+
+| label | description, verbatim |
+|-------+-----------------------|
+| =deploy:staging= | "Initiates deployment on staging" |
+| =deployed:staging= | "State of successful staging deployment" |
+| =deploy-failed:staging= | "State of failed staging deployment." |
+
+This is the closest external match to this repo's central distinction, and it
+arrived at *the same two prefixes*: the imperative =deploy:= for the trigger and
+the past participle =deployed:= for the observation. It also has the
+verdict-pair shape — =deployed:staging= against =deploy-failed:staging= is
+=staging:e2e= against =staging:e2e-failed=.
+
+*What it does not have*: a production tier (staging only), a third value, a
+declared writer, an exclusion rule, or a build identity. It is the right
+distinction with none of the machinery.
+
+*** =openstax/rex-web= — observation labels naming a build [E]
+
+76 labels, of which 34 are =in-release-<N>=, plus =in-staging=, =in-production=,
+=dev-approved= (259 issues), =scan-passed= (31), =HOLD= and =ICE=.
+
+This *refutes the survey's own prediction*. The task predicted that "observation
+labels that name a build" would be unusual. They are not: =in-release-1712= is a
+label whose entire content is *which build this change is in*, and openstax has
+34 of them live and many more retired. The two-tier =in-staging= / =in-production=
+pair is the environment-state distinction, and =dev-approved= / =scan-passed=
+are gate observations recorded as labels.
+
+The differences from this repo are real but narrower than predicted: openstax
+names a *release number*, not a head SHA; the labels are not declared to have a
+single writer; and there is no failure counterpart to =scan-passed=, so a change
+with no =scan-passed= is indistinguishable from one the scan could not run on.
+*Which is the three-valued defect, in the wild.*
+
+*** =mysociety/alaveteli= — the two-environment pair, at its simplest [E]
+
+=awaiting-deploy=, =on-staging=, =next-release=, =has-blockers=. Four labels
+covering intent, staging state, release targeting, and blockage. No production
+label; production is implied by the absence of the others. Fourteen years of a
+real civic-tech deployment, and this is the whole vocabulary.
+
+*** Honourable mentions
+
+- =climatepolicyradar/navigator-backend= [E]: =deploy:dev= — "Create an
+  ephemeral environment for the PR"; =deploy:staging= — "Deploy the latest
+  commit automatically if it has this label". *Pure intent, and the description
+  says so.* Note "if it has this label" — a trigger that stays on re-fires,
+  which is the defect =change/label-owners.tsv= records against =release=.
+- =fedora-infra/anitya= [E]: =deployed:staging=, =deployed:prod=. Pure state,
+  two tiers, no intent labels at all.
+- =app-vitals/shipwright= [E]: =status:pending=, =status:ready=,
+  =status:blocked=, =status:deploying=, =status:deployed=, plus =hold:manual=
+  ("Reserved — do not auto-pick; worked manually in a specific session"). A
+  single =status:*= namespace carrying lifecycle *and* action *and* blockage —
+  the overloading =spec.org= §Nomenclature says to avoid.
+- =elastic/kibana= [E]: twelve =ci:*deploy*= labels
+  (=ci:cloud-deploy=, =ci:project-deploy-security=, =ci:cloud-redeploy=,
+  =ci:cloud-persist-deployment=…). *All intent, none state.* Plus
+  =Environment:ECH= / =Environment:MKI= as loci.
+- =grafana/grafana= [E]: =deploy-frontend-preview=, =deploy-storybook=. Intent.
+- =mozilla/addons-server= [E]: =env:dev=, =env:stage=, =env:prod=,
+  =type:prod_bug=, =priority:blocks_release=. These are *loci* — where the bug
+  was seen — not deployment states. Easy to mistake for the latter.
+
+** What the largest projects do: nothing
+
+Scanning the full label sets of nineteen prominent repositories for any
+deployment vocabulary [E]:
+
+| repo | deployment-state labels | what it has instead |
+|------+-------------------------+---------------------|
+| kubernetes/kubernetes | *none* | =release-blocker=, =sig/release=, =do-not-merge/*= |
+| rust-lang/rust | *none* | =T-release=, =I-release-nominated=, =S-waiting-on-t-release= |
+| cockroachdb/cockroach | *none* | ~90 =branch-release-<version>= labels |
+| spinnaker/spinnaker | *none* | =target-release/<version>=, =release/blocker= |
+| fluxcd/flux2 | *none* | =backport:release/v2.9.x= |
+| microsoft/vscode | *none* | =insiders-released=, =unreleased=, =release-cherry-pick= |
+| backstage/backstage | *none* | =workflow:before-release=, =workflow:after-release= |
+| hashicorp/terraform | *none* | — |
+| gitlabhq/gitlabhq | *none* | — |
+| argoproj/argo-cd | *none* | =production-binary=, =production-image= (artifact kinds) |
+| cdevents/spec | *none* | — |
+
+*Every one of these ships software, and none of them labels where a change is
+deployed.* The pattern is consistent: large projects label *which release a
+change is targeted at or landed in* — a version axis — and let the deployment
+axis live entirely outside the issue tracker. The one partial exception is
+elastic/kibana, whose =ci:*-deploy-*= labels are deployment *triggers* and carry
+no state.
+
+*The inference* [H]: deployment-state labels appear where the repository and the
+estate are the same team's concern and the estate is small enough to have one
+staging and one production. A project with thousands of downstream operators has
+no single "production" to label, so the axis is meaningless and nobody invents
+a vocabulary for it. *This repo is in the first category, which is why it needed
+one.*
+
+** Intent versus state, counted
+
+Of the 34 environment-bearing strings measured, classified by whether the
+label's job is to *cause* a deployment or to *record* one:
+
+| kind | strings | combined issues | note |
+|------+---------+-----------------+------|
+| intent — "please deploy" | 13 | 9,106 | =deploy:*=, =deploy-*=, =auto-deploy=, =needs-deploy=, =staging-ready=, =do-not-deploy=, =awaiting-deploy= |
+| state — "is deployed" | 15 | 8,096 | =deployed:*=, =in-staging=, =in-production=, =on-staging=, =status:deployed=, =state:deployed=, =deploying=, =*-failed=, =deploy-blocked=, =pending-deployment= |
+| ambiguous — both or neither | 6 | 2,423 | =env:*=, =environment:staging=, =production-ready=, =code-freeze=, =deploy-freeze= |
+
+(=awaiting-deploy= is counted as intent; it is arguably a queue state. It is
+one repository's label and moving it changes the totals by 2,137 without
+changing the conclusion.)
+
+*The distinction is real and people do make it* — the grammar carries it,
+imperative for intent and past participle for state, in exactly the way
+=deploy:staging= versus =deployed:staging= does. *What nobody does is declare
+it.* Not one of the surveyed repositories has a file stating which labels are
+intent and which are state, or who may write each. =nyrkio/nyrkio= comes closest
+by putting "Initiates" and "State of" in the label descriptions, which is a
+declaration of a kind, and it covers three labels.
+
+*Three repositories mix the two in one namespace* — =app-vitals/shipwright='s
+=status:*= holds =ready= (intent-ish), =deploying= (action) and =deployed=
+(state); =mozilla/addons-server='s =env:*= holds a locus that reads as a state.
+That is the failure mode =change/label-owners.tsv='s exclusion-group split was
+written to fix, occurring naturally.
+
+** Freeze, verified rather than assumed
+
+The prediction was that the estate-global =freeze= would have no external
+equivalent. *Confirmed, and the reason is more interesting than the absence.*
+
+- Bare =freeze= (1,376): sampled twenty issues; all were application-freeze bug
+  reports ("tab hidden", "auto crash: ResizeObserver loop", "Freeze idle mods")
+  [E]. Zero change freezes.
+- =deploy-freeze= (4): four issues, GitHub-wide.
+- =code-freeze= (53): the largest user, =camunda/camunda-platform-helm=, defines
+  it as *"Issue eligible for work during the code freeze"*, with a companion
+  =code-freeze-candidate= = "Issue found during a code freeze that we aren't
+  sure yet are eligible to work on during the code fz" [E].
+
+That last one is the finding. Camunda's =code-freeze= is an *exemption carried
+by a change*, not a property of the estate — the freeze itself lives somewhere
+else (a calendar, a Slack message, a release manager's head) and the label marks
+which changes may cross it. *That is precisely the collapse this repo rejected
+when it split =emergency= (estate) from =itil:emergency= (exemption)*, and it is
+the default thing people do.
+
+Where estate-global freezes *do* exist as a first-class object, they are not
+labels and not in the forge. =docs/reference-survey.org= already records the
+three: AWS Systems Manager Change Calendar (iCalendar/RFC 5545 documents that
+are "Open by default" or "Closed by default"), AWS CodePipeline's
+=DeploymentWindow= rule provider, and Google Cloud Deploy's deploy policies with
+=rolloutRestriction= =timeWindows=. All tier 3. All external to the change.
+
+* Part 3 — candidate standards, graded
+
+Tiers are =docs/release-standards.org= §A taxonomy: 1 formal standard, 2 open
+specification, 3 vendor contract, 4 framework, 5 research programme, 6 folklore.
+
+** The summary table
+
+| candidate | tier | named state machine? | names environments? | 3-valued? | paywalled? |
+|-----------+------+----------------------+---------------------+-----------+------------|
+| CDEvents | 2 | *yes* for CI runs; *no* for deployment | *yes*, first-class subject | *4-valued for runs*; N/A for deployments | no |
+| *OpenTelemetry semconv* | *2* | *yes* — =cicd.pipeline.run.state= (3) + =.result= (6) | =deployment.environment.name=, Stable | *yes* — =error= is defined against =failure= | no |
+| SLSA | 2 | no — levels, not states | *no* — explicitly out of scope | n/a | no |
+| in-toto (VSA) | 2 | a verdict, not a machine | no | *no* — =PASSED=/=FAILED=, plus a separate "decline to claim" | no |
+| in-toto (Test Result) | 2 | no | no | *yes, but wrong* — =PASSED=/=WARNED=/=FAILED=, a warning tier | no |
+| SPIFFE / SPIRE | 2 | no — workload identity only | no | n/a | no |
+| OSCAL | 1/2 | risk status only; findings are not a machine | no | *no* — =satisfied=/=not-satisfied=, a closed enum | no |
+| ISO/IEC 20000-1:2018 | *1* | requires policy, criteria, records; names no states | *one* — "the live environment" | no | *yes*, CHF 179 |
+| ITIL 4 change enablement | *4* | the *classification* (standard/normal/emergency); splits release from deployment | "environments", plural | no | *yes*, PeopleCert Plus |
+| ServiceNow change model | 3 | yes, incl. a reversible =Review= state | yes, per instance | *yes* — =Successful= / =Successful with issues= / =Unsuccessful= | no |
+| Kubernetes conditions | 3 | =Available= / =Progressing= / =ReplicaFailure= | no | *yes* — =Unknown= | no |
+| Argo Rollouts | 3 | =AnalysisPhase= | via Rollout targets | *yes* — =Inconclusive= | no |
+| Argo CD | 3 | health + sync + operation | via Application destination | *yes* — =Unknown= | no |
+| Flux CD | 3 | =Ready=/=Reconciling=/=Stalled=/=Healthy= | no | *yes* — inherits =Unknown= | no |
+| Spinnaker | 3 | =ExecutionStatus= (12 values) | yes, via Managed Delivery | partly — see §Spinnaker | no |
+| Backstage | 3 | =lifecycle= is maturity, not deployment | no | no | no |
+| GitHub Deployments | 3 | 7 REST / 11 GraphQL values | *yes*, =environment= is a field | barely — =ABANDONED= only | no |
+
+*No single row is tier 1 or 2 and does all three — a deployment state machine,
+named environments, and a third value.* The two tier-2 rows each do two of the
+three and miss a different one:
+
+- *CDEvents* names environments as a first-class subject and binds a service to
+  an =artifactId=, and has *no failure event at all* for a deployment.
+- *OpenTelemetry semconv* has the six-valued result with =error= defined against
+  =failure=, and a =deploy= task type to hang it on, and no notion of a
+  deployment *state* that persists after the run ends.
+
+Joined, they would be the standard this repo needs. Nobody has joined them, and
+=docs/release-standards.org= already recorded the adjacent version of the same
+gap: signed provenance stops at the registry, deployment events start at the
+environment, and nothing crosses.
+
+** CDEvents — names environments perfectly, and cannot say a deployment failed
+
+Read from =cdevents/spec= at =main= (=version.txt= = =0.6.0-draft=; the released
+line is v0.5.1 per =docs/release-standards.org=) [E]. The subjects, verbatim
+from =continuous-deployment.md=:
+
+| subject | fields |
+|---------+--------|
+| =environment= | =id=, =source=, =name= ("Name of the environment"; examples =dev=, =staging=, =production=, =ci-123=), =url= |
+| =service= | =id=, =source=, =environment= (a reference to the above, *required*), =artifactId= (a *Purl*, *required*) |
+
+The eight conformance events under continuous deployment, which is the complete
+list [E, enumerated from =conformance/=]:
+
+: environment_created  environment_modified  environment_deleted
+: service_deployed  service_upgraded  service_rolledback  service_removed  service_published
+
+*There is no failure event and no outcome field on any of them.* =service
+deployed= carries ={id, source, environment, artifactId}= and nothing else; a
+deployment that did not work simply produces no event. CDEvents' deployment
+vocabulary is a *success-only log*, and the question "is this environment
+currently serving X" is answered by replaying it, not by reading a state.
+
+*And yet CDEvents is four-valued where it does record outcomes* [E]. From
+=core.md= and =testing-events.md=, the =outcome= enum on =pipelineRun finished=,
+=taskRun finished=, =testCaseRun finished= and =testSuiteRun finished= is
+exactly:
+
+: success | failure | cancel | error
+
+with a companion free-text =reason= ("Canceled by user", "Failed assertion",
+"Timed out") and =errors= ("In case of error, canceled, or failed pipeline,
+provides details about the failure").
+
+*That enum is the closest thing in any open specification to this repo's exit
+code contract.* =docs/exit-codes.org= distinguishes 1 "refused — the check
+failed" from 4 "I could not check"; CDEvents distinguishes =failure= from
+=error=, and adds =cancel=, which =docs/exit-codes.org= has no code for and
+=spec.org= §Nomenclature names as a closure code. *The vocabulary this repo needs
+exists, one document away from the deployment events, and is not applied to
+them.*
+
+CDEvents also has =continuous-operations.md= with =incident detected=, =incident
+reported=, =incident resolved= [E] — adjacent to =emergency=, but about
+incidents, not about stopping the estate.
+
+*Tier 2, CDF incubating, pre-1.0.* Free.
+
+** OpenTelemetry semantic conventions — the one specification that draws this repo's own line
+
+=docs/release-standards.org= §OpenTelemetry already took the /resource/
+attributes (=service.name=, =service.version=, =service.instance.id=,
+=deployment.environment.name= — all Stable, with =staging= and =production=
+among the well-known values). Not repeated. The addition here is the =cicd.*=
+family, which that note did not cover, and *it is the most important single
+finding in Part 3.*
+
+Read from =open-telemetry/semantic-conventions=, =model/cicd/registry.yaml= [E].
+Two separate enums, on two separate axes:
+
+| attribute | members | stability |
+|-----------+---------+-----------|
+| =cicd.pipeline.run.state= | =pending=, =executing=, =finalizing= | release_candidate |
+| =cicd.pipeline.result= and =cicd.pipeline.task.run.result= | =success=, =failure=, =error=, =timeout=, =cancellation=, =skip= | release_candidate |
+
+*Six values, and the two that matter are defined against each other, verbatim:*
+
+#+begin_quote
+=failure= — "The pipeline run did not finish successfully, eg. due to a compile
+error or a failing test. *Such failures are usually detected by non-zero exit
+codes of the tools executed in the pipeline run.*"
+
+=error= — "The pipeline run failed due to *an error in the CI/CD system*, eg. due
+to the worker being killed."
+
+=timeout= — "A timeout caused the pipeline run to be interrupted."
+
+=cancellation= — "The pipeline run was cancelled, eg. by a user manually
+cancelling the pipeline run."
+
+=skip= — "The pipeline run was skipped, eg. due to a precondition not being met."
+
+— =model/cicd/registry.yaml=, all six members at =stability: release_candidate=
+#+end_quote
+
+*That is =docs/exit-codes.org=, written by a standards body.* This repo spends a
+section defending why exit 4 ("I could not check") must not collapse into exit 1
+("the check failed"); OpenTelemetry defines exactly that boundary and puts the
+distinguishing criterion in the same place this repo does — *the failure is the
+tool's non-zero exit; the error is the apparatus breaking underneath it.* It
+further supplies =timeout=, =cancellation= and =skip=, of which the repo has
+=cancel= and =expired= as closure codes (§Nomenclature) and *no code at all* for
+=skip= — which is precisely the 19-skipped-check-runs incident
+(=docs/exit-codes.org=, issue #34), where skipped was read as not-green.
+
+Also relevant: =cicd.pipeline.task.type= has members =build=, =test=, =deploy=,
+so a deploy is a task type whose run carries the six-valued result. *This is the
+only place in any specification surveyed where a deployment gets a verdict with
+an indeterminate value.*
+
+The stability caveat is real and cuts both ways: =release_candidate= is one step
+below Stable and above Experimental — the names are close to frozen but not
+frozen, so =docs/ci-portability.org='s rule still applies. The *resource*
+attributes this repo would use for guard 5 (=service.version=,
+=deployment.environment.name=) are Stable [E via =docs/release-standards.org=].
+
+*Tier 2.* Free. *The best adoption candidate in this survey.*
+
+** SLSA and in-toto — build-side, and they say so; but the VSA has the better idea
+
+=docs/release-standards.org= §Provenance already established that SLSA
+"explicitly does not cover deployment" and that in-toto's Statement binds a
+predicate to an artifact digest. Nothing here changes that. SLSA has *levels*,
+not states; there is no state machine to align to. One currency note:
+=slsa.dev= now renders v1.0 and v1.1 as *"Status: Retired"*, with v1.2 current
+[E] — any citation of v1.0 is stale.
+
+*The Verification Summary Attestation is worth reading anyway*, for a reason
+that has nothing to do with deployment.
+
+- =verificationResult= is *exactly two-valued*. Verbatim: "Either =\"PASSED\"= or
+  =\"FAILED\"= to indicate if the artifact passed or failed the policy
+  verification." No =UNKNOWN=, no =INDETERMINATE=.
+- *And the indeterminate idea exists one field over.* =verifiedLevels= is of type
+  =SlsaResult=, whose spec text reads: "SHOULD be the SLSA Track level the
+  referenced artifact qualifies for as =SLSA_<TRACK_NAME>_LEVEL_<LEVEL_NUMBER>=,
+  or *=SLSA_<TRACK NAME>_LEVEL_UNEVALUATED= if the VSA issuer does not want to
+  make a claim about the track level*."
+
+*That is the pattern this repo already uses and has not named: a binary verdict
+plus a separate "I decline to claim".* =spec.org= says a gate that fails to
+reject its =fixtures/<gate>/fail/= input "produces no verdict that run — its
+PASS is void". The VSA-shaped move for that is *to omit the claim*, not to
+invent a third verdict value — and the attestation format has a reserved word
+for the omission so a verifier can tell "unevaluated" from "absent by accident".
+*If the =*-inconclusive= proposal in §Part 5 is ever built, this is the
+alternative design to price against it.*
+
+*** The wrong three-valued model, recorded so it is not borrowed by mistake
+
+The in-toto *Test Result* predicate (=https://in-toto.io/attestation/test-result/v0.1=)
+*is* three-valued [E]: =result= is "One of =PASSED=, =WARNED=, or =FAILED=", with
+=passedTests= / =warnedTests= / =failedTests= arrays.
+
+*Do not borrow it.* Its third value is a *warning tier*, which
+=CLAUDE.md= §Invariants forbids outright — "Add a warning tier to any gate. Zero
+findings or the gate failed." A warning tier and an indeterminate value look
+alike and are opposites: a warning says "I looked, it is bad, proceed anyway";
+an indeterminate says "I could not look, so you may not proceed". *The whole
+argument of =docs/exit-codes.org= is that the second must block.*
+
+*Tier 2.* Free. Out of scope for the label question, and the source of the two
+best design notes in this section.
+
+** SPIFFE, OSCAL
+
+*** SPIFFE / SPIRE
+
+Workload identity. No deployment-state vocabulary at all. Tier 2, free,
+*irrelevant to this survey* — listed only so the absence is on the record rather
+than an omission.
+
+*** OSCAL — a closed two-valued enum, and the =UNKNOWN= is on the wrong axis
+
+*An earlier draft of this file guessed [H] that OSCAL "does admit an
+indeterminate outcome". That guess was wrong and is withdrawn.* Read from the
+generating metaschema, =usnistgov/OSCAL=
+=src/metaschema/oscal_assessment-common_metaschema.xml= at =main= (v1.2.3 line),
+because the rendered NIST reference pages resist fetching:
+
+| construct | members | open? |
+|-----------+---------+-------|
+| finding / objective status =state= | =satisfied=, =not-satisfied= | *closed* — no =allow-other= |
+| finding target =reason= | =pass=, =fail=, =other= | =allow-other="yes"= |
+| observation =method= | =EXAMINE=, =INTERVIEW=, =TEST=, *=UNKNOWN=* | |
+| risk =status= | =open=, =investigating=, =remediating=, =deviation-requested=, =deviation-approved=, =closed= | =allow-other="yes"= |
+
+The status enum carries no =allow-other= attribute, which in Metaschema means
+*closed*: an OSCAL finding is satisfied or it is not, full stop. The =other= on
+=reason= is an escape hatch on the *justification*, not a third verdict.
+
+The one genuine explicit unknown is =method="UNKNOWN"=, glossed for "converting
+historic content to OSCAL, where the conversion process cannot initially
+identify the appropriate method(s)" — it qualifies *how* you observed, not
+*whether it passed*. Wrong axis.
+
+The only actual state machine in OSCAL is the *risk* status, which is a
+remediation lifecycle and not a deployment one. Free, US Government public
+domain. Tier 1/2 depending on which artifact. *Nothing to adopt.*
+
+** ISO/IEC 20000-1:2018 — tier 1, paywalled, names one environment and no states
+
+*Paywalled (=iso.org/standard/70636.html=, CHF 179, third edition, stage 60.60,
+confirmed 2023); the standard was not read.* Claims are [E, secondary]. The
+clause structure below is better than secondary, however: it comes from *ISO's
+own free redline preview PDF* (cover =ISO/IEC 20000-1:redline:2018(E)=), whose
+Contents page shows the 2011→2018 renumbering with strikethrough.
+
+*** The clause numbering, settled
+
+Both numbers that have been used in this repository are correct, for different
+things, and neither the task's framing nor
+=docs/reference-survey.org= was wrong:
+
+| 2018 clause | title | replaces (2011) |
+|-------------+-------+-----------------|
+| 8.5 | Service design, build and transition | 9.2 Change management |
+| *8.5.1* | *Change management* | |
+| 8.5.2 | Service design and transition | |
+| *8.5.3* | *Release and deployment management* | 9.3 Release and deployment management |
+
+So =docs/reference-survey.org='s "clause 8.5.1" is change management and the
+task's "§8.5.3" is release and deployment management. *An earlier draft of this
+file asserted that 8.5.1 was the correction and 8.5.3 was an error. That was
+wrong and is withdrawn.*
+
+Three numbering traps worth recording so nobody re-derives them [E, secondary]:
+
+1. *"Change control" is not ISO vocabulary.* It was an ITIL 4 detour (Foundation,
+   February 2019), later reverted. The likely source of the confusion is *ISO
+   9001 clause 8.5.6, "Control of changes"* — a different standard.
+2. *Any citation of "9.2 change management" is necessarily the 2011 edition.* In
+   the 2018 edition 9.2 is Internal audit and 9.3 is Management review.
+3. *There is no Amd 1:2020.* The amendment is *ISO/IEC 20000-1:2018/Amd 1:2024*,
+   part of the ISO-wide "Climate action changes" sweep, and it touches 4.1 and
+   4.2 — *not* clause 8.5. SC 40 states an intent to revise through 2026 [H].
+
+*** What it says, and what it does not
+
+- *One environment, singular.* The only environment the standard names is *"the
+  live environment"* [E, secondary — itSMF UK's pocket guide restatement of
+  8.5.3]. There is no staging, pre-production or test tier anywhere in it. *This
+  repo's entire 9200-block staging tier has no ISO counterpart*; only production
+  maps to "live".
+- *Two-valued outcomes, with a hard reversal obligation.* Success or failure,
+  and remediation of a failed deployment is a *shall* where ITIL makes it a
+  *should* [E, secondary — Advisera draws the contrast explicitly]. That is the
+  standards warrant for =change:backed-out= being a real closure code rather
+  than a variant of =change:failed=.
+- *It requires policy, criteria and records; it enumerates no states.* The
+  fourth-level subclauses are 8.5.1.1 Change management policy, 8.5.1.2 Change
+  management initiation, 8.5.1.3 Change management activities; 8.5.3 requires
+  documented *"release acceptance criteria"*. Activities in sequence and
+  documents that must exist — a conformance target for *having* a process, not a
+  vocabulary for its states. *There is nothing here to map a label onto.*
+
+*Tier 1. Paywalled. Defines no state machine and knows of only one environment.*
+It is the only genuine formal standard in this survey and it has the least to
+say about the question this file asks.
+
+** ITIL 4 change enablement — tier 4, paywalled, and the only source of three of this repo's labels
+
+*Paywalled (AXELOS/PeopleCert); the practice guides were not read.* Claims are
+[E, secondary], consistent with =docs/reference-survey.org='s verbatim quotations
+of the 9 January 2020 Change Enablement practice guide, which this file takes as
+its secondary source of record.
+
+What ITIL supplies that nothing else does:
+
+| this repo | ITIL 4 |
+|-----------+--------|
+| =itil:standard= | "A low-risk, pre-authorized change that is well understood and fully documented, and which can be implemented without needing additional authorization" |
+| =itil:normal= | a change following "a process that includes collective expert assessment, authorization, and control" |
+| =itil:emergency= | the practice "should ensure that changes are implemented effectively, safely, and promptly in emergency situations" |
+| the change schedule | the change schedule, a named artifact of the practice |
+| the approver | "change authority — A person or group responsible for authorizing a change" |
+| =change:failed= / =change:backed-out= | closure codes |
+
+*The classification axis is ITIL's, and the =itil:= prefix is honest about it.*
+That is the one place where this repo's vocabulary has a real external parent,
+and the parent is tier 4 — a commercially licensed body of practice whose
+conformance notion certifies *people*, not systems.
+
+One more thing ITIL supplies that ISO does not, and it bears directly on this
+repo's two-phase gate: *ITIL 4 splits release from deployment*, where ISO
+20000-1 fuses them in 8.5.3. Deployment management (a *technical* management
+practice) moves components "to environments"; release management (a *service*
+management practice) makes features "available for use"; and deploying "does NOT
+mean that the components or the change is visible or available for users" [E,
+secondary]. *That is the closest standards warrant anywhere for "a staging
+deploy is a real deployment that authorises nothing", and it is ITIL, not ISO.*
+
+*** Two things ITIL does not supply, which this repo has anyway
+
+- *A lifecycle state machine with stable names.* Secondary restatements list
+  change-record states, but they vary between restatements and between tools.
+  =change:requested= / =scheduled= / =complete= is *this repo's*, not ITIL's.
+- *A post-implementation review as named ITIL 4 vocabulary.* *This did not
+  resolve, and is [H].* What is solid: PIR is a *v3* term — ITIL v3 change
+  management had a sub-process literally named "Post Implementation Review and
+  Change Closure" — and ITIL 4 *dropped* v3's separate Change Evaluation
+  process, folding its activities into change enablement [E, secondary]. What
+  could not be established either way: whether ITIL 4's own text uses the phrase.
+  Every ITIL-4-context use of "PIR" located is *vendor or adopting-institution*
+  (ServiceNow process guides, university IT change-enablement guides), never
+  ITIL text; and "post-implementation review" is absent from at least one
+  60-term ITIL 4 glossary that does carry /change/, /change enablement/,
+  /standard change/, /emergency change/, /release/ and /deployment/ —
+  suggestive, not dispositive.
+
+  *The primary is now harder to reach than when =docs/reference-survey.org= was
+  written* [E]: the free AXELOS glossary endpoint returns only the site shell,
+  the historic direct PDF link returns HTML, the PeopleCert equivalent redirects
+  to a login, and the 34 practice guides sit behind PeopleCert Plus membership
+  (PeopleCert completed the AXELOS acquisition in 2021).
+
+  *Defensible phrasing, and the form this repo should use*: PIR is an ITIL v3
+  term that remains near-universal in ITSM tooling; ITIL 4's change enablement
+  practice requires review activity, but that ITIL 4 uses the phrase
+  "post-implementation review" is unverified.
+
+*** Where the three-valued closure actually comes from, and it is not ITIL
+
+Worth isolating, because it is the only three-valued *closure* vocabulary in the
+whole survey and this repo is one value short of it.
+
+ServiceNow's change model mandates a close code on the =Review= state with
+exactly three values [E, secondary — ServiceNow-authored process guide]:
+
+: Successful | Successful with issues | Unsuccessful
+
+and the =Closed= → =Review= transition is reversible.
+
+*That vocabulary is ServiceNow's — tier 3 — not ITIL's and not ISO's*, and it
+should be cited that way rather than as "ITIL requires a PIR close code".
+=spec.org= §Nomenclature lists closure codes "passed / failed / cancelled /
+expired / backed-out", which is richer on the *why-it-stopped* axis and *has no
+middle value on the did-it-work axis*. "Successful with issues" is the case
+where production serves the new build and something is nonetheless wrong — which
+this repo currently has to record as =change:complete= plus prose in the PIR.
+Whether that is a gap or a deliberate refusal (it is one step from the warning
+tier =CLAUDE.md= forbids) is a question for an ADR, not for this file.
+
+** Kubernetes, Argo, Flux — the three-valued family
+
+These are the rows that answer the three-valuedness question, and every enum
+below was read from the project's own source tree [E].
+
+*** Kubernetes conditions — =Unknown= is normative, with a normative reason
+
+From =kubernetes/api=, =core/v1/types.go= (verbatim comment):
+
+#+begin_quote
+"These are valid condition statuses. =ConditionTrue= means a resource is in the
+condition. =ConditionFalse= means a resource is not in the condition.
+*=ConditionUnknown= means kubernetes can't decide if a resource is in the
+condition or not.* In the future, we could add other intermediate conditions,
+e.g. ConditionDegraded."
+#+end_quote
+
+: ConditionTrue = "True"   ConditionFalse = "False"   ConditionUnknown = "Unknown"
+
+And from =apps/v1/types.go=, the Deployment condition types:
+=Available=, =Progressing=, =ReplicaFailure=.
+
+*"Kubernetes can't decide" is =docs/exit-codes.org='s code 4, in a type system,
+in the most widely deployed control plane in existence.* It is not an edge case
+there; it is the default value of a condition nobody has reported on.
+
+*** Argo Rollouts — =Inconclusive= is a terminal phase
+
+From =argoproj/argo-rollouts=,
+=pkg/apis/rollouts/v1alpha1/analysis_types.go= [E]:
+
+: AnalysisPhasePending      = "Pending"
+: AnalysisPhaseRunning      = "Running"
+: AnalysisPhaseSuccessful   = "Successful"
+: AnalysisPhaseFailed       = "Failed"
+: AnalysisPhaseError        = "Error"
+: AnalysisPhaseInconclusive = "Inconclusive"
+
+and =Completed()= returns true for =Successful=, =Failed=, =Error= *and*
+=Inconclusive= — so =Inconclusive= is a *finished* analysis, not a pending one.
+There is also a per-metric =InconclusiveLimit= ("the maximum number of times the
+measurement is allowed to measure =Inconclusive=, before the entire metric is
+considered =Inconclusive="), and the =MetricResult= struct counts
+=Successful=, =Failed= and =Inconclusive= separately.
+
+*This is the single best external precedent for the repo's position on exit code
+4.* Argo Rollouts is a deployment controller whose verdict vocabulary is
+four-valued at the terminal — pass, fail, broke, could-not-tell — with a
+configurable tolerance for the fourth. It is exactly the shape
+=docs/interfaces.org= §=tri(cmd)= argues for, built and shipped.
+
+*** Argo CD — three independent =Unknown=-bearing axes
+
+From =argoproj/gitops-engine= =pkg/health/health.go= and =argo-cd=
+=pkg/apis/application/v1alpha1/types.go= [E]:
+
+| axis | values |
+|------+--------|
+| health | =Unknown=, =Progressing=, =Healthy=, =Suspended=, =Degraded=, =Missing= |
+| sync | =Unknown=, =Synced=, =OutOfSync= |
+| hydrate operation | =Unknown=, =Hydrating=, =Failed=, =Hydrated= |
+
+Note =Unknown= is the *first* constant in each enum — the zero value. The system
+is built so that the default answer is "I do not know", and a definite answer
+requires a successful observation. That is the inverse of every label scheme in
+Part 2, where the absence of a label is read as "no" rather than "unobserved".
+
+*** Flux CD — Kubernetes conditions, with a reason vocabulary
+
+From =fluxcd/pkg= =apis/meta/conditions.go= [E]: condition types =Ready=,
+=Stalled=, =Reconciling=, =Healthy=; reasons =Succeeded=, =Failed=,
+=Progressing=, =Suspended=, =ProgressingWithRetry=, =DependencyNotReady=,
+=HealthCheckFailed=, =ReconciliationSucceeded=, =ReconciliationFailed=,
+=HealthCheckCanceled=, =PruneFailed=, =ArtifactFailed=, =BuildFailed=, and more.
+Status values are inherited from =metav1.Condition= and are therefore the
+Kubernetes =True=/=False=/=Unknown=.
+
+=DependencyNotReady= is worth noting: it is a *blocked* reason distinct from a
+*failed* reason — the same fact this repo carries as =blocked:queue= versus
+=staging:e2e-failed=.
+
+** Spinnaker — the only vocabulary with a second dimension
+
+From =spinnaker/orca=,
+=orca-api/src/main/java/com/netflix/spinnaker/orca/api/pipeline/models/ExecutionStatus.java=
+[E]. Twelve values, and *each carries two booleans*, =complete= and =halt=:
+
+| value | complete | halt | the source's own comment |
+|-------+----------+------+--------------------------|
+| =NOT_STARTED= | false | false | "The task has yet to start." |
+| =RUNNING= | false | false | "still running and the Task may be re-executed in order to continue" |
+| =PAUSED= | false | false | "still running and the Task may be resumed" |
+| =SUSPENDED= | false | false | "complete but the pipeline should now be stopped pending a trigger of some kind" |
+| =SUCCEEDED= | true | false | "executed successfully and the pipeline may now proceed" |
+| =FAILED_CONTINUE= | true | false | *"The task execution failed, but the pipeline may proceed to the next task."* |
+| =TERMINAL= | true | true | "The task failed and the failure was terminal." |
+| =CANCELED= | true | true | "The task was canceled." |
+| =REDIRECT= | false | false | "a decision path should be followed" |
+| =STOPPED= | true | true | "The task was stopped." |
+| =SKIPPED= | true | false | "The task was skipped and the pipeline will proceed" |
+| =BUFFERED= | false | false | "not started and must be transitioned to NOT_STARTED" |
+
+=complete= is "has finished its work (successfully or not)"; =halt= is "an
+abnormal completion so nothing downstream should run afterward".
+
+*The second dimension is the transferable idea.* Spinnaker does not have an
+"unknown", but it has something this repo's label model lacks: *a failure that
+does not stop the pipeline* (=FAILED_CONTINUE=) as a distinct value from one
+that does (=TERMINAL=). =spec.org= forbids a warning tier on a gate ("Zero
+findings or the gate failed"), which is the right call for a *gate*; Spinnaker's
+split is about *stages*, and the analogue here would be the difference between a
+gate failing and a soak observation being negative.
+
+Spinnaker's Managed Delivery does model environments and promotion constraints
+(=depends-on=, =allowed-times=, =manual-judgement=) — already recorded in
+=docs/reference-survey.org=, not repeated.
+
+** Backstage — a maturity axis wearing an environment's name
+
+=kind: Component= carries =spec.lifecycle= with the conventional values
+=experimental=, =production=, =deprecated=. *That is a maturity axis, not a
+deployment environment*: it says how seriously to take the component, not where
+it is running. The only deployment-ish label vocabulary in the repository itself
+is =workflow:before-release= / =workflow:after-release= [E], which is release
+process housekeeping. Backstage has no deployment state machine to align to.
+Tier 3.
+
+* Part 4 — the 37 labels, mapped
+
+=change/label-owners.tsv= declares exactly 37 label names (counting =app:*= as
+one, and including the four marked RETIRED and the one marked REJECTED) [E].
+
+Mapping key: *≈* a real external counterpart; *~* something adjacent with
+different semantics; *—* nothing found.
+
+| label | closest external | tier | fit |
+|-------+------------------+------+-----|
+| =app:*= | monorepo path labellers (actions/labeler); =elastic/kibana='s =ci:project-deploy-<app>= | 6 | ≈ derived-from-diff is universal |
+| =itil:standard= | ITIL 4 "standard change", verbatim | 4 | ≈ *direct parent* |
+| =itil:normal= | ITIL 4 "normal change" | 4 | ≈ *direct parent* |
+| =itil:emergency= | ITIL 4 emergency change | 4 | ≈ *direct parent* |
+| =control-plane= | — | — | *nothing.* "Changes how every future change is verified" is not a category anything else has |
+| =labeler:skip= | =release-please:force-run= (246) is the inverse shape; =do-not-merge= (170,624) | 6 | ~ an opt-out that transfers ownership is common; declaring the transfer is not |
+| =change:requested= | ITIL change record raised | 4 | ~ [E, secondary]; ITIL 4 names no stable state string |
+| =change:scheduled= | =autorelease: pending= (74,067); the ITIL change schedule | 4/6 | ~ |
+| =change:complete= | =autorelease: tagged= (618,874); GitHub =success= | 3/6 | ≈ the commonest state label in existence |
+| =change:failed= | CDEvents =outcome: failure=; Spinnaker =TERMINAL=; =deployment-failed= (1,406) | 2/3/6 | ≈ |
+| =change:backed-out= | CDEvents =dev.cdevents.service.rolledback=; =rollback= (608) | *2* | ≈ *CDEvents has a first-class event for exactly this* |
+| =change:backfill-owed= | — | — | *nothing.* An unpaid documentation debt that blocks nothing is unique here |
+| =release= (intent) | =release-please:force-run=; =deploy:staging= @ climatepolicyradar | 6 | ≈ a trigger label a person adds |
+| =release:start= | GitHub =in_progress=; CDEvents has none | 3 | ~ declared, unwritten (§Disagreements 5) |
+| =deploy:staging= | =deploy:staging= @ nyrkio, "Initiates deployment on staging" | 6 | ≈ *same string, same meaning, independent* |
+| =deploy:production= | =deploy:production= (22); =ci:cloud-deploy= @ kibana | 6 | ≈ |
+| =staging:in-progress= | GitHub =IN_PROGRESS=; =status:deploying= (1) | 3 | ≈ |
+| =staging:e2e= | =scan-passed= @ openstax; CDEvents =testSuiteRun finished outcome=success= | 2/6 | ~ CDEvents has the verdict but not attached to an environment |
+| =staging:e2e-failed= | =deploy-failed:staging= @ nyrkio; CDEvents =outcome=failure= | 2/6 | ≈ |
+| =staging:smoke= | — | — | ~ no external vocabulary separates smoke from e2e as a *named instrument* |
+| =staging:smoke-failed= | — | — | ~ |
+| =staging:uat= | GitHub required reviewers → =DeploymentReviewState.APPROVED=; Spinnaker =manual-judgement= | 3 | ≈ *the best-standardised thing in the whole table* |
+| =production:e2e= | — | — | ~ nobody runs an authorising e2e against production |
+| =production:e2e-failed= | — | — | ~ |
+| =production:smoke= | — | — | ~ |
+| =production:smoke-failed= | — | — | ~ |
+| =production:healthy= | Argo CD =HealthStatusHealthy=; K8s =Available=True=; Flux =Healthy= | 3 | ≈ *and all three are three-valued where this is not* |
+| =blocked:queue= | Flux =DependencyNotReady=; Spinnaker =BUFFERED= | 3 | ≈ |
+| =blocked:lock= | K8s =coordination.k8s.io= Lease (already in reference-survey) | 3 | ≈ the mechanism, not the label |
+| =blocked:diverged= | GitHub's =409 Conflict= on =POST /deployments= when "the commit's status checks failed"; =auto_merge= | 3 | ~ |
+| =blocked:freeze= | — | — | *nothing* — see =freeze= |
+| =freeze= (estate) | AWS SSM Change Calendar "Closed by default"; GCP Deploy =rolloutRestriction.timeWindows=; CodePipeline =DeploymentWindow= | *3* | ~ *the concept exists; as a label it does not* |
+| =emergency= (estate) | CDEvents =incident detected= / =resolved= | 2 | ~ CDEvents records the incident, not the estate's stop |
+| =hold:staging= (REJECTED) | =HOLD= @ openstax; =on-hold= (7,901); =hold:manual= @ shipwright | 6 | ≈ *everyone has this label; this repo deleted it on purpose* |
+| =staging:passed= (RETIRED) | =released= (2,740,897) | 6 | ≈ retired here for naming no instrument and no environment — which is precisely what =released= does |
+| =staging:failed= (RETIRED) | — | — | same |
+| =deployed:production= (RETIRED) | =deployed:production= (16); =in-production= (3,246); =deployed:prod= (374) | 6 | ≈ *retired here, alive everywhere else* |
+
+** What has no external equivalent at all
+
+Five labels, and they are five different kinds of unusual.
+
+1. *=control-plane=.* "Says WHY the change is handled differently: it alters how
+   every future change is verified, so it cannot be verified by the pipeline."
+   Nothing in any surveyed vocabulary distinguishes a change to the *judging
+   apparatus* from a change to the thing judged. Argo, Flux and Spinnaker all
+   deploy their own config through the same machinery that deploys workloads.
+   *This is a genuine invention and it is the one most worth writing up
+   elsewhere.*
+2. *=change:backfill-owed=.* A persistent marker that a change reached main
+   without its record and still owes one, which blocks nothing and which
+   automation may not clear. ITIL requires retrospective documentation of an
+   emergency change [E, secondary]; nothing gives that debt a *name a machine can
+   read*.
+3. *=freeze= as an estate property.* The concept exists at tier 3 in three
+   clouds. As a *label in the forge that every guard reads*, nothing. The one
+   thing people do label — =code-freeze= — means the opposite.
+4. *=blocked:freeze=.* Follows from 3.
+5. *The =production:*= observation stack.* Everyone verifies staging; nobody
+   found records an authorising e2e verdict *against production* as a labelled
+   observation. Production is verified by telemetry, by Argo CD health, by
+   alerting — continuously and outside the change record. Recording it *on the
+   change* is unusual, and it is what makes guard 5 possible.
+
+** The two predictions, judged
+
+| prediction | verdict |
+|------------+---------|
+| Observation labels that name a build are likely unusual | *REFUTED.* =openstax/rex-web= has 34 =in-release-<N>= labels plus =in-staging= and =in-production= [E]. The shape is attested. What is unusual is not the build-naming but the *declared single writer* and the *failure counterpart* |
+| The estate-global =freeze= is likely unusual | *CONFIRMED*, and sharpened: the only real =code-freeze= labels found carry the inverted, per-change-exemption semantics that =spec.org= §Nomenclature names as the defect |
+
+A third result nobody predicted: *the intent/state split is attested, string for
+string.* =nyrkio/nyrkio='s =deploy:staging= / =deployed:staging= pair, with its
+descriptions, is the discovery of this survey.
+
+* Part 5 — is there a standard to adopt, and what would it cost
+
+** The direct answer
+
+*No. There is no standard for deployment labels, and the label layer is
+genuinely tier 6 folklore — this repo's included.* But that verdict is too
+convenient, because it is true of everyone's labels and therefore says nothing.
+The useful version is narrower:
+
+#+begin_quote
+*The labels are folklore, and they should stay folklore — but three of the
+vocabularies they encode are standardised elsewhere, and this repo is currently
+poorer than the standard in exactly one respect: three-valuedness.*
+#+end_quote
+
+** What to adopt, and the price
+
+*** 1. Adopt OpenTelemetry's result enum as the names for gate verdicts. Tier 2. Cheap.
+
+=cicd.pipeline.result= is =success | failure | error | timeout | cancellation |
+skip=, and OTel defines =failure= as the tool's non-zero exit and =error= as the
+CI/CD system breaking underneath it [E, verbatim in §OTel]. *That is
+=docs/exit-codes.org='s 1-versus-4, with the same distinguishing criterion, in a
+tier-2 specification.* CDEvents' =success | failure | cancel | error= is the
+same idea with two fewer values and should be treated as the fallback.
+
+- *Cost*: a naming column in =docs/exit-codes.org= mapping each exit code to its
+  semconv member, and the same strings in gate output. *No behavioural change*;
+  0, 1 and 4 keep their numbers and their meanings.
+- *Gain, immediately*: two values the repo does not currently have a code for.
+  =skip= is the 19-skipped-check-runs incident (issue #34) — "skipped" is *not*
+  "not green", and there is now a published name for it. =timeout= is what
+  =change/reap.sh= produces and what =spec.org= calls the =expired= closure code.
+- *Gain, later*: when a deployment record needs a schema —
+  =docs/release-standards.org= recommends CDEvents' shape for that — the gate
+  verdicts translate without loss, because CDEvents' four values are a subset.
+- *Risk*: =release_candidate= stability, so the strings may still move. Record
+  the version read (=model/cicd/registry.yaml= at =main=, 2026-09-14) and re-check
+  before any claim of conformance. =docs/ci-portability.org='s rule applies.
+
+*** 2. Adopt Argo Rollouts' =Inconclusive= as the name for exit 4. Tier 3. Free.
+
+This costs nothing and buys the argument. =docs/exit-codes.org= spends a section
+defending why 4 is not 1; Argo Rollouts *ships* that distinction as
+=AnalysisPhaseInconclusive=, as a terminal phase with a configurable tolerance,
+in a deployment controller with wide adoption [E]. The next time the rule has to
+be defended, it is not a local eccentricity — it is what the most-used
+progressive-delivery controller does.
+
+- *Cost*: nothing. A citation.
+- *The stronger version, which is not free*: give the =staging:*= and
+  =production:*= verdict stacks a *third* label —
+  =staging:e2e-inconclusive= beside =staging:e2e= and =staging:e2e-failed= —
+  so that "the instrument could not run" is recorded rather than represented by
+  absence. Today an absent =staging:e2e= means "not yet run" *or* "ran and could
+  not tell", and guard 4 cannot distinguish them. *That is the same defect this
+  repo has already found three times* (§Disagreements, =merge-on-healthy.yml=,
+  =preflight= and the 19 skipped check runs). Cost: three new labels, three new
+  exclusion-group rows, and a change to =gates/e2e.sh --pr=. *This is the one
+  recommendation in this file that is a real proposal and not a citation.*
+
+*** 3. Keep the =itil:= prefix, and keep it honest. Tier 4, paywalled.
+
+The classification axis genuinely descends from ITIL 4, and the prefix says so.
+Nothing to adopt; something to *not* over-claim. Two corrections for the record:
+"post-implementation review" is ITIL v3 vocabulary and its status in ITIL 4 is
+[H] from disagreeing secondary sources; and ITIL 4 supplies no stable
+change-record state strings, so =change:requested/scheduled/complete= is this
+repo's own and should not be described as ITIL conformance.
+
+*** 4. Do not adopt ISO/IEC 20000-1. Tier 1, paywalled.
+
+It is the only formal standard in the survey. It requires that change types,
+policy, acceptance criteria and records be *defined*; it does not define them.
+There is nothing to align a label to, and the conformance test is an audit of an
+organisation, not of a repository. *Cost of adoption: CHF 179, an auditor, and
+no change to any label.*
+
+One thing to take from it for free: ISO knows of exactly *one* environment, "the
+live environment", and fuses release with deployment in 8.5.3. *ITIL splits
+them, and the split is the thing this repo's model depends on* — a staging
+deploy is a real deployment that makes nothing available to anyone. Cite ITIL
+for that, never ISO.
+
+*** 4b. Cite ServiceNow, not ITIL, for the PIR close code. Tier 3.
+
+The three-valued closure =Successful= / =Successful with issues= /
+=Unsuccessful= is *ServiceNow's*, and the repo has been informally treating a
+PIR requirement as ITIL's. Correct the attribution wherever it appears, and note
+that "post-implementation review" as ITIL *4* vocabulary is unverified and
+probably v3-inherited. Whether to add the missing middle value is an ADR
+question and deliberately not answered here — it sits one step from the warning
+tier =CLAUDE.md= forbids.
+
+*** 5. Do not adopt GitHub's deployment state machine as the source of truth.
+
+Already argued in =docs/release-standards.org= (self-reported, not attested) and
+in =docs/github-environments.org= (nothing that deploys this estate runs in
+Actions). Three additions from this survey that strengthen the case [E]:
+supersession fires no webhook, =auto_inactive= excludes production so a
+blue/green pair retires nothing by itself, and status history is deleted at 90
+days. *Use the Deployments API as a place to write records, as
+=docs/github-environments.org= concludes. Do not read the estate out of it.*
+
+*** 6. Adopt nothing from SLSA, SPIFFE, OSCAL or Backstage for this question.
+
+Recorded so the absence is on the record rather than an omission. OSCAL in
+particular was *guessed* to have an indeterminate finding state and does not —
+its status enum is closed at =satisfied= / =not-satisfied=.
+
+From in-toto, take one design note and refuse one design: the VSA's
+=SLSA_<TRACK>_LEVEL_UNEVALUATED= is the right shape for "this run produced no
+verdict" (omit the claim, with a reserved word for the omission), and the Test
+Result predicate's =WARNED= is the wrong shape and is forbidden by
+=CLAUDE.md=.
+
+** The cost of the status quo, stated plainly
+
+Keeping the labels as folklore costs three things, and only the third is serious:
+
+1. *No interoperability.* Nothing else can read =staging:e2e=. This is priced at
+   zero: nothing else is trying to.
+2. *No conformance test.* =gates/label-audit.py= and =tla/Labels.tla= are the
+   conformance test, and they are better than anything a standard would give,
+   because they check *this* machine (=docs/label-state-machine.org=: 2,336,400
+   states, twelve rules, 13/13 cross-checked). *A repo that model-checks its own
+   label machine does not need a standard to tell it the machine is consistent.*
+3. *The two-valued verdict stacks.* This is the real cost, it is the thing
+   Kubernetes, Argo CD, Argo Rollouts and Flux all get right, and it is fixable
+   for the price of three labels. Everything else in this file is a citation;
+   this is a defect.
+
+** Where a standard would have helped and did not exist
+
+Worth recording as the gap, in the shape =docs/release-standards.org= uses:
+
+#+begin_src mermaid :eval never-export
+flowchart LR
+  subgraph std["STANDARDISED"]
+    A["ITIL 4<br/>classification<br/>standard / normal / emergency"]
+    B["OTel semconv cicd.pipeline.result<br/>success / failure / error /<br/>timeout / cancellation / skip<br/>CDEvents outcome: a 4-value subset"]
+    C["CDEvents<br/>environment + artifactId<br/>service.deployed"]
+    D["K8s / Argo / Flux<br/>Unknown, Inconclusive"]
+  end
+  subgraph gap["NOT STANDARDISED ANYWHERE"]
+    E["the label layer<br/>intent vs state"]
+    F["estate-global freeze<br/>as a readable fact"]
+    G["control-plane<br/>a change to the judge"]
+    H["an unpaid change record"]
+  end
+  A --> E
+  B -.->|"applies to runs,<br/>not to deployments"| C
+  D -.->|"lives in the controller,<br/>never in the forge"| E
+  classDef g fill:#fff3cd,stroke:#8a6d3b,stroke-width:2px
+  class E,F,G,H g
+#+end_src
+
+*The standards stop at the controller and the labels start at the forge, and
+nothing crosses.* That is the same boundary =docs/release-standards.org= drew
+between signed provenance and deployment events, one layer up.
+
+* Refutation conditions for this file
+
+1. A tier-1 or tier-2 specification is found that defines a deployment state
+   machine with named environments *and* a third value distinct from failure.
+   (§Part 3's summary table asserts none exists.)
+2. A label string with environment semantics is found on more than 100 *distinct
+   repositories*. (§Part 2 asserts every one is a single-repo habit; the counts
+   are per issue, not per repo, and only the top-6 repositories per label were
+   checked — *this is the weakest measurement in the file* [H].)
+3. Any repository is found whose =freeze=-family label means "the estate is
+   stopped for everyone" rather than "this change may cross the freeze".
+4. GitHub ships a repository- or organisation-scoped deployment freeze.
+5. CDEvents adds a failure predicate or an =outcome= field to
+   =dev.cdevents.service.deployed=.
+6. =gates/label-audit.py= is shown to accept a write by a non-declared owner,
+   which would make the conformance claim in §The cost of the status quo false.
+
+* Sources
+
+Read directly [E]:
+
+- GitHub REST: =docs.github.com/en/rest/deployments/{deployments,statuses,environments,branch-policies,protection-rules}=;
+  =docs.github.com/en/rest/actions/workflow-runs=.
+- GitHub GraphQL schema: =docs.github.com/public/fpt/schema.docs.graphql=.
+- GitHub Actions: =…/actions/reference/workflows-and-actions/deployments-and-environments=;
+  =…/actions/how-tos/deploy/configure-and-manage-deployments/{control-deployments,review-deployments,view-deployment-history,create-custom-protection-rules}=;
+  =docs.github.com/en/webhooks/webhook-events-and-payloads=.
+- =cdevents/spec= at =main= (=version.txt= = =0.6.0-draft=):
+  =continuous-deployment.md=, =core.md=, =testing-events.md=,
+  =continuous-operations.md=, =conformance/=.
+- =kubernetes/api=: =core/v1/types.go=, =apps/v1/types.go=.
+- =argoproj/argo-rollouts=: =pkg/apis/rollouts/v1alpha1/analysis_types.go=.
+- =argoproj/gitops-engine=: =pkg/health/health.go=.
+- =argoproj/argo-cd=: =pkg/apis/application/v1alpha1/types.go=.
+- =fluxcd/pkg=: =apis/meta/conditions.go=.
+- =spinnaker/orca=: =orca-api/…/pipeline/models/ExecutionStatus.java=.
+- =googleapis/release-please=: =README.md=.
+- =open-telemetry/semantic-conventions=: =model/cicd/registry.yaml= at =main=.
+- Label names and descriptions via =GET /repos/{owner}/{repo}/labels= for
+  nineteen prominent repositories and the exemplars named in §Part 2.
+- Label counts via =GET /search/issues?q=label:"<name>"=, 2026-09-14.
+
+Also read directly [E]:
+
+- =usnistgov/OSCAL=: =src/metaschema/oscal_assessment-common_metaschema.xml= at
+  =main= — the generating metaschema, because the rendered NIST reference pages
+  resist fetching.
+- =slsa.dev/spec/v1.2/verification_summary= and
+  =in-toto/attestation= =spec/predicates/vsa.md= at =main=.
+- =in-toto/attestation= Test Result predicate, v0.1.
+- ISO's *free redline preview* PDF for ISO/IEC 20000-1:2018 (cover reads
+  =ISO/IEC 20000-1:redline:2018(E)=) — Contents page only, which is what carries
+  the 2011→2018 clause renumbering.
+
+Paywalled, claims attributed to secondary restatements [E, secondary]:
+
+- *ISO/IEC 20000-1:2018* — the body text. Secondaries: the ISO/IEC JTC1/SC40
+  committee paper (Forrester & Penn, /Comparison of 2018 Versions of ISO/IEC
+  20000-1 and CMMI for Services/); itSMF UK, /Planning and Achieving ISO/IEC
+  20000 Certification/, 2019 edition; Advisera's clause-indexed
+  mandatory-documents list; a PECB whitepaper (2011 edition).
+- *ITIL 4 Change Enablement practice guide* (AXELOS, 9 January 2020) — verbatim
+  definitions taken from =docs/reference-survey.org=, which remains this file's
+  secondary source of record for them. *The primary is now less reachable than
+  when that file was written*: the free AXELOS glossary endpoint returns only
+  the site shell, the historic PDF link returns HTML, the PeopleCert equivalent
+  redirects to a login, and the practice guides sit behind PeopleCert Plus.
+- *ServiceNow change model* — close codes, from a ServiceNow-authored process
+  guide. Tier 3, not paywalled, but not read from a normative document either.
+
+Not read, and therefore [H] where cited: SPIFFE and Backstage specifications
+were not fetched; both were assessed from prior knowledge and the projects' own
+repository label sets. The =deployment.environment.name= and =service.*=
+stability claims are [E] via =docs/release-standards.org=, not re-verified here;
+the =cicd.*= members *were* read directly and are [E]. Whether ITIL 4's own text
+uses the phrase "post-implementation review" is *unresolved* and marked [H]
+throughout.
+
+Prior work in this repository, cited rather than repeated: =docs/release-standards.org=
+(the six tiers, CDEvents, OTel, SLSA, in-toto, ITIL, GitHub Deployments as
+self-report), =docs/reference-survey.org= (ITIL verbatim, AWS/GCP deployment
+windows, Spinnaker Managed Delivery), =docs/github-environments.org= (why
+protection rules enforce nothing here), =docs/label-ownership.org= (the
+single-writer rule), =docs/label-state-machine.org= (the model-checked machine),
+=docs/exit-codes.org= (why 4 is not 1), =docs/interfaces.org= (=tri()=).

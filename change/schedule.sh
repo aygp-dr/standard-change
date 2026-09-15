@@ -194,6 +194,19 @@ case "${1:-}" in
     # shellcheck disable=SC2046  # the split IS the point: slot() prints two fields
     set -- $(slot "$mins" "$after"); start="$1"; end="$2"
     env="${CHANGE_ENV:-staging}"
+    # A MERGED CHANGE CANNOT BE BOOKED. Nothing checked, so a runaway loop
+    # reserved windows for #28 after it settled -- and `block` adds
+    # change:scheduled, which put the label back on a change settle.sh had just
+    # cleared. The PR then claimed a reservation for work already in production.
+    #
+    # The evidence that it was scheduled is that it SHIPPED; the forge's MERGED
+    # is the record once settle has run.
+    state=$(gh pr view "$pr" --repo "$repo" --json state -q .state 2>/dev/null || echo '')
+    if [ "$state" = MERGED ] || [ "$state" = CLOSED ]; then
+      echo "refused: #$pr is $state. A change that has landed does not need a window," >&2
+      echo "  and booking one re-adds change:scheduled to a change settle.sh cleared." >&2
+      exit 2
+    fi
     sha=$(gh pr view "$pr" --repo "$repo" --json headRefOid -q '.headRefOid' | cut -c1-7)
     url=$(gh pr view "$pr" --repo "$repo" --json url -q '.url')
     st=$(read_sched); old=$(echo "$st" | jq -r .sha); cur=$(echo "$st" | jq -r .body)

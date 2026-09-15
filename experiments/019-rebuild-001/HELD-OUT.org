@@ -1,0 +1,53 @@
+#+TITLE: 001 rebuild — the held-out defect set
+#+DATE: 2026-09-14
+
+* Why this file exists
+
+=standard-change-000= refuted its own hypothesis for one reason: the carried
+corpus was a *post-mortem*, so five of six known defects were "answered" by a
+rebuild that had been handed the write-up of those five. A grading rule where
+the answer key is part of the study material grades nothing.
+
+001 fixes the method, not just the corpus. The defects below were found on the
+night of 2026-09-13/14 and are deliberately *not* written into =spec.org= as
+incidents. The builder is given the generalised taxonomy (eight classes) and
+never these instances. Each one is a test of whether a class in the spec is
+predictive or merely descriptive.
+
+*Do not hand this file to the builder.* It is the test set.
+
+* The held-out set
+
+| # | defect as observed | class it should be caught by |
+|---+--------------------+------------------------------|
+| H1 | =soak.sh= called with arguments transposed printed "soak passed: 0/0 probes" and exited 0 | 7 — a check that cannot fail |
+| H2 | =FRONT_STG= hardcoded to a port that is one app replica, not the router front; the authorizing e2e refused a healthy estate | duplicated declared fact |
+| H3 | the driver deployed =targets/bastille= (a Python stand-in) and verified =targets/node= (the real apps) — deploy and verification addressed different estates | 3 — observation is not intent |
+| H4 | =reap.sh= releases a held berth only for windows *it* closes; a window closed on another exit path strands =deploy:staging= with nothing that will ever release it | boundary condition, unnamed state |
+| H5 | =queue.sh= alone did not default =GITHUB_REPOSITORY=; every sibling script did | — (consistency, no class yet) |
+| H6 | =health.sh= manifest mode printed "not serving X (saw: X)": =bad= increments for a bad code OR a wrong sha, the message names only the sha | diagnostic names the wrong cause |
+| H7 | =emacs --batch= exits 0 when the error is raised inside a timer, so an async failure reports success | 8 / 7 — async failure is not absence of failure |
+| H8 | the estate freeze records no actor and no reason, under a shared token | exposure / attribution |
+
+* Grading rule
+
+For each held-out defect, ask of the rebuild, in this order:
+
+1. *Does the rebuild have the defect?* Build the same thing; look.
+2. *If not, does the rebuild's design make it unrepresentable,* or did it merely
+   not happen to be written that way? Only the first counts.
+3. *Can the rebuild NAME the state?* A pipeline that avoids H4 by accident but
+   has no word for "berth held, window gone" has not answered it.
+
+A defect is ANSWERED only if the rebuild can be shown to refuse it — by a test
+that fails when the guard is removed. Absence of the bug is not an answer;
+=000= established that absence is usually luck.
+
+* Prediction, recorded before grading
+
+H1, H6 and H7 are the honest tests: they are instances of classes the spec
+states in general terms and never illustrates with these cases. H2, H3 and H5
+are likely to be answered trivially because a clean build will not reproduce a
+mid-life mistake — they should be graded as NOT INFORMATIVE rather than passed.
+H4 and H8 are the ones that will discriminate, because both require the rebuild
+to have invented a *name* the spec does not supply.

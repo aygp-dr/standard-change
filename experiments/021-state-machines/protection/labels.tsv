@@ -1,0 +1,39 @@
+label	prefix	semantics	owner	human_add	asserts
+app:*	app:	classification	labeller	no	this change deploys this group. Derived from the diff and recomputed on every push, which is what makes the set a manifest rather than a wish
+itil:standard	itil:	classification	labeller	no	the diff is limited to the deployable surface; this is a pre-authorised change type
+itil:normal	itil:	classification	labeller	no	the diff touches router/, gates/, change/, targets/ or .github/; this change needs assessment
+itil:emergency	itil:	classification	human	yes	THIS change is the remedy and it outranks the others. A precedence claim, not a readiness claim. Never derived, never inferred
+control-plane	(bare)	classification	labeller	no	this change alters how every FUTURE change is verified, so it cannot be verified by the pipeline it changes
+labeler:skip	labeler:	intent	human	yes	the declared writer of app:* and itil:standard/normal is now a person, not the labeller. TRANSFERS OWNERSHIP; silences no guard
+change:requested	change:	intent	human	yes	a person wants this change to begin. The only label a person adds to set a change going
+release	(bare)	intent	human	yes	a person wants a window. A trigger the scheduler consumes; one that stays on re-fires
+change:scheduled	change:	state	scheduler	no	a window is booked. An entitlement to the path to production, not permission and not a promise
+change:complete	change:	state	change/settle.sh	no	TERMINAL and the record. Never cleared
+change:failed	change:	state	change/abort.sh	no	TERMINAL closure code: production never served this. Nothing to undo
+change:backed-out	change:	state	change/abort.sh	no	TERMINAL closure code: production DID serve this and was returned. Asserts an estate action, so it must name the sha it returned to
+change:backfill-owed	change:	intent	change/abort.sh	yes	AN UNPAID CHANGE RECORD. A person declares the debt and a person clears it; automation must not clear a debt it did not pay. Blocks nothing. Persistent, because the merge is when the debt starts
+release:start	release:	state	the pipeline	no	the release has BEGUN for the booked change. Never written by hand: adding it claims a deployment is running, which a person cannot truthfully assert
+deploy:staging	deploy:	state	workflow	no	staging is being deployed right now, AND the berth is claimed. An action label doing a lock's job
+deploy:production	deploy:	state	workflow	no	production is being deployed right now
+staging:in-progress	staging:	state	workflow	no	an action is in flight against staging
+staging:e2e	staging:	observation	gates/e2e.sh --pr	no	the e2e instrument passed against staging. Repeatable, so the LABEL authorizes nothing -- the record naming the SHA does
+staging:e2e-failed	staging:	observation	gates/e2e.sh --pr	no	the e2e instrument failed. A recorded failure outranks its own pass in guard 4
+staging:smoke	staging:	observation	gates/smoke.sh --pr	no	a browser could actually use staging
+staging:smoke-failed	staging:	observation	gates/smoke.sh --pr	no	a browser could not
+staging:uat	staging:	observation	human	yes	THE EXCEPTION: for acceptance the person IS the instrument. Not repeatable, so the label is durable and a person may withdraw it -- but it still needs a record naming this build
+production:e2e	production:	observation	gates/e2e.sh --pr	no	the e2e instrument passed against production
+production:e2e-failed	production:	observation	gates/e2e.sh --pr	no	it failed against production
+production:smoke	production:	observation	gates/smoke.sh --pr	no	a browser could use production
+production:smoke-failed	production:	observation	gates/smoke.sh --pr	no	it could not
+production:healthy	production:	observation	gates/health.sh --pr	no	the estate CONVERGED on this build. Typed by hand once, on #9; that was the ownership defect the whole declaration exists for
+review:proxy	review:	observation	change/review.sh [H]	no	a proxy, NOT a person, reviewed this SHA. A different label from APPROVED on purpose, so nobody reads one as the other
+blocked:queue	blocked:	state	change/queue.sh	no	guard 1 refused: another open PR holds the berth
+blocked:lock	blocked:	state	change/lock.sh	no	guard 3's lock half refused: another deployment holds the lock
+blocked:freeze	blocked:	state	gates/preflight.sh	no	guard 3's freeze half refused: the estate is shut to ordinary change
+blocked:diverged	blocked:	state	workflow	no	guard 4b refused: main moved under this change. A human may clear it after rebasing
+hold:staging	hold:	intent	REJECTED	no	a person wants to look before this promotes. DECLARED REJECTED with no owner and human_add=no, and still enforced at three sites. The contradiction is the model, not a bug to resolve silently
+freeze	(bare)	estate	human	yes	ESTATE STATE: ordinary change is suspended. A property of the WORLD, blocking everyone including its declarer. Written by nobody in-tree, which is why the label auditor cannot see it -- it audits WRITES and this label is only ever read
+emergency	(bare)	estate	human	yes	ESTATE STATE: an emergency is in flight out there. Blocks standard and normal changes and grants NO exemption to whatever PR carries it. Deliberately no self-exclusion
+staging:passed	staging:	observation	RETIRED	no	named no measurement and no environment, so a pass from one estate could overwrite a failure from another. Replaced by the staging:* stack
+staging:failed	staging:	observation	RETIRED	no	same defect
+deployed:production	deployed:	state	RETIRED	no	replaced by change:complete plus the deployment record

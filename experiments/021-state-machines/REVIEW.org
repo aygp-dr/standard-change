@@ -1,0 +1,1084 @@
+#+TITLE: 021 — the bar for a state machine of this pipeline
+#+SUBTITLE: Scenario review, invariants, the states with no name, the rubric, and where the three artefacts already disagree
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:3 num:t
+
+* What this is
+
+Five engineers are each building a state machine of this pipeline with the
+*pull request as the core primitive*. This document is the bar they are graded
+against, written before their models exist, plus a review of the three artefacts
+that already model it — =spec.org=, the code, and =tla/= — including where those
+three disagree with each other today.
+
+*The central warning, and it is not rhetorical.* =spec.org:2802= defines the
+domain entity and then rules out the encoding by name:
+
+#+begin_example
+| *change* | a proposed alteration, with a record | a commit, a branch, or a PR |
+#+end_example
+
+Both TLA modules index every single variable by =PRs= (=tla/StandardChange.tla:16=,
+=tla/Labels.tla:29=), and every scenario in =scenarios.org= is written about a
+numbered PR. So the primitive the brief proposes is the one the governing
+document explicitly says the change *is not* — and the two existing formal
+models already took it, which is a large part of why they lose what §5 shows they
+lose. A model whose state vector is a function of one PR has nowhere to put
+trunk, the estate, the calendar, the served build, or the forge's own opinion,
+and every one of D4, D6, D9, D11, D13, D17 and D18 is a change endangered or
+refused by exactly those.
+
+** Epistemic marking
+
+[E] observed by me or by an agent working for me in this session, with the line
+read; [H] not verified; [I] inference. Every claim about code carries
+=file:line=. I ran no deployments, touched no port in 9000–9299, edited no
+label, no window, no PR, and made no write to the forge. TLC was run only on
+copies in a scratchpad; nothing in =tla/= was modified.
+
+** A count correction, and it matters
+
+The brief says "the 17 scenarios". =scenarios.org= carries *eighteen*
+deployment sequences, D1–D18 (=scenarios.org:70= .. =:669=), plus thirteen
+labeller scenarios L1–L13 (=:28= .. =:59=). =spec.org:2585= also says
+"Seventeen scenarios". D18 was added 2026-09-14 and neither count was updated.
+D18 is the scenario that most directly refutes the PR-as-primitive framing, so
+dropping it from the count is not a clerical matter.
+
+* 1. The eighteen scenarios
+
+The question asked of each: *what property does it demonstrate, and can a state
+machine hold that property?*
+
+- *T* — a transition. An edge between two named states.
+- *G* — a guard predicate. A condition on an edge.
+- *N* — neither. The property is about *what we could and could not tell*, about
+  the *range of an oracle*, about the *relation between a record and the world*,
+  or about the *implementation that reads a verdict*. Some are reachable by
+  adding subjects or widening a codomain; none is reachable by adding states. A
+  naive machine loses them *silently*, which is the failure mode this repository
+  exists to document.
+
+** Part A — the labeller
+
+| id | property demonstrated | T / G / N |
+|----+-----------------------+-----------|
+| L1–L3 | the manifest is a function of the diff, and fans out | *T* — a derivation, not a state |
+| L4 | a change can be classified and deploy nothing | *T*, and it is the case guard 6 gets wrong |
+| L5 | classification precedence: normal outranks standard | *G* on the classifier |
+| L6 | the empty manifest is a legitimate value | *T*, and see INV-11 — empty must be *provably* empty |
+| L7 | ownership is by path, not by file type | *T* |
+| L8 | control-plane paths classify as normal | *G* |
+| L9 | the labeller *removes*; a shrinking diff shrinks the manifest | *T* — the half most models omit |
+| L10 | a human write to a derived artefact must not survive | *G*, an authority predicate, not a state |
+| L11 | reclassification is ordinary, in both directions | *T* |
+| L12 | a verdict is bound to a SHA and dies when the SHA moves | *G* — INV-5/6 |
+| L13 | *the negative fixture.* The catalogue rejects its own run if the labeller cannot fail | *N* |
+
+L13 is the first *N* and sets the pattern. It is not a property of the pipeline;
+it is a property of *the checker of the pipeline*. No arrangement of states
+expresses "this suite produced no verdict because it cannot produce a negative
+one". It requires a *proof obligation on the model* — §4 item 6 — and §5.9 shows
+two live instances where the existing models failed it.
+
+** Part B — the deployment sequences
+
+| id | property demonstrated | T / G / N |
+|----+-----------------------+-----------|
+| D1 | the queue and the rebase loop; a stale re-request is refused by guard 0 | *G* (=B(c)=T=) + *T* |
+| D2 | staging composes the change against *current production*, not against itself; disjoint app sets are still refused | *N* → *G* |
+| D3 | the bypass is of the staging *environment* only; guard 2 has no emergency arm | *G* |
+| D4 | a verdict expires because a subject *other than the change* moved | *T* on trunk, *not* on the PR |
+| D5 | a production deploy is never cancelled mid-flight; queueing beats indeterminacy | *G* + *T* |
+| D6 | 200 is not convergence; the health check must compare the served build | *G* over *estate* state |
+| D7 | a failed change must not wedge the berth — and the spec has *not decided* how | *T*, plus an undecided liveness obligation |
+| D8 | the manifest shrank, so the environment must follow | *T* |
+| D9 | three defects: guard 3 lives at one advisory site; =queue.sh claim= reports success having done nothing; a classification outlived its purpose | *N*, *N*, *G* |
+| D10 | pre-authorisation is a property of the *change model*, not a judgement at booking | *G* (the eligibility conjunction) |
+| D11 | a branch old enough *cannot be verified at all* — the instrument is not in its tree | *N* |
+| D12 | booking and driving must be one loop; every individual booking was valid | *N* — a trajectory property |
+| D13 | settlement asserted a merge the forge refused; the record ran ahead of the world | *N* |
+| D14 | a diff no assertion covers is a diff the pipeline cannot judge; and a refused change still loses its window, =expired= not =failed= | *N* + *T* |
+| D15 | superseded check runs counted as current; a verdict that *was* true | *G*, but only if verdicts are time-indexed |
+| D16 | the driver read a refusal and walked past it | *N* |
+| D17 | guard 0 has never fired, because the forge never emits =BEHIND= | *N* — the sharpest |
+| D18 | an approved, booked, green change is refused on entry to staging by an acceptance nobody updated; forfeit-on-entry is *ordinary* | *T* + *N* |
+
+** The six a state machine will lose, and exactly how
+
+Each fails differently. A model can answer one and lose the other five.
+
+*** D2 — the composition of the deployed thing is not a state of the change
+
+=scenarios.org:100= asserts that on staging, the *untouched* groups serve the
+production SHA. That is not about the PR; it is about the *contents of an
+environment*, and it needs an =ENVIRONMENT= entity carrying a per-group build
+map. A PR-primitive model holds =holder = p= and calls staging occupied — which
+is exactly what =tla/StandardChange.tla:34= and =tla/Labels.tla:55= do — so it
+cannot say *what staging is serving*. The mixed-app trap is then unstateable, and
+D6 and guard 5 go with it. Confirmed: neither TLA module has any environment
+entity [E].
+
+*** D4 — the trigger is an event on trunk
+
+The content of =scenarios.org:131= is that the PR did not move and =main= did
+(=scenarios.org:155=). If trunk is a field on the PR, the model can express the
+*consequence* but not the *cause*, and will put the invalidation edge at the PR's
+next action rather than at trunk's push. =spec.org:1112= is explicit: guard 0 at
+claim is a convenience, guard 4b at reliance is load-bearing. =StandardChange.tla=
+does have a =mainV= counter and a =MainMoved= action (=:235=), which is the right
+shape — and it then implements the *pre-correction* behaviour, stealing the berth
+(§5.6).
+
+*** D11 — unmeasurable is a state, and it is not "ungated"
+
+=scenarios.org:362=: guard 2 needs evidence about a build, and the instrument
+that produces it is not in that build. A two-state gating model has
+={gated, ungated}= and files this under =ungated=, which reads as *the gates have
+not passed* — indistinguishable from red. It is neither: it is *unmeasurable*, a
+third value at the level of the whole suite. =tla/StandardChange.tla:43= types
+=gated= as =BOOLEAN= and has no =GatesFail= action at all, so the model cannot
+even express red, let alone unmeasurable [E].
+
+*** D13 — the record ran ahead of the world
+
+=scenarios.org:429=. =settle.sh= had =gh pr merge ... && ok=; the merge refused,
+execution continued, the PIR was posted, the summary claimed success. A model
+with one =merged= bit *cannot represent this state* — and that is the trap,
+because unrepresentability here reads as proof of safety. It needs *two*
+variables (INV-24). All four existing models have one: =pipeline_sim.Change=
+has no merge field distinct from =State.COMPLETED=; =Labels.tla:62= has
+=merged[p]= as a single =BOOLEAN= [E].
+
+*** D16 — the guard was correct, the caller dropped the verdict
+
+=scenarios.org:559=: =./change/guard4.sh "$PR" | tail -1=. The guard refused;
+the pipeline's status was =tail='s; production was cut over. There is no state
+this pipeline "is in". It is a property of the *implementation of the transition
+function* — whether a computed verdict reaches the code that branches on it. A
+state machine assumes verdicts are consumed by construction, and that assumption
+is precisely what failed here, twice, eight hours apart, in the script written to
+replace the one that failed first. Answerable only by a *realisability
+obligation* (INV-29). §5.3 shows it is still live.
+
+*** D17 — the model is more capable than the world
+
+=scenarios.org:607=. Guard 0's refusal sits inside =if [ "$state" = "BEHIND" ]=
+(=change/queue.sh:25=), and =BEHIND= has never been returned: 0 of 14 open PRs
+after 163 commits landed on main. A model whose =mergeStateStatus= ranges over
+={CLEAN, BEHIND, DIRTY, UNSTABLE}= will exercise guard 0's refusal on every run
+and thereby *certify a guard that has refused nothing in this repository's life*.
+The model is not wrong about the predicate; it is wrong about the *oracle's
+range*, and nothing inside the model can see that. The answer is not a state, a
+guard, or an invariant, but a *measurement obligation attached to the model*
+(INV-28). =spec.org:2679= already states the audit question; no artefact in the
+repo implements it.
+
+*** D18 — forfeit on entry is ordinary, and unknowable in advance
+
+=scenarios.org:669=. Every guard passed; the acceptance suite refused at the
+estate; the window was spent. *T* for the forfeit edge, and the models will get
+that. The *N* half is the finding: the refusal was knowable at review time and
+*no scheduler can know it*, because the thing that refuses runs only against a
+deployed estate. A model that has only the edge has modelled the outcome and lost
+the reason there is no guard for it. It also exposes a gap in the closure enum —
+see §3.3.
+
+** The two that are about time, not state
+
+D7 (=scenarios.org:188=) and D12 (=scenarios.org:413=) are *liveness*. D7: a
+failed change must not hold the berth forever, and =scenarios.org:197= records
+the question as *undecided*. D12: every individual booking was correct and the
+trajectory was absurd — twenty-five windows on one day. Neither is refuted by any
+reachable-state check.
+
+=tla/= is the only artefact with the vocabulary, and it does not use it [E]:
+=tla/StandardChange.cfg= and =tla/Labels.cfg= declare only =SPECIFICATION Spec=
+and =INVARIANT= / =INVARIANTS= lines. No =PROPERTY=, no temporal formula, no
+fairness. Every check in the repository is safety-only. A model that offers only
+safety invariants must *say so* and must name D7 and D12 as the properties it
+does not check.
+
+* 2. The invariants
+
+Stated so they can be checked mechanically. Each names its source. A model is
+judged on whether it can *state* each one, whether it can *check* it, and whether
+removing the corresponding guard makes the check fail.
+
+** A. The berth
+
+*INV-1 — BERTH SINGLETON.* =|{c : holds_berth(c)}| ≤ 1= at every state.
+(=spec.org:176=.) Check: a reachable-state predicate. Every model has it; alone
+it discriminates nothing — and see INV-27, because =tla/StandardChange.tla:263=
+states it *vacuously*.
+
+*INV-2 — A BERTH IS A LEASE.* Every held berth carries an *owner* and a
+*deadline*. A berth with no expiry is not a lease, and INV-1 becomes a deadlock
+rather than a queue. (=spec.org:142=; capability C3 at =spec.org:255=;
+implemented at =change/state.sh:64=, =:102=.) *No existing model has the
+deadline* — not =pipeline_sim= (a counting model, =sim/pipeline_sim.py:122=), not
+=label_sim=, not either TLA module [E]. Check: the berth is a record, not a
+boolean, a PR id, or a count.
+
+*INV-3 — EVERY EXIT RELEASES OR RETAINS, NEVER STRANDS.* For every path that ends
+a change's occupancy of the path to production, either the berth is released, or
+the change remains on the path with a live deadline. *No path may close a window
+while leaving the berth held.* (=change/reap.sh:46=; violated in the
+implementation — §3.3 and §5.4.) Check: enumerate terminal transitions; assert
+=held ⇒ (∃ open window ∨ ∃ live deadline)=.
+
+*INV-4 — PREEMPTION EXTENDS; STALENESS RELEASES.* A change whose verdict was
+invalidated by *someone else's* merge keeps its position, gets a deadline
+extension, and is marked =revalidate=. A change that went stale on its own
+releases. "The berth is never taken away by someone else's merge"
+(=spec.org:1156=; the two edges at =:1164–:1169=; implemented at
+=change/state.sh:102=, =:113=). *All three formal models get this backwards* —
+§5.6. Check: two distinct edges out of "invalidated", selected by *who caused
+it*.
+
+** B. Verdicts in time
+
+*INV-5 — A VERDICT NAMES ITS BUILD.* Every observation, approval and deployment
+record carries the content hash it was measured against. No bare boolean verdict
+anywhere. (=spec.org:2629=; =docs/interfaces.org:41=; =docs/interfaces.org:289=
+makes =(change_id, instrument, sha)= the query key, explicitly *not*
+=(change_id, instrument)=.) Only =sim/pipeline_sim.py= satisfies this today
+(=:93–:95=, =:106–:107=) [E].
+
+*INV-6 — A VERDICT IS COMPARED AT RELIANCE.* Every guard that consumes a verdict
+compares =verdict.sha= to the head *at the moment it relies on it*, not at the
+moment the verdict was written. (=spec.org:2635=.) Check: no guard reads a
+verdict without reading the head in the same evaluation. *Resetting a verdict on
+push is not this.* =tla/StandardChange.tla:76–85= and =tla/Labels.tla:444–451=
+model the reset and have no hash at all; the binding is documentation
+(=tla/Labels.tla:59=, =:61= say "THIS head" about bare booleans) [E].
+
+*INV-7 — SUPERSEDED IS NOT CURRENT.* For a =(subject, instrument)= pair, only the
+latest observation counts; earlier ones are history and must not be aggregated
+with it. (=spec.org:2603=; D15; the fix shape is
+=group_by(.name) | map(max_by(.started_at))=.) Check: every aggregation over
+observations is preceded by a per-name max. No existing model can even reach the
+defect: all four hold one scalar verdict per axis, so the *stale* case is caught
+and the *superseded-but-counted* case is unrepresentable [E].
+
+*INV-8 — OBSERVATIONS ARE APPEND-ONLY.* A withdrawal is a *new row*, never an
+update, because an audit must see that a verdict was taken and then retracted.
+(=docs/interfaces.org:294=.)
+
+*INV-9 — RE-CHECK AT RELIANCE.* For every guard =g= whose subject can change
+after =g= is evaluated, there is *no path* on which =g= is evaluated at =t1= and
+relied on at =t2 > t1= without re-evaluation at =t2=. (=spec.org:182=,
+=:1230=; =docs/interfaces.org:57=, =:428=.) Check: annotate each guard with its
+subject's mutability; for every mutable-subject guard, exhibit the re-check edge.
+This is the invariant the repository is organised around, and the one a
+PR-primitive model is least equipped to state, because "the subject changed" is
+an event on something that is not the PR.
+
+** C. The third value
+
+*INV-10 — EVERY READ IS THREE-VALUED.* Every question the model asks an external
+system has codomain ={yes, no, cannot-determine}=. =cannot-determine= refuses
+*differently* from =no=, and it *blocks*. (=spec.org:2590=, =:2699=, and =:2740=
+— "every verdict enum in this spec is three-valued"; =docs/interfaces.org:26=;
+=docs/exit-codes.org:15= assigns exit 4, =:26= says 4 blocks.) Check: *no guard's
+return type is a boolean.* Mechanical, and the cheapest discriminator here. Of
+four existing models, exactly one arm of one model satisfies it
+(=sim/pipeline_sim.py:63–80=, the =Deploys= enum) [E].
+
+*INV-11 — EXEMPTION REQUIRES POSITIVE EVIDENCE.* A guard may exempt a change only
+when an oracle *proved* the exempting condition and the record *names that
+oracle*. Absence of evidence that the condition fails is =indeterminate=, and
+indeterminate is not exempt. (=spec.org:212=: "=deploys(c)= is three-valued,
+never a set that may be empty".) Check: every =exempt= branch is reachable only
+from a successful oracle read; a failed read reaches =abstain=.
+
+*INV-12 — A VOID VERDICT IS NOT A FAILING ONE.* A suite whose self-test did not
+run, or ran and failed, produces *no verdict* — its PASS is void, which is
+neither pass nor fail. (=spec.org:1817=, =:2664=.) Check: three constructors;
+=void= does not unify with =fail=.
+
+*INV-13 — CONVERGENCE, NOT LIVENESS.* Guard 5 is satisfied only when *N* samples
+all report the expected build. More than one distinct build is =UNCONVERGED=; an
+unreachable probe is =indeterminate=. (=spec.org:2150=.) Check:
+=health(env, sha) ∈ {converged, unconverged, unreachable}=; no boolean =healthy=
+anywhere — =docs/interfaces.org:328= forbids it by name, and
+=tla/Labels.tla:84–87= has three of them [E].
+
+** D. Namespaces and closure
+
+*INV-14 — THREE SUBJECTS, THREE NAMESPACES.* Classification (what kind of change),
+lifecycle (how far it has got) and estate (the state of the world) are separate.
+Exactly one classification; at most one active lifecycle state; the estate's
+flags on *something that cannot be deployed*. (=spec.org:2810=; =README.org:186=;
+implemented in the declaration at =change/label-owners.tsv:86–87=.) Check: three
+disjoint enums; no value of one appears in another's domain.
+
+*INV-15 — AN ESTATE FLAG IS NOT A FIELD ON A CHANGE.* A freeze or estate emergency
+is a property of the world, blocking everyone *including its declarer*. A flag
+attached to a change is a flag whose carrier is exempt from it. (=spec.org:2812=;
+=docs/interfaces.org:312=.) The repository's *best* piece of modelling is here,
+and it is worth quoting as the target: =change/label-owners.tsv:54= declares an
+unprefixed =emergency= label as "ESTATE STATE ... grants NO exemption to whatever
+PR carries it. Separate from =itil:emergency= because an emergency handled
+outside the pipeline has no PR to classify, and hanging the CLASS on a PR to
+represent it would hand that PR a bypass of every blocker." *That sentence is the
+whole of INV-15, and no model in the repo implements it* — =tla/Labels.tla:65–66=
+has =freeze= and =estateEmg= as global variables, which is right, but =spec.org=
+itself never separates the two emergencies (§5.1).
+
+*INV-16 — A CLASSIFICATION IS EXACTLY ONE, AND IT EXPIRES AT RELIANCE.* Zero or two
+classifications is an *error state*, not a default arm; and a class set at =t1=
+must be re-confirmed at activation, not trusted. (=spec.org:2789=;
+=change/label-owners.tsv:86=; D9 at =scenarios.org:257= — #44 carried
+=itil:emergency= for two hours after the exercise that set it and would have been
+exempted from guards 0 and 1 on that basis; the eligibility rule at
+=scenarios.org:330=.) =tla/Labels.tla= gets this right and is the model to copy:
+=Label(p)= re-derives standard/normal on every push and never touches emergency
+(=:135–:140=), so a declared emergency that receives a push holds *two* classes —
+reachable *by design* — and =ClassGuard= refuses the claim rather than the state
+(=:485=) [E].
+
+*INV-17 — EXPIRED IS NOT FAILED.* Closure codes are a closed enum
+={passed, failed, cancelled, expired, backed-out}=. =expired= asserts *nothing was
+attempted*; =cancelled= asserts somebody decided; =failed= asserts an attempt that
+did not succeed. A change closed =expired= keeps its classification, its approval
+and its observations, and is left *eligible and unbooked*. (=spec.org:2786=,
+=:2817=; =docs/interfaces.org:266=; correctly implemented at =change/reap.sh:16=,
+=:66=, and =change/schedule.sh:285=.) *No formal model has closure codes at all*:
+=sim/pipeline_sim.py:41–43= declares =FAILED=, =REJECTED=, =CANCELLED= and never
+assigns any of them; =tla/Labels.tla:60= collapses =change:failed= and
+=change:backed-out= into one boolean, and =:220= says of expiry "Nothing was
+attempted, so no closure code" — which is the exact collapse =spec.org:2787=
+forbids [E].
+
+** E. Manifest, record, and authority
+
+*INV-18 — THE MANIFEST IS DERIVED, NEVER ASSERTED.* =manifest(c) = f(diff(c))=,
+owned by automation; a human write does not survive the next derivation. Any
+exception is a *declared, visible deviation* carried into the record.
+(=spec.org:150=; L10; the declared exception =labeler:skip= at =spec.org:729= and
+=change/label-owners.tsv:29=.)
+
+*INV-19 — ADDING AND REMOVING ARE DIFFERENT AUTHORITIES.* Two verbs per fact. A
+person asks; automation may *answer* the ask but may not *invent* one.
+(=docs/interfaces.org:63=; =README.org:214=; the reaper deliberately refuses to
+re-assert the human's ask, =change/reap.sh:66=.) The repository has a
+machine-readable form of this — =change/label-owners.tsv=, with =human_add= and
+=human_rm= as separate columns — and §5.2 shows its own enforcer is blind to one
+of its two tombstone values.
+
+*INV-20 — AN ACTION LABEL IS NOT A REQUEST.* =deploy:*= asserts *work is in
+flight*. A hand-written one is a forged assertion, and the workflow it triggers
+must *re-establish the fact* rather than believe it. (=spec.org:2354=, =:2367=.)
+
+*INV-21 — THE ORACLE IS INDEPENDENT OF THE CALLER.* An instrument records its own
+result; where a verdict genuinely comes from the caller, the record says so by
+name. (=spec.org:2617=; =docs/interfaces.org:49=.)
+
+*INV-22 — AN ESTATE WRITE RECORDS WHO AND WHY, IN THE SAME WRITE.* If the identity
+cannot be established, the control refuses. An unattributable freeze is not a
+safer freeze. (=spec.org:637=.)
+
+** F. The estate and the world
+
+*INV-23 — THE DEPLOYED COMPOSITION IS MODELLED.* An environment carries a per-group
+build map; on staging the changed groups serve =H(c)= and the untouched groups
+serve the production build. (=scenarios.org:100=.) Check: environment state is a
+map, not an occupancy flag.
+
+*INV-24 — THE RECORD IS NEVER AHEAD OF THE WORLD.* "We recorded merged" and "the
+forge attests merged" are *separate variables*; the record may not assert a fact
+the world has not confirmed. Likewise for deployed. (D13; =spec.org:156= — the
+Deployments API is a self-report with good provenance about *who claimed it*, not
+evidence about what is running.)
+
+*INV-25 — LIVE, CLOSED, MERGED ARE THREE EVENTS IN THAT ORDER.* Not
+interchangeable; the berth is released on =merged=, a repository event, while it
+protects the estate. (=spec.org:2138=.)
+
+*INV-26 — PRODUCTION FIRST.* =deploys(c) = ∅ ∨ served_build(production) = T= at
+merge, with =deploys(c)= three-valued per INV-11. (=spec.org:181=.)
+
+** G. Obligations on the model itself
+
+Not invariants over states. Conditions the model must satisfy to be worth
+checking at all — and where every *N* scenario lives.
+
+*INV-27 — EVERY GUARD, AND EVERY INVARIANT, MUST BE SHOWN TO REFUSE.* For each, a
+test that fails when it is removed — in *all* arms, not only the happy one.
+(=spec.org:221=: =000='s self-test had exactly the right two cases and the guard
+exempted its way past both.) Check: mutation. *Two live violations are in this
+repository's own models*: =sim/pipeline_sim.py:305= asserts =not self.regressed=
+— the D4 invariant, the simulator's headline claim — and =self.regressed= is
+assigned exactly once, to =False=, at =:129=, and never set true anywhere in
+=sim/=; and =tla/StandardChange.tla:263='s =AtMostOneHolder= is literally
+=TypeOK:51= restated, so it is implied and cannot fail. Both are inside checked
+suites. Both are class 7 committed by the code written to enforce class 7 [E].
+
+*INV-28 — EVERY GUARD MUST NAME ITS ORACLE AND THAT ORACLE'S OBSERVED RANGE.* What
+does it read, what value does it test for, and *has that value ever been observed
+from that oracle in this configuration?* A guard with zero lifetime refusals is a
+hypothesis, not a control. (=spec.org:2679=; D17.)
+
+*INV-29 — A VERDICT MUST BE UNPIPEABLE.* Any step whose verdict gates a later step
+must be structurally incapable of having its status discarded by formatting.
+Capture, test, then format. (=spec.org:2651=; D16.) In shell this is a lint: no
+=guard | anything=. §5.3 shows three live violations.
+
+*INV-30 — A NEGATIVE TEST MUST NAME WHAT IT REFUTED.* A negative run that reports
+only "something failed" cannot distinguish the property it was written for from
+any other. =tla/StandardChange.cfg:8= checks the single conjunction =Safety=, so
+=tla/check.sh:21= (asserting =Guard4b=FALSE= violates =NoRegression=) and
+=tla/check.sh:29= (asserting =ProdFirst=FALSE= violates =NoMergeBeforeProduction=)
+grep the *identical string*, =Error: Invariant Safety is violated=. Neither can
+tell which conjunct broke; either could be passing on =TypeOK=. =tla/Labels.cfg:16–27=
+lists its eleven invariants individually and =tla/check.sh:75= greps the specific
+name — the fix exists in the repository and was not applied to the other module
+[E].
+
+* 3. The states this system can reach that have no name
+
+=spec.org:2776= makes the right demand: *a rebuild is graded on whether it can
+name each one, not on whether it prevents them.* A model that cannot represent an
+unnamed state is wrong in the direction that looks tidy — the defect has no home,
+so the model proves its absence.
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction LR
+    state "berthed" as B
+    state "verified" as V
+    state "STRANDED BERTH\nheld, window closed,\nnothing will release" as S
+    state "DEPLOYED, NOT MERGED" as D
+    state "DEPLOYED, NOT MERGED,\nWINDOW GONE\nspec: has no name" as X
+    state "UNMEASURABLE\nno instrument in tree" as U
+    state "VACUOUSLY GREEN\nno assertion covers the diff" as G
+    state "GUARD UNREACHABLE\noracle cannot emit\nthe refusing value" as R
+    state "FORFEIT ON ENTRY\nattempted, refused,\nnothing changed" as F
+    B --> V: authorizing run passes
+    V --> S: hold:staging, window closed held
+    B --> S: run dies after the berth is claimed
+    V --> D: production cut over, merge refused
+    D --> X: window lapses while deployed
+    B --> U: guard 2 asks, the reporter is not in this tree
+    B --> G: every gate green, nothing asserted
+    B --> R: guard evaluated, refusal unreachable
+    B --> F: acceptance refuses at the estate
+#+end_src
+
+** 3.1 Named in the spec
+
+- *deployed, not merged* (=spec.org:2780=). Reached live on #40 (D13).
+- *booked, unverifiable* (=spec.org:2784=). The spec says refuse at booking, not
+  at activation — a requirement nothing implements; D11 hit it at activation.
+- *undefined class* (=spec.org:2789=). Zero or two classifications, with every
+  rule branching on the class taking an arm nobody chose. Reachable *by design*
+  in =tla/Labels.tla:481–482=, which is the correct treatment.
+
+** 3.2 Named as nameless
+
+- *deployed, not merged, and the window is gone.* =spec.org:2793=: "A rebuild
+  needs a word for it before it needs a fix." Reached twice, once by a script
+  that reported the opposite.
+
+** 3.3 Not in the spec, reachable, verified [E]
+
+*** STRANDED BERTH — the one the brief asks about, and it is live
+
+Berth held, window *closed*, staging serving the build, and nothing anywhere will
+release it.
+
+- =change/activate.sh:268= claims the berth (=--add-label deploy:staging=).
+- The =hold:staging= branch at =:321–:332= disarms the exit trap (=:324=),
+  *closes the window* =held= (=:325=), and exits 0 (=:332=) — without removing
+  =deploy:staging=.
+- The only path that removes it is =:368=, on the production route the hold path
+  never reaches.
+- =change/reap.sh= releases a held berth only while walking windows that are
+  *open and lapsed* (=:41=, =:50–:79=). A window already closed is never
+  revisited.
+- The same strand is reachable by a crash: the trap armed at
+  =change/activate.sh:263= closes the window and does not release the berth.
+
+This is =experiments/019-rebuild-001/HELD-OUT.org= H4, held out from the builders
+on purpose. It is reachable here through the *intended* flow of a label
+=change/label-owners.tsv:35= declares REJECTED — and =change/settle.sh:244–250=
+does not clear =hold:staging= either, despite its =persistent=no= column [E].
+
+*** UNMEASURABLE
+
+Approved, booked, and *no instrument exists in the change's tree* to produce the
+evidence guard 2 requires (D11). Not green, not red, not ungated. Worsens
+monotonically with branch age; invisible until the window opens.
+
+*** VACUOUSLY GREEN
+
+Every gate green and *no assertion covers the diff* (D14: the intended break
+passed 24 tests). The pipeline's green and the pipeline's ignorance are the same
+bytes.
+
+*** GUARD UNREACHABLE
+
+The guard is present, correctly written, reasoned about in an ADR, and its
+refusing arm cannot be entered because the oracle does not emit the value it
+tests for (D17; guard 0 at =change/queue.sh:25=, guard 6 at
+=gates/production-first.sh=). Two measured instances in one repository — and two
+more *inside the models themselves*, INV-27.
+
+*** FORFEIT ON ENTRY — a gap in the closure enum, opened and not closed
+
+Approved, booked, green, berth claimed, every guard passed — and refused at the
+estate by an acceptance record nobody updated (D18). The window is spent. Nothing
+*failed*: no attempt was wrong. Nothing *expired*: something was attempted.
+Nothing was *cancelled*: nobody decided. The enum at =spec.org:2817= has no arm
+for "attempted, correctly refused, estate unchanged", and =scenarios.org:723=
+prescribes =schedule.sh close <id> failed=, collapsing it into the arm INV-17
+exists to keep separate.
+
+*This is the finding I would most want the five models to notice*, because
+=spec.org= opened it on 2026-09-14 and did not close it.
+
+*** UNSCHEDULED, NOT FAILED, NOT REQUESTED
+
+=change/reap.sh:70= names it and leaves it unnamed on purpose: "The change is
+left with no lifecycle label, which is the honest state: it was scheduled, it no
+longer is, and nobody has asked for a new window yet." A model with a total
+lifecycle function has nowhere to put it. =tla/Labels.tla= can
+(=life[p] \subseteq Lifecycle=, a *set*, so empty is a value) — and this is
+exactly why =MergedHasRecord= (=:514=) had to be invented: =Reap= fires on a
+merged-but-unsettled PR and strips its last lifecycle label [E].
+
+* 4. The grading rubric
+
+100 points. Weighted toward what a PR-primitive model is structurally likely to
+get wrong, because that is what will discriminate between five models that will
+all get INV-1 right.
+
+Scored against the model *as designed*, not as it happens to behave. Per
+=experiments/019-rebuild-001/HELD-OUT.org=: "does the rebuild's design make it
+*unrepresentable*, or did it merely not happen to be written that way? Only the
+first counts."
+
+The bar is not hypothetical. Every item below is satisfied by at least one
+existing artefact in this repository, and no existing artefact satisfies more
+than a third of them.
+
+** 1. Subjects other than the change — 25
+
+The largest weight, because it is the framing risk, and because =spec.org:2802=
+says the change *is not* the PR.
+
+| what is being scored | points |
+|----------------------+--------|
+| trunk is a subject, and the invalidation edge originates *at trunk's push*, not at the change's next action (D4) | 6 |
+| the estate is a subject: environments carry a per-group build map, so "what staging is serving" is answerable (D2, D6, INV-23) | 6 |
+| the calendar is a subject with windows that lapse on their own, independent of any change, and with a *deadline* (D14, D18, INV-2, INV-17) | 5 |
+| the world is a subject: freeze and estate-emergency are not fields on a change, and their declarer is recorded (INV-15, INV-22) | 4 |
+| the forge is a subject distinct from the record, so "the forge says merged" and "we recorded merged" are two variables (D13, INV-24) | 4 |
+
+*Zero for this section* if all of the above are boolean fields on the PR. That
+model passes D1, D3, D5, D8 and fails everything that made this repository
+interesting. =tla/StandardChange.tla= scores 6 of 25 [E]: it has =mainV= and
+nothing else.
+
+** 2. The third value — 20
+
+| what is being scored | points |
+|----------------------+--------|
+| no guard in the model has a boolean codomain; =indeterminate= is a constructor, not an error path (INV-10) | 8 |
+| =indeterminate= *blocks*, and blocks *differently* from refuse — the two are distinguishable in the record (=docs/exit-codes.org:26=) | 4 |
+| exemption requires positive evidence and names its oracle; a failed read reaches abstain, never exempt (INV-11) | 4 |
+| a void suite verdict is a third thing from a failing one (INV-12) | 2 |
+| health is three- or four-valued: converged / unconverged / unreachable (INV-13) | 2 |
+
+Cheap to check, expensive to retrofit: a model that types one guard as =Bool= has
+almost certainly typed them all that way. The existing high-water mark is
+=sim/pipeline_sim.py:63–80=, which gets the 8 and the 4 for guard 6 only, and
+loses the rest because its gates cannot go red at all (=:139–142=) [E].
+
+** 3. Verdicts in time — 18
+
+| what is being scored | points |
+|----------------------+--------|
+| every verdict names its build, non-nullably (INV-5) | 5 |
+| the guard compares to the head at reliance, not at issue (INV-6, INV-9) | 5 |
+| supersession: latest-per-name, not aggregate-over-history (INV-7, D15) | 4 |
+| observations are append-only; withdrawal is a new row (INV-8) | 2 |
+| the model states *which* guards have mutable subjects and exhibits a re-check edge for each (INV-9) | 2 |
+
+*Resetting a verdict on push scores zero for the first item.* Both TLA modules do
+that and neither has a hash; =tla/Labels.tla:59= and =:61= assert "THIS head" in
+comments about bare booleans. Only =sim/pipeline_sim.py= earns the 5 [E].
+
+** 4. The berth as a lease — 12
+
+| what is being scored | points |
+|----------------------+--------|
+| *every* terminal and early-exit path either releases the berth or leaves a live deadline — enumerated, not asserted (INV-3) | 5 |
+| the berth is a record with owner and deadline, not a holder id or a count (INV-2) | 3 |
+| preemption extends and staleness releases, as two edges selected by cause (INV-4) | 3 |
+| the singleton itself (INV-1), and *non-vacuously* (INV-27) | 1 |
+
+INV-1 is worth one point, and only if it can fail — =tla/StandardChange.tla:263=
+would score zero on it. INV-3 is worth five because the implementation violates
+it (§3.3) and =HELD-OUT.org= H4 predicts it will discriminate. INV-4 is worth
+three because *all three formal models get it backwards* (§5.6), so a model that
+gets it right has demonstrably read the spec rather than the models.
+
+** 5. Naming the unnamed — 10
+
+Two points each, awarded for a *name and a distinct representation*, not for a
+comment:
+
+| state | points |
+|-------+--------|
+| deployed-not-merged, and the three-fact version with the window gone | 2 |
+| stranded berth (held, window closed, nothing will release) | 2 |
+| unmeasurable (the instrument is not in the tree) | 2 |
+| vacuously green (no assertion covers the diff) | 2 |
+| forfeit-on-entry, with a closure code that is neither =failed= nor =expired= | 2 |
+
+Awarded only when the state is *distinguishable in the model's own vocabulary*.
+"It would be represented as =berthed= with =window = None=" is a zero — that is
+the tidy-and-wrong answer this section exists to catch.
+
+** 6. Refutability of the model's own guards — 8
+
+| what is being scored | points |
+|----------------------+--------|
+| every guard *and every invariant* has a mutation test: remove it, the check must go red — in all arms (INV-27) | 3 |
+| every guard names its oracle, the value it tests for, and whether that oracle has been observed to emit it (INV-28, D17) | 3 |
+| every negative test names the specific property it refuted, not "something failed" (INV-30) | 2 |
+
+A model scoring zero here has certified guard 0 and guard 6, both of which have
+refused nothing in this repository's life — and will have shipped its own
+=self.regressed= (=sim/pipeline_sim.py:305=) or its own vacuous
+=AtMostOneHolder= (=tla/StandardChange.tla:263=) without noticing.
+
+** 7. Honest scope — 7
+
+| what is being scored | points |
+|----------------------+--------|
+| states plainly which scenarios it *cannot* hold, and why — rather than silently mapping them onto states that look similar (the *N* column of §1) | 3 |
+| distinguishes safety from liveness, and names D7 and D12 as temporal properties it does not check | 2 |
+| marks unverified claims, and does not promote a property from the model to the world without a measurement (=spec.org:1822=) | 2 |
+
+=tla/StandardChange.tla:195–216= is the model answer for the first item: a dated,
+explicit KNOWN GAP block saying the module cannot express three-valued =deploys=
+and therefore cannot catch the defect both real implementations had. That block
+is worth more than the invariants around it.
+
+** Disqualifiers
+
+Independent of score. Each converts a silent failure into a certified one.
+
+1. *A boolean guard.* If any guard's codomain is ={true, false}=, the model
+   cannot express the class that fired at least six times here (=spec.org:2595=),
+   and every result it produces about refusals is suspect.
+2. *One =merged= bit.* Collapsing the record and the world makes D13
+   unrepresentable, and unrepresentability reads as proof.
+3. *=expired= modelled as a kind of =failed=*, or closure as a boolean. Loses the
+   only signal that says the slots are too short (=docs/interfaces.org:266=).
+4. *A classification that is also a lifecycle state.* One label asserting both
+   "an emergency is in flight" and "this change is exempt" is the defect that
+   took longest to find here (=spec.org:2820=) — and §5.1 shows =spec.org= still
+   commits it.
+5. *A verdict with no build.* (=spec.org:2629=.)
+6. *An invariant that cannot fail.* If a single invariant in the submission is
+   implied by the type invariant, the whole suite is suspect until each one is
+   mutation-tested.
+
+** Tie-breakers, in order
+
+1. The model that *names more of §3*. Naming is the graded skill
+   (=spec.org:2778=).
+2. The model whose guards and invariants are shown to refuse — by mutation, not
+   by argument.
+3. The model that is *smaller*, given equal coverage. =spec.org:87= is the
+   reminder: the machinery exists because a contract is missing, and a model that
+   makes the machinery look inevitable has reproduced the architecture's mistake
+   at one remove.
+4. The model that says what it cannot do.
+
+** The anti-pattern to watch for
+
+A model that is *more capable than the world*. It will look like the best
+submission: every guard has a refusing arm, every arm is exercised, the state
+graph is complete and connected. D17 is what that looks like from outside — a
+guard that has never refused anything, whose model exercises its refusal on every
+run. Ask of every refusing edge: *what real oracle emits the value on this edge,
+and has it ever?* A complete state graph over an oracle range nobody measured is
+a fiction with a coverage report.
+
+* 5. Where the existing artefacts already disagree
+
+Three artefacts: =spec.org= (which governs), the code, and =tla/=. Nine confirmed
+disagreements. The two I was asked to verify rather than trust are both real, and
+both broader than stated.
+
+** 5.1 The emergency label — CONFIRMED, and the stale name is undeclared
+
+*=change:emergency= has no row in =change/label-owners.tsv=.* It is not a
+deprecated name; it is an *undeclared* one. The declaration has, at =:55=:
+
+#+begin_example
+itil:emergency	human	yes	yes	yes	bypasses the queue; a person must own declaring an emergency
+#+end_example
+
+and the class exclusion group at =:86= is
+=itil:standard itil:normal itil:emergency=. The rename is dated in the file's own
+comment at =:63=: "SPLIT 2026-09-13: classification moved to =itil:*= and
+=change:*= now holds only the lifecycle."
+
+*=spec.org= never adopted the split.* It uses =change:emergency= twenty times and
+=itil:emergency= once, and contains *zero* occurrences of =itil:standard= or
+=itil:normal= [E]. The load-bearing sites:
+
+- =spec.org:145= — the =authorization= row of the §Domain model entity table
+- =spec.org:713= — the §Labels table, the authoritative label list
+- =spec.org:890= — the state-machine diagram's bypass edge
+- =spec.org:901= — "the only thing that can state it is =change:emergency="
+- =spec.org:955= and =:1342= — the reference implementations of =queue.sh= and
+  =release.sh=
+- =spec.org:1230=, =:1234=, =:1250= — §Emergency, the only bypass
+- =spec.org:1550=, =:1551=, =:1554= — the =deploy-production.yml= skeleton
+- =spec.org:2251=, =:2252=, =:2254=, =:2308=, =:2863=
+
+The one =itil:= line is =spec.org:2814=, in §Nomenclature — the 0.5 section, and
+specifically the row that draws the classification/lifecycle distinction.
+
+The shipped counterparts of those three code blocks all say =itil:=:
+=change/queue.sh:8=, =change/release.sh:12=,
+=.github/workflows/deploy-production.yml:35–39=, plus =change/activate.sh:158=,
+=:220= and =gates/preflight.sh:167=.
+
+*The divergence is operative, not cosmetic.* =gates/preflight.sh:167= uses
+=grep -cx 'itil:emergency'= — an exact whole-line match. A PR carrying
+=change:emergency=, exactly as =spec.org:713= specifies, *would not match*, and
+would be treated as an ordinary change by the one script that reads the calendar.
+
+*=tla/StandardChange.tla= contradicts itself inside one module, on one variable.*
+=:29= is the declaration of the model's state variable:
+
+#+begin_example
+    emergency,    \* emergency[p]: change:emergency present
+#+end_example
+
+and =:126= reasons about the same variable as "=itil:emergency= is a statement".
+One module, one variable, two names, only one of which is declared anywhere.
+=tla/Concurrent.tla:190= is pre-rename throughout and cites =spec.org= as its
+source at =:120=, which explains the inheritance. =tla/Labels.tla= is post-rename
+throughout and cites =label-owners.tsv= by name at =:142= [E].
+
+*The code is not uniform either*, so the brief's "every implementation uses
+=itil:emergency=" holds for the promotion path and not elsewhere:
+=status:28= — a live executable at the repository root — hardcodes
+=EMERGENCY = "change:emergency"=; =sim/speedrun.py:135= instructs the reader to
+add =change:emergency=; =experiments/016-dora/derive.py:85= treats
+=change:standard|normal|emergency= as the classification set while =:379= prints
+a note about normalising this very divergence. =scenarios.org= uses both, in one
+file: =:113=, =:114=, =:138= say =change:emergency=; =:259=, =:298=, =:340= say
+=itil:emergency= [E].
+
+*Why it is more than a rename.* =spec.org:2308= lists =change:emergency= in the
+*request* row of the three-kinds-of-label table, placing the emergency
+authorization inside the =change:*= namespace that =spec.org:2810= and
+=README.org:189= both declare to be the *lifecycle* namespace. The stale name is
+not merely old: it is the precise collapse §Nomenclature identifies as "the
+distinction that carries the most weight", surviving sixteen hundred lines
+earlier in the document that identifies it.
+
+*And the spec is missing the distinction the declaration makes.*
+=change/label-owners.tsv:54= declares a *second*, unprefixed =emergency= label as
+estate state, explicitly separate from =itil:emergency= and granting no exemption
+to its carrier. =spec.org= has no such label. Its §Nomenclature does draw the
+distinction in prose (=:2812–:2814=, "emergency (estate)" vs "itil:emergency"),
+but its label table (=:702–:725=) has one emergency label doing both jobs. The
+governing document is behind the implementation on the very point it identifies
+as most important.
+
+*Consequence for the five models.* A model built from =spec.org= encodes the
+emergency authorization as a lifecycle state and has one emergency concept. A
+model built from the declaration has two concepts in two namespaces. These are
+*different state machines*.
+
+** 5.2 =hold:staging= — CONFIRMED, at four sites, and the auditor is blind to it
+
+=change/label-owners.tsv:35= declares it with owner =REJECTED=, =persistent=no=,
+=human_add=no=, =human_rm=no=, and a note dated 2026-09-13.
+
+It is read and enforced at *three* sites:
+
+- =change/guard4.sh:196= — a =FAIL= arm on the production authorization guard,
+  feeding =rc=1= into =exit "$rc"= at =:202=
+- =change/activate.sh:320= — read at =:320=; =:321–:332= is a whole terminal
+  branch with its own PR comment and closure code =held=, presented at
+  =:301–:318= as current design ("guard 4c") citing ADR 0001, with *no mention
+  that the label is rejected*
+- =gates/preflight.sh:310–316= — the third site, and the *only* one that records
+  the rejection: =:310–:313= explains it and =:316= refuses on the label anyway,
+  deliberately ("removing the check would be more dangerous than keeping it")
+
+And it is *written* at a fourth: =deploy-run:45= adds it and =:51= removes it,
+against =human_add=no= / =human_rm=no= / owner =REJECTED=, with a comment at
+=:40–:43= presenting it as "the one human stop" and citing a README section that
+no longer says that [E].
+
+*The enforcer cannot see this.* =gates/label-audit.py= — the script
+=change/label-owners.tsv:11= names as its enforcement — special-cases the
+tombstone value =RETIRED= at =:102= and =:115= and *never mentions =REJECTED=*
+[E]. The declaration has two tombstones and the auditor knows one.
+
+Three further consequences:
+
+- =change/settle.sh:244–250= does not clear =hold:staging=, despite
+  =persistent=no=. A hold survives settlement.
+- *=spec.org= never mentions =hold:*= at all* — zero occurrences [E]. The
+  governing document has no opinion on a label four scripts touch.
+- No TLA module carries it, so the conflict is entirely unmodelled and no
+  model-check can surface it.
+
+=README.org= carries both positions: =:232–:254= says it is rejected and lists
+the four real human stops; =:255–:303= preserves the original argument under a
+"Superseded" heading. That is the correct way to retire a design. The four
+scripts are not.
+
+*This is not a stale-comment problem.* §3.3 shows the rejected label is the
+shortest path to the stranded berth, so the repository is enforcing semantics it
+has declared dead, on a path with no release edge.
+
+** 5.3 D16 is recorded as fixed and is live on the two most consequential lines
+
+=scenarios.org:575=: "All five now capture the output, test the status, and print
+afterwards." =spec.org:2651= states the class as a rule.
+=change/activate.sh:71–90= carries a twenty-line comment explaining the defect and
+defines =indent()= at =:86–:90= to fix it.
+
+In the same file, under =#!/bin/sh= with =set -eu= and *no* =pipefail= [E]:
+
+- =change/activate.sh:341= — =./targets/bastille/deploy.sh production "$SHA" | sed 's/^/   /'=
+  — the *production deploy*. Status is =sed='s. =ok "both production replicas <- $SHA"=
+  at =:343= fires unconditionally.
+- =change/activate.sh:351= — =./targets/bastille/front/switch.sh "$IDLE" | sed 's/^/   /'=
+  — the *atomic cutover*. Same shape; =ok= at =:352= fires unconditionally.
+- =change/activate.sh:258= — =./change/schedule.sh check "$EVENT" | sed 's/^/   /' || die "the window is inside a freeze"=
+  — this is *guard 3*, the freeze check on the activation path. The =||= binds to
+  the pipeline, whose status is =sed='s, which always succeeds. *The =die= at
+  =:258= cannot fire.* The file's own comment at =:75= describes exactly this:
+  "even the =|| die= written at guard 5 could never fire, because the =||= bound
+  to the pipeline and not to the gate."
+
+The staging deploy three sections earlier *is* converted (=:288= uses =indent=
+with =|| die=), as is every gate call. The conversion stopped before the
+production half.
+
+So =scenarios.org= claims the class is eliminated, =spec.org= states it as a rule,
+the file states it as a rule in its own header, and the production deploy, the
+production cutover and the activation-path freeze guard are all still in the
+defective shape. =spec.org:2759= predicted this — "the taxonomy is recursive...
+each rule has been violated by the code written to enforce it" — and the
+prediction is currently true of the rule's own file.
+
+** 5.4 Guard 6 is three-valued in the spec, three-valued in the simulator, and two-valued in the guard
+
+=spec.org:212=: "=deploys(c)= is three-valued, never a set that may be empty",
+with a table at =:214–:218= requiring =indeterminate → abstain — exit 4, blocks=.
+=spec.org:207= names the defect by its exact line: "here:
+=groups.sh "$pr" 2>/dev/null || true= — a forge that could not answer produced the
+empty set, and the guard exempted the change."
+
+That line is still there: =gates/production-first.sh:39=. The exemption it feeds
+is still there: =:65–:68= returns =exit 0= with "no =app:*= labels -- nothing
+deploys, so nothing to wait for". There is *no =exit 4= anywhere in the file* —
+the only exits are 0 at =:67=, =:74=, =:100= and 1 at =:151= [E].
+
+=change/guard4.sh= is the same shape: =rc=0= at =:66=, =rc=1= at seven sites,
+=exit "$rc"= at =:202=. The guard that authorizes production is strictly
+two-valued, against =spec.org:2740= and =docs/exit-codes.org:15=.
+
+*Meanwhile =sim/pipeline_sim.py:63–80= implements the three-valued version
+correctly* — a =Deploys= enum with =SOME=, =PROVABLY_NONE=, =INDETERMINATE=, a
+docstring that explains why a possibly-empty set is the wrong representation, a
+blocking default in =__post_init__= (=:99–:104=), and three arms in =_finish=
+(=:240–:258=) [E]. So the simulator models the spec and the shell guard does not,
+and *the two disagree about the same guard in the same repository*. A model
+builder reading §Guard 6 plus =sim/= will believe guard 6 is three-valued here.
+It is not, on the path that runs.
+
+** 5.5 Guard 6 is in one of =spec.org='s two guard tables and not the other
+
+=spec.org:175–181= — §The guards as predicates — lists 0, 1, 2, 4, 4b, 5 and *6*.
+
+=spec.org:903–911= — §The guards, the operational table with "Checked by" and
+"Emergency bypass" columns — lists 0, 1, 2, *3*, 4, 4b, 5 and *not 6*.
+
+Neither is marked as a subset of the other, and they differ by two members in
+opposite directions. A model built from the first implements production-first and
+no schedule check; from the second, a schedule check and no production-first.
+=spec.org:187= acknowledges guard 6 was "added 2026-09-14 after it was found
+missing" — the fix added it to one table.
+
+** 5.6 All three formal models steal the berth, against the spec and two docs
+
+=spec.org:1156=: "*The berth is never taken away by someone else's merge.*"
+=spec.org:1157–:1158= names berth-withdrawal as "the correction scenario D4's
+first fix got wrong". =spec.org:1164–:1169= gives the two edges: self-inflicted
+releases, preemption keeps the berth with =revalidate= and an extended deadline.
+=docs/idp-api.org:173=: "*Nothing may evict a berth holder.*"
+=docs/adr/0003-scheduling-is-a-separate-component.org:28=: "no priority, *no
+preemption*, no automatic reslotting."
+
+All three models implement the un-corrected version [E]:
+
+- =sim/pipeline_sim.py:214–215= — =_activate= calls
+  =self._release(c, "trunk moved: ... (guard 4b)")=, so a *preempted* change
+  loses its slot and takes a forfeit. The same file's =_finish= sweep at
+  =:274–:277= is correct — it only nulls =other.staged_at= and keeps the window.
+  *The two preemption paths in one file disagree with each other.*
+- =tla/StandardChange.tla:245= — =MainMoved= sets
+  =holder' = IF holder # NoPR /\ base[holder] < mainV THEN NoPR ELSE holder=.
+- =tla/Labels.tla:292–302= — =Evict(e,h)= strips the holder's =berth=,
+  =scheduled=, =booking=, =verdict= and =uat=.
+
+And the =Labels= case is *checked in the rejected direction*:
+=tla/Labels.cfg:15= sets =EmergencyPreempts = TRUE= and =:21= checks
+=EmergencyNeverWaits=, so the verified model asserts that preemption always
+happens — the side ADR 0003 rejects [E]. This is acknowledged as open elsewhere
+(=README.org:385=, =docs/label-state-machine.org:93=), but the configuration as
+shipped verifies the wrong arm.
+
+*This is the single most useful thing in §5 for the five builders*: INV-4 is a
+place where reading the models will actively mislead them, and only reading
+=spec.org:1156= gets it right.
+
+** 5.7 The two TLA modules disagree about what break-glass costs
+
+=tla/StandardChange.tla:160=, =:180=, =:220= all require
+=(emergency[p] /\ approved[p])=, and =NoSilentBypass= (=:274–:275=) states the
+rule with the approval conjunct.
+
+=tla/Labels.tla:332–336= — =Promote= — grants the break-glass arm on
+=IsEmergency(p)= alone. *There is no =approved= variable in =Labels.tla= at all*
+[E]. Its comment at =:329–:330= claims it is "the break-glass path of
+StandardChange.tla"; it is strictly weaker. =sim/label_sim.py:149= has the same
+weakening.
+
+Worse: =Labels.tla:333–:335= requires only =berth[p]= for the emergency arm, so an
+emergency can reach =prodAct= with =verdict = "fail"=. =StandardChange.tla:271='s
+=NoRedGatesShipped= exists precisely to forbid that and is documented at =:270= as
+having "NO emergency bypass". =Labels.tla= has no analogue: *a failing gate never
+blocks anything in that model*. =spec.org:913= is unambiguous — "Guard 2 and guard
+5 have no bypass at all" — and D3's headline assertion (=scenarios.org:127=) is
+exactly this case.
+
+** 5.8 =spec.org= contradicts itself on the port map, in the direction it just corrected
+
+=spec.org:462–472= — the tier table, amended 2026-09-13 with the amendment
+recorded at =:474–:485= — says =9100–9199= is *team*, "cannot promote", and
+=:491= says "anything at 9100–9199 is a dead end by construction". =9200=
+staging, =9210= blue, =9220= green, =9230= front.
+
+=spec.org:523–531= — sixty lines later in the same file — says "=9100–9109=
+environment front routers: *9100 production*, 9101 staging, 9102+ team", and
+=:531= gives the block-10 ceiling's rationale as "rather than silently walking
+into 9100 and *taking the production router's port*".
+
+Flatly contradictory: 9100 is simultaneously a dead end by construction and
+production's address. The estate implements the first — =environments.tsv:10–12=
+and =:29–:36=, =envs:54–59=, =change/ports.sh:45–52= [E] — so =:523–:531= is the
+stale half, along with a rationale that now cites a port the spec calls a dead
+end.
+
+The amendment note at =:482= says this was "recorded rather than quietly corrected
+because *=spec.org= governs*... A spec that lags its implementation is the bug the
+verification contract exists to catch." The correction reached one table and not
+the other, which is the same defect one level down.
+
+** 5.9 Three checks in this repository cannot fail
+
+Class 7, in the artefacts written to enforce class 7 [E].
+
+1. *=sim/pipeline_sim.py:305=* — =assert not self.regressed=, the D4 invariant and
+   the simulator's headline claim. =self.regressed= is assigned exactly once, to
+   =False=, at =:129=, and is never set true anywhere in =sim/=. Two Hypothesis
+   tests rest on it: =sim/test_scenarios.py:58= and =:90=
+   (=test_emergency_never_strands_a_regression=). Both assert nothing.
+2. *=tla/StandardChange.tla:263=* — =AtMostOneHolder == holder = NoPR \/ holder \in PRs=
+   is =TypeOK:51= restated, so it is implied and cannot fail. It is in =Safety=
+   and therefore "checked". The comment at =:261–:262= admits it.
+3. *=tla/StandardChange.cfg:8=* — =INVARIANT Safety= checks only the conjunction,
+   so =tla/check.sh:21= and =:29= — two different negative tests, for
+   =NoRegression= and =NoMergeBeforeProduction= respectively — grep the identical
+   string =Error: Invariant Safety is violated=. Neither can tell which conjunct
+   broke; either could be passing on =TypeOK= or =NoDraftDeployed=.
+   =tla/check.sh:11–15= already records that the =Guard4b= negative silently
+   stopped failing once =ProdFirst= was added, which is exactly this coupling.
+   =tla/Labels.cfg:16–27= lists its eleven invariants individually so
+   =tla/check.sh:75= can name them — *the fix exists in the repository and was not
+   applied to the other module.*
+
+Also in this family, and smaller: =sim/pipeline_sim.py:139–142='s =run_gates=
+unconditionally sets =gated_at = head= and there is no =run_gates_fail=, so red
+gates are unrepresentable and =:302='s "completed with no gate run" is close to
+vacuous; and =tla/StandardChange.tla:87–91='s =GatesPass= likewise only ever sets
+=TRUE= [E].
+
+** 5.10 Declared labels nothing writes, and retired labels still written
+
+From =change/label-owners.tsv= against the whole tree [E]:
+
+- *=blocked:freeze=* (=:52=) — declared owner =gates/preflight.sh=. Zero
+  occurrences in any script, workflow, simulator or TLA module.
+  =gates/preflight.sh= never writes or reads it. The declaration names a writer
+  that does not write, and =spec.org:724= lists it as a live label.
+- *=change:backfill-owed=* (=:94=) — declared owner =change/abort.sh=.
+  =change/abort.sh= never references it. Zero occurrences outside the declaration
+  and one experiment note.
+- *=staging:passed= and =staging:failed=* (=:46–:47=) — declared *RETIRED*, "named
+  no measurement and no environment; replaced by the =staging:*= stack". They are
+  still written by =.github/workflows/deploy-staging.yml:30=, =:32=, read by
+  =.github/workflows/main-moved.yml:14=, gate =.github/workflows/promote.yml:8=,
+  and are added and removed by =change/activate.sh:298= and =:368=. *And
+  =spec.org= rests guard 4 on =staging:passed=*: it is the predicate
+  =staged(H(c))= at =:178=, the label table row at =:713=, the guard table row at
+  =:909=, and the state-machine edge at =:888=. =change/guard4.sh:4= opens by
+  saying "Guard 4 *used to* ask one question: is =staging:passed= present?" — past
+  tense — and the live guard reads the =staging:e2e= / =staging:uat= observation
+  stack instead (=:22=, =:189=). *The governing document's central authorization
+  predicate names a retired label.*
+- *=deployed:production=* (=:48=) — declared RETIRED, still added by
+  =.github/workflows/deploy-production.yml:51=.
+- *=itil:standard=* (=:26=) — declared owner =labeller=; =.github/labeler.yml=
+  emits =app:*=, =control-plane= and =itil:normal= (=:91=) and *never emits
+  =itil:standard=*, while =:86= requires exactly one class label. The complement
+  is applied by a separate shell step in =.github/workflows/labeller.yml:44–48=,
+  which is the arrangement =spec.org:775= describes — so this one is a
+  documentation defect in the declaration's owner column, not a live gap.
+
+The declaration also has a layout defect: rows =:92–:94= (=change:failed=,
+=change:backed-out=, =change:backfill-owed=) sit *below* the exclusion-group
+header at =:85=, so a parser keying on position rather than on field count will
+mis-read them.
+
+* 6. What I did not verify
+
+- The refusal counts in D17 — 0 of 14 PRs, 484 runs — are from
+  =scenarios.org:620–630= and =spec.org:2690–2693=. Not re-measured against the
+  forge, per the read-only constraint. [H]
+- =gates/preflight.sh= beyond =:167= and =:310–:316=. It is 335 lines and is the
+  one script that reads the calendar; its three-valuedness is asserted by
+  =docs/exit-codes.org= and not checked by me. [H]
+- =tla/Concurrent.tla= beyond =:120= and =:190=.
+- Whether =gates/label-audit.py= would in fact flag =deploy-run='s
+  =hold:staging= writes: =:105='s behaviour depends on =owner_of("deploy-run")=,
+  which I did not trace. The =REJECTED=-blindness at =:102= and =:115= is
+  confirmed; the downstream consequence is [I].
+- The five models. They do not exist yet.
+
+* 7. The one-sentence version
+
+A model of this pipeline whose only primitive is the pull request will score well
+on §4.4 and the disqualifier list, name none of §3, and certify guard 0 — which
+is what =spec.org:2769= calls the point: *the failures are silent*, and a tidy
+state machine is the quietest place yet found to put one.
