@@ -230,12 +230,27 @@ def selftest(groups, retired, declared) -> int:
         ("I3b a tombstone with no closure code", "tombstone-without-closure",
          [P(1, "change:end")]),
     ]
+    # I6 needs the calendar, so it is driven separately.
+    i6 = [
+        ("I6 a window held by a change with no label", "booking-without-label",
+         [P(1, "app:core")], {"1"}),
+        ("I6 a label claiming a window that does not exist", "label-without-booking",
+         [P(1, "change:scheduled")], set()),
+        ("I6 label and booking agree", None,
+         [P(1, "change:scheduled")], {"1"}),
+    ]
     bad = 0
     for name, kind, state in cases:
         got = {f["kind"] for f in audit(state, groups, retired, declared)}
         ok = kind in got
         print(f"  {'ok  ' if ok else 'BAD '} {name:<38} -> {kind if ok else sorted(got) or 'nothing'}")
         bad += 0 if ok else 1
+    for name, kind, state, booked in i6:
+        got = {f["kind"] for f in audit(state, groups, retired, declared, booked)}
+        ok6 = (kind in got) if kind else not (got & {"booking-without-label", "label-without-booking"})
+        print(f"  {'ok  ' if ok6 else 'BAD '} {name:<46} -> {kind or 'no I6 finding'}")
+        bad += 0 if ok6 else 1
+
     fresh = audit([P(1, "change:end", age=5)], groups, retired, declared)
     okf = not fresh
     print(f"  {'ok  ' if okf else 'BAD '} {'GRACE: a settle in flight is not a finding':<38} -> "
@@ -248,7 +263,7 @@ def selftest(groups, retired, declared) -> int:
           f"{'no findings' if ok else [f['kind'] for f in got]}")
     bad += 0 if ok else 1
     bad += 0 if okf else 1
-    print(f"  pr-state-audit self-test: {len(cases)+2} cases, {bad} wrong")
+    print(f"  pr-state-audit self-test: {len(cases)+len(i6)+2} cases, {bad} wrong")
     return 1 if bad else 0
 
 

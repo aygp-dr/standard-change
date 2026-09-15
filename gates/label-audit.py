@@ -1,3 +1,13 @@
+    # NOTE, 2026-09-15. ruff F841 flagged `undeclared` here as assigned and
+    # never used, and it looked like a dead check. It is not: the per-file loop
+    # above already reports the same fact -- "writes 'X', which is NOT DECLARED
+    # in change/label-owners.tsv" -- at the point it reads each file, where it
+    # can also name WHICH file. This set was a second way to compute one fact,
+    # and the second way was worse because it had lost the filename.
+    #
+    # Deleted rather than wired up. I wired it up first and it duplicated every
+    # finding, which is the defect this file's own failure text warns about:
+    # two writers, one fact.
 #!/usr/bin/env python3
 """label-audit.py -- every label write in this repo must be by its declared owner.
 
@@ -108,7 +118,11 @@ def main():
 
     # Persistence: settle.sh must clear every transient label and no persistent one.
     settle = (ROOT / "change" / "settle.sh").read_text()
-    cleared = set(re.findall(r"--remove-label\s+\"?\$?l\"?", settle))
+    # `cleared` was a second, weaker way of asking the same question as
+    # `listed` below -- it matched the --remove-label call rather than the loop
+    # it sits in, so it could only ever say "settle clears SOMETHING". Removed
+    # rather than reported: two ways to compute one fact is the defect this
+    # file warns about in its own failure text.
     clear_list = re.search(r"for l in (.*?); do", settle, re.S)
     listed = set(clear_list.group(1).split()) if clear_list else set()
     for label, row in decl.items():
@@ -159,6 +173,15 @@ def main():
                                  f"the other -- mutually exclusive in group "
                                  f"'{name}'. One change, one class.")
 
+    # A LABEL THE TREE WRITES THAT NOTHING DECLARES. This set was computed here
+    # and never reported -- the check existed and produced no verdict, which is
+    # the defect class this gate is for. Found 2026-09-15 by ruff F841 (assigned
+    # and never used), not by reading.
+    #
+    # It matters: staging:deployed, staging:healthy, production:deployed,
+    # change:end and staging:hold were all written by scripts and live on the
+    # forge for hours before any declaration named them. This is the check that
+    # was supposed to say so, and it was silent because its answer went nowhere.
     undeclared = {l for l in writes if matches(l, decl) is None}
     for name, members in groups.items():
         missing = members - set(decl)
