@@ -1,0 +1,104 @@
+#+TITLE: Augmenting a repository with change-control tracking labels, without thrashing the labels it has
+#+DATE: 2026-09-15
+
+* What a repository must already have
+
+Three things, under whatever names it uses. Nothing here renames them.
+
+| it has                                 | here it is called   | examples elsewhere                                              |
+|----------------------------------------+---------------------+-----------------------------------------------------------------|
+| a risk designation on a change         | class, =itil:*=     | =risk:high=, =type:hotfix=, a Jira priority, a CAB category     |
+| a concept of "something deployable"    | unit, =app:*=       | =component:*=, =area:*=, a CODEOWNERS path, a monorepo package  |
+| pipelines that govern deployment       | the actions         | workflows, a CD service, a deploy script a person runs           |
+
+The first two are the repository's own labels. They are *inputs* to change
+control and never its state: derived from the diff or declared by a person,
+written by the repository's own labeller, replaced by it on the next push.
+The boundary is stated in full in the rebuild issue on namespace boundaries
+(2026-09-15) and it is the one rule that keeps augmentation from becoming
+replacement: *nothing in the tracking layer adds, removes or repairs a label
+in those two namespaces.*
+
+* The mapping, not the rename
+
+One table, kept in the repository, says how the tracking layer reads the
+labels it does not own. Conceptually:
+
+| tracking concept | read from                      | how                                                          |
+|------------------+--------------------------------+--------------------------------------------------------------|
+| standard         | their risk designation         | the values they call routine, pre-approved, low               |
+| normal           | their risk designation         | the values that need a window or an approval                  |
+| emergency        | a person's declaration         | a label a person adds; never derived                          |
+| unit             | their deployable's label       | one or more; drives which gates and which targets             |
+| environments     | their tiers                    | named as *places* (a port, a host, a slot), not runtime modes |
+
+If the repository has no risk designation, the labeller's rule is the one
+here: derive standard or normal from what the diff touches, and let a person
+declare an emergency. If it has one, map it and leave it alone.
+
+* The tracking layer that is added
+
+Prefixed however the repository prefers; the words are what matter.
+
+| axis        | labels                                                       | written by                | cleared by                     |
+|-------------+--------------------------------------------------------------+---------------------------+--------------------------------|
+| intent      | =change:start=, =staging:hold=                               | a person                  | the pipeline on consuming them |
+| lifecycle   | =change:scheduled=, =change:complete=                        | the scheduler, settlement | settlement                     |
+| action      | =deploy:<env>=, =<env>:deployed=                             | the driver, a workflow    | settlement, abort, the reaper  |
+| observation | =<env>:<instrument>= (=healthy=, =e2e=, =smoke=, =uat=)      | the instrument that took it | on the next push, settlement |
+| blocked     | =blocked:<reason>=                                           | the guard that refused    | the same guard when it passes  |
+| closure     | =change:failed=, =change:backed-out=, =change:abandoned=, =change:backfill-owed= | abort, a person | nobody                    |
+| end         | =change:end=                                                 | a person or the pipeline  | it is the act of clearing (#122) |
+
+Two words are a person's: =change:start= and =staging:hold=. Everything else
+is written by the thing that knows the fact, and an observation is written
+only by the instrument that measured it (=docs/label-ownership.org=,
+experiments 014 and 023 F4).
+
+* Every decision, with its options and where each was watched
+
+The point of the research directory. A repository adopting the layer chooses
+per row; the rows are independent.
+
+| decision                       | options                                                                                                   | chosen here, and what was seen                                                                                          |
+|--------------------------------+-----------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------|
+| the berth (one change at a time) | a label · a lease record with owner and deadline · a commit status · a merge queue · an environment protection rule | label + record; two operators could not tell whose it was (D21, 022, 023 F3)                                          |
+| the final gate (merge)         | the host settles and merges · auto-merge on required commit statuses (#109) · a merge queue (#102)         | host settles; the runner cannot see the estate, so its refusal was noise until silenced (023)                            |
+| windows and the calendar       | none (bare-knuckle) · manual schedule, automated deploy · integrated scheduler · migrate to a release train | none for the grinds; the PIR records the deviation; small teams self-coordinate (pipeline-history §options)              |
+| evidence of an observation     | PR comments with machine-readable markers · commit statuses · check runs from an App                       | comments with markers, keyed to the build sha (014); statuses proposed (#109)                                             |
+| the pipeline's identity        | the operator's token · a bot account · a GitHub App                                                        | operator tokens; a machine's removal is indistinguishable from a person's (023 F3, D21)                                   |
+| closing the estate             | labels on an estate issue · a repository variable · environment protection · a calendar freeze             | labels on issue #1: =freeze=, =emergency= (README §5b); the estate is a third subject (spec 0.5)                         |
+| a stale head                   | refuse and ask for a rebase · the forge updates the branch · a merge queue rebases                         | refuse livelocked against a trunk moving every four minutes; forge update-branch (023 F1)                                 |
+| acceptance (UAT)               | a person records it · the as-is journey replayed by a browser · none                                        | replay, recorded as replay; "a person accepted it" when none had was read by five of five owners (023 F4)                |
+| the end of a change            | a tombstone label · the merge is the record and =change:end= only clears · closure codes                   | the merge is the record (#122)                                                                                            |
+| a change that failed at staging | leave the markers · end the release and clean up                                                          | end and clean up; five unended releases left five dirty tickets (#103)                                                    |
+| ordering                       | PR number · time of intent · a booked window · a queue                                                    | PR number; the label carries no time, so who asked first is not on the list (023)                                         |
+| substrate for staging/production | jails · dev blocks on a laptop · a multi-app host (Vercel-shaped) · Cloudflare · static hosting            | jails on hydra, blocks on the mini (=substrate-emulation=, =hosting-survey=, =deployment-targets=)                        |
+| promotion model                | place · audience (blue-green, rings) · channel (re-tag)                                                    | place then audience: install on the idle colour, swap the front (=promotion-models=)                                       |
+| what a workflow may enforce    | GitHub Environments · required reviewers · branch protection · nothing (the host enforces)                 | the host; what CI can and cannot validate is in =ci-and-the-estate= and =github-environments=                             |
+| observing the human            | the PR list · the timeline · a dashboard · gossip between operators                                        | the PR list shows state, never history (D21); the timeline is where authorship lives                                       |
+
+* Augmenting in five steps
+
+1. *Do not rename.* Map the risk designation and the deployable label in the
+   table above. The audit that ships with this layer refuses any write to
+   those namespaces from any file but the repository's labeller.
+2. *Declare owners before writing a label.* One row per label: who writes it,
+   who clears it, whether a person may. The pattern is
+   =change/label-owners.tsv=; a label nobody owns is a label nobody can
+   trust (=label-ownership=).
+3. *Give the person one word.* =change:start=. Everything the pipeline needs
+   after that it derives or observes. A second human word is a second thing
+   to explain (023: eleven confusions, most of them words).
+4. *Let the instrument write the observation,* keyed to the build it saw. A
+   label with no build attached authorizes nothing (014).
+5. *End every release,* including the ones that fail: clear the working
+   labels, keep the closure code, leave the merge as the record.
+
+* What the models check
+
+The TLA+ module and the simulator (=label-state-machine=) check the tracking
+layer only: fifteen switchable rules, each with an invariant it protects,
+over two changes and one estate. The repository's own labels enter as
+constants (the class, the units). A rebuild that keeps the boundary can re-run
+both against its own scripts without modelling the labeller at all.

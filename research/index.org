@@ -1,0 +1,55 @@
+#+TITLE: standard-change: the history and the research
+#+SUBTITLE: Everything that was read, tried and found, assembled for a rebuild; none of the internals
+#+DATE: 2026-09-15
+#+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
+#+LATEX_CLASS: article
+#+LATEX_HEADER: \usepackage{fontspec}\setmainfont{Charter}\setmonofont{Menlo}[Scale=0.85]
+#+LATEX_HEADER: \usepackage[margin=2.2cm]{geometry}
+
+This document is the research directory of the repository, assembled by
+=#+INCLUDE= from the documents under =docs/= and =experiments/= so it can be
+rebuilt as HTML or PDF (=gmake research=). It covers what was read, what was
+tried and what was found. It leaves out the internals: the spec, the scripts,
+the gates, the shell review. A repository with a risk designation, something
+deployable and a pipeline that governs deployment can take the tracking layer
+described in Part V without touching the labels it already has.
+
+* Part I: How to read this, and how to adopt it
+#+INCLUDE: "adoption.org" :minlevel 2
+
+* Part II: History of the ideas
+#+INCLUDE: "../docs/pipeline-history.org" :minlevel 2
+#+INCLUDE: "../docs/release-strategies.org" :minlevel 2
+#+INCLUDE: "../docs/reference-survey.org" :minlevel 2
+#+INCLUDE: "../docs/five-properties.org" :minlevel 2
+#+INCLUDE: "../docs/release-standards.org" :minlevel 2
+#+INCLUDE: "../docs/promotion-models.org" :minlevel 2
+#+INCLUDE: "../docs/label-standards-survey.org" :minlevel 2
+#+INCLUDE: "../docs/precedence-and-locks.org" :minlevel 2
+#+INCLUDE: "../docs/deploy-ledger-comparison.org" :minlevel 2
+#+INCLUDE: "../docs/storefront-deployments.org" :minlevel 2
+
+* Part III: Substrates, hosting and what a platform can enforce
+#+INCLUDE: "../docs/substrate-emulation.org" :minlevel 2
+#+INCLUDE: "../docs/hosting-survey.org" :minlevel 2
+#+INCLUDE: "../docs/deployment-targets.org" :minlevel 2
+#+INCLUDE: "../docs/github-environments.org" :minlevel 2
+#+INCLUDE: "../docs/ci-and-the-estate.org" :minlevel 2
+#+INCLUDE: "../docs/ci-portability.org" :minlevel 2
+
+* Part IV: What was found
+#+INCLUDE: "../docs/label-ownership.org" :minlevel 2
+#+INCLUDE: "../docs/labels-are-the-only-channel.org" :minlevel 2
+#+INCLUDE: "../docs/concurrent-change.org" :minlevel 2
+#+INCLUDE: "../docs/label-state-machine.org" :minlevel 2
+#+INCLUDE: "../docs/reviewer-identity.org" :minlevel 2
+#+INCLUDE: "../docs/testing-problems.org" :minlevel 2
+#+INCLUDE: "../docs/time-spent.org" :minlevel 2
+
+* Part V: The experiments, in order
+#+INCLUDE: "../experiments/014-observation-records/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/016-dora/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/020-browser-uat/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/022-five-agent-grind/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/024-five-owners/notes.org" :minlevel 2
