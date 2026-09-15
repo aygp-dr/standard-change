@@ -1,8 +1,8 @@
 {
   "name": "@standard-change/oneui",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "type": "module",
   "private": true,
   "main": "oneui.js",
-  "description": "Shared UI surface. NOT an app: no routes.json, no port, nothing to deploy on its own. Every app depends on it, which is exactly why it lives outside apps/."
+  "description": "Shared UI surface. NOT an app: no routes.json, no port, nothing to deploy on its own. Every app depends on it, which is exactly why it lives outside apps/. `version` is a COPY of oneui.js's exported VERSION, which is the source; shared/tests/oneui.test.mjs fails if they drift. Nothing imports this file -- the apps import ../../../shared/oneui.js by path -- so this number constrains no dependency and pins no release."
 }
