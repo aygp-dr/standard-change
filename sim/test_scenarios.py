@@ -165,3 +165,41 @@ def test_guard6_exempts_only_on_positive_evidence():
                          deploys=Deploys.PROVABLY_NONE))
     assert c.state is State.COMPLETED, \
         "a change proven to deploy nothing was blocked by guard 6"
+
+
+# ---------------------------------------------------------------------------
+# The lock has an owner (D21). Each of these must FAIL if the owner check is
+# removed from World.release_berth -- absence of the bug is not an answer.
+# ---------------------------------------------------------------------------
+
+def test_berth_is_exclusive():
+    w = World()
+    assert w.claim_berth(None, "A") is True
+    assert w.claim_berth(None, "B") is False, "two operators held one berth"
+
+
+def test_a_foreign_release_is_refused_when_the_lock_is_owned():
+    w = World()
+    w.claim_berth(None, "A")
+    assert w.release_berth("B", owned=True) is False, \
+        "B released a lock A was holding"
+    assert w.berth_owner == "A", "A lost its berth to somebody else's release"
+
+
+def test_a_foreign_release_succeeds_when_it_is_not_and_is_counted():
+    """The observed behaviour, kept so the fix has something to be better than.
+
+    This is what happened on 2026-09-14: aygp-dr removed a deploy:staging that
+    jwalsh held, and its own log called it 'releasing the estate'.
+    """
+    w = World()
+    w.claim_berth(None, "A")
+    assert w.release_berth("B", owned=False) is True
+    assert w.swept == 1, "the sweep was not recorded, so nobody could know"
+
+
+def test_the_owner_may_always_release_its_own():
+    w = World()
+    w.claim_berth(None, "A")
+    assert w.release_berth("A", owned=True) is True
+    assert w.berth_owner is None

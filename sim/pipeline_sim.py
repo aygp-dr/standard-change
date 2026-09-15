@@ -118,6 +118,14 @@ class World:
         # running" are the two facts guard 6 exists to keep apart.
         self.in_prod = 0
         self.prod_reachable = True
+        # THE LOCK HAS AN OWNER. D21, 2026-09-14: three identities wrote one
+        # deploy:staging label and neither operator could tell whose it was,
+        # because a label has no owner field and --remove-label is the same
+        # call whether you release yours or take someone else's. Modelled as
+        # (holder, owner) so `release_berth` can refuse a foreign release, and
+        # `sweep_berth` can perform one on purpose.
+        self.berth_owner: str | None = None
+        self.swept = 0
         self.merges: list[tuple[int, Divergence]] = []
         self.berths = berths
         self.hold_slots = hold_slots
@@ -178,6 +186,30 @@ class World:
         c.window, c.state = s, State.SCHEDULED
         self._log(f"{c.chg} scheduled -> slot {s} ({self.fmt(s)})")
         return s
+
+    def claim_berth(self, c: "Change", operator: str = "driver") -> bool:
+        """Guard 1, with an owner. Returns False if somebody else holds it."""
+        if self.berth_owner is not None:
+            return False
+        self.berth_owner = operator
+        return True
+
+    def release_berth(self, operator: str = "driver", owned: bool = True) -> bool:
+        """Release. With owned=True only the claimant may; that is the fix.
+
+        owned=False reproduces the observed behaviour: any operator may clear
+        the label, so a release and a theft are the same operation. Each one
+        that happens is counted, because the defect is not that the lock ends
+        up free -- it does -- but that the holder is never told.
+        """
+        if self.berth_owner is None:
+            return False
+        if owned and self.berth_owner != operator:
+            return False
+        if self.berth_owner != operator:
+            self.swept += 1
+        self.berth_owner = None
+        return True
 
     def _release(self, c: Change, why):
         if c.window is not None:
