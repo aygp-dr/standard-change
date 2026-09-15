@@ -123,7 +123,7 @@ def report(r):
 
 PLAN = {
  "submitted":            ("open a PR touching apps/<x>",
-                          "labeller attaches app:<x> and change:standard"),
+                          "labeller attaches app:<x> and itil:standard"),
  "window refused":       ("add change:requested while another change holds the berth",
                           "blocked:queue, and a comment naming the holder"),
  "gate red":             ("push a commit that fails a unit test",
