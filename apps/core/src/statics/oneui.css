@@ -5,7 +5,7 @@
    docs/cross-cutting-coupling.org, now with a network hop in it. */
 body { background: #fff; font: 14px/1.6 system-ui; margin: 0; padding: 40px }
 main { max-width: 40rem }
-code { background: #fff; padding: 2px 6px; border-radius: 3px }
+code { background: #fff3c4; padding: 2px 6px; border-radius: 3px }
 a    { margin-right: 10px; display: inline-block }
 h1   { margin: 0 0 4px }
 h2   { margin: 22px 0 2px; font-size: 17px }
