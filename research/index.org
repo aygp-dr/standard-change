@@ -3,8 +3,12 @@
 #+DATE: 2026-09-15
 #+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
 #+LATEX_CLASS: article
-#+LATEX_HEADER: \usepackage{fontspec}\setmainfont{Charter}\setmonofont{Menlo}[Scale=0.85]
-#+LATEX_HEADER: \usepackage[margin=2.2cm]{geometry}
+#+LATEX_HEADER: \usepackage{fontspec}\setmainfont{STIX Two Text}\setmonofont{Menlo}[Scale=0.82]
+#+LATEX_HEADER: \usepackage[letterpaper,margin=2cm]{geometry}\usepackage{ltablex}\keepXColumns\setlength{\tabcolsep}{3pt}
+#+LATEX_HEADER: \usepackage{xurl}\usepackage[htt]{hyphenat}\sloppy
+#+LATEX_HEADER: \makeatletter\def\verbatim@font{\ttfamily\footnotesize}\makeatother
+#+LATEX_HEADER: \usepackage{newunicodechar}\newunicodechar{→}{\ensuremath{\rightarrow}}\newunicodechar{←}{\ensuremath{\leftarrow}}\newunicodechar{↔}{\ensuremath{\leftrightarrow}}\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+#+LATEX_HEADER: \newunicodechar{≈}{\ensuremath{\approx}}\newunicodechar{≤}{\ensuremath{\leq}}\newunicodechar{≥}{\ensuremath{\geq}}\newunicodechar{≠}{\ensuremath{\neq}}\newunicodechar{⊆}{\ensuremath{\subseteq}}\newunicodechar{∈}{\ensuremath{\in}}\newunicodechar{∉}{\ensuremath{\notin}}\newunicodechar{∧}{\ensuremath{\wedge}}\newunicodechar{∨}{\ensuremath{\vee}}\newunicodechar{¬}{\ensuremath{\neg}}\newunicodechar{×}{\ensuremath{\times}}
 
 This document is the research directory of the repository, assembled by
 =#+INCLUDE= from =history/=, =substrates/=, =findings/= here and =experiments/= so it can be
