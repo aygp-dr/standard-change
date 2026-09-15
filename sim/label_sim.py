@@ -149,14 +149,14 @@ def actions(st, R):
             yield f"ResolveClass({p})", put(st, i, q._replace(cls=frozenset({"emergency"})))
         if q.draft:
             yield f"MarkReady({p})", put(st, i, q._replace(draft=False))
-        if not q.release:
+        if not q.release and not q.unaff:   # nothing to release
             yield f"AddRelease({p})", put(st, i, q._replace(release=True))
         if q.release:  # watch.sh:37-38
             life = q.life if (R["LifecycleExclusive"] and "scheduled" in q.life) else q.life | {"requested"}
             yield f"Watch({p})", put(st, i, q._replace(release=False, life=life))
-        if "requested" not in q.life and "scheduled" not in q.life:
+        if "requested" not in q.life and "scheduled" not in q.life and not q.unaff:
             yield f"Request({p})", put(st, i, q._replace(life=q.life | {"requested"}))
-        if "scheduled" not in q.life:  # schedule.sh block:257
+        if "scheduled" not in q.life and not q.unaff:  # schedule.sh block:257
             life = ((q.life - {"requested"}) | {"scheduled"}) if R["LifecycleExclusive"] else q.life | {"scheduled"}
             for b in ("queued", "designated"):
                 yield f"Book({p},{b})", put(st, i, q._replace(life=life, booking=b))
@@ -225,9 +225,10 @@ def actions(st, R):
         # release:unaffected -- a person's claim that the estate is untouched; the only
         # act left is the merge, and only when the labeller agrees (no app:*).
         # A claim that contradicts the labeller is withdrawn by a person. [UnaffectedMerges]
-        if not q.unaff:
+        # said FIRST, about a change nothing else has been said about (also what keeps the space checkable)
+        if not q.unaff and not q.life and not q.release and q.booking == "none" and not q.berth:
             yield f"DeclareUnaffected({p})", put(st, i, q._replace(unaff=True))
-        if q.unaff:
+        if q.unaff and not q.merged:
             yield f"WithdrawUnaffected({p})", put(st, i, q._replace(unaff=False))
         if q.unaff and not q.draft and not q.berth and (not R["UnaffectedMerges"] or not q.unit):
             yield f"MergeUnaffected({p})", put(st, i, q._replace(merged=True, pir=True, cleaned=True, life=frozenset(),

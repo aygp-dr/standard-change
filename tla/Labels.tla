@@ -222,7 +222,7 @@ MarkReady(p) ==
 
 \* A person adds release -- intent (README.org, Adding a label and removing it).
 AddRelease(p) ==
-    /\ Open(p) /\ ~release[p]
+    /\ Open(p) /\ ~release[p] /\ ~unaffected[p]
     /\ release' = [release EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, booking, berth, stgDeployed, stgHealthy, hold,
                    prodAct, prodDeployed, verdict, uat, healthy, closed, served,
@@ -249,7 +249,7 @@ Watch(p) ==
 
 \* A person adds change:requested directly (label-owners.tsv: human).
 Request(p) ==
-    /\ Open(p) /\ "requested" \notin life[p] /\ "scheduled" \notin life[p]
+    /\ Open(p) /\ "requested" \notin life[p] /\ "scheduled" \notin life[p] /\ ~unaffected[p]
     /\ life' = [life EXCEPT ![p] = @ \cup {"requested"}]
     /\ UNCHANGED <<class, draft, release, booking, berth, stgDeployed, stgHealthy,
                    hold, prodAct, prodDeployed, verdict, uat, healthy, closed, served,
@@ -259,7 +259,7 @@ Request(p) ==
 
 \* change/schedule.sh block:257 -- book a window, queued or --at.
 Book(p) ==
-    /\ Open(p) /\ "scheduled" \notin life[p]
+    /\ Open(p) /\ ~unaffected[p] /\ "scheduled" \notin life[p]
     /\ \E b \in {"queued", "designated"} : booking' = [booking EXCEPT ![p] = b]
     /\ life' = [life EXCEPT ![p] =
                   IF LifecycleExclusive THEN (@ \ {"requested"}) \cup {"scheduled"}
@@ -657,7 +657,11 @@ Abort(p) ==
 (* and the labeller agreed. [UnaffectedMerges]                              *)
 (***************************************************************************)
 DeclareUnaffected(p) ==
-    /\ Open(p) /\ ~unaffected[p]
+    \* Said FIRST: about a change nothing else has been said about. (Also what
+    \* keeps the state space checkable: unaffected is a small subtree, not a
+    \* flag over every state -- the unpruned model passed 113M states and
+    \* filled the disk on 2026-09-15.)
+    /\ Open(p) /\ ~unaffected[p] /\ life[p] = {} /\ ~release[p] /\ booking[p] = "none" /\ ~berth[p]
     /\ unaffected' = [unaffected EXCEPT ![p] = TRUE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
@@ -667,7 +671,7 @@ DeclareUnaffected(p) ==
 
 \* A person withdraws the claim (the labeller says the diff touches a unit).
 WithdrawUnaffected(p) ==
-    /\ Open(p) /\ unaffected[p]
+    /\ Open(p) /\ unaffected[p] /\ ~merged[p]
     /\ unaffected' = [unaffected EXCEPT ![p] = FALSE]
     /\ UNCHANGED <<class, life, draft, release, booking, berth, stgDeployed,
                    stgHealthy, hold, prodAct, prodDeployed, verdict, uat, healthy,
