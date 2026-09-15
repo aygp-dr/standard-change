@@ -1,0 +1,9 @@
+Timeline
+- 13:16Z TLC (17 rules, unpruned) died: "No space left on device" at 113,161,897 distinct states, depth 20, 21.6M queued; tla/states was 7.3 GB and the volume was at 100%.
+- Pruned DeclareUnaffected (first word only), WithdrawUnaffected (not after merge), AddRelease/Request/Book refuse an unaffected change; frames regenerated.
+
+Reproduction
+  python3 sim/label_sim.py --bound 6 --walks 0 --disable Interfere        -> 502,995 states (was 817,683)
+  python3 sim/label_sim.py --bound 8 --walks 0 --disable Interfere --disable UnaffectedMerges -> VERDICT violated UnaffectedNeverDeploys
+  TLC NoUnaffected -> Invariant UnaffectedNeverDeploys is violated
+  TLC Labels (positive) -> restarted 13:23Z with a 2 GB disk guard; result appended when done
