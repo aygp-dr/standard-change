@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import datetime, timezone
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -65,6 +66,13 @@ DECL = Path(__file__).resolve().parent.parent / "change" / "label-owners.tsv"
 # Labels that assert the change is FINISHED. An open PR carrying one is
 # claiming a closure it has not reached.
 TERMINAL = {"change:end", "change:complete", "change:failed", "change:backed-out"}
+# change:end is the TOMBSTONE -- it says cleanup ran. It does not say what the
+# change DID. These do, and one of them must accompany it.
+CLOSURE = {"change:complete", "change:failed", "change:backed-out"}
+# A settle briefly holds change:end on a PR that is open, between the label
+# write and the merge landing. That window is about a second. Sixty is
+# generous and still catches everything that matters.
+GRACE_S = 60
 # Labels that assert the change is MOVING right now.
 IN_FLIGHT = {"deploy:staging", "deploy:production", "staging:in-progress",
              "change:scheduled", "change:start"}
@@ -105,11 +113,34 @@ def audit(open_prs, groups, retired, declared):
         held = [p["n"] for p in open_prs if lab in p["labels"]]
         if len(held) > 1:
             add("singleton", f"{len(held)} open PRs carry `{lab}` -- {what} admits one", held)
+    # I3, with a grace window. A settle holds change:end on an open PR for about
+    # a second between writing the label and the merge landing; firing on that
+    # would train a reader to ignore the check. Past GRACE_S it is a real
+    # finding: the change is closed and still open.
     for lab in sorted(TERMINAL):
-        carry = [p["n"] for p in open_prs if lab in p["labels"]]
+        carry = [p["n"] for p in open_prs
+                 if lab in p["labels"] and (p.get("age_s") is None or p["age_s"] > GRACE_S)]
         if carry:
             add("terminal-on-open",
-                f"`{lab}` asserts the change is finished, on {len(carry)} OPEN PR(s)", carry)
+                f"`{lab}` asserts the change is finished, on {len(carry)} OPEN PR(s) "
+                f"idle > {GRACE_S}s", carry)
+
+    # AND THE PART NOBODY CAN RESOLVE FROM THE LABELS. change:end is the
+    # tombstone -- it records that cleanup RAN. It does not record what the
+    # change did. Without a closure code beside it, an open PR carrying it is
+    # unresolvable: it might need resubmitting (failed, backed-out) or merging
+    # (complete), and nothing on the change says which.
+    #
+    # This is not theoretical. change:failed and change:backed-out DID NOT
+    # EXIST on the forge until 2026-09-15, and change/abort.sh writes them with
+    # `|| true` -- so every abort before then produced exactly this state.
+    orphan = [p["n"] for p in open_prs
+              if "change:end" in p["labels"] and not (p["labels"] & CLOSURE)
+              and (p.get("age_s") is None or p["age_s"] > GRACE_S)]
+    if orphan:
+        add("tombstone-without-closure",
+            "`change:end` with no closure code: cannot tell whether these need "
+            "RESUBMITTING (failed/backed-out) or MERGING (complete)", orphan)
     for p in open_prs:
         t, f = p["labels"] & TERMINAL, p["labels"] & IN_FLIGHT
         if t and f:
@@ -142,8 +173,9 @@ def selftest(groups, retired, declared) -> int:
     The control matters as much as the failures: an audit that refuses
     everything is as useless as one that refuses nothing.
     """
-    def P(n, *labs):
-        return {"n": n, "draft": False, "title": "", "labels": set(labs)}
+    def P(n, *labs, age=999):
+        # age defaults past GRACE_S: a synthetic case is not a settle in flight.
+        return {"n": n, "draft": False, "title": "", "age_s": age, "labels": set(labs)}
 
     cases = [
         ("I1 two PRs hold the berth", "singleton",
@@ -157,6 +189,8 @@ def selftest(groups, retired, declared) -> int:
          [P(1, "itil:standard", "itil:normal")]),
         ("H1 a RETIRED label in use", "retired", [P(1, "staging:passed")]),
         ("H2 an undeclared pipeline label", "undeclared", [P(1, "staging:invented")]),
+        ("I3b a tombstone with no closure code", "tombstone-without-closure",
+         [P(1, "change:end")]),
     ]
     bad = 0
     for name, kind, state in cases:
@@ -164,23 +198,36 @@ def selftest(groups, retired, declared) -> int:
         ok = kind in got
         print(f"  {'ok  ' if ok else 'BAD '} {name:<38} -> {kind if ok else sorted(got) or 'nothing'}")
         bad += 0 if ok else 1
+    fresh = audit([P(1, "change:end", age=5)], groups, retired, declared)
+    okf = not fresh
+    print(f"  {'ok  ' if okf else 'BAD '} {'GRACE: a settle in flight is not a finding':<38} -> "
+          f"{'suppressed' if okf else [f['kind'] for f in fresh]}")
+
     clean = [P(1, "app:core", "itil:standard"), P(2, "app:plp", "itil:normal", "deploy:staging")]
     got = audit(clean, groups, retired, declared)
     ok = not got
     print(f"  {'ok  ' if ok else 'BAD '} {'CONTROL: a clean estate is accepted':<38} -> "
           f"{'no findings' if ok else [f['kind'] for f in got]}")
     bad += 0 if ok else 1
-    print(f"  pr-state-audit self-test: {len(cases)+1} cases, {bad} wrong")
+    bad += 0 if okf else 1
+    print(f"  pr-state-audit self-test: {len(cases)+2} cases, {bad} wrong")
     return 1 if bad else 0
 
 
 def prs():
     out = subprocess.run(
         ["gh", "pr", "list", "--repo", REPO, "--state", "open", "--limit", "100",
-         "--json", "number,labels,isDraft,title"],
+         "--json", "number,labels,isDraft,title,updatedAt"],
         capture_output=True, text=True, check=True).stdout
-    return [{"n": p["number"], "draft": p["isDraft"], "title": p["title"],
-             "labels": {l["name"] for l in p["labels"]}} for p in json.loads(out)]
+    now = datetime.now(timezone.utc)
+    rows = []
+    for p in json.loads(out):
+        age = None
+        if p.get("updatedAt"):
+            age = (now - datetime.fromisoformat(p["updatedAt"].replace("Z", "+00:00"))).total_seconds()
+        rows.append({"n": p["number"], "draft": p["isDraft"], "title": p["title"],
+                     "age_s": age, "labels": {l["name"] for l in p["labels"]}})
+    return rows
 
 
 def main() -> int:
