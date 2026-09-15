@@ -1,0 +1,152 @@
+#+TITLE: Promotion models: what "environment" means in forty-five pipelines
+#+DATE: 2026-09-15
+#+OPTIONS: ^:nil
+
+The owner's survey table, then what it says. The table is data as supplied
+(one row per source, a progression left to right, a note on what kind of thing
+the progression is); the classification and the reading below are this
+document's. Companion to =docs/pipeline-history.org= (the timeline of pipeline
+semantics) and =spec.org= §Port tiers (this estate's own progression).
+
+* The survey
+
+| source              | progression                                                              | note                                              |
+|---------------------+--------------------------------------------------------------------------+---------------------------------------------------|
+| itil                | dev, sit, uat, pre-prod, prod                                            | environments                                      |
+| sap                 | dev, qas, prd                                                            | environments; transport landscape                 |
+| twelve-factor       | development, staging, production                                         | environments                                      |
+| frameworks-general  | dev, test, prod                                                          | runtime mode                                      |
+| rails               | development, test, production                                            | runtime mode; staging added by convention         |
+| django              | local, staging, production                                               | runtime mode; convention not built in             |
+| aspnet-core         | development, staging, production                                         | runtime mode                                      |
+| symfony             | dev, test, prod                                                          | runtime mode                                      |
+| laravel             | local, production                                                        | runtime mode                                      |
+| elixir              | dev, test, prod                                                          | runtime mode                                      |
+| node                | development, test, production                                            | runtime mode                                      |
+| capistrano          | staging, production                                                      | deploy targets                                    |
+| heroku              | review, development, staging, production                                 | pipeline stages                                   |
+| vercel              | development, preview, production                                         | deploy targets; preview per branch                |
+| netlify             | branch-deploy, deploy-preview, production                                | deploy targets                                    |
+| cloudflare-pages    | preview, production                                                      | deploy targets                                    |
+| amazon              | alpha, beta, gamma, onebox, prod                                         | pipeline stages; prod split into waves            |
+| google              | dev, staging, canary, prod                                               | environments                                      |
+| google-populations  | fishfood, dogfood, teamfood, prod                                        | user populations                                  |
+| microsoft-rings     | ring0, ring1, ring2, ring3, ring4                                        | user populations                                  |
+| windows-insider     | canary, dev, beta, release-preview, ga                                   | channels                                          |
+| azure-app-service   | staging-slot, production-slot                                            | deploy targets; promotion by swap                 |
+| chrome              | canary, dev, beta, stable, extended-stable                               | channels                                          |
+| firefox             | nightly, beta, release, esr                                              | channels                                          |
+| debian              | experimental, unstable, testing, stable, oldstable                       | package suites                                    |
+| ubuntu              | proposed, updates, security, release                                     | package pockets                                   |
+| freebsd             | current, stable, release                                                 | source branches                                   |
+| linux-kernel        | linux-next, mainline, stable, longterm                                   | source branches                                   |
+| rust                | nightly, beta, stable                                                    | channels                                          |
+| node-release-lines  | current, active-lts, maintenance                                         | release lines                                     |
+| semver              | alpha, beta, rc, release                                                 | artifact maturity                                 |
+| maven               | snapshot, release                                                        | artifact maturity                                 |
+| npm                 | next, latest                                                             | dist-tags                                         |
+| pypi                | testpypi, pypi                                                           | registries                                        |
+| cloud-vendors       | private-preview, public-preview, ga                                      | feature maturity                                  |
+| kubernetes          | alpha, beta, ga                                                          | feature gates                                     |
+| redhat-bugzilla     | new, assigned, post, modified, on_qa, verified, release_pending, closed  | issue status                                      |
+| mozilla-bugzilla    | affected, fixed, verified                                                | per-train flag values                             |
+| aws-control-tower   | sandbox, dev, prod                                                       | organizational units                              |
+| aws-codepipeline    | source, build, deploy                                                    | pipeline stages                                   |
+| gcp-cloud-deploy    | dev, staging, prod                                                       | targets; docs example                             |
+| kargo               | test, uat, prod                                                          | stages; docs example                              |
+| flux                | staging, production                                                      | cluster directories; convention                   |
+| traffic-exposure    | shadow, dark-launch, canary, blue-green, full                            | rollout strategy                                  |
+| standard-change     | dev-block, staging, idle-colour, front                                   | environments; see §This estate for the ports      |
+
+* Seven kinds of progression, one word
+
+Every row is called a progression and most of them are called environments in
+conversation. They are seven different subjects. What moves from left to
+right is different in each, and so is what "promote" means.
+
+| kind                    | what moves            | promote means                                       | rows                                                                                   |
+|-------------------------+-----------------------+-----------------------------------------------------+----------------------------------------------------------------------------------------|
+| place (environment)     | the artifact          | install the same build somewhere more real          | itil, sap, twelve-factor, google, flux, gcp-cloud-deploy, kargo, this estate           |
+| runtime mode            | nothing               | pick a config; the word names a switch, not a place | frameworks-general, rails, django, aspnet-core, symfony, laravel, elixir, node         |
+| deploy target           | the artifact          | as place, but the target is a product feature       | capistrano, vercel, netlify, cloudflare-pages, azure-app-service                       |
+| pipeline stage          | control               | the next stage may run                              | heroku, amazon, aws-codepipeline                                                       |
+| audience (population)   | the users             | let more people see what is already installed       | google-populations, microsoft-rings, traffic-exposure                                  |
+| channel / suite / line  | the label on a build  | re-tag; the bits do not move                        | windows-insider, chrome, firefox, rust, debian, ubuntu, freebsd, linux-kernel, node-release-lines, npm, maven, semver, pypi, cloud-vendors, kubernetes |
+| record status           | a claim about a change | someone asserts the next thing is true              | redhat-bugzilla, mozilla-bugzilla                                                      |
+
+Three observations follow.
+
+*The framework rows are not environments at all.* =RAILS_ENV=, =NODE_ENV=,
+=APP_ENV= select a configuration inside one process. Rails' "staging added by
+convention" and Django's "convention not built in" say it plainly: the
+framework has a switch, and the place is something the operator invents.
+Reading a runtime mode as a place is how "we deployed to staging" comes to mean
+"we ran with the staging config on a laptop".
+
+*Audience and place are orthogonal, and the big shops separate them.* Amazon's
+row is places ending in "prod split into waves"; Google's row is places and
+its second row is audiences over the same places; Microsoft's rings are
+audiences with no place named at all. Blue-green (the =traffic-exposure= row)
+is an audience model too: both colours are the same place, and promotion moves
+the front, not the build.
+
+*The channel rows promote by re-labelling.* A Chrome build reaches stable by
+being called stable; a Debian package reaches testing by ageing; =npm dist-tag
+add= moves =latest= without publishing. The artifact is immutable and the
+progression is a pointer. That is the model closest to a label-driven
+pipeline, and it is also the one in which "where is it" has no answer beyond
+"which pointer names it".
+
+* Where the label namespaces sit in this
+
+The seven kinds are the boundary question from the rebuild
+(issue on namespace boundaries, filed 2026-09-15) seen from outside.
+
+- =app:*=, =itil:*= are the record's *classification*: what the change is.
+  No row in the survey has this axis, because every row is about a build or an
+  audience and none is about a change. ITIL is the source of the word and the
+  survey's ITIL row is its environments, not its change types.
+- =deploy:staging=, =deploy:production=, =staging:deployed=,
+  =production:deployed= are *place*: the artifact is installed at a tier. The
+  estate's tiers are places with ports, not runtime modes, which is why a
+  worktree block and staging can serve the same build and still be different
+  things.
+- =staging:e2e=, =staging:smoke=, =staging:uat=, =production:healthy= are
+  *record status* in Mozilla's sense: a per-build flag ("verified on this
+  train") that says nothing about any other build. The labeller's synchronize
+  withdrawal exists because a flag with no build attached is Bugzilla's
+  =verified= with no version.
+- =change:start=, =change:scheduled=, =change:complete=, the closure codes are
+  *pipeline stage* and *record status*: control, then a claim.
+- The idle colour and the front are *audience*: blue-green. Promotion to
+  production in this estate is two acts the survey keeps apart, install on the
+  idle colour (place) and swap the front (audience), and =production:healthy=
+  is observed after the second.
+- There is no *channel* in this estate. The artifact is a sha and nothing
+  re-tags it; a change reaches production by being installed, not by being
+  called production. The merge to =main= is the nearest thing to a channel
+  move, and it is the record catching up with the place, which is why it comes
+  last.
+
+* This estate
+
+The survey row reads =dev-block, staging, idle-colour, front=. The ports as
+=spec.org= §Port tiers states them on 2026-09-13: dev blocks =9000 + 10n= for
+n ≤ 9, staging =9200=, production blue =9210=, green =9220=, the front =9230=.
+The row's "100N0" is the older e2e default (issue #84) and not a tier.
+
+Two things the survey makes visible about the estate. It has every kind but
+channel and audience-by-population, and its one audience mechanism, the
+colour swap, is not a label; it is a fact about the front that
+=production:healthy= reports. And its "staging" is a place in the ITIL sense
+and a deploy target in the Capistrano sense at once, which is the ambiguity
+the port tiers were written to remove: the number says which.
+
+* Sources
+
+The table is the owner's survey as supplied on 2026-09-15; the rows name their
+sources and are not re-verified here. Where a row is a product's documentation
+example rather than a fixed design (=gcp-cloud-deploy=, =kargo=, =flux=), the
+note says so. Claims in §Seven kinds about specific vendors are readings of the
+rows, not of the vendors' documents; =docs/pipeline-history.org= carries the
+verified references for the historical claims.
