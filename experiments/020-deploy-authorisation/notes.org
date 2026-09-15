@@ -1,0 +1,181 @@
+#+TITLE: 020 -- guarding the act of deploying, not only the decision
+#+DATE: 2026-09-13
+
+* Hypothesis
+
+Every guard in this repository sits on the *decision* to deploy: a label, a
+checklist, a merge. Nothing guarded the *act*, so calling a deploy target
+directly reached a protected environment past all of them.
+
+Falsifiable form: /if the deploy target must name its authorisation, then a SHA
+that is the head of no open pull request cannot reach staging or production, a
+forge that cannot be reached refuses rather than proceeds, and a dev block is
+unaffected./
+
+* The objection this has to answer first
+
+=scenarios.org= D9 *deferred exactly this fix*, and the reason was good:
+
+#+begin_quote
+Deferred -- guard 3 on the deploy path. A person reads the calendar, sees their
+window, and deploys. =preflight= is the checklist they run, and a checklist a
+human follows is a real control; enforcing the window a second time inside
+every target would be a second implementation of guard 3, which is the defect
+this repo has already hit twice. Building it now buys nothing and costs a
+divergence.
+#+end_quote
+
+Two things have to be true to proceed anyway.
+
+** 1. D9's own revisit trigger has fired, twice
+
+#+begin_quote
+The trigger that forces the revisit: the first deployment initiated by
+automation rather than by a person. [...] Any of these counts: a workflow that
+calls a target directly, a scheduled job, an agent driving =deploy.sh=
+unattended, or =change/activate.sh= being revived.
+#+end_quote
+
+- #32 is *an agent driving =deploy.sh= unattended* -- the issue says so: "by an
+  agent that knew better".
+- =.github/workflows/deploy-staging.yml= line 19 *calls the target directly*
+  today.
+
+At that moment, in D9's words, "there is no checklist, and =preflight='s exit
+code is advice nobody receives". The deferral was conditional and the condition
+is met.
+
+** 2. It must not be a second implementation, and it is not
+
+=change/authorize.sh= does *not* re-implement the window, the freeze, the lock,
+the queue or the gates. It calls =gates/preflight.sh= -- the one existing
+implementation of that checklist -- and passes its exit code through unchanged.
+Guard 3 is still implemented exactly once. What changed is that *a machine now
+receives the answer* instead of a person reading it.
+
+It is one script called by *two* targets (=targets/node=, =targets/bastille=),
+which is the opposite of the divergence D9 warned about: the alternative --
+logic pasted into each target -- is the thing that would have diverged.
+
+The genuinely new logic is the one question =preflight= cannot ask, because
+=preflight= is given a PR and a deploy target is given a SHA: *is this SHA the
+head of an open pull request at all?* Nothing else in the repo asks it, and it
+is the question that would have refused =766a522=.
+
+* Success criterion
+
+Eighteen assertions in =demonstrate.sh=, ten mutations in =mutate.sh=, all
+killed. The load-bearing ones:
+
+- *C2* -- the incident itself: a SHA heading no open PR is refused.
+- *C3* -- forge unreachable is *exit 4*, not 0 and not 1. Fail closed.
+- *C9/C9b/C9c* -- the guard runs before the deploy touches anything, its
+  verdict is propagated, and the call is never piped.
+- *C1* -- a dev block asks the forge nothing at all.
+
+* What was run, and what it printed
+
+Run on 2026-09-13 on hydra (FreeBSD 14.3), =jq 1.8.1=, =gh 2.83.2=, =python3=.
+
+: $ ./experiments/020-deploy-authorisation/demonstrate.sh
+:   ... 18 passed, 0 failed
+
+: $ ./experiments/020-deploy-authorisation/mutate.sh
+:   killed 2  P1   the node target stops calling authorize.sh      by C9 C9c
+:   killed 2  P2   the jail target stops calling authorize.sh      by C9 C9c
+:   killed 2  P3   the authorisation is piped, discarding its verdict  by C9c C9b
+:   killed 1  P4   unreachable forge proceeds instead of refusing  by C3
+:   killed 2  P5   no open PR at this SHA is allowed through       by C2 C2b
+:   killed 2  P6   preflight's exit code is ignored                by C5 C6
+:   killed 2  P7   preflight's exit codes are flattened to 1       by C5 C6
+:   killed 1  P8   an unknown environment is assumed unprotected   by C8
+:   killed 1  P9   break glass authorises without recording a reason  by C7b
+:   killed 2  P10  dev blocks are no longer exempt                 by C1 C1b
+:
+:   10 mutations applied, 10 killed, 0 expected survivor(s), 0 unexplained
+
+** Against the real forge, read-only
+
+Not stubbed. These ran against =aygp-dr/standard-change= as it stood:
+
+: $ ./change/authorize.sh dev-3 $(git rev-parse --short HEAD)
+: authorize: dev-3 is a dev block -- unrestricted by design.
+: dev-block: no authorisation required
+: EXIT=0
+
+: $ ./change/authorize.sh staging 944c541
+: REFUSED: 944c541 is not the head of any open pull request.
+: EXIT=1
+
+And the full delegation, on a real open PR:
+
+: $ ./change/authorize.sh staging 37d943b        # head of PR #75
+:       NO   someone else IS in staging: #61 holds the berth
+:       NO   this pull request is a DRAFT
+:       yes  the estate is open -- no freeze, no emergency in flight
+:       do not proceed (exit 6)
+: REFUSED (exit 6): gates/preflight.sh says #75 may not deploy to staging now.
+: EXIT=6
+
+That run is the whole argument in one output: the berth and the draft state
+were judged by =preflight=, in the one place they are implemented, and the
+deploy target *received the refusal* rather than a person reading it.
+
+* Three mutations survived, and they were the three that mattered
+
+First mutation run killed 7 of 10. *P1 (the node target stops calling the
+guard), P2 (the jail target stops calling it) and P3 (the call is piped) all
+SURVIVED* -- the three most important mutations in the set.
+
+The fix was fine. The *assertions* were vacuous. C9 and C9b grepped the raw
+source for =authorize.sh=, and both targets carry comments that name
+=authorize.sh= and quote ~authorize.sh | sed~ as the thing never to write. The
+greps matched the documentation, so they passed no matter what the code did.
+
+C9/C9b now strip comments before matching, and C9c was added to assert the call
+propagates its exit code. All three mutations now die.
+
+This is the taxonomy being recursive again: three checks that could not fail,
+guarding the rule /a check that cannot fail produces no verdict/, found only by
+mutation -- which is precisely what =spec.org= says about the three tests in
+this repo that passed while asserting nothing.
+
+* The cost, stated plainly
+
+A protected deploy now needs the forge reachable. That is real and it is the
+honest trade the issue names. The alternative -- deploy and stamp the record
+"unauthorised: could not verify" -- produces an *authorised-looking estate*,
+which is worse. So: fail closed, with a break-glass that is *recorded*.
+
+=DEPLOY_BREAK_GLASS='<reason>'= authorises without any check, shouts on stderr,
+and the reason is written into =version.json= as =authorisation=. The estate
+reports its own override. That is the difference between a break-glass and a
+bypass, and it is why the override is not a silent boolean.
+
+* What is NOT verified here
+
+*No deploy target was run to completion, or to its refusal.* Doing that on this
+host would put the live staging block's ports and deployment worktree one bug
+away from being touched, and the estate is up. So C9/C9b/C9c are *static*
+assertions about =targets/node/deploy.sh= and =targets/bastille/deploy.sh= --
+that the call is there, before the first destructive step, unpiped, with its
+exit code propagated -- and P1/P2/P3 confirm each can fail.
+
+=change/authorize.sh= itself is exercised behaviourally, stubbed and live.
+
+The first person to run a protected deploy on a tree carrying this should
+expect it to *refuse* unless a window is open and the berth is theirs, and
+should check =jq .authorisation deployments/<env>/version.json= afterwards.
+
+* Not done
+
+- =gates/preflight.sh= is invoked by =.github/workflows/deploy-staging.yml= as
+  =./gates/preflight.sh staging=, but its signature is =<pr> [env]=. It is
+  being passed the string =staging= as the PR number. Guard 3 has therefore
+  never actually evaluated in CI; the step fails on =gh pr view staging=, which
+  is fail-closed by accident rather than by design. Left alone here because it
+  is a separate defect with a separate blast radius, and this branch should not
+  be the place CI changes shape. It wants its own issue.
+- The same workflow passes =deploy.sh staging "$(./change/groups.sh "$PR")"= --
+  GROUPS where =targets/node/deploy.sh= expects a SHA. The two targets have
+  different signatures and the workflow is written for the jail one.
