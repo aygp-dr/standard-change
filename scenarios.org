@@ -1022,3 +1022,54 @@ who is moving to production. A two-holder tie, a sweep mid-hold, and a
 workflow-initiated release all look identical on that list: the label is simply
 absent, and absence has no author. The PR list shows the STATE of the lock and
 never its HISTORY, which is the only place the answer lives.
+
+** D22 — five owners, one task each, and one landed
+
+*2026-09-15 02:46–03:06Z. Five agents, one PR each, told only: get your change
+to production. Forbidden from editing any pipeline script and from clearing
+another change's label.* Full account in =experiments/024-five-owners/=.
+
+*One of five landed*, and only by abandoning the documented entry point and
+hand-running the eight-step node sequence.
+
+*** The three that generalise
+
+1. *The refusal that mattered most was never posted.* =driver.sh= exit 5,
+   "lock held by #N", goes to stdout only — no comment, no label, no queue
+   entry, while =README.org= promises a comment naming the holder. An owner
+   who says =change:start= and walks away sees a change that silently does
+   nothing forever. All five hand-rolled a polling loop.
+
+2. *The abort named a symptom and never the cause.* Every failed run posted
+   /"staging did not come up serving <sha>"/ while staging was healthy and
+   passed 27 e2e checks minutes later. The actual error — a missing directory
+   — reached the terminal and never the pull request. Acting on the comment
+   alone, an owner investigates a working estate.
+
+3. *Guard 1 admitted two holders.* #52 and #55 both took =deploy:staging= at
+   02:51:42Z, because the label and =lock.sh='s record are two locks acquired
+   non-atomically. A workflow stripped one eleven seconds later while its
+   driver went on believing it held the berth. D20 said guard 1 had never
+   refused; this says it *admitted a violation of the property it enforces*.
+
+*** The finding that is not about messages
+
+=change/driver.sh= hardcodes another host's estate (=:9010=/=:9020=,
+=worktrees/staging=, =/tmp/claude-501/=). On hydra those ports are live as
+=dev-1= and =dev-2=, =promotes=no= — and =:9010= was serving =b72589f=, which
+was #60's own pre-rebase head. Had the worktree existed, the driver would have
+deployed a protected change onto a dev block and *the health poll would have
+matched*, reporting staging deployed while deploying nothing. A false pass one
+SHA away.
+
+*** And the template, which the pipeline already contains
+
+The best message in the run was written by a person: the =CHANGES_REQUESTED=
+review on #60 named the rule, quoted both versions of the line, explained why,
+said what would clear it, and separated what it had checked from what it had
+not. Its owner acted without opening a script.
+
+=production-first.sh= reaches the same standard — /"it turns green by itself
+the moment gates/health.sh records production:healthy. Nothing to re-push."/ —
+saying what to do and what not to bother doing. The pipeline knows how to
+write a refusal; the abort and lock paths were not given the same care.
