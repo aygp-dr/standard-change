@@ -1,0 +1,179 @@
+#+TITLE: Classifying a change — what the frameworks already say
+#+DATE: 2026-09-15
+
+* Why this note exists
+
+We are adopting a rule for the =itil:*= labeller:
+
+#+BEGIN_QUOTE
+The labeller owns =itil:*= unless overridden. Changes under =apps/= are
+=itil:standard=. Database migrations are =itil:normal=. =itil:emergency= is an
+*override*: a person may set it, and the labeller must not overwrite it.
+#+END_QUOTE
+
+*None of this is novel, and the note exists to say where each part comes from.*
+Every clause has a published precedent, and the places we differ are worth
+knowing precisely because they are the places nothing is backing us up.
+
+Epistemics: ITIL 4 and ISO/IEC 20000-1 are paywalled. Their statements here are
+=[E, secondary]= — consistent across independent restatements, which is
+corroboration and not verification. Everything about Kubernetes, CODEOWNERS and
+=actions/labeler= is =[E]=, read from the docs or the source.
+
+* The prefix says which SPEECH ACT the label is
+
+Worth stating before the rest, because it explains why =itil:= is the right
+prefix rather than a decoration.
+
+=itil:= reads as a *classification*. =release:=, =change:= and =deploy:= read
+as *calls to action*. That difference is not a naming preference — the two
+kinds of label are used by different readers at different moments, and
+confusing them is what produced most of the defects in =scenarios.org=.
+
+This is Austin and Searle's taxonomy, applied to a label registry rather than
+to utterances, and it is about sixty years old =[E, secondary]=:
+
+| speech act | our namespaces | what a reader does with it |
+|------------+----------------+----------------------------|
+| *assertive* — describes what is | =itil:*=, =app:*= | decides which rules apply |
+| *directive* — asks for something | =change:start=, =release=, =deploy:<env>= | acts, or refuses |
+| *reportive* — records what happened | =<env>:<verdict>=, =change:complete= | audits, afterwards |
+
+Three consequences fall out, and each one has already bitten this estate:
+
+1. *An assertive does not expire.* =itil:standard= is true of a change for as
+   long as the change is that shape. A directive is consumed — =change:start=
+   means /go/, and once something has gone, leaving it on is a lie. We have
+   cleared stale =change:start= by hand more than once.
+2. *A reportive must name its subject.* "e2e passed" is not a report; "e2e
+   passed on =2249f10= observed at =:9200=" is. Every verdict defect in
+   =scenarios.org= is a reportive missing its subject.
+3. *Only a directive should trigger anything.* Six workflows here fire on
+   =labeled=, which means assertives and reportives dispatch too — writing a
+   report re-runs the thing being reported on. That is the read-after-write
+   race, restated: we wired behaviour to the wrong speech act.
+
+So =itil:= being clearly a classification is the property we want. It cannot be
+misread as a call to release, and nothing should key an action off it.
+
+* The three types are ITIL's, verbatim
+
+The classification is not ours. ITIL 4 change enablement defines three, and the
+=itil:= prefix exists to say so rather than to claim the idea:
+
+| type | ITIL's definition =[E, secondary]= | ours |
+|------+------------------------------------+------|
+| *standard* | pre-authorised, low-risk, follows a documented procedure. No approval per instance — the PROCEDURE was approved once | =apps/**= |
+| *normal* | assessed and authorised before it proceeds | migrations |
+| *emergency* | expedited to restore service; documented *retrospectively*, not skipped | human override |
+
+The load-bearing part of "standard" is the one most often dropped: *the
+authorization attaches to the procedure, not the change*. A standard change is
+not "low risk so we waved it through" — it is "this exact shape was assessed
+already, and this instance matches the shape." That is why deriving it from a
+path glob is defensible: the glob IS the shape.
+
+ISO/IEC 20000-1 §8.5.1 requires changes be *categorised* and that categories
+determine the authority needed =[E, secondary]=. It names no categories, so it
+constrains that you have them, not which.
+
+* "Migrations are normal" is the oldest rule here
+
+Database migrations being a higher-risk class is not an ITIL claim; it is
+near-universal in practice, and for reasons that are properties of migrations
+rather than opinions about them:
+
+- *They are not obviously reversible.* A deploy rolls back by serving the
+  previous build. A migration that dropped a column does not.
+- *Their blast radius exceeds the deploy.* The schema is shared by every
+  process reading it, including ones not being deployed.
+- *They are stateful and one-shot* — the same migration run twice is not the
+  same as run once, which is untrue of a deploy.
+
+The standard mitigation is the *expand/contract* (or parallel-change) pattern —
+add the new column, backfill, switch readers, drop the old one, as separate
+changes — which exists precisely because a migration cannot be treated as a
+deploy. Rails encodes this in =db/migrate/= being its own directory with its own
+irreversible-migration exception (=ActiveRecord::IrreversibleMigration=) =[E]=.
+
+So: routing =db/migrate/**= to =itil:normal= is inheriting a rule the ecosystem
+already enforces structurally, not inventing a policy.
+
+* "Derive from the path" is CODEOWNERS
+
+Classifying by changed path is what =CODEOWNERS= has done since 2017 =[E]=:
+a glob determines who must review. =actions/labeler= is the same mechanism with
+labels instead of reviewers. Routing =apps/**= → standard and =db/migrate/**= →
+normal is a CODEOWNERS-shaped rule that happens to emit a label.
+
+The one thing worth stating that CODEOWNERS does NOT give us: *precedence when
+two globs match*. CODEOWNERS is last-match-wins by file order. Our two classes
+are mutually exclusive, so a change touching both =apps/= and =db/migrate/=
+must resolve to one, and the rule has to say which. **It resolves to the
+higher: normal wins.** A change containing a migration is a change containing a
+migration, whatever else it also contains.
+
+* "Override but not overwritten" is Kubernetes field ownership
+
+This is the clause that sounds novel and is the most thoroughly solved.
+
+Kubernetes *server-side apply* tracks, per field, which actor last set it
+(=managedFields=). Another actor writing that field produces a **conflict**,
+not a silent overwrite; taking ownership requires =--force-conflicts=, and
+ownership then transfers and is recorded =[E]=. The property we want —
+*a human may set this, and the controller must not take it back* — is exactly
+field ownership with a declared manager.
+
+Terraform has the same shape in =lifecycle { ignore_changes = [...] }=: the
+provider still manages the resource, and explicitly stops reconciling the named
+attributes =[E]=.
+
+We already have one instance of this pattern and did not name it as such:
+=labeler:skip=, described in =change/label-owners.tsv= as *"the opt-out that
+transfers ownership of the derived labels"*. That is server-side apply's
+force-conflicts, spelled as a label.
+
+*The general rule, which we should state once and stop re-deriving:* a derived
+value has a declared owner; a human may take ownership; the derivation must
+then stop reconciling that value rather than fight for it. An override that can
+be overwritten is not an override — it is a race, and we have watched this
+estate lose that race repeatedly.
+
+** The mechanism that makes it true here, and its hazard
+
+=actions/labeler= runs with =sync-labels: true=, which *removes* labels whose
+globs no longer match =[E]=. So the protection for =itil:emergency= is entirely
+that **it has no entry in =.github/labeler.yml=** — the action cannot remove
+what it does not manage.
+
+That is correct and it is fragile: it is an ownership boundary enforced by
+absence. Adding an =itil:emergency= glob "for completeness" would silently make
+a human-owned label machine-reconciled, and nothing would report it. Worth a
+gate rather than a comment.
+
+* Where we are NOT backed by anything
+
+Named so they are not mistaken for inherited:
+
+1. *=itil:standard= as the complement of =itil:normal=.* Nothing in ITIL says
+   "standard" is the default class. We chose it because the pipeline exists to
+   make routine changes boring, so the routine case should need no rule. It
+   means a new top-level directory is silently standard until someone notices.
+2. *One classification per change.* ITIL does not forbid a change being
+   assessed under more than one lens; our exclusivity is a modelling choice.
+3. *Deriving classification from a diff at all.* ITIL's classification is a
+   judgement about risk made by a person or a board. A path glob is a proxy for
+   blast radius. **Blast radius is not risk** — a one-line change to a payment
+   path is small and dangerous — and every framework surveyed treats the
+   judgement as human. This is the substitution we are making knowingly, and it
+   is the one most likely to be wrong.
+
+* What this buys the labeller, concretely
+
+- =apps/**= → =itil:standard=, because the procedure was pre-authorised.
+- =db/migrate/**= → =itil:normal=, because the ecosystem already treats
+  migrations as a separate class with its own reversal story.
+- Both match → =itil:normal=. The higher class wins.
+- =itil:emergency= is human-owned, set by a person, and *unmanaged by the
+  labeller* — which today is enforced by its absence from the glob file, and
+  ought to be enforced by a check.
