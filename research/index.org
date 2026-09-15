@@ -33,34 +33,35 @@ described in Part I without touching the labels it already has.
 #+INCLUDE: "findings/the-method.org" :minlevel 3
 
 * Part II: History of the ideas
-#+INCLUDE: "../research/history/pipeline-history.org" :minlevel 2
-#+INCLUDE: "../research/history/release-strategies.org" :minlevel 2
-#+INCLUDE: "../research/history/reference-survey.org" :minlevel 2
-#+INCLUDE: "../research/history/five-properties.org" :minlevel 2
-#+INCLUDE: "../research/history/release-standards.org" :minlevel 2
-#+INCLUDE: "../research/history/promotion-models.org" :minlevel 2
-#+INCLUDE: "../research/history/label-standards-survey.org" :minlevel 2
-#+INCLUDE: "../research/history/precedence-and-locks.org" :minlevel 2
-#+INCLUDE: "../research/history/deploy-ledger-comparison.org" :minlevel 2
-#+INCLUDE: "../research/history/storefront-deployments.org" :minlevel 2
+#+INCLUDE: "history/pipeline-history.org" :minlevel 3
+#+INCLUDE: "history/release-strategies.org" :minlevel 3
+#+INCLUDE: "history/reference-survey.org" :minlevel 3
+#+INCLUDE: "history/five-properties.org" :minlevel 3
+#+INCLUDE: "history/release-standards.org" :minlevel 3
+#+INCLUDE: "history/promotion-models.org" :minlevel 3
+#+INCLUDE: "history/affected-by-construction.org" :minlevel 3
+#+INCLUDE: "history/label-standards-survey.org" :minlevel 3
+#+INCLUDE: "history/precedence-and-locks.org" :minlevel 3
+#+INCLUDE: "history/deploy-ledger-comparison.org" :minlevel 3
+#+INCLUDE: "history/storefront-deployments.org" :minlevel 3
 
 * Part III: Substrates, hosting and what a platform can enforce
-#+INCLUDE: "../research/history/substrate-mapping.org" :minlevel 2
-#+INCLUDE: "../research/substrates/substrate-emulation.org" :minlevel 2
-#+INCLUDE: "../research/substrates/hosting-survey.org" :minlevel 2
-#+INCLUDE: "../research/substrates/deployment-targets.org" :minlevel 2
-#+INCLUDE: "../research/substrates/github-environments.org" :minlevel 2
-#+INCLUDE: "../research/substrates/ci-and-the-estate.org" :minlevel 2
-#+INCLUDE: "../research/substrates/ci-portability.org" :minlevel 2
+#+INCLUDE: "history/substrate-mapping.org" :minlevel 3
+#+INCLUDE: "substrates/substrate-emulation.org" :minlevel 3
+#+INCLUDE: "substrates/hosting-survey.org" :minlevel 3
+#+INCLUDE: "substrates/deployment-targets.org" :minlevel 3
+#+INCLUDE: "substrates/github-environments.org" :minlevel 3
+#+INCLUDE: "substrates/ci-and-the-estate.org" :minlevel 3
+#+INCLUDE: "substrates/ci-portability.org" :minlevel 3
 
 * Part IV: What was found
-#+INCLUDE: "../research/findings/label-ownership.org" :minlevel 2
-#+INCLUDE: "../research/findings/labels-are-the-only-channel.org" :minlevel 2
-#+INCLUDE: "../research/findings/concurrent-change.org" :minlevel 2
-#+INCLUDE: "../research/findings/label-state-machine.org" :minlevel 2
-#+INCLUDE: "../research/findings/reviewer-identity.org" :minlevel 2
-#+INCLUDE: "../research/findings/testing-problems.org" :minlevel 2
-#+INCLUDE: "../research/findings/time-spent.org" :minlevel 2
+#+INCLUDE: "findings/label-ownership.org" :minlevel 3
+#+INCLUDE: "findings/labels-are-the-only-channel.org" :minlevel 3
+#+INCLUDE: "findings/concurrent-change.org" :minlevel 3
+#+INCLUDE: "findings/label-state-machine.org" :minlevel 3
+#+INCLUDE: "findings/reviewer-identity.org" :minlevel 3
+#+INCLUDE: "findings/testing-problems.org" :minlevel 3
+#+INCLUDE: "findings/time-spent.org" :minlevel 3
 
 * Part V: The experiments, in order
 #+INCLUDE: "../experiments/001-d4-staging-regression/notes.org" :minlevel 3
