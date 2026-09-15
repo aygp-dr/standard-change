@@ -75,10 +75,21 @@ DECL = Path(__file__).resolve().parent.parent / "change" / "label-owners.tsv"
 
 # Labels that assert the change is FINISHED. An open PR carrying one is
 # claiming a closure it has not reached.
-TERMINAL = {"change:end", "change:complete", "change:failed", "change:backed-out"}
+TERMINAL = {"change:end", "change:complete", "change:failed", "change:backed-out",
+            "change:abandoned", "change:superseded"}
 # change:end is the TOMBSTONE -- it says cleanup ran. It does not say what the
 # change DID. These do, and one of them must accompany it.
-CLOSURE = {"change:complete", "change:failed", "change:backed-out"}
+# The FOUR change closures. spec.org §Nomenclature, corrected 2026-09-15:
+# a change completes, is backed out, is ABANDONED, or is SUPERSEDED. It is
+# never `cancelled` or `expired` -- those are window results.
+#
+# abandoned and superseded were added to the forge and to the declaration and
+# NOT ADDED HERE, so the audit went on reporting tombstone-without-closure for
+# #55 while #55 carried change:abandoned. A closure code the checker does not
+# know about is not a closure code -- the same defect as a label the
+# declaration does not know about, one layer up.
+CLOSURE = {"change:complete", "change:failed", "change:backed-out",
+           "change:abandoned", "change:superseded"}
 # A settle briefly holds change:end on a PR that is open, between the label
 # write and the merge landing. That window is about a second. Sixty is
 # generous and still catches everything that matters.
