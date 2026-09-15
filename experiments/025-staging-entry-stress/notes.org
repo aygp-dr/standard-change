@@ -1,0 +1,131 @@
+#+TITLE: 025 — staging entry under gate flakiness, and what a red run does to the berth
+#+DATE: 2026-09-15
+
+* Hypotheses
+
+Three, each falsifiable, each with the check that would refute it.
+
+** H1 — the mean check count is a misleading summary of entry cost
+
+The number of checks a change must clear to enter staging is set by its
+=app:*= labels, and that distribution is *bimodal* in this repo: changes touch
+one app, or they touch all of them. If so, =E[(1-f)^n]= and =(1-f)^E[n]=
+diverge materially, and any capacity statement built on the mean n is wrong in
+a known direction (too pessimistic, by convexity).
+
+*Refuted if* the Jensen gap is under half a point at f=10%, i.e. the mean is a
+fine summary after all.
+
+** H2 — a 10% per-check failure rate is not a 10% per-PR failure rate
+
+Entry is conjunctive: every check must pass. With n ≈ 16 the per-PR failure
+rate should land far outside the 10–50% band that the band's own framing
+assumes.
+
+*Refuted if* f=10% per check yields a per-PR failure rate inside 10–50%.
+
+** H3 — releasing the berth on a red run strictly dominates holding it
+
+=sim/simulate-gates.py= assumes the losing policy: "a red run holds the
+singleton berth while the author retries, so gate flakiness converts directly
+into queue starvation." If a red run instead *frees* the berth and the author
+debugs off-berth, throughput should rise by a factor that depends only on the
+failure rate and on debug time relative to hold time — not on the arrival
+process, the backlog, or the queue discipline.
+
+*Refuted if* the advantage depends on backlog size or arrival rate, or if
+there is any f ≥ 0 at which releasing is worse.
+
+* Success criterion
+
+The Monte Carlo must agree with an *independently derived* closed form within
+Monte Carlo error, on every cell of the sweep. A simulation that agrees with
+nothing external is asserting its own output. =--check= encodes five such
+agreements and exits non-zero on any of them.
+
+* Run
+
+: ./experiments/025-staging-entry-stress/staging_entry_sim.py
+: ./experiments/025-staging-entry-stress/staging_entry_sim.py --check
+: ./experiments/025-staging-entry-stress/staging_entry_sim.py --sweep 10 25 50 --debug 120
+
+Measured input, read 2026-09-15 (87 PRs, every state):
+
+: gh pr list --state all --limit 400 --json number,labels,state \
+:   | jq -r '.[]|[.labels[].name|select(startswith("app:"))|ltrimstr("app:")]|sort|join("+")' \
+:   | sort | uniq -c | sort -rn
+
+* Result
+
+*H1 held.* Jensen gap 2.45 points at f=10% (20.13% vs 17.68%), a 1.14×
+ratio. n ranges 12–31 with almost nothing in the middle: one PR in 87 ever
+touched exactly two apps.
+
+*H2 held, and by more than expected.* f=10% per check is a *79.9%* per-PR
+failure rate. Inverting the mixture, the 10–50% band requires per-check
+failure between *0.64% and 4.28%* — the band only exists above ~95.7%
+per-check reliability.
+
+*H3 held.* The ratio is exactly =1 + f·debug/hold=, confirmed by simulation
+across the sweep. At f=50% with debug twice hold, releasing doubles
+throughput. The backlog, arrival rate and ordering all cancel.
+
+* Two defects found while grounding the model
+
+Neither was the object of the experiment; both are on the staging-entry path
+and are recorded here because that is where they were found. Analysis and the
+argument for what to do about them is in =docs/staging-entry-stress.org=.
+
+** D1 — the workflow passes deploy groups where both targets read a SHA
+
+=spec.org:1574= and =docs/deployment-targets.org:102= both say
+=deploy.sh <env> <groups...>=. Both implementations disagree with that:
+
+| file | line | signature |
+|------+------+-----------|
+| =targets/bastille/deploy.sh= | 2, 10 | =<env> [sha]=, =sha="${2:-$(git rev-parse --short HEAD)}"= |
+| =targets/node/deploy.sh= | 2, 37 | =<env> <sha>=, =sha="${2:?}"= |
+
+=.github/workflows/deploy-staging.yml:26= passes ="$(./change/groups.sh "$PR")"=
+as =$2=. Measured — *every* possible =groups.sh= output is refused by the node
+target, including the empty string:
+
+: groups.sh output 'core'                    REFUSED (exit 3)
+: groups.sh output 'checkout core pdp plp'   REFUSED (exit 3)
+: groups.sh output ''                        REFUSED (exit 3)
+: groups.sh output '43a8e3e'                 OK -> 43a8e3e0895...
+
+On bastille the same input is *accepted silently* and written into
+=version.json= as the build SHA. The two targets fail differently on one
+defect: node refuses, bastille corrupts the record guard 5 reads.
+
+The refusal surfaces as exit 3, which =docs/exit-codes.org:15= defines as
+"freeze, or the SHA does not exist" — a wiring bug wearing a freeze's clothes.
+
+=change/activate.sh:294= gets it right (=targets/node/deploy.sh staging "$SHA"=),
+which is why the estate exists at all. The workflow path is the broken one.
+
+** D2 — =vars.DEPLOY_TARGET= is not set
+
+=gh variable list= returns only =PRODUCTION_URL= and =STAGING_URL=. The
+workflow interpolates =./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh= →
+=./targets//deploy.sh=. D1 is unreachable through the workflow because D2
+stops it first.
+
+*Neither is changed here.* Both sit on the same path as the deferred
+=guard4.sh:141= item and belong to the same ruling.
+
+* What this does not model
+
+- *Correlated failure.* Checks are treated as independent. A broken =routes.json=
+  reds lint, e2e and the contract gate at once; real red runs cluster, which
+  makes the per-PR rate better than =(1-f)^n= and the queue worse.
+- *The calendar.* =release:start= here means "if it's free I'm deploying".
+  =preflight.sh= exit 3 (freeze) and exit 4 (calendar unreachable) are not in
+  the model. They can only lower throughput.
+- *Debug time as a constant.* One number for every author and every failure.
+  Its ratio to hold time is the only thing H3 depends on, so the shape of its
+  distribution matters less than its mean — but a heavy tail would widen p95
+  latency well past what is reported.
+- *Fairness.* FCFS among ready changes. The berth has no priority rule, so
+  =itil:emergency= preemption (=label_sim.py= =EmergencyPreempts=) is absent.

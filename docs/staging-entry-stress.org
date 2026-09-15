@@ -1,0 +1,239 @@
+#+TITLE: Staging entry under gate flakiness — what our checks cost, and what a red run does to the berth
+#+DATE: 2026-09-15
+
+Our gate checks, our label distribution, our singleton berth. Everything here
+is measured from this repo or derived in closed form from it; the tooling and
+the hypotheses it was built to test are =experiments/025-staging-entry-stress/=.
+
+* The short version
+
+1. *A 10% per-check failure rate is a 79.9% per-PR failure rate.* Entry to
+   staging is conjunctive over ~16 checks. Nothing about a 10% check is
+   survivable at that depth.
+2. *Our check count is bimodal, so the mean lies.* Changes touch one app or
+   all of them. Capacity planned on the mean n is wrong by 14%.
+3. *A red run should release the berth.* Holding it while the author debugs
+   costs throughput by exactly =1 + f·debug/hold=. At our numbers that is
+   1.2× to 2.0×, and the advantage depends on nothing else at all.
+4. *The workflow entry path cannot deploy anything today.* Two independent
+   wiring defects, found while grounding the model. See §5.
+
+* 1. What a change actually has to clear
+
+From =.github/workflows/deploy-staging.yml= (six steps between claim and
+verdict), =.github/workflows/gate.yml= (the four check-run names guard 4
+requires green), and =router/routes.json= (what =gates/e2e.sh= probes):
+
+: n  =  6 fixed steps  +  4 gate runs  +  1 per group installed  +  routes probed
+
+Route counts per app, from =router/routes.json=: core 8, checkout 3, plp 2,
+mock 2, pdp 1.
+
+* 2. The label distribution, measured
+
+87 PRs, every state, read 2026-09-15. This is the distribution *in practice*,
+not an assumption:
+
+| group set                    | PRs | n  | P(clean entry) at f=10% |
+|------------------------------+-----+----+-------------------------|
+| =(no app label)=             |  22 | —  | not a unit; never enters |
+| =pdp=                        |  16 | 12 | 28.24%                  |
+| =core=                       |  14 | 19 | 13.51%                  |
+| =checkout=                   |  13 | 14 | 22.88%                  |
+| =plp=                        |  10 | 13 | 25.42%                  |
+| =checkout+core+pdp+plp=      |   7 | 28 | *5.23%*                 |
+| =mock=                       |   2 | 13 | 25.42%                  |
+| =checkout+core+mock+pdp+plp= |   2 | 31 | *3.82%*                 |
+| =pdp+plp=                    |   1 | 15 | 20.59%                  |
+
+65 of 87 are units (=CLAUDE.md=: a unit carries at least one =app:*= label).
+The 22 without one never reach the berth and are excluded — including them
+would describe a population a quarter of which cannot enter staging at all.
+
+*The shape is the finding.* n runs 12 to 31 with a hole in the middle: in 87
+PRs, exactly one ever touched two apps. Changes here are single-app or
+whole-estate, nothing between.
+
+* 3. Why the mean is the wrong summary
+
+| quantity | value |
+|----------+-------|
+| =E[(1-f)^n]= over the real mixture | *20.13%* pass |
+| =(1-f)^E[n]= using mean n = 16.45  | 17.68% pass |
+| gap | 2.45 points, 1.14× |
+
+=x -> (1-f)^x= is convex, so the mixture always beats its own mean
+(Jensen). With a bimodal n the two *diverge* instead of nearly agreeing. Plan
+on the mean and you will under-provision by 14% — in the safe direction for
+capacity, but it also hides where the loss is: the single-app changes carry
+the pass rate, and the seven-plus-two whole-estate changes are already lost
+before anyone looks at them.
+
+* 4. The berth, and the policy nobody has stated
+
+=sim/simulate-gates.py= records an assumption that has never been argued for:
+
+#+begin_quote
+a red run holds the singleton berth while the author retries, so gate
+flakiness converts directly into queue starvation
+#+end_quote
+
+That is one of two policies, and it is the worse one.
+
+| policy | what a red run does |
+|--------+---------------------|
+| *HOLD* | author keeps the berth while debugging |
+| *RELEASE* | berth frees immediately; author debugs off-berth and re-queues |
+
+Attempts to green are Geometric(1−f), so per successful deployment:
+
+: RELEASE   berth-minutes per green  =  hold / (1-f)
+: HOLD      berth-minutes per green  =  hold + (f/(1-f)) * (hold + debug)
+
+Dividing, everything about the queue cancels:
+
+#+begin_quote
+*RELEASE / HOLD  =  1 + f · debug / hold*
+#+end_quote
+
+No arrival rate, no backlog, no queue discipline, no fairness rule. The gain
+depends only on how often runs go red and on how long debugging takes relative
+to a deploy. It is ≥ 1 for every f ≥ 0: *releasing can never cost throughput.*
+
+** Simulated against that, 1000 PRs, hold 30m, debug 60m
+
+Saturated on purpose — every change carries =release:start= and takes the
+berth the moment it is free, the "if it's free I'm deploying" regime with no
+calendar. That is the only regime where the policy difference is visible
+rather than absorbed by idle time.
+
+| f | policy | greens/day | analytic | err | tries | mean latency | p95 |
+|---+--------+------------+----------+-----+-------+--------------+-----|
+| 10% | release | 42.8 | 43.2 | 0.9% | 1.12 | 282h | 530h |
+| 10% | hold    | 35.7 | 36.0 | 0.9% | 1.11 | 347h | 645h |
+| 20% | release | 38.9 | 38.4 | 1.3% | 1.23 | 310h | 587h |
+| 20% | hold    | 28.2 | 27.4 | 2.6% | 1.24 | 428h | 796h |
+| 30% | release | 33.4 | 33.6 | 0.5% | 1.44 | 353h | 685h |
+| 30% | hold    | 20.7 | 21.0 | 1.4% | 1.44 | 566h | 1087h |
+| 40% | release | 28.7 | 28.8 | 0.5% | 1.67 | 414h | 795h |
+| 40% | hold    | 16.1 | 16.0 | 0.6% | 1.66 | 738h | 1399h |
+| 50% | release | 23.8 | 24.0 | 0.7% | 2.01 | 500h | 963h |
+| 50% | hold    | 11.3 | 12.0 | *5.5%* | 2.08 | 1082h | 2019h |
+
+Simulation matches the closed form everywhere. The one cell at 5.5% is
+f=50% HOLD, which produces the fewest greens in the run and therefore the
+widest Monte Carlo error; it is sampling noise, not disagreement — it tightens
+with =--prs 10000=.
+
+** The ratio, three ways
+
+| f | simulated | closed form | =1 + f·debug/hold= |
+|---+-----------+-------------+--------------------|
+| 10% | 1.200× | 1.200× | 1.200× |
+| 20% | 1.382× | 1.400× | 1.400× |
+| 30% | 1.614× | 1.600× | 1.600× |
+| 40% | 1.781× | 1.800× | 1.800× |
+| 50% | 2.102× | 2.000× | 2.000× |
+
+*Latency is where it really shows.* At f=50% the mean time-to-green is 500
+hours under RELEASE and 1082 hours under HOLD. Throughput doubles; waiting
+doubles with it, and p95 goes from 963h to 2019h.
+
+* 5. Two defects on this path, found while grounding the model
+
+Neither was the object of the exercise. Both are on staging entry, so they
+belong in this analysis rather than in a research note.
+
+** D1 — the workflow passes deploy groups where both targets read a SHA
+
+=spec.org:1574= and =docs/deployment-targets.org:102= both document
+=deploy.sh <env> <groups...>=. *Both implementations disagree with the spec*,
+and with each other about the consequence:
+
+| target | signature | handed =groups.sh= output |
+|--------+-----------+---------------------------|
+| =targets/node/deploy.sh:37= | =sha="${2:?}"= | *refuses*, exit 3 |
+| =targets/bastille/deploy.sh:10= | =sha="${2:-$(git rev-parse --short HEAD)}"= | *accepts*, writes it into =version.json= as the build SHA |
+
+=deploy-staging.yml:26= (and =deploy-production.yml:42=) pass
+="$(./change/groups.sh "$PR")"= as =$2=. Measured against the real
+=git rev-parse=, every possible =groups.sh= output is refused by the node
+target — including the empty string a non-unit produces:
+
+: 'core'                    REFUSED     'checkout core pdp plp'   REFUSED
+: ''                        REFUSED     '43a8e3e'                 OK
+
+Two things follow. The node target *cannot ever* deploy through this workflow,
+at any failure rate — a deterministic 100% loss that no retry policy and no
+gate reliability touches. And the bastille target's silent acceptance puts a
+group list where guard 5 expects a build identity.
+
+The refusal arrives as exit 3, which =docs/exit-codes.org:15= defines as
+"freeze, or the SHA does not exist". *A wiring bug wearing a freeze's
+clothes* — the same confusion of categories as =guard4.sh:141=, where an empty
+filter reads as consent.
+
+=change/activate.sh:294= passes =targets/node/deploy.sh staging "$SHA"=
+correctly. That is the path that built the live estate, and it is why this has
+stayed invisible.
+
+** D2 — =vars.DEPLOY_TARGET= is not set
+
+=gh variable list= returns =PRODUCTION_URL= and =STAGING_URL= only. The
+workflow expands to =./targets//deploy.sh=. D2 stops the run before D1 can,
+which is why D1 has never produced a visible failure.
+
+*Neither is changed here.* Both sit on the same path as the deferred
+=guard4.sh:141= item and belong with it in one ruling.
+
+* 6. What follows for us
+
+- *The 10–50% band is a per-PR band, and our per-check rate has to be far
+  better than it sounds to reach it.* Inverting the mixture:
+
+  | per-PR failure | implied per-check f | per-check pass |
+  |----------------+---------------------+----------------|
+  | 10% | 0.64% | 99.36% |
+  | 20% | 1.36% | 98.64% |
+  | 30% | 2.19% | 97.81% |
+  | 40% | 3.14% | 96.86% |
+  | 50% | 4.28% | 95.72% |
+
+  A gate that is "99% reliable" puts us at a *15% per-PR failure rate*. This
+  is the argument for =CLAUDE.md='s "zero findings or the gate failed" — a
+  warning tier is a check that fails 10% of the time on purpose.
+
+- *Whole-estate changes are the expensive ones and we make them often.* Nine
+  of 65 units touched four or five apps, at n=28–31 and a 4–5% clean-entry
+  rate. Under the spec's own =deploy.sh <env> <groups...>= these would pay for
+  what they touch. Under what is implemented, =deploy.sh= loops all five apps
+  and =gates/e2e.sh= probes all sixteen routes regardless of the groups it is
+  handed — so a one-line =pdp= change pays the whole-estate toll anyway. D1 is
+  the same divergence seen from the other end: *the groups argument is
+  computed, passed, and then discarded by every consumer.*
+
+- *State the berth policy.* RELEASE is free — it never loses throughput at
+  any failure rate, and it is worth 1.2×–2.0× at ours. If we want it, the
+  place it becomes true is =deploy-staging.yml='s =always()= steps, which
+  already release the lock and close the window; what is missing is that a red
+  run currently leaves the *author* believing the berth is theirs to retry in.
+  That is a documentation and =queue.sh= question, not a new mechanism.
+
+* Reproducing
+
+: ./experiments/025-staging-entry-stress/staging_entry_sim.py
+: ./experiments/025-staging-entry-stress/staging_entry_sim.py --check
+: ./experiments/025-staging-entry-stress/staging_entry_sim.py --sweep 10 25 50 --debug 120
+
+=--check= asserts five independent agreements (Jensen's direction, the
+constant-n collapse, the ratio identity, sim-vs-closed-form on six cells, and
+that attempts-to-green is Geometric) and exits non-zero on any failure. A
+Monte Carlo that agrees with nothing external is asserting its own output.
+
+* What this does not model
+
+Correlated failure (checks are independent here; real red runs cluster, which
+makes the per-PR rate *better* and the queue *worse*), the calendar
+(=preflight.sh= exit 3 and 4 are absent; both can only lower throughput),
+debug time as anything but a constant, and any priority rule on the berth —
+so =itil:emergency= preemption is not represented.
