@@ -19,7 +19,10 @@ person's. Carry forward: before a second operator joins, the pipeline gets
 an identity of its own (a bot account or an App) and the lock becomes a
 record with a holder and a deadline, with the label as the visible state.
 Trigger: the first time =ListAgents= or the forge shows a second live
-session on the same estate.
+session on the same estate. Open item: the operator in the bastille has
+not reported its side since the port; once the core network is reachable,
+its calendar ref, its scheduler's grammar and its account of D21 and 024
+are the other half of the mainline review (=experiments/026=).
 
 ** The prefix or the tense must say who wrote a label
 
@@ -110,7 +113,7 @@ watch it being written.
 The first published spend was 1.9 times the truth because a transcript
 writes one usage record per streaming update (017 F1). Carry forward: the
 counting rule is in =experiments/017-token-metrics/derive.py= and
-=experiments/027-review-cost/tally.py=; the lever is turns, not tokens.
+=experiments/027-review-cost/tally.py=; the lever is turns; tokens follow.
 Trigger: any cost figure.
 
 * Skill candidates for aygp-dr/skills staging, each with its incident
