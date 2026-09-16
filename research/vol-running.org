@@ -1,0 +1,29 @@
+#+TITLE: Where it can run
+#+SUBTITLE: Substrates, hosting, what a platform enforces, and the lease and lock vocabulary, for the operator
+#+DATE: 2026-09-16
+#+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
+#+SETUPFILE: preamble.org
+
+A volume of the research edition for the operator. Where the estate can
+run, what a platform can enforce against what it claims, and the short
+documents on leases, locks and the change record that an operator needs
+without the history volume.
+
+* Substrates and what a platform can enforce
+#+INCLUDE: "history/substrate-mapping.org" :minlevel 2
+#+INCLUDE: "substrates/substrate-emulation.org" :minlevel 2
+#+INCLUDE: "substrates/hosting-survey.org" :minlevel 2
+#+INCLUDE: "substrates/deployment-targets.org" :minlevel 2
+#+INCLUDE: "substrates/github-environments.org" :minlevel 2
+#+INCLUDE: "substrates/ci-and-the-estate.org" :minlevel 2
+#+INCLUDE: "substrates/ci-portability.org" :minlevel 2
+#+INCLUDE: "../experiments/013-freebsd-browser/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/002-gitea-actions/README.org" :minlevel 2
+
+* Leases, locks and the record
+#+INCLUDE: "history/precedence-and-locks.org" :minlevel 2
+#+INCLUDE: "history/changeflow-state-machine.org" :minlevel 2
+#+INCLUDE: "history/deploy-ledger-comparison.org" :minlevel 2
+
+* The tables
+#+INCLUDE: "appendix/issue-index.org" :minlevel 2

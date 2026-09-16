@@ -1,7 +1,7 @@
 #+TITLE: The label table, as declared
 #+DATE: 2026-09-15
 
-Generated from =change/label-owners.tsv= at =2a5d25b= by =research/generate.py=.
+Generated from =change/label-owners.tsv= at =9560471= by =research/generate.py=.
 47 labels. A label with no row here has no owner and cannot be trusted
 (=findings/label-ownership.org=). Columns: persistent (survives settlement),
 a person may add, a person may clear; the first sentence of the declaration.
@@ -13,12 +13,12 @@ a person may add, a person may clear; the first sentence of the declaration.
 | =itil:normal= | labeller | yes | no | no | derived; same |
 | =control-plane= | labeller | yes | no | no | derived from gates/, change/, .github/ -- NARROWER than itil:normal, which also globs router/ and targets/ |
 | =labeler:skip= | human | yes | yes | yes | the opt-out that transfers ownership of the derived labels |
-| =release:started= | human | no | yes | no | the human's part of starting a change; the pipeline clears it |
+| =release:started= | scheduler | no | no | no | THE RUNNER'S ANSWER to release:start: the verb was consumed and a driver holds this change (watch.sh and the d |
 | =release:scheduled= | scheduler | no | no | no | set when a window is booked |
 | =release:completed= | change/settle.sh | yes | no | no | The pipeline's OUTCOME: production converged on this head, and it DRIVES the side effects -- the merge to main |
-| =release:ended= | scheduler | yes | no | no | The TOMBSTONE |
+| =release:ended= | scheduler | yes | no | no | THE RUNNER'S ANSWER to release:end, and the record an aborted release leaves beside its closure code (release: |
 | =release:skip= | human | yes | yes | yes | INTENT, a verb: skip the estate |
-| =release:start= | human | no | yes | no | INTENT |
+| =release= | human | no | yes | no | INTENT |
 | =hold:staging= | REJECTED | no | no | no | REJECTED SEMANTICS 2026-09-13 |
 | =deploy:staging= | scheduler | no | no | no | ACTION in flight, and the berth claim guard 1 reads |
 | =deploy:production= | workflow | no | no | no | INTENT to deploy to production, landed by promote.yml when staging:smoke is recorded with staging:e2e beside i |

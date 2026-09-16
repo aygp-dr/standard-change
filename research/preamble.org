@@ -1,0 +1,26 @@
+# The LaTeX and export settings shared by the complete edition and the volumes.
+# Loaded by #+SETUPFILE from each index; edit here, never in an index.
+#+LATEX_CLASS: research
+#+LATEX_CLASS_OPTIONS: [11pt,oneside,titlepage]
+#+LATEX_COMPILER: xelatex
+# Preamble from the LaTeX review of 2026-09-15 (verified build in the reviewer's copy).
+# 11pt at 15.5cm (~93 characters per line) rather than the reviewed 12pt at 14.5cm, to keep the page count near 280. Fonts by file name so the same preamble builds on
+# any TeX Live (Menlo exists only on macOS); STIX Two Text has none of the
+# arrows or set symbols, STIX Two Math has all but the cross; mono scaled to
+# the text's x-height. Prose measure 14.5cm (~80 characters at 12pt); tables
+# may overhang it by 2cm each side (export-common.el). verbatim is redefined
+# as fvextra's Verbatim so it wraps; \sloppy replaced by \emergencystretch.
+#+LATEX_HEADER: \usepackage{fontspec}
+#+LATEX_HEADER: \setmainfont{STIXTwoText}[Extension=.otf,UprightFont=*-Regular,BoldFont=*-Bold,ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]
+#+LATEX_HEADER: \setmonofont{SourceCodePro}[Extension=.otf,UprightFont=*-Regular,BoldFont=*-Bold,ItalicFont=*-RegularIt,BoldItalicFont=*-BoldIt,Scale=MatchLowercase]
+#+LATEX_HEADER: \newfontfamily\symbolfont{STIXTwoMath}[Extension=.otf,UprightFont=*-Regular]
+#+LATEX_HEADER: \usepackage[letterpaper,textwidth=15.5cm,textheight=23cm,hcentering,vcentering]{geometry}
+#+LATEX_HEADER: \usepackage{microtype}\linespread{1.04}\raggedbottom\setlength{\emergencystretch}{1.5em}
+#+LATEX_HEADER: \usepackage{ltablex}\keepXColumns\usepackage{booktabs}\setlength{\tabcolsep}{4pt}
+#+LATEX_HEADER: \usepackage[export]{adjustbox}
+#+LATEX_HEADER: \usepackage{xurl}\usepackage[htt]{hyphenat}
+#+LATEX_HEADER: \usepackage{xcolor}\definecolor{linkblue}{rgb}{0.12,0.22,0.5}\hypersetup{colorlinks=true,linkcolor=linkblue,urlcolor=linkblue,bookmarksdepth=3}
+#+LATEX_HEADER: \usepackage{fvextra}\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\small,breaksymbolleft={}}
+#+LATEX_HEADER: \XeTeXinterchartokenstate=1\newXeTeXintercharclass\slashclass\XeTeXcharclass`\/=\slashclass\XeTeXinterchartoks\slashclass 0={\allowbreak}
+#+LATEX_HEADER: \usepackage{amssymb}\usepackage{newunicodechar}\newunicodechar{⊕}{{\symbolfont ⊕}}\newunicodechar{∅}{{\symbolfont ∅}}\newunicodechar{→}{{\symbolfont →}}\newunicodechar{←}{{\symbolfont ←}}\newunicodechar{↔}{{\symbolfont ↔}}\newunicodechar{⇒}{{\symbolfont ⇒}}
+#+LATEX_HEADER: \newunicodechar{≈}{{\symbolfont ≈}}\newunicodechar{≤}{{\symbolfont ≤}}\newunicodechar{≥}{{\symbolfont ≥}}\newunicodechar{≠}{{\symbolfont ≠}}\newunicodechar{⊆}{{\symbolfont ⊆}}\newunicodechar{∈}{{\symbolfont ∈}}\newunicodechar{∉}{{\symbolfont ∉}}\newunicodechar{∧}{{\symbolfont ∧}}\newunicodechar{∨}{{\symbolfont ∨}}\newunicodechar{✓}{{\symbolfont ✓}}\newunicodechar{✗}{{\symbolfont ☓}}

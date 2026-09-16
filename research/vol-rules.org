@@ -1,0 +1,33 @@
+#+TITLE: What broke, and what the rules are
+#+SUBTITLE: The findings, the label machine, and the grinds, for a rebuilder grading against the spec
+#+DATE: 2026-09-16
+#+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
+#+SETUPFILE: preamble.org
+
+A volume of the research edition for the rebuilder. The seventeen rules and
+the failure modes that were found, the three grinds that produced the
+messaging audit, and the tables to check coverage against. The primitives
+the findings rest on are in the adopting volume.
+
+* What was found
+#+INCLUDE: "findings/label-ownership.org" :minlevel 2
+#+INCLUDE: "findings/concurrent-change.org" :minlevel 2
+#+INCLUDE: "findings/label-state-machine.org" :minlevel 2
+#+INCLUDE: "findings/changing-the-pipeline.org" :minlevel 2
+#+INCLUDE: "findings/changing-the-rules.org" :minlevel 2
+#+INCLUDE: "findings/cross-cutting-coupling.org" :minlevel 2
+#+INCLUDE: "findings/testing-problems.org" :minlevel 2
+#+INCLUDE: "findings/time-spent.org" :minlevel 2
+#+INCLUDE: "findings/reviewer-identity.org" :minlevel 2
+#+INCLUDE: "../experiments/021-state-machines/REVIEW.org" :minlevel 2
+#+INCLUDE: "../experiments/021-state-machines/PARING.org" :minlevel 2
+
+* The grinds
+#+INCLUDE: "../experiments/022-five-agent-grind/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 2
+#+INCLUDE: "../experiments/024-five-owners/notes.org" :minlevel 2
+
+* The tables
+#+INCLUDE: "appendix/label-table.org" :minlevel 2
+#+INCLUDE: "appendix/scenario-index.org" :minlevel 2
+#+INCLUDE: "appendix/issue-index.org" :minlevel 2

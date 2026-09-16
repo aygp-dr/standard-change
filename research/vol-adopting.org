@@ -1,0 +1,26 @@
+#+TITLE: Adopting standard-change
+#+SUBTITLE: The tracking layer for a repository that has a risk designation, something deployable, and a pipeline
+#+DATE: 2026-09-16
+#+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
+#+SETUPFILE: preamble.org
+
+A volume of the research edition for the adopter. The grammar, the five
+properties, the method and the census, and nothing about this repository's
+own bugs; those are in the rules volume, and the surveys in the history
+volume. The complete edition (=index.org=) carries everything in the
+rebuild order.
+
+* How to adopt it
+#+INCLUDE: "adoption.org" :minlevel 2
+#+INCLUDE: "findings/release-grammar.org" :minlevel 2
+#+INCLUDE: "history/five-properties.org" :minlevel 2
+#+INCLUDE: "findings/labels-are-the-only-channel.org" :minlevel 2
+#+INCLUDE: "findings/the-method.org" :minlevel 2
+#+INCLUDE: "findings/evidence-census.org" :minlevel 2
+#+INCLUDE: "substrates/conformance-ladder.org" :minlevel 2
+#+INCLUDE: "../spec.org::*Nomenclature" :only-contents t :minlevel 2
+#+INCLUDE: "../docs/exit-codes.org" :minlevel 2
+
+* The tables
+#+INCLUDE: "appendix/label-table.org" :minlevel 2
+#+INCLUDE: "appendix/issue-index.org" :minlevel 2

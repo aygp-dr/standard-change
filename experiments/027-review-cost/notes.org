@@ -1,0 +1,80 @@
+#+TITLE: 027 -- what the mainline review cost, per agent, and what the cheap driver actually did
+#+DATE: 2026-09-16
+
+* Hypothesis
+
+Splitting a review into a specification by an expensive model and a
+mechanical walk by a cheap one costs an order of magnitude less than the
+expensive model doing both, and produces a ledger of the same quality.
+Falsified if the cheap walk's cost is within a factor of three of the
+specification's, or if the ledger it produces would need to be redone.
+
+* Success criterion
+
+A per-agent table from the agents' own transcripts (017's counting rule),
+and a check of the walk against its own procedure: tool uses per row, and
+whether the per-row steps the specification names were run.
+
+* Run
+
+#+begin_example
+python3 experiments/027-review-cost/tally.py \
+  "l7-spec (opus)=<task>/a21e71825a9cbcf0e.output" \
+  "driver (haiku)=<task>/a2990bd6cfc6ef04a.output" \
+  "split-assessor (sonnet)=<task>/a410e3c77126ce94d.output"
+#+end_example
+
+Rates are the table in =tally.py=, USD per million tokens, approximate;
+edit them when they change.
+
+* 2026-09-16, the numbers
+
+| agent                   | model                    | calls | tool uses | output tokens | cache read | total tokens |   USD |
+|-------------------------+--------------------------+-------+-----------+---------------+------------+--------------+-------|
+| specification (L7)      | claude-opus-5            |    32 |        35 |        34,799 |  2,776,021 |    2,934,903 |  9.10 |
+| the walk (driver)       | claude-haiku-4-5         |    36 |        35 |        23,316 |  1,958,570 |    2,056,507 |  0.41 |
+| split assessment        | claude-sonnet-5          |    10 |        10 |        14,725 |    645,107 |      736,512 |  0.70 |
+| the three paper reviews | claude-fable-5-1         |    61 |       116 |       154,504 |  7,246,582 |    8,385,025 | 40.90 |
+
+The specification cost 22 times the walk. The first clause of the
+hypothesis holds.
+
+* F1 -- the cheap walk did not walk
+
+The ledger has 185 rows and the driver made 35 tool uses in total, which is
+one tool use per five rows. The specification's Step 7 (the survival check:
+grep three added lines at HEAD) and Step 6 (re-run a cheap reproduction) are
+per-row commands; at that count they were not run per row. The verdicts
+show it: 171 of 185 rows are =unverifiable=, and rows such as =9332ed3= (a
+one-line CSS rule still in the tree) carry "no corroborating evidence
+found" when a single =git grep= finds the evidence. The seven
+=confirmed-by-note-only= rows are the rows the extractor had already marked
+as carrying a complete note. The walk re-expressed the mechanical columns
+as verdicts and cost forty cents doing it.
+
+The second clause of the hypothesis fails: the ledger's judgement columns
+would need to be redone. The fix is the one the specification hinted at
+when it made the survival check "mechanical and cheap": a check that is
+mechanical belongs in the extractor, where it runs for every row without a
+model in the loop. Steps 6 and 7 move into =extract.py=; the model's share
+of the walk shrinks to the rows the mechanics cannot settle.
+
+* F2 -- where the money is, again
+
+As in 017: cache reads are 92 to 96 percent of every agent's tokens. The
+L7's 35 tool uses read the spec, the methodology, sixty commits and four
+notes into context once each; the walk read the ledger and its caches. The
+lever is the number of turns and what each turn re-reads, and the cheap
+model's saving came from making fewer turns, which is also why it skipped
+the rows.
+
+* What this changes
+
+- =experiments/026-mainline-review/extract.py= gains the survival check and
+  the cheap re-run, so the mechanical verdicts (=no-claim=,
+  =confirmed-by-note-only=, and =confirmed= by survival) need no agent.
+- A driver agent is given rows, one per turn, with the row's evidence in the
+  prompt, or it is not given the walk at all. "Follow the procedure" over
+  185 rows is a request a cheap model answers by summarising.
+- The cost table above is the one to compare against when the walk is
+  rerun with the mechanical checks in place.

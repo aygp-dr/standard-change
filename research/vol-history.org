@@ -1,0 +1,27 @@
+#+TITLE: The history and the standards survey
+#+SUBTITLE: What was read: timelines, surveys and references, with their verification drawers, for the researcher
+#+DATE: 2026-09-16
+#+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
+#+SETUPFILE: preamble.org
+
+A volume of the research edition for the researcher. The surveys and the
+references with their verification drawers intact. The cuts proposed in
+issue #126 apply here first; until they land this volume is the largest.
+
+* History of the ideas
+#+INCLUDE: "history/pipeline-history.org" :minlevel 2
+#+INCLUDE: "history/release-strategies.org" :minlevel 2
+#+INCLUDE: "history/reference-survey.org" :minlevel 2
+#+INCLUDE: "history/release-standards.org" :minlevel 2
+#+INCLUDE: "history/promotion-models.org" :minlevel 2
+#+INCLUDE: "history/affected-by-construction.org" :minlevel 2
+#+INCLUDE: "history/label-standards-survey.org" :minlevel 2
+#+INCLUDE: "history/deployment-signalling-survey.org" :minlevel 2
+#+INCLUDE: "history/classification-frameworks.org" :minlevel 2
+#+INCLUDE: "history/storefront-deployments.org" :minlevel 2
+#+INCLUDE: "history/precedence-and-locks.org" :minlevel 2
+#+INCLUDE: "history/changeflow-state-machine.org" :minlevel 2
+#+INCLUDE: "history/deploy-ledger-comparison.org" :minlevel 2
+
+* The tables
+#+INCLUDE: "appendix/issue-index.org" :minlevel 2
