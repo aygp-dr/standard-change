@@ -1,5 +1,5 @@
 #+TITLE: The issue index
-#+DATE: 2026-09-15
+#+DATE: 2026-09-16
 
 Generated from the forge at build time. The paper cites issues by number; a
 reader elsewhere has no tracker, so this is the one-line meaning of each.
