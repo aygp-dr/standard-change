@@ -1,0 +1,300 @@
+#+TITLE: 029 -- stacked diffs, and a guard that only knows one base
+#+DATE: 2026-09-16
+
+* Why
+
+Every open pull request in this repository has base =main=. Measured today:
+ten of ten. The pipeline has therefore never been asked what it does when a
+change's base is *another change*, and every guard was written under an
+assumption nobody wrote down.
+
+Two chains of five, in the same area, deployed deliberately out of order,
+against ten local dev blocks -- one per change, which is exactly the capacity
+the estate has.
+
+* What the code assumes today, measured
+
+=change/queue.sh= is guard 0. Three facts, all verified by reading it:
+
+| line | what it does |
+|---+---|
+| =:24= | =mergeStateStatus= from the forge -- computed against the *PR's base*, whatever that is |
+| =:26= | =baseRefOid= -- the tip of the *PR's base*, again whatever that is |
+| =:27= | =divergence.sh "$base" origin/main= -- but the comparison is *hardcoded to main* |
+
+And =grep -rn baseRefName= over the repository returns *nothing*. The forge is
+asked for the base's OID and its merge state; it is never asked what the base
+*is*.
+
+So the guard reads two facts relative to the PR's base and then adjudicates
+them against =main=. While every base is =main= those are the same thing and
+the bug is invisible. That is the condition this experiment removes.
+
+** The refusal text is the sharpest part
+
+=queue.sh:41=, on a =BEHIND= branch:
+
+: Staging refused: branch is `BEHIND` relative to `main`. Rebase onto `main`
+: and re-add `deploy:staging`
+
+For =checkout-stack-3=, whose base is =checkout-stack-2=, =BEHIND= means
+behind *stack-2*. The message names the wrong reference, and *the remedy it
+prescribes would destroy the stack*: rebasing stack-3 onto =main= discards
+stack-1 and stack-2 from its history. An author who follows the instruction
+correctly has collapsed their own chain.
+
+This is the same defect shape as 024's F2 -- a refusal that names a symptom
+rather than the cause -- except here the instruction is not merely unhelpful,
+it is destructive.
+
+* Hypotheses
+
+** H1 -- guard 0 reads its facts against the base and its verdict against main
+
+*Refuted if* a stacked change with a base that is current, on a =main= that has
+moved, is correctly classified. *Confirmed if* the class is computed from a
+diff that includes the stack's own commits.
+
+** H2 -- divergence cannot tell "main moved under you" from "you are ahead of main"
+
+=divergence.sh base..origin/main= lists files that differ between the base and
+main. For a stacked change the base is *ahead* of main by every commit in the
+chain below it. Those files differ. So the stack's own work should be reported
+as divergence class =artifact= -- i.e. *the deeper the stack, the more certainly
+its own contents are read as main having moved under it.*
+
+*Refuted if* depth does not affect the class. *Confirmed if* stack-5 is refused
+for a reason that is entirely its own ancestors' changes.
+
+Prediction, registered before running: chains touching =apps/checkout/**= make
+=artifact= the winning class, so every non-leaf is refused with "Deploying this
+tree would revert what shipped" -- a sentence that is exactly backwards.
+
+** H3 -- there is no transitive freshness rule, and nothing notices
+
+Nothing in =gates/= or =change/= walks a base chain. A leaf can therefore hold
+=deploy:staging= while its ancestors are unmerged, and deploying it deploys
+every ancestor's code with no record that it did.
+
+*Refuted if* any script resolves a base transitively. *Confirmed if* stack-5
+deploys while stack-1..4 are open, and the observation record names only #5.
+
+** H4 -- out-of-sequence deployment is not merely unordered, it is unrecorded
+
+Deploy the leaf first, then an ancestor. The ancestor's tree is a *subset* of
+what is already serving, so its deployment is a *rollback of its own
+descendants* -- and guard 5 will confirm convergence on the ancestor's sha,
+correctly, while the estate silently loses four changes' work.
+
+*Refuted if* anything refuses the second deployment. *Confirmed if* both
+deployments are green and the estate ends on the ancestor.
+
+** H5 -- the berth serialises the stack into its worst case
+
+The berth is a singleton and both chains touch =checkout=. Ten changes, one
+berth. Per =docs/staging-entry-stress.org=, attempts-to-green multiply; here
+the ordering constraint is not a preference but a correctness requirement, and
+the queue has no way to express it.
+
+* Method
+
+** The two chains
+
+Ten pull requests, two chains of five, both in =apps/checkout/=, so the diffs
+are in the same area and the stacks genuinely interact.
+
+| chain | branches | base of each |
+|---+---+---|
+| numeric | =checkout-stack-1= .. =checkout-stack-5= | previous in chain; 1's base is =main= |
+| alpha | =checkout-stack-a= .. =checkout-stack-e= | previous in chain; a's base is =main= |
+
+The leaf of each chain (=-5=, =-e=) carries =itil:standard=. The rest carry
+their =app:checkout= label from the labeller and nothing else, so that the
+class is asserted exactly once per chain -- at the point where the chain is
+proposed for release.
+
+*Deliberate:* both chains start from =main= and never touch each other. Two
+independent stacks in one area is the case that distinguishes "the berth is
+busy" from "these two cannot compose".
+
+** Trivial changes, same area
+
+Each change edits the same file in =apps/checkout/= -- one line each, appended
+in order, so that:
+- every pair of adjacent changes is a textual conflict if reordered,
+- the leaf's tree is the only one containing all five lines,
+- and an ancestor deployed after a descendant provably serves less.
+
+** Out of sequence
+
+Three orderings, each a separate observation:
+
+| order | what it tests |
+|---+---|
+| leaf first (=-5=, then =-1=) | H4 -- does an ancestor roll back its descendants |
+| interleaved (=-1=, =-a=, =-2=, =-b=, ...) | H5 -- two stacks contending for one berth |
+| middle-out (=-3= while 1,2 open) | H3 -- transitive freshness, with a gap below |
+
+** Ten local blocks
+
+=change/ports.sh= allocates dev blocks at =9000 + 10n=, =n <= 9=, and refuses
+block 10. Ten blocks, ten changes: the estate's dev capacity is *exactly*
+saturated by this experiment, which is itself a finding about stacking -- a
+stack of depth k needs k environments to verify each level independently, and
+the tier holds ten.
+
+* Success criterion
+
+The experiment succeeds if each hypothesis is *decided* -- confirmed or
+refuted -- by an observation recorded on a pull request, not by reading code.
+A hypothesis that cannot be decided because the machinery refused earlier for
+an unrelated reason is *undecided* and must be reported as such, never as
+refuted.
+
+Per =CLAUDE.md=, a guard that cannot reject produces no verdict: if guard 0
+never fires at all during this run, H1 and H2 are undecided rather than
+refuted.
+
+* Semantics to decide, once the observations exist
+
+The question is not only "what does it do" but "what should it do". Four
+styles, and this repository currently implements none of them:
+
+| style | leaf merges | freshness rule |
+|---+---+---|
+| *collapse* (Phabricator, Graphite) | leaf merges the whole chain as one commit | leaf fresh iff up to date with =main= |
+| *sequential* | bottom merges first, each PR retargets to =main= | each fresh iff up to date with its base |
+| *merge queue* | queue linearises and tests the combination | freshness is the queue's problem |
+| *deploy-the-leaf* | nothing merges; the leaf is deployed | leaf fresh iff *transitively* fresh |
+
+The rule the owner asked about belongs to the fourth:
+
+: A leaf is deployable iff it is up to date with its immediate base, AND its
+: base is itself deployable by this same rule, down to a base that is `main`.
+
+That is a transitive walk, and it has two properties worth stating before
+measuring. It is *recursive*, so one unmerged ancestor anywhere in the chain
+poisons the leaf. And it is *not* what guard 0 computes -- guard 0 asks one
+question, once, against =main=.
+
+A second rule is needed for the estate, and it is the one H4 attacks:
+
+: A deployment may not serve a tree that is an ancestor of what is already
+: serving, unless it is declared a rollback.
+
+Nothing today distinguishes "deploy stack-1" from "roll back to stack-1", and
+they are the same act on the same estate.
+
+* Validation scenarios
+
+Each is a named setup, one act, and one question decided by observation. The
+=observed= column is filled in during the run and never before; a scenario
+whose machinery refused earlier for an unrelated reason is *undecided*, not
+refuted.
+
+** V1 -- an ancestor moves after its descendants are approved
+
+The scenario the owner posed, and the one that decides whether this deployment
+style is expressible at all.
+
+*Setup.* Build =checkout-stack-1= .. =-5= plus =checkout-stack-release=.
+Then, in order:
+
+1. modify =checkout-stack-3= -- push a new commit to it,
+2. approve =checkout-stack-5=,
+3. approve =checkout-stack-release=,
+4. say =release:start= on =checkout-stack-release=.
+
+*The question.* Does it deploy?
+
+*Prediction, registered before running: yes, and that is the defect.*
+
+The reasoning, and it turns on guard 0 checking exactly one level:
+
+| pair | state after step 1 |
+|---+---|
+| =release= vs its base =-5= | *CLEAN* -- neither moved |
+| =-5= vs =-4= | CLEAN |
+| =-4= vs =-3= | *BEHIND* -- 3 moved under 4 |
+| =-3= vs =-2= | CLEAN |
+
+=change/queue.sh:24= asks the forge for =mergeStateStatus= of *the pull request
+being deployed*. For =release= that is =CLEAN=, because its immediate base did
+not move. The staleness is three levels down and nothing walks down.
+
+So guard 0 passes. Guard 4 asks whether a reviewer approved *this head*, and
+=release='s head is untouched since approval, so it passes too. Every guard is
+satisfied and every guard is answering a question about one edge of a chain
+with five.
+
+*What ships.* =release='s tree contains =-3= as it was *before* step 1. The
+estate serves a build that does not include the modification, while
+=checkout-stack-3='s pull request displays that modification as merged-pending
+and its author believes it is in flight.
+
+*The general statement.* Approval and freshness are both computed per pull
+request against one base. A stack's *content* is transitive. Approving a leaf
+therefore attests to an ancestor state that the ancestor's own pull request may
+have already superseded -- and nothing in the system can see the gap.
+
+*Refuted if* anything refuses at any step, or if the deployed tree contains the
+step-1 modification. *Confirmed if* the deployment is green and the served
+build predates step 1.
+
+*Second question, dependent on the first.* If the author rebases the stack to
+pick up the modification, every descendant's head SHA changes, so *every
+approval above =-3= is invalidated at once* -- five approvals lost for a
+one-line change three levels down. Either the stack ships stale content or a
+modification anywhere costs every review above it. Measure which, and the cost.
+
+** V2 -- leaf first, then an ancestor
+
+Deploy =-5=, then deploy =-1=. Does anything refuse the second?
+
+*Prediction: no.* =-1='s tree is an ancestor of what is serving, so its
+deployment removes four changes' work, and guard 5 confirms convergence on
+=-1='s sha -- correctly, which is the problem. A rollback and a deployment are
+the same act on this estate.
+
+** V3 -- middle-out with a gap below
+
+=release:start= on =-3= while =-1= and =-2= are open and unmerged. Deploying
+=-3= deploys their content too, with no record naming them.
+
+*Question:* does the observation record name anything but =-3=?
+
+** V4 -- two stacks, one berth, same area
+
+Interleave the numeric and alpha chains. Both touch =apps/checkout/=.
+
+*Question:* does the queue distinguish "the berth is busy" from "these two
+cannot compose"? It has one mechanism for both.
+
+** V5 -- the destructive remedy
+
+Take any refusal from guard 0 on a non-leaf and follow its instruction
+literally: =Rebase onto `main`=.
+
+*Question:* what is left of the stack? *Prediction: the chain below the rebased
+change is discarded from its history.* This is recorded as a scenario rather
+than a hypothesis because the answer is not in doubt -- what is being measured
+is whether the system says anything at all before it happens.
+
+* Findings ledger
+
+Filled during the run. =trigger= is the condition that forces a revisit, per
+=CLAUDE.md=; a finding without one is an observation, not an issue.
+
+| id | scenario | what happened | trigger |
+|---+---+---+---|
+| -- | -- | not yet run | -- |
+
+* What this does not model
+
+- *Rebase churn.* Real stacks are rebased constantly as the bottom merges. This
+  run holds the chains still, so it measures the guard, not the workflow.
+- *The forge's own stack support.* GitHub retargets a PR's base when its base
+  branch merges. That behaviour is part of the system under test and is not
+  simulated -- it will be observed if it fires.
+- *Conflicts.* The changes are appended in order and do not conflict as written.
+  Reordering them would, which is the point, but no reorder is performed.
