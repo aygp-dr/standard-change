@@ -46,22 +46,26 @@ jobs:
           case " $labels " in
             *" staging:hold "*) echo "::notice::staging:hold is on #$PR -- a person said not yet; deploy:production not landed"; exit 78 ;;
           esac
-      - name: require staging:e2e on the same change
+      - name: require staging:e2e, staging:smoke and staging:uat on the same change
+        id: req
         run: |
+          echo "ready=false" >> "$GITHUB_OUTPUT"
           labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]|join(" ")')
           case " $labels " in
             *" staging:e2e "*) echo "staging:e2e present" ;;
             *) echo "::error::promotion without staging:e2e -- not authorized"; exit 1 ;;
           esac
-          case " $LABELS " in
+          case " $labels " in
             *" staging:smoke "*) echo "staging:smoke present" ;;
             *) echo "not yet: staging:smoke is not recorded"; exit 0 ;;
           esac
-          case " $LABELS " in
+          case " $labels " in
             *" staging:uat "*) echo "staging:uat present" ;;
             *) echo "not yet: staging:uat (the accepted journey) is not recorded"; exit 0 ;;
           esac
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: promote
+        if: steps.req.outputs.ready == 'true'
         run: |
           gh pr edit "$PR" --add-label deploy:production
           gh pr comment "$PR" --body "staging:e2e, staging:smoke and staging:uat recorded on \`${{ github.event.pull_request.head.sha }}\` and the gates are green on it. Landing \`deploy:production\`."
