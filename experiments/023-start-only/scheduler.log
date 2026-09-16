@@ -179,3 +179,11 @@ Post "https://api.github.com/graphql": net/http: TLS handshake timeout
 00:55:42Z  scheduler  #60 ended: driver exit 1
 01:00:52Z  scheduler  watching aygp-dr/standard-change for release:start every 20s
 01:01:16Z  scheduler  release:start on #62
+01:02:10Z  driver #62  updated from main: 346e236 -> 857798f
+01:02:16Z  driver #62  claimed the lock for 857798f
+01:02:45Z  driver #62  staging: healthy, e2e, smoke, uat on 857798f
+01:03:07Z  driver #62  promoted
+01:03:15Z  driver #62  LANDED 857798f at 2026-09-16T01:03:15Z
+  MARKER NOT SENT: http://127.0.0.1:7510/webhook unreachable. The release stands; only the marker is missing.
+01:04:18Z  driver #62  SETTLED #62 (857798f): landed 2026-09-16T01:03:15Z, merged 2026-09-16T01:03:30Z
+01:04:18Z  scheduler  #62 settled
