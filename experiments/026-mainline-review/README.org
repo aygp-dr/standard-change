@@ -1,0 +1,427 @@
+#+TITLE: 026 -- reviewing the mainline, commit by commit, with a cheap agent
+#+DATE: 2026-09-15
+#+OPTIONS: toc:2 num:t ^:nil
+
+* What this is
+
+Three hundred and ninety-six commits landed on =main= between 2026-09-12 and
+2026-09-15, from two cells. Thirty carry a git note. The progressive commit
+protocol says a commit touching the spec, a gate or the change scripts carries
+a note with =Timeline= and =Reproduction=, and that a qualifying commit with no
+note is a defect. Nobody has counted the defects.
+
+This experiment is the counting. It specifies a review that walks every
+mainline commit, asks the same seven questions of each, and writes one row per
+commit into =ledger.tsv=. The questions are chosen so a Haiku-class agent can
+answer them from git and from cheap read-only commands, with no judgement call
+it cannot make. The judgement that remains is a lookup in a decision table.
+
+The audit is itself an experiment, per =.meta/methodology.org=: a one-shot
+checker is evidence and belongs where the next person can re-run it.
+
+* Hypothesis
+
+A Haiku-class agent driving the procedure in §The review process assigns every
+commit in =<base>..main= a verdict from the closed set, using only the
+read-only commands in §What the driver agent must not do, and a spot re-review
+of twenty randomly sampled rows disagrees with its verdict on at most two.
+
+Falsified if the agent reaches a row it cannot decide without a judgement the
+procedure does not supply, or if the spot re-review disagrees on three or more
+of twenty, or if any =verdict= cell holds a value outside the closed set.
+
+* Success criterion
+
+After the run:
+
+- =ledger.tsv= has exactly one data row per commit in =<base>..main=, and every
+  row has twenty-four tab-separated fields.
+- No cell anywhere in the file holds =?=.
+- Every =verdict= cell holds one of =confirmed=, =confirmed-by-note-only=,
+  =unverifiable=, =contradicted=, =no-claim=.
+- Every =evidence= cell is non-empty and names a thing that was observed: a
+  command and its exit, a sha, an issue number, a path.
+- =notes.org= carries the counts, the twenty sampled shas, and the disagreement
+  count.
+- =git status --short= shows changes under =experiments/026-mainline-review/=
+  and nowhere else.
+
+* What could go wrong
+
+- *The rubber stamp.* A cheap agent under a long worklist converges on one
+  verdict and stops looking. The guard is the spot re-review, and the shape of
+  the distribution: a run that returns =confirmed= for more than nine rows in
+  ten is refuted by the extractor's own count of missing notes.
+- *A write dressed as a reproduction.* A note's =Reproduction= names
+  =change/driver.sh= or =gh pr edit=. Re-running it moves the live estate. The
+  extractor flags these in =repro_writes= before the agent sees the row, and
+  §What the driver agent must not do forbids them by name.
+- *The survival check false-negatives.* A line added by a commit and later
+  reformatted reads as gone. The rule in step 7 requires two of three sampled
+  lines, and a miss lands as =unverifiable=, never as =contradicted=.
+- *=#N= is a pull request.* Two hundred and sixty-six commit bodies mention
+  =#N=, and this repo numbers issues and pull requests in one sequence. A
+  lookup against =gh issue list= alone reports a live pull request as unknown.
+  Step 3 caches both.
+- *The research migration.* On 2026-09-15, =63a66b3= moved eight findings from
+  =docs/= into =research/findings/= and rewrote the references in eight scripts
+  and workflows. Any note written before that sha whose reproduction names a
+  =docs/= path is stale by relocation. Step 8 handles it, and the answer is
+  =confirmed-by-note-only=, never =contradicted=.
+- *Network.* =gh= and the forge are not always reachable. Step 3 caches once
+  and step 5 degrades to =N:unknown=.
+- *Four unreachable notes.* =git notes list= names five objects that
+  =git log= cannot resolve. They belong to commits that were rewritten away.
+  The extractor skips them silently. They are out of scope.
+
+* Running
+
+One command builds the mechanical half. Everything after it is the procedure.
+
+#+begin_example
+python3 experiments/026-mainline-review/extract.py HEAD~60      # the test run
+python3 experiments/026-mainline-review/extract.py 1d83827~396  # the full mainline
+#+end_example
+
+The full walk takes the base ref of the first commit on =main=. Get it with
+=git rev-list --max-parents=0 main=, and pass that sha directly if
+=<root>~1= does not resolve.
+
+* The review process
+
+The procedure is written for an agent that reads one row at a time and has no
+memory between rows. Every step says what to check and what to record. A step
+that cannot be completed writes the fallback value the step names. No step
+invents a value.
+
+** Step 0. Pin the frame
+
+Record four facts at the top of =notes.org= before anything else:
+
+1. =git rev-parse --short HEAD= on =main=. This is the head the review is
+   against. Every later re-run compares to this tree.
+2. =git status --short=. It must be empty. A dirty tree makes every
+   reproduction result meaningless.
+3. The base ref passed to =extract.py=.
+4. The date and the host, from =date -u= and =uname -sr=.
+
+** Step 1. Build the ledger
+
+Run =extract.py= with the base ref. It writes =ledger.tsv= and prints counts.
+Paste the counts into =notes.org= verbatim. Columns 1 to 16 are now filled and
+are never edited again. Columns 17 to 24 hold =?=.
+
+If the printed commit count disagrees with =git rev-list --count <base>..main=,
+stop and record the disagreement. Do not proceed.
+
+** Step 2. Cache the forge, once
+
+One call each, saved to files under =experiments/026-mainline-review/=:
+
+#+begin_example
+gh issue list --state all --limit 400 --json number,state > cache-issues.json
+gh pr    list --state all --limit 400 --json number,state > cache-prs.json
+#+end_example
+
+If either call fails, write an empty array to the file and record the failure
+in =notes.org=. Every =issue_state= lookup then answers =N:unknown=. Do not
+call =gh= again per row.
+
+** Step 3. Cache the baseline, once
+
+Five read-only checks, each observed to finish in under a second on this tree.
+Record the exit code and the last line of each into =cache-baseline.txt=:
+
+#+begin_example
+./gates/docs-lint.py
+python3 tla/frames.py --check
+python3 gates/label-audit.py
+python3 gates/label-model-coverage.py
+python3 sim/label_sim.py --bound 8 --walks 0
+#+end_example
+
+These are the comparators. A note that recorded one of these numbers is
+checkable against the cached line without re-running anything. Several of these
+gates report findings today. The baseline is what they report now, and a note
+recording a different number is evidence of drift, which is the point.
+
+Two commands are known to be slow and are out of scope for a per-row re-run:
+=python3 sim/cross_check.py= and =./tla/check.sh=. Both need a large bound or a
+JVM. Treat a reproduction naming either as =runnable=no-slow=.
+
+** Step 4. Walk the rows, oldest first
+
+For each data row of =ledger.tsv=, in file order, fill columns 17 to 24 by
+steps 5 through 12. Write the row back before moving on. Never hold more than
+one row's worth of context.
+
+** Step 5. Column 17, =claim=
+
+Read the subject and the body: =git log -1 --format='%s%n%n%b' <sha>=.
+
+Write one clause naming what the commit asserts is now true, in the present
+tense, under twelve words. Take the words from the commit. Do not summarise the
+diff and do not judge whether the claim holds. That is step 12's job.
+
+If the subject is a merge, write =merges <branch>=. If the subject names only a
+move or a rename with no assertion, write =relocation only=.
+
+** Step 6. Columns 18 and 19, =runnable= and =repro_out=
+
+Read column 14, =repro_cmd=. Apply the first matching rule:
+
+| condition                                                      | runnable    | repro_out |
+|----------------------------------------------------------------+-------------+-----------|
+| =repro_cmd= is =-=                                             | =na=        | =na=      |
+| column 15 =repro_writes= is =yes=                              | =no-writes= | =na=      |
+| the command names =cross_check.py= or =tla/check.sh=           | =no-slow=   | =na=      |
+| the command needs a browser, nginx, a port or a running app    | =no-host=   | =na=      |
+| the command names =gh= against the live forge                  | =no-forge=  | =na=      |
+| the first path in the command does not exist at HEAD           | =no-moved=  | =na=      |
+| otherwise                                                      | =yes=       | see below |
+
+When =runnable= is =yes=, run the command once with a sixty-second timeout.
+Compare its output to the output pasted under that command in the note:
+
+- The note pastes a count, an exit code or a verdict word, and the re-run
+  produces the same one. Write =same=.
+- The note pastes one of those and the re-run produces a different one. Write
+  =differs=, and put both numbers in =evidence=.
+- The note pastes no output at all. Write =na=, and record the exit code in
+  =evidence=.
+
+"Does not exist at HEAD" is a literal test. Take the first token in the command
+that starts with =./=, =/= or a directory name, strip any arguments, and run
+=test -e=. Do not guess where the file went.
+
+** Step 7. The survival check
+
+This runs for every row, and it is the only evidence available to a row with no
+note. It answers whether the commit's change is still in the tree.
+
+1. =git show --format= --unified=0 <sha>= over the paths in the commit.
+2. Collect the added lines, those beginning with a single =+=. Discard lines
+   shorter than twenty characters, blank lines, and lines whose first non-space
+   character is =#=, =//=, =;= or =*=.
+3. Take the first three surviving lines. If there are fewer than three, take
+   what there is. If there are none, the survival check is =na=.
+4. For each, =git grep -F -q '<line>' HEAD -- <its path>=. A path that no
+   longer exists at HEAD counts as a miss.
+5. Survival is =present= when at least two of three hit, or when one of one or
+   two of two hit. Otherwise it is =gone=.
+
+When survival is =gone=, run =git log --oneline <sha>..HEAD -- <path>= and keep
+the newest sha. That sha goes in =evidence=. Do not judge whether the removal
+was intended.
+
+Record the survival result in =evidence= in the form =survival present 3/3= or
+=survival gone, superseded by <sha>=.
+
+** Step 8. The relocation rule
+
+=63a66b3= on 2026-09-15 moved eight documents out of =docs/= and into
+=research/findings/=, and rewrote the references. Before writing =no-moved= for
+a path under =docs/=, run:
+
+#+begin_example
+git log --diff-filter=R --format='%h %s' --name-status --follow -- <path> | head
+#+end_example
+
+If the path was renamed, record the new path in =evidence= and set =runnable=
+to =no-moved=. A reproduction that fails only because its file moved is not a
+contradiction. The verdict table sends it to =confirmed-by-note-only= when the
+note is complete, and to =unverifiable= when it is not.
+
+The same rule applies to any path a rename touched. The test is mechanical:
+=git log --diff-filter=R= finds it or it does not.
+
+** Step 9. Column 20, =issue_state=
+
+For each =#N= in column 13, look up =N= in =cache-issues.json=, then in
+=cache-prs.json=. Write the first hit as =N:issue-open=, =N:issue-closed=,
+=N:pr-open=, =N:pr-merged= or =N:pr-closed=. A number in neither file is
+=N:unknown=. Join with commas. An empty column 13 gives =-=.
+
+Do not call =gh= here. The caches from step 2 are the only source.
+
+** Step 10. Column 21, =opened=
+
+Read the note, if there is one: =git notes show <sha>=. A note opens an issue
+when its =Timeline= says so in words like "recorded as", "filed", "opened",
+"trigger recorded in", followed by a =#N=. Write those numbers, comma-joined.
+Write =-= when there is no note, or when the note names no issue it opened.
+
+When the note names an issue it opened and step 9 resolved that number to
+=N:unknown=, that is a contradiction. Say so in =evidence=. The note claims a
+record that the forge does not have.
+
+** Step 11. Column 22, =validation=
+
+Name every validator that touched this commit. Check each in turn and join the
+hits with commas. Write =none= when nothing hits.
+
+| value        | the test                                                                 |
+|--------------+--------------------------------------------------------------------------|
+| =gate=       | column 5 is =gate=, or the note's reproduction runs anything in =gates/=  |
+| =tlc=        | the paths touch =tla/=, or the note's reproduction runs =tla/check.sh=    |
+| =sim=        | the paths touch =sim/=, or the reproduction runs =sim/*.py=              |
+| =experiment= | the paths touch =experiments/=, or subject or note names =experiments/NNN= |
+| =grind=      | subject or note names experiment 016, 022, 023 or 024, or the word grind  |
+| =driver=     | the paths touch =change/driver.sh=, =scheduler.sh=, =activate.sh= or =watch.sh= |
+
+This column records which apparatus covers the commit. It does not assert the
+apparatus passed.
+
+** Step 12. Columns 23 and 24, =verdict= and =evidence=
+
+Apply the first matching rule. Rules are ordered, and the first hit wins.
+
+| #  | condition                                                              | verdict                  |
+|----+------------------------------------------------------------------------+--------------------------|
+|  1 | column 4 =merge= is =yes=                                              | =no-claim=               |
+|  2 | =repro_out= is =differs=                                               | =contradicted=           |
+|  3 | step 10 found an opened issue the forge does not have                  | =contradicted=           |
+|  4 | =required=yes= and =note=no=                                           | =unverifiable=           |
+|  5 | =required=yes= and =note=yes= and =timeline= or =repro= is =no=        | =unverifiable=           |
+|  6 | =repro_out= is =same=                                                  | =confirmed=              |
+|  7 | =note=yes= and =timeline=yes= and =repro=yes= and =runnable= is not =yes= | =confirmed-by-note-only= |
+|  8 | =kind=chore= and =issues= is =-= and =note=no=                         | =no-claim=               |
+|  9 | survival is =present=                                                  | =confirmed=              |
+| 10 | survival is =gone=                                                     | =unverifiable=           |
+| 11 | otherwise                                                              | =unverifiable=           |
+
+=evidence= is one line naming what was observed, and it must be checkable by
+someone re-reading the row. Write the command and its exit, or the survival
+fraction, or the sha that superseded the change, or the two disagreeing
+numbers. A verdict of =contradicted= without both numbers in =evidence= is
+itself a defect and the row goes back to =unverifiable=.
+
+Rule 4 is the protocol defect the review exists to count. Its evidence line is
+fixed:
+
+#+begin_example
+protocol defect: kind=<kind> requires a note, none present
+#+end_example
+
+** Step 13. Close the run
+
+1. =grep -c '?' ledger.tsv= must return zero.
+2. =awk -F'\t' '!/^#/ && NF!=24' ledger.tsv= must print nothing.
+3. Count the verdicts and the protocol values. Paste both tables into
+   =notes.org=.
+4. Sample twenty shas with =shuf= or with =sort -R=, list them in =notes.org=,
+   and re-derive their verdicts from scratch without looking at the ledger.
+   Record the disagreement count. Three or more refutes the hypothesis.
+5. =git status --short=. Anything outside
+   =experiments/026-mainline-review/= is a defect of the run and gets recorded.
+
+* The special cases, stated once
+
+** Merge commits
+
+There are two on =main=, =06681c6= and =b39aa55=. A merge commit carries no
+claim of its own. Verdict =no-claim=, evidence naming the branch merged. Do not
+walk its second parent. The commits on the branch are already in the log if
+they are reachable.
+
+** Commits from hydra
+
+Column 3 reads =hydra= for the 315 commits authored as =apace@defrecord.com=,
+and =mini= for the 81 authored as =j@wal.sh=. The cells are not
+interchangeable. hydra is FreeBSD with no nginx and no Playwright browser
+build. A reproduction recorded on hydra that names a browser, the router or a
+served port is =runnable=no-host= when the review runs on the mini, and the
+verdict follows rule 7. That is a property of the estate. Record it, and do not
+read it as a defect of the commit.
+
+Column 16, =note_cell=, carries the note's own =Cell:= line when it has one.
+Compare it to =uname -sr= before deciding =no-host=.
+
+** A commit with no note where one was required
+
+Verdict =unverifiable=, by rule 4. The evidence line is fixed and given in step
+12. These rows are the review's product. Count them, group them by =kind= and
+by =cell=, and list the shas in =notes.org=. Do not open issues for them and do
+not comment on the forge. The count goes to the owner, who decides.
+
+The extractor found twenty such commits in the last sixty. Expect the full
+walk to find many more. A run that reports zero has a bug in the extractor,
+not a clean history.
+
+** A reproduction that no longer runs because the file moved
+
+Covered by step 8. The verdict is =confirmed-by-note-only= when the note is
+complete, and =unverifiable= when it is not. It is never =contradicted=. A file
+that moved is a fact about the tree, and the note recorded a true thing about
+an older tree.
+
+* What the driver agent must not do
+
+These are prohibitions, and each one is checkable after the fact.
+
+- *No edits outside =experiments/026-mainline-review/=.* Not the spec, not a
+  gate, not a script, not =CLAUDE.md=, not another experiment. =git status
+  --short= at the end is the check.
+- *No writes to the forge.* No =gh issue create=, =gh issue edit=, =gh issue
+  close=, =gh issue comment=, =gh pr create=, =gh pr edit=, =gh pr comment=,
+  =gh pr merge=, =gh label create=, =gh label edit=, =gh label delete=, =gh
+  api -X POST|PATCH|PUT|DELETE=, =gh run rerun=, =gh workflow run=. Reading is
+  allowed and is cached in step 2.
+- *No running of a change script that writes.* Named: =change/driver.sh=,
+  =change/scheduler.sh=, =change/abort.sh=, =change/settle.sh=,
+  =change/unaffected.sh=, =change/activate.sh=, =change/release.sh=,
+  =change/reap.sh=, =change/marker.sh=, =change/lock.sh=, and
+  =change/schedule.sh= with =block=, =book=, =close= or =open=. The extractor
+  flags a reproduction naming any of these as =repro_writes=yes=, and step 6
+  sends it to =no-writes=.
+- *No git that rewrites or publishes.* No =commit=, no =push=, no =rebase=, no
+  =merge=, no =tag=, no =reset --hard=, no =notes add=, =append=, =edit= or
+  =remove=. No worktree creation and no branch creation.
+- *No port allocation and no estate.* No =gmake port-alloc=, =port-free=,
+  =dev=, =run=, =router=, =stop=, =clean=. The review reads history and does
+  not need a running estate.
+
+The reproductions it may run are the read-only ones:
+
+- the five baseline checks in step 3;
+- =./gates/docs-lint.py=, =python3 gates/label-audit.py=, =python3
+  gates/label-model-coverage.py=, =python3 gates/audit-controls.py=, =python3
+  gates/pr-state-audit.py= and any =gates/*.py= invoked with =--selftest=;
+- =python3 sim/label_sim.py= with an explicit =--bound= of 10 or less and
+  =--walks 0=;
+- =python3 tla/frames.py --check=;
+- =git= reads: =log=, =show=, =notes show=, =notes list=, =grep=, =diff=,
+  =rev-parse=, =rev-list=, =status=, =cat-file=;
+- =gh= reads: =issue list=, =issue view=, =pr list=, =pr view=, =api= with no
+  =-X= other than =GET=.
+
+Anything outside that list is =runnable=no-writes= and the row takes rule 7.
+When in doubt, do not run it. An unrun reproduction costs one verdict of
+=confirmed-by-note-only=. A run write costs the estate.
+
+* The ledger
+
+=ledger.tsv= is written by =extract.py= and carries its own schema as comment
+lines at the top, so the file is self-describing wherever it is opened. The
+schema is defined in one place, =HEADER_COMMENT= in =extract.py=, and is
+re-emitted on every run. Twenty-four tab-separated columns: sixteen mechanical,
+eight judgement.
+
+* Promotion checklist
+
+This experiment promotes when all of these hold:
+
+- [ ] The full walk has run against every commit on =main=, and =notes.org=
+      carries the counts.
+- [ ] The spot re-review of twenty rows disagreed on at most two, and the
+      sampled shas are listed.
+- [ ] The count of rule-4 rows, grouped by =kind= and =cell=, is in
+      =notes.org=. That number is the finding.
+- [ ] No cell holds =?=, and every =verdict= is in the closed set.
+- [ ] =git status --short= showed nothing outside this directory.
+- [ ] Any row with verdict =contradicted= has both numbers in its =evidence=,
+      and has been read by a human before anything is done about it.
+- [ ] The finding about the missing notes is written into =.meta/= as a
+      finding, or the protocol in =.meta/methodology.org= is amended in the
+      direction of the observation. A protocol that 20 commits in 60 ignore is
+      either unenforced or wrong, and the run says which.
