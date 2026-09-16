@@ -26,8 +26,11 @@ one of these two sequences.
 
 ** The core case: one word, then the process
 
-A person opens a pull request. The labeller attaches =app:*= and a class.
-The person adds one label: =release:start=. That is the whole of their part.
+A person opens a pull request and gets it reviewed. The labeller attaches
+=app:*= and a class. The person adds one label: =release:start=. That is the
+whole of their part. Review is finished before the word is said: the process
+reads the approval as a precondition and never performs it, so no reviewer
+appears in the flow below.
 
 What happens next, in order. Each step is written by the thing that knows
 the fact. The person watches it on the PR.
@@ -57,8 +60,7 @@ it (label-state-machine rule 13; precedence-and-locks §Rejected).
 
 =release:skip= says "the estate is untouched". The scheduler checks it
 against the labeller: any =app:*= beside it is refused. With none, the gates
-run on the head, a reviewer that is not the author approves, and the merge
-is the record. No berth, no window, no observation
+run on the head and the merge is the record. No berth, no window, no observation
 (affected-by-construction; label-state-machine rule 17).
 
 ** Ending a release early
