@@ -1,0 +1,309 @@
+#+TITLE: The maximal check set -- what it costs to keep, not whether it works
+#+DATE: 2026-09-16
+#+OPTIONS: toc:2 num:nil
+
+Eight reviewers, one check family each, costing =checks.tsv= against
+=research/adoption.org='s question: what does an arbitrary repository pay to
+add these and to keep them green.
+
+*Whether any check finds a real defect is out of scope here, deliberately.*
+The organisational problem is not "is this gate meaningful". It is that a gate
+is a standing obligation on people who did not add it, and nothing in a
+registry records that obligation.
+
+* The number
+
+Cheapest defensible subset of every family, for a repository that has the
+subject each check needs:
+
+| | hours |
+|---+---|
+| add, one-time | *94--149* |
+| maintain, per year | *98--160* |
+| as a fraction of one engineer-year | *5.4% -- 8.9%* |
+
+104 of the 116 rows were costed. The full set is several times the subset in
+both columns, and the extra buys duplicate oracles -- see §Two oracles.
+
+*The recurring number is the finding.* Adding is a project with an end.
+Maintaining is a tax with none, and it is charged to whoever is holding the
+berth on the day a threshold drifts or a feed publishes.
+
+| family | add | maintain/yr |
+|---+---+---|
+| build, types, codegen | 12--16 | 3--5 |
+| SAST and secrets | 7 | 6 |
+| supply chain | 8 | 6 |
+| infrastructure, config, policy | 11--15 | 12--15 |
+| contracts and migrations | 25--45 | 12--24 |
+| test tiers and quality | 8--20 | *25--50* |
+| runtime and performance | 8 | 14 |
+| preview, DAST, resilience | 15--30 | *20--40* |
+
+* Four ways a check decays, and only one is about your code
+
+** 1. The threshold drifts, and the drift is invisible
+
+Half the runtime family compares a measurement against a number somebody
+chose. =checks.tsv= has columns for scope, phase, tier, gate, tool and
+applies, and *no column for the number and no column for who owns it*.
+Contrast =research/adoption.org= step 2, which is explicit for labels: a label
+nobody owns is a label nobody can trust. The same discipline is simply absent
+for numbers.
+
+Measured on this host: run-to-run CV *7.0--7.5%*, flat from 1.5 ms to 150 ms,
+because the noise is scheduler and cache contention rather than sampling. A
+budget at p50 + 10% therefore fires on *8.8%* of runs with nothing wrong. To
+hold this repo's own per-check reliability bar the margin must be *>= 18%* --
+*which means it cannot detect any regression smaller than 18%*. There is no
+setting that is both quiet and useful.
+
+Expected merged changes to the first false alarm: ~11. The response is to
+raise the number, because the alarm lands on an unrelated author who is
+blocked and has no context, and raising takes thirty seconds where
+investigating takes a day. Five raises double it: *~57 merged changes to
+double a budget*, with no line of the diff ever examined.
+
+And one co-tenant burning a core moved the measured mean *+26.5%* -- larger
+than any regression a budget would be set to catch.
+
+** 2. The baseline only ever grows
+
+Suppression files, allowlists, ignore comments, whitelists, exception lists,
+=# nosec=, =#checkov:skip=, =@ts-expect-error=. Every one is monotonic in
+practice. Nobody has ever removed an entry, because removing one means
+re-adjudicating a finding somebody already decided to live with.
+
+The measured case: bandit on this repo's Python produced *70 findings, and all
+70 are false positives*. =B105= fires on =REVIEWER_GH_TOKEN= because the word
+is /token/, in a repo whose subject is token handling. =B311= fires on
+=random.Random(20260914)= in seeded simulators where determinism is the
+requirement -- the suggested fix would break the reproducibility invariant.
+
+Triage density 9.9 findings/KLOC, about *0.5 h per KLOC of Python*. A 100 KLOC
+Python repository pays ~50 h to reach first green, and buys a suppression file
+that is now relied on and unreviewed.
+
+The second-order cost does not appear in any hours table: *every false positive
+triaged teaches the team that the gate is wrong*, and that lesson is applied to
+the next finding, which may be real.
+
+** 3. The finding rate is exogenous
+
+Every other family reports nothing on a quiet week. The dependency family does
+not. At ~1,200 transitive packages expect *15--60 new advisories per year
+against a frozen lockfile*, *6--20 h/yr of triage* before any remediation, and
+10--25 changes that each consume a full production path.
+
+: A gate whose verdict on an unchanged tree changes over time is not gating
+: the change. It is gating the calendar, and charging the next person who
+: happens to walk past.
+
+A repository with no commits for six months still accumulates findings, and
+the first change after the quiet period -- a one-line documentation fix --
+inherits all of them.
+
+This is also where =CLAUDE.md='s "zero findings or the gate failed" is tested
+hardest, and it survives. An unfixable advisory is not a finding to demote to
+a warning tier; it is a finding about *a different subject* routed to the wrong
+gate. Split it: one gate on the change asking "did this head leave a
+fix-available advisory untaken", one nightly gate on the estate asking "is
+every unfixable advisory recorded, owned and unexpired". Two binary gates beat
+one gate with a tier.
+
+** 4. The subject moves and the check goes quiet
+
+This is the one that matters most, and it is the reason the other three are
+survivable and this is not.
+
+* Silent disarm: the defect the registry was written to prevent, and does not
+
+=change/guard4.sh:142= counts check runs that are not success /after/ filtering
+to four names. Filter an empty list and zero failures out of zero runs scores
+green. *There is no denominator.*
+
+Roughly half of every family has the same shape. Measured, not reasoned about:
+
+| tool | invocation | result |
+|---+---+---|
+| =node --test= | no test files discovered | *exit 0* |
+| =node --test= | unmatched glob passed literally | *exit 0* |
+| =node --test --test-coverage-branches=90= | zero tests | *exit 0* |
+| =wget= crawl (=gates/smoke.sh=) | connection refused throughout | *"Found no broken links"* |
+| =madge --circular= | moved entry point | *"No circular dependency found"* |
+
+And the ones already disarmed in this tree today:
+
+- =gates/shellcheck.sh= covers *43 of 57* shell scripts. Outside the glob:
+  =.github/config/apply.sh=, =tla/check.sh=, =router/generate.sh=.
+- =gates/python-lint.sh= covers *17 of 31* Python files. Outside: =change/review.py=,
+  =targets/bastille/app.py=.
+- =test-hygiene= declares =**/*.test.mjs=; the repo has *47 =.test.mjs= against
+  678 =.test.js=*.
+- =sast-codeql= declares =**/*.js=, missing *1,589 lines of =.mjs=* including
+  the only file in the repo that does crypto.
+- =.github/workflows/main-moved.yml:14= filters on =staging:passed=, which
+  =change/label-owners.tsv= records as *RETIRED*. The list is empty, the loop
+  body never runs, the workflow exits 0 green. *The baseline invalidator is
+  itself silently disarmed.*
+- =apps/*/Makefile= runs bare =node --test=. Rename a tests directory and that
+  gate goes green having run nothing.
+
+** The fix, and it is one helper rather than a hundred
+
+=checks.tsv= already states the rule in its own header -- a glob that must
+match something before N/A is available -- and *nothing implements it*. Every
+check must emit how many subjects it examined and return 4 when that count is
+zero. Zero-of-zero is ABSENT, not PASS.
+
+*~4--6 hours, and it is worth more than any two scanners in the registry.*
+
+Five states, not three. The registry began with FAIL / ABSENT / N/A; costing
+the families produced two more:
+
+| state | means | exit |
+|---+---+---|
+| FAIL | ran, found something | 1 |
+| ABSENT | the tool is not installed | 4 |
+| *BROKEN* | the tool is installed and does not run | 4 |
+| N/A | ran, this repo has no such subject | 0, vacuously |
+| *UNARMED* | tool and subject present, *ruleset empty* | 4 |
+
+* command -v is not a liveness test
+
+Found while costing, and it is live on this host right now:
+
+: $ node --version
+: ld-elf.so.1: Shared object "libllhttp.so.9.3" not found, required by "node"
+: $ echo $?
+: 1
+
+=llhttp= was upgraded 9.3 to 9.4.2 and node was not rebuilt. =command -v node=
+succeeds. =lighthouse= is a =#!/usr/bin/env node= script and dies the same way.
+
+So every node-tooled gate in this repository currently reports *FAIL -- the
+code is broken* where the truth is *ABSENT -- I could not check*. Six agents
+hit this independently. Nothing in =gates/= or =change/= guards on it.
+
+Meanwhile the estate those gates measure is *green*: 9000, 9200, 9210, 9220
+and 9230 all serving. The tools that still work are the ones with no runtime --
+=curl=, =wget=, =jq=, =sh= -- which is exactly the set =gates/smoke.sh=,
+=gates/e2e.sh= and =gates/health.sh= were written against, and the reason they
+are the only estate checks that ran today.
+
+: The estate is healthy and every instrument that could say so is exit 4.
+
+=CLAUDE.md='s Quickstart still asserts node 24.14.1 and chromium at
+=/usr/local/bin/chrome=. Neither is true today. Same failure mode the file's
+own Status section apologises for.
+
+* What conjunction does
+
+From =docs/staging-entry-stress.org=: entry is conjunctive, and n is set by the
+change's labels. Adding the test-tier family alone takes mean n from *16.45 to
+44.9*, and the per-change clean-run rate from *20.13% to 2.46%* at a 10%
+per-check failure rate. A whole-estate change goes to *0.00%* -- not unlikely,
+arithmetically never.
+
+The part that gets missed: *adding checks retroactively makes every existing
+check insufficiently reliable.* Holding per-change failure at 20% needs
+per-check f <= 1.36% today and <= 0.507% with that one family added. Adding a
+browser matrix makes =lint-shell= too flaky.
+
+=e2e-browser= at 16 routes x 3 browsers is *48 conjunctive cells*, and costs
+more than the other twelve members of its family combined. For that one gate
+to be 99% reliable each cell must fail less than *0.021%* of the time, about
+one flake in 4,700 cell-runs. Visual regression is worse: 1 in *7,476*
+screenshots. Nothing achieves that across a font rendering change.
+
+* Flake is a gate-semantics problem
+
+=CLAUDE.md=: a gate that fails to reject its fail fixture produces no verdict
+that run -- its PASS is void. That rule is about the reject direction. Flake is
+the same defect from the accept side, and both share one property: *the verdict
+is no longer a function of the SHA*.
+
+When a flaky check goes red and the author re-runs it green, what was measured
+is a maximum over draws from a distribution the author kept sampling until it
+returned the answer they wanted. The first run was an *exit 4*, and 4 blocks --
+instead it is recorded as a 1, re-run, and the 0 is recorded as a measurement.
+
+: A gate whose verdict is not reproducible on the same SHA produces no verdict.
+
+Two consequences, both enforceable today. =gate-selftest= covers *no member of
+the test family* -- =gates/fixtures/= holds =audit=, =docs=, =gh=,
+=observations=, =shebang=, =smoke=, and no =unit=, =e2e=, =uat= or =coverage=
+fail fixture exists. And =flake-detect= as a required per-change gate is
+self-defeating: a 1%-flaky suite of ten tests makes it red *9.56%* of runs.
+
+Separately measured: =experiments/012= applied five mutations to the guards and
+*all five survived*. A 0% mutation score on the control plane, which
+=CLAUDE.md= calls the product.
+
+* Two oracles
+
+Every family contains the same check twice, and the second one is not free --
+it doubles baselining and suppression upkeep for a small marginal yield:
+
+| the one question | asked by |
+|---+---|
+| is a dependency vulnerable | =osv-scanner=, =trivy=, =npm audit= -- *90--95% the same advisory set*, all downstream of GHSA |
+| is there a secret | =gitleaks=, =trufflehog= -- ~90% the same detection; the second buys verification *only if =--only-verified= is on* |
+| unused code | =knip= strictly contains =depcheck= |
+| import cycles | =dependency-cruiser= ships =no-circular=; =madge= is a subset |
+| diff a typed interface against a baseline | =proto-breaking=, =openapi-breaking=, =graphql-diff=, =event-schema-compat=, =api-surface= -- one check, five file extensions |
+| are the tests any good | =mutation= and =patch-coverage= -- and they disagree exactly where it matters |
+| weak crypto | =crypto-misuse= is a strict subset of the semgrep and CodeQL packs |
+
+Three green rows read as three independent confirmations when they are one
+engine run three times. In a registry whose stated purpose is saying what a
+check actually reported, that is the error it exists to prevent.
+
+* advisory is a leading indicator
+
+=checks.tsv= carries 35 =advisory= rows, and its header already flags that this
+contradicts =CLAUDE.md:70=. The costing found something sharper than the
+contradiction:
+
+: advisory is what a check gets labelled when nobody could defend making it
+: required.
+
+Every =advisory= row in the build family landed in that reviewer's drop-or-defer
+list. Not a coincidence. And the worst cell in the design is an advisory check
+that is also slow -- =cross-arch= under emulation and =sanitizers= each roughly
+triple the berth hold while being unable to refuse anything. *Maximum cost,
+zero authority.*
+
+* What this says about adopting
+
+1. *Build the =applies= runner first.* Not a check. ~4--6 h, and without it
+   every row below can score green having examined nothing.
+2. *Probe liveness, not presence.* =tool --version=, never =command -v=.
+3. *Prefer checks with no threshold and no baseline file.* That single
+   criterion selects almost exactly the cheapest subset of every family, which
+   is the most surprising result here.
+4. *Give every threshold an owner and a date in the file that holds it.* A
+   raise is then a reviewable act rather than a line in an unrelated change.
+5. *Put anything whose duration is a multiple of the berth hold off the change
+   path entirely* -- nightly, against the default branch, reporting to an issue
+   rather than a commit status. A status on a change is what makes a human wait.
+6. *Prevention beat detection, measured.* Zero secrets across 408 commits and
+   77,438 added lines, and the control was one line of =.gitignore=. The first
+   hour of a security budget goes there, not to a scanner.
+
+* The ratchet
+
+=gates/quality-gates.py= is the instrument for the other half of this: 13 rules
+over 4 apps, calibrated at today's values with zero slack.
+
+One added line -- a guard clause with a log -- fails *5 of 13* gates on
+=checkout= and =core=, *4 of 13* on =pdp= and =plp=.
+
+The two worst are the ratios, because they fail on changes that are locally
+correct: =min_comment_pct= falls when you add code, so you must add comments to
+add code; =min_test_ratio= falls when you add source, so every fix owes test
+lines by count rather than by need.
+
+Neither is flake. No retry clears them. =thresholds.tsv= carries =owner= and
+=since= columns, *52 rows, all unowned* -- which is the maintenance cost made
+visible, and the reason this file exists.

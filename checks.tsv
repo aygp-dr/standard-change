@@ -25,7 +25,7 @@
 # gate    required | advisory
 #         NOTE: `advisory` CONTRADICTS CLAUDE.md:70 ("Do not add a warning tier
 #         to any gate. Zero findings or the gate failed."). Every advisory row
-#         here is a proposal, not a ruling.
+#         here is a proposal, not a ruling. See docs/maximal-checks.org.
 #
 # id	scope	phase	tier	gate	tool	applies	what
 build-matrix	root	static	ready	required	node	package.json	compile on every supported version, warnings as errors

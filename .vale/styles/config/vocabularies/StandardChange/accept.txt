@@ -581,3 +581,11 @@ Ubuntu
 FreeBSD
 Firefox
 Bugzilla
+allowlists
+unreviewed
+triaged
+lockfile
+lockfiles
+unfixable
+untaken
+baselining
