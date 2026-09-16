@@ -357,6 +357,102 @@ queue exists, because both are policies *over* a waiting line. Debounce does
 not: it is worth having today, against a mutex with no queue at all, and it is
 the cheapest of the four.
 
+** PriorityQueue, which is just the data structure, and that is the point
+
+After the harbour, the tower, the pit lane and the deli counter: the thing we
+have been describing is a =PriorityQueue=, and it has been in the standard
+library the whole time. That is not a deflation. A borrowed physical domain
+tells you which distinctions are *real*; the abstract data type tells you what
+the *fields* are, and we have been arguing about fields.
+
+The ADT says an entry is a tuple, and the canonical tuple -- it is in the
+Python =heapq= documentation, under "Priority Queue Implementation Notes" -- is:
+
+: (priority, count, task)
+
+Three fields, and each one settles an argument this repo has had separately:
+
+| field | ours | what it settles |
+|---+---+---|
+| =priority= | =itil:emergency= vs the rest | precedence, which =precedence-and-locks.org= reached from the ITIL side |
+| =count= | *nothing yet* | the deli ticket -- a monotonically increasing sequence number |
+| =task= | the change | -- |
+
+The middle field is the interesting one. =heapq= recommends it *because a heap
+is not stable*: equal priorities come out in arbitrary order unless you supply
+a tiebreak, and =java.util.PriorityQueue= documents the same thing -- "ties are
+broken arbitrarily". The recommended fix is a counter that never decreases.
+
+So the deli ticket above is not a second idea. *It is the =count= field*, and
+the standard library has been recommending it as the answer to exactly our
+problem -- equal-priority changes coming out in arbitrary order -- since before
+this repo existed. Experiment 022's completion order (#95 #93 #96 #92 #94, not
+arrival order) is what a priority queue with no =count= field looks like from
+outside.
+
+Two more the ADT hands over without ceremony. *Starvation* is what a plain
+priority queue does to low-priority entries, and the textbook remedy is aging
+-- raise the priority with waiting time, which is a *function over =count= and
+now*, so it needs the field too. And *the class is not the priority*:
+=precedence-and-locks.org= already notes that ServiceNow keeps change **type**
+and change **priority** as separate columns, and we collapsed them. The ADT
+agrees, structurally: =priority= is its own field, and nothing says it must
+equal the class.
+
+That last point is the opening for the next section.
+
+** A credit score for changes: the destination without the mechanism
+
+The guess is right, and change management has several versions of it.
+
+ServiceNow is the clearest: a *Change Risk Assessment* (a questionnaire
+producing a risk value), a *Change Risk Predictor* trained on historical
+outcomes, and -- the one that is actually a credit score -- **promotion into
+the Standard Change Catalog**: a normal change that has been executed
+successfully enough times can be proposed as a standard change *template*, and
+from then on it is pre-approved. Track record buys reduced friction. That is
+credit history with a repayment record.
+
+Google SRE's *error budget* is the same instinct on the estate rather than the
+change: a balance you spend by failing, and when it is spent "releases are
+temporarily halted". =research/history/release-standards.org:370-393= already
+has this, including the local invention of it (=spec.org= §The balance watching
+the emergency rate) and the limit that matters: *"an error budget cannot price
+contention, and a berth cannot price risk."*
+
+**And here is our gap, which is sharper than not having a score.**
+
+ITIL's standard change is pre-authorised *because it has a track record* --
+that is what the category means. In this repo, =itil:standard= is assigned by
+=.github/workflows/labeller.yml:46-48=:
+
+: elif [ "$has_app" -gt 0 ]; then  itil:standard
+
+Pre-authorisation is granted **because the diff touched =apps/=**. Not because
+this kind of change has succeeded before, not because anything was measured.
+*We have the destination without the mechanism that is supposed to earn it.*
+
+The raw material exists and is never fed back. =experiments/016-dora= measures
+change failure rate against a stated definition ("a production deployment that
+required unplanned remediation"), per change, with sources of record. Nothing
+reads it. Nothing has ever demoted a path from standard to normal because
+changes on that path kept failing, and nothing could -- the class is recomputed
+from the glob on every push, so a track record has nowhere to live.
+
+Stated as the three things a scoring system would need, in this repo's terms:
+
+| needs | have it? |
+|---+---|
+| an outcome per change, defined and recorded | yes -- 016-dora's definition; =release:completed= / =release:failed= |
+| a subject the score attaches to (a path, a template, an app) | *no* -- the class attaches to a PR and is recomputed each push |
+| a rule that changes future authority from the score | *no* |
+
+The second row is the blocker and it is structural, not missing work: *a score
+needs something that persists across changes to attach to*, and every label
+here is deliberately per-change and transient. That is the same property that
+makes the labels honest, so this is a real design tension rather than an
+oversight -- and it belongs in the record as one.
+
 * On borrowing domains at all
 
 These are reasoning aids and they are not free. Three cautions earned here:
