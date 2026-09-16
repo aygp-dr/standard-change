@@ -1,0 +1,295 @@
+#+TITLE: Metaphors - slipway
+#+SUBTITLE: Borrowed domains for reasoning about labels as control and audit
+#+OPTIONS: toc:2 num:t ^:nil
+#+STARTUP: overview
+
+* What this is
+
+This repo is an argument about guardrails: which system dependencies are
+declared, and how labels and pipelines act as a *control* mechanism (they
+decide what may happen next) and an *audit* mechanism (they record what did).
+Those two jobs pull in opposite directions, and most of the defects found here
+come from a label being asked to do both.
+
+Metaphors are load-bearing for that argument, not decoration. A borrowed domain
+that has solved the same problem for a century tells you which distinctions are
+real. Companion to [[./vocabulary.org][~vocabulary.org~]], which names the terms; this file names the
+*pictures* behind them.
+
+Each metaphor below is checked against one question, because that question is
+where the control job and the audit job came apart.
+
+* The question these four were built for
+
+On 2026-09-15 the owner ruled: a merged change must not carry ~change:end~.
+
+: it's merged, i know the change, if needed, has ended
+
+The pipeline had been clearing every transient label at settlement and then
+writing ~change:end~ as a tombstone. The owner's objection was to the shape of
+it:
+
+: the recursive nature of clear all labels then add change end then clear
+: change end is weird -- like having a bunch of dishes on the counter, then
+: putting all in the dishwasher then putting a postit note indicating that
+: you cleaned up the kitchen then tossing the postit note
+
+The resolution is not "drop the tombstone". It is that *the tombstone is only
+worth writing where no authoritative record exists*. A merge is recorded by the
+forge, in ~mergedAt~, which the pipeline does not own and cannot contradict. An
+abort is recorded by nothing.
+
+The general rule, which is what the metaphors are for:
+
+#+begin_quote
+Two records of one fact can disagree. The platform's cannot. So a label that
+restates a fact the platform already owns is not a second record - it is a
+future contradiction with a timestamp.
+#+end_quote
+
+slipway has the receipt: PR #52 carried ~change:end~ through an entire
+successful deploy while still open. ~mergedAt~ could not have done that.
+
+* Four metaphors
+
+** Harbour: the departure log and the chalk on the berth
+
+The harbour master keeps a departure log. A ship that sails is in it - stamped,
+timed, owned by the port, not writable by the crew. That is ~mergedAt~.
+
+Chalking =DEPARTED= on the empty berth is a second record of the same sailing.
+It is convenient, it is local, and it is *wrong the moment it disagrees* - a
+berth chalked =DEPARTED= with a ship still alongside is precisely #52. Nobody
+resolves it by consulting the chalk.
+
+But a ship that never sails - charter abandoned, towed out, scrubbed - leaves no
+departure entry at all. Now the chalk is the only thing separating /we stood
+this down deliberately/ from /the harbour master cleared the berth because the
+fees lapsed/. Same mark, opposite value, decided entirely by whether the port's
+own log has an entry.
+
+- control :: the berth is free, so the next ship may enter
+- audit :: why it is free, and the log answers that only for ships that sailed
+
+** Air traffic control: the strip that goes in the landed bay
+
+A flight that lands is in the arrival log and its progress strip moves to the
+landed bay. The system records it; the controller does not have to.
+
+Writing =LANDED= on the strip and leaving it in the active rack is the failure
+mode. The rack is the control surface - what is in it is what you are still
+separating - and a strip that says =LANDED= while sitting in the active rack is
+a fact fighting the instrument next to it. The radar wins, and the strip has
+cost you the seconds you spent reconciling them.
+
+A flight cancelled at the gate never generates an arrival. Then the notation on
+the strip is the whole record, and it distinguishes /cancelled/ from /lost from
+the sequence/ - which is the difference between a tidy day and an incident
+report.
+
+This is also why slipway's queue is AIS-shaped rather than ATC-shaped: labels
+broadcast, nobody holds the picture. See =.claude/agents/queue-atc.md=.
+
+- control :: what is in the active rack is what still needs separating
+- audit :: the arrival log, for everything that arrived
+
+** Racing: the transponder loop and the pit board
+
+The car crossing the line is timed by the loop. The timing system owns that
+fact absolutely; it is the reason the sport can be adjudicated at all.
+
+=FINISHED= chalked on the pit board is a restatement, and the board is the wrong
+place for it - the board is for instructions to a driver who is still driving.
+A board reading =FINISHED= to a car still circulating is an instruction, not a
+record, and it will be obeyed.
+
+A car retired in the garage never crosses the loop. =RET - engine= on the sheet
+is then the only record, and it carries the one thing the timing system cannot
+infer: that this was a decision rather than a disappearance. Classification
+exists for exactly the cars the transponder cannot classify.
+
+- control :: the pit board, read by someone who will act on it
+- audit :: the timing loop, for everything that finished; the sheet, for
+  everything that did not
+
+** Kitchen: the ticket rail and the void
+
+An order that goes out rings out on the POS. The sale is recorded by the system
+that takes the money, which is the one record nobody is allowed to edit.
+
+Spiking the ticket *and* writing =SERVED= on it is the post-it on the clean
+dishwasher. Worse, the rail is the control surface - tickets on the rail are
+work outstanding - so a ticket marked =SERVED= still hanging on the rail is a
+dish the line will cook twice.
+
+An order killed mid-service - allergy, walkout, comp - never rings out. =VOID -
+walkout= written before spiking is the only record, and it is the one the
+manager reads at close. Without it a killed ticket is indistinguishable from one
+that fell behind the pass, and those have very different consequences.
+
+- control :: what hangs on the rail is what still has to be cooked
+- audit :: the POS for everything sold, the void note for everything not
+
+* What all four agree on
+
+Every domain independently separates two surfaces, and the separation is always
+the same one:
+
+| surface           | question it answers        | who owns it   | slipway         |
+|-------------------+----------------------------+---------------+-----------------|
+| the working board | what may happen next       | the operator  | the labels      |
+| the system record | what happened              | the platform  | ~mergedAt~, the forge |
+
+Three consequences this repo has paid for:
+
+1. *A label on the control surface is an instruction.* The pit board is obeyed.
+   The rail is cooked. The rack is separated. A terminal label left on an open
+   change is not a stale note, it is a live instruction - which is why
+   ~gates/pr-state-audit.py~ treats =terminal-on-open= (I3) as a finding rather
+   than as untidiness.
+
+2. *Restating the platform's record creates a contradiction, never a backup.*
+   The chalk, the =LANDED= strip, the =FINISHED= board, the =SERVED= ticket.
+   All four domains treat this as an error, not as redundancy.
+
+3. *The annotation earns its place exactly where the platform has no entry.*
+   The abandoned charter, the gate cancellation, the retirement, the void. In
+   slipway: ~change/abort.sh~ keeps ~change:end~, and it is right to.
+
+The modelled form is ~NoTombstoneOnMerged~ in [[../tla/Labels.tla][~tla/Labels.tla~]], guarded by the
+~MergeIsTheTombstone~ constant so the invariant can be made to fail.
+
+* Four more, from computing
+
+The four above are physical domains, and they were chosen for the *control vs
+audit* split. The berth's other question -- what kind of lock is it, and what
+may expire it -- is better served by domains that have a specification rather
+than a picture. A borrowed word from computing comes with a man page.
+
+** UNIX: advisory locking, and the atomic create
+
+=flock(2)= and =fcntl= locks are *advisory*: the kernel records the holder and
+refuses a conflicting request, and a process that never asks is never stopped.
+Mandatory locking is the other kind, and almost nobody uses it.
+
+That is the berth exactly, and it is the caution this file already states in
+other words -- "a harbour has physical exclusion; a label does not". UNIX has
+the domain's own word for it, so we should use it: *the berth is an advisory
+lock*. Guard 1 is the cooperating process asking first. Anything writing
+=deploy:staging= without asking is not breaking the lock, it is declining to
+participate in one, and that is what five identities did in one day.
+
+The second UNIX word is the one =change/lock.sh= is missing. The idiom for a
+correct acquire is not read-then-write; it is =open(O_CREAT|O_EXCL)= or
+=mkdir=, both atomic, both failing loudly when someone got there first.
+=lock.sh acquire= reads the holder, decides, then writes unconditionally --
+which is =test= followed by =set= with a window in between.
+
+- control :: the lock is advisory; it works only because everyone asks
+- audit :: the holder and the time, in the lock record
+
+** UNIX: the PID file, and why a stale one is not proof
+
+=/var/run/foo.pid= plus an age check is =change/lock.sh= in one sentence: a
+record naming the holder and when it started, declared stale after an interval.
+
+It also carries the classic defect, and we have our own version of it. A PID
+file goes wrong when the PID is *reused*: the file looks live, the process it
+names is not the one that wrote it. Our analogue is the re-label -- #94 added
+=deploy:staging= fourteen times during experiment 022, so "the label is
+present" and "this claim is the one that acquired it" are different facts. That
+is why =change/berth.sh= ages the *last labeled event not followed by an
+unlabeled*, rather than the label's presence.
+
+** Filesystems: the lease, and the renewal that does not exist
+
+NFSv4 states P1's shape precisely and in the domain's own words: a client holds
+a *lease* on a delegation, the lease has a term, and the client must *renew* it
+or the server reclaims. Linux =fcntl(F_SETLEASE)= is the same idea locally.
+=Stale file handle= is the error for a handle that outlived what it named.
+
+The gap this exposes: five-properties P1 says "an unrenewed lease lapses", and
+*we have no renew operation*. Nothing a holder does extends the berth, so the
+term is measured from acquisition and never refreshed, and a long legitimate
+deployment ages exactly like an abandoned one. A lease without renewal is a
+timeout wearing a lease's name.
+
+- control :: the delegation is held while the lease is live
+- audit :: the server's state, not the client's belief
+
+** Event stacks: the log, the projection, and the fencing token
+
+The queue is *AIS-shaped* -- that finding is above and it is the right one.
+Event-stack computing has the same shape with a specification attached.
+
+*Log versus projection.* In event sourcing the log is authoritative and every
+view is a projection rebuilt from it. The labels are a projection; =mergedAt=
+is the log. "Restating the platform's record creates a contradiction, never a
+backup" is the projection-versus-log rule, and it is why a projection may be
+rebuilt at will but may never be *written to* as though it were the log.
+
+*Consumer groups.* A Kafka consumer holds a partition under a lease with a
+session timeout; exceeding =max.poll.interval.ms= evicts the member and
+triggers a rebalance. That is =BERTH_EXPIRY=auto= precisely, and it is the
+most-deployed instance of the thing we are building.
+
+*The fencing token, and why manual is the default.* Kleppmann's argument about
+distributed locks is that a lease plus timer eviction is *unsafe* unless every
+write carries a monotonically increasing token that the resource checks and
+refuses when stale. Without one, an evicted holder that resumes -- from a
+pause, a long GC, a slow network -- writes after losing the lock and nothing
+downstream can tell. Kafka has this: the generation id. We do not:
+=targets/*/deploy.sh= carries no token and the estate would accept a write from
+an evicted holder.
+
+So =BERTH_EXPIRY=auto= is exactly the configuration Kleppmann describes as
+unsafe, and the owner's ruling that expiry is *manual by default* is the
+correct one for a system with no fencing. The option exists; the default
+declines it, and now the reason has a citation.
+
+- control :: the lease, and the token that makes eviction survivable
+- audit :: the log; the projection is never the record
+
+** Schedulers: starvation, aging, and what FIFO would cost
+
+A run queue is where "no FIFO" has a name and a remedy. Experiment 022 is a
+textbook *starvation*: #94 lost five claim rounds over twenty-four minutes, and
+completion order was #95 #93 #96 #92 #94 -- not arrival order. UNIX schedulers
+answer this with *aging*: a runnable process that keeps losing has its priority
+raised until it cannot lose again. A mutex with no queue has nowhere to put the
+age, which is why the remedy has to be a queue rather than a better lock.
+
+Two more the scheduler literature supplies, and both are arguments against
+reaching for FIFO reflexively:
+
+- *The convoy effect.* FIFO plus one long holder makes every short change wait
+  behind it. A schedule would give us ordering and this pathology in the same
+  move.
+- *Priority inversion.* A low-priority holder blocks a high-priority waiter --
+  =itil:emergency= arriving while an ordinary change holds the berth. The
+  classic remedies are inheritance and the ceiling protocol;
+  =research/history/precedence-and-locks.org= reaches the same place from ITIL,
+  and already separates *type* from *priority* the way ServiceNow does.
+
+- control :: the run queue and the policy over it
+- audit :: accounting, which is a different subject and a different structure
+
+* On borrowing domains at all
+
+These are reasoning aids and they are not free. Three cautions earned here:
+
+- A metaphor that fits too well stops you looking. slipway's queue looked like
+  ATC for weeks; it is AIS - decentralised broadcast with no authority - and
+  the ATC picture hid the fact that *nobody was holding the picture*.
+- Borrowed domains carry their own failure modes, which may not transfer. A
+  harbour has physical exclusion; a label does not. The berth singleton (I1) is
+  enforced by an auditor precisely because nothing physical enforces it.
+- Prefer the domain's own word once it fits. =berth=, =window=, =freeze= and
+  =slot= are all borrowed and all now load-bearing terms in
+  [[./vocabulary.org][~vocabulary.org~]]. That is the metaphor having done its job and retired.
+
+* Local Variables                                                  :noexport:
+
+# Local Variables:
+# org-confirm-babel-evaluate: nil
+# End:
