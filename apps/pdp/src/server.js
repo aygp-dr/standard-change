@@ -83,7 +83,8 @@ export function loadCatalogue(file = CATALOGUE_FILE) {
   const bad = !doc || typeof doc !== 'object' || !Array.isArray(doc.products) ||
     doc.products.some((p) => !p || typeof p.sku !== 'string' || p.sku === '' ||
       typeof p.name !== 'string' || typeof p.price !== 'number' ||
-      !Number.isFinite(p.price) || typeof p.availability !== 'string');
+      !Number.isFinite(p.price) || typeof p.availability !== 'string' ||
+      (p.updated !== undefined && typeof p.updated !== 'boolean'));
   if (bad) return { ok: false, reason: 'catalogue-malformed', products: [] };
   return { ok: true, reason: null, products: doc.products };
 }
@@ -163,6 +164,12 @@ export function render(path, catalogue = loadCatalogue()) {
     price: hit.price,
     currency: typeof hit.currency === 'string' ? hit.currency : 'USD',
     availability: hit.availability,
+      // An explicit projection, not a spread. A field reaches the response
+      // because the contract admits it, not because someone put it in the
+      // file -- so adding data to products.json cannot silently widen what
+      // this app publishes. Defaulted rather than trusted: a catalogue
+      // written before this flag existed is valid and means `false`.
+      updated: hit.updated === true,
   };
   return d;
 }
@@ -222,7 +229,26 @@ This product has not gone away; try again shortly.</p>
 <p>We have no product <code>${sku}</code>. It may have been renamed or removed — <a href="/search">search everything</a> instead.</p>
 <p class=v>catalogue: ok — this product is not in it</p>`;
   const p = d.product;
-  return `<h2>${esc(p.name)}</h2>
+  // A BOOLEAN, not a date, and deliberately.
+  //
+  // What makes a product "updated" is a business rule -- a price move, a
+  // restock, a copy change, a merchandiser's judgement -- and those rules
+  // differ per category and change without the catalogue's shape changing.
+  // A date here would force this app to own the rule (updated within N days of
+  // what? whose clock?) and would be wrong for every category that disagrees.
+  //
+  // The cost, stated: a boolean nobody clears is permanently true. Expiry is
+  // the catalogue's job, not the renderer's -- pdp shows what it is told and
+  // does not decide when a fact stops being true. See issue #18.
+  // Styled inline rather than by adding a class to shared/oneui.js. A style
+  // there would make this a four-app change for one app's badge -- the blast
+  // radius argument in docs/cross-cutting-coupling.org, applied before the fact
+  // instead of after.
+  const badge = p.updated
+    ? '<span style="background:#0e8a16;color:#fff;font-size:11px;padding:2px 6px;'
+      + 'border-radius:3px;vertical-align:middle;margin-right:6px">UPDATED</span>'
+    : '';
+  return `<h2>${badge}${esc(p.name)}</h2>
 <p><b>${esc(money(p.price, p.currency))}</b> · ${esc(AVAILABILITY[p.availability] || p.availability)}</p>
 <p>SKU <code>${sku}</code></p>
 <p>${addToCart(p.sku)}</p>`;
@@ -334,3 +360,5 @@ if (isMain) createServer((req, res) => {
 }).listen(PORT, BIND, () => {
   console.log(`pdp listening on ${PORT} (block ${BLOCK}, sha ${SHA})`);
 });
+
+// feat/pdp-price: simulated change
