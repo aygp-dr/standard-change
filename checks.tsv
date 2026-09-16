@@ -1,0 +1,142 @@
+# checks.tsv -- the maximal check set, declared. One row per check.
+#
+# THE POINT OF THIS FILE is the difference between three things a check can
+# report when it does not say PASS, which CI conventionally collapses into one:
+#
+#   FAIL   the check ran and found something            exit 1
+#   ABSENT the tool is not installed here               exit 4 -- "I could not
+#          check". docs/exit-codes.org: 4 is not 1, and neither is 0.
+#   N/A    the check ran, and this repo has no such     exit 0, vacuously
+#          subject (no .tf files, so no terraform lint)
+#
+# ABSENT and N/A both produce "no findings". Treating them alike is the same
+# defect as change/guard4.sh:142, where an empty check-run filter scores green:
+# zero failures out of zero runs read as consent. The `applies` column is what
+# separates them -- a glob that must match something for the check to be N/A
+# rather than ABSENT.
+#
+# scope   root  one run for the repo | app  one run per apps/*/
+# phase   static  no running estate | dynamic  needs one
+# tier    push | ready | label | nightly      (cost tiers)
+# gate    required | advisory
+#         NOTE: `advisory` CONTRADICTS CLAUDE.md:70 ("Do not add a warning tier
+#         to any gate. Zero findings or the gate failed."). Every advisory row
+#         here is a proposal, not a ruling. See docs/maximal-checks.org.
+#
+# id	scope	phase	tier	gate	tool	applies	what
+build-matrix	root	static	ready	required	node	package.json	compile on every supported version, warnings as errors
+types-ts	app	static	push	required	tsc	apps/*/tsconfig.json	tsc --strict
+types-py	root	static	push	required	mypy	**/*.py	static types, python
+codegen-drift	root	static	push	required	node	router/generate.sh	regenerate and diff against committed
+lockfile-drift	root	static	push	required	npm	package-lock.json	npm ci with frozen lockfile
+repro-build	root	static	nightly	advisory	node	package.json	build twice, compare hashes
+sast-codeql	root	static	label	required	codeql	**/*.js	CodeQL security queries
+sast-semgrep	root	static	ready	required	semgrep	**/*	Semgrep security rulesets
+sast-bandit	root	static	ready	required	bandit	**/*.py	bandit, python security
+lint-js	app	static	push	required	node	apps/*/src/*.js	per-app javascript lint
+lint-shell	root	static	push	required	shellcheck	**/*.sh	shellcheck the control plane
+fmt-shell	root	static	push	required	shfmt	**/*.sh	shell formatting
+lint-python	root	static	push	required	ruff	**/*.py	ruff, select F,E9
+deadcode-js	root	static	ready	advisory	knip	package.json	unused exports and files
+deadcode-py	root	static	ready	advisory	vulture	**/*.py	unused python code
+depcheck	root	static	ready	advisory	depcheck	package.json	unused dependencies
+import-cycles	root	static	ready	required	madge	apps/*/src/*.js	import cycles
+arch-boundaries	root	static	ready	required	dependency-cruiser	apps/*/src/*.js	layer boundaries
+complexity	root	static	ready	advisory	jscpd	**/*.js	duplication threshold on changed files
+api-surface	app	static	ready	required	api-extractor	apps/*/routes.json	public API surface diff
+secrets-gitleaks	root	static	push	required	gitleaks	**/*	secret detection over the branch diff
+secrets-trufflehog	root	static	ready	required	trufflehog	**/*	secret detection, history
+crypto-misuse	root	static	ready	required	semgrep	**/*	weak algorithms, hardcoded IVs
+vuln-osv	root	static	push	required	osv-scanner	package-lock.json	dependency vulnerabilities
+vuln-trivy	root	static	ready	required	trivy	package-lock.json	dependency vulnerabilities, second oracle
+vuln-npm-audit	root	static	push	required	npm	package-lock.json	npm audit, gate on severity
+dep-policy	root	static	ready	required	node	package.json	banned packages, unpinned, typosquat, min age
+license-scan	root	static	ready	required	license-checker	package.json	license deny list
+sbom-gen	root	static	ready	advisory	syft	package.json	SBOM generation
+sbom-diff	root	static	ready	advisory	syft	package.json	SBOM diff against main
+slsa-provenance	root	static	label	advisory	cosign	.github/workflows/*.yml	provenance and signature verification
+actions-pinned	root	static	push	required	zizmor	.github/workflows/*.yml	actions pinned by SHA
+actions-lint	root	static	push	required	actionlint	.github/workflows/*.yml	workflow file lint
+tf-validate	root	static	push	required	terraform	**/*.tf	terraform validate
+tf-lint	root	static	push	required	tflint	**/*.tf	tflint
+tf-checkov	root	static	ready	required	checkov	**/*.tf	IaC policy
+k8s-kubeconform	root	static	push	required	kubeconform	**/*.yaml	manifest schema
+k8s-kube-linter	root	static	ready	required	kube-linter	**/*.yaml	kube-linter policy
+helm-lint	root	static	push	required	helm	**/Chart.yaml	helm lint and template
+dockerfile-lint	root	static	push	required	hadolint	**/Dockerfile	hadolint, pinned digest, non-root
+config-schema	root	static	push	required	yq	**/*.yml	YAML/JSON against JSON Schema
+envvar-manifest	root	static	push	required	node	**/*.sh	env references checked against a manifest
+policy-opa	root	static	ready	required	conftest	**/*.yaml	policy as code
+openapi-lint	root	static	push	required	spectral	**/openapi.yaml	OpenAPI lint
+openapi-breaking	root	static	push	required	oasdiff	**/openapi.yaml	breaking-change detection
+proto-lint	root	static	push	required	buf	**/*.proto	buf lint
+proto-breaking	root	static	push	required	buf	**/*.proto	buf breaking against main
+graphql-diff	root	static	push	required	graphql-inspector	**/*.graphql	schema diff
+event-schema-compat	root	static	ready	required	node	**/*.avsc	registry compatibility
+migration-lint	root	static	push	required	squawk	db/migrate/**	destructive statements, long locks
+sql-lint	root	static	push	advisory	sqlfluff	**/*.sql	sqlfluff
+bundle-budget	app	static	ready	required	size-limit	apps/*/src/*.js	bundle-size budget per entry point
+a11y-lint	app	static	push	required	eslint	apps/*/src/*.js	jsx-a11y template rules
+css-lint	app	static	push	advisory	stylelint	**/*.css	stylelint and design tokens
+i18n-keys	app	static	ready	advisory	node	**/*.json	missing or unused translation keys
+md-lint	root	static	push	advisory	markdownlint	**/*.md	markdown lint
+link-check	root	static	nightly	advisory	lychee	**/*.org	link checker
+spellcheck	root	static	push	advisory	cspell	**/*.org	spellcheck
+docs-build	root	static	ready	required	python3	**/*.org	docs gate -- gates/docs-lint.py
+docstring-cov	root	static	ready	advisory	interrogate	**/*.py	docstring coverage
+changelog-entry	root	static	push	required	git	**/*	changeset or changelog entry present
+license-headers	root	static	push	advisory	git	**/*.sh	license header on new files
+commit-meta	root	static	push	required	git	**/*	conventional commits, signature, PR template
+pr-size	root	static	push	advisory	git	**/*	PR size limit in lines or files
+file-hygiene	root	static	push	required	git	**/*	large files, exec bits, line endings, .env
+test-hygiene	root	static	push	required	git	**/*.test.mjs	no .only, no unexplained skip, assertion present
+test-mapping	root	static	ready	advisory	git	**/*.js	tests exist for changed source files
+shebang-policy	root	static	push	required	python3	**/*.sh	shebang policy -- gates/shebang.sh
+checkmake	root	static	push	advisory	checkmake	Makefile	Makefile lint
+tla-check	root	static	ready	required	java	tla/*.tla	TLC model check, both directions
+proof-check	root	static	label	advisory	lean	**/*.lean	proof checking in CI
+unit-tests	app	dynamic	push	required	node	apps/*/tests	node --test per app
+integration-tc	root	dynamic	ready	required	podman	**/*	integration with real dependencies
+contract-pact	root	dynamic	ready	required	node	apps/*/routes.json	consumer contract and provider verification
+schemathesis	root	dynamic	ready	required	schemathesis	**/openapi.yaml	spec exercised against the live service
+e2e-browser	root	dynamic	ready	required	playwright	apps/*/routes.json	browser matrix, sharded
+snapshot-golden	app	dynamic	push	advisory	node	apps/*/tests	golden-file tests
+doc-examples	root	dynamic	ready	advisory	node	**/*.org	documentation examples executed
+install-test	root	dynamic	ready	required	npm	package.json	build, install clean, smoke command
+mutation	root	dynamic	label	advisory	stryker	**/*.js	mutation score on the diff
+property-based	root	dynamic	ready	required	python3	gates/*.py	property-based tests -- hypothesis
+fuzzing	root	dynamic	nightly	advisory	cargo	**/*.rs	fuzzing with a time budget
+flake-detect	root	dynamic	ready	required	node	apps/*/tests	rerun changed tests N times, shuffle order
+patch-coverage	root	dynamic	ready	required	node	apps/*/src/*.js	branch coverage on the diff
+sanitizers	root	dynamic	nightly	advisory	cargo	**/*.rs	ASan, UBSan, TSan, race
+leak-detect	root	dynamic	nightly	advisory	node	apps/*/src/*.js	heap, fd, thread growth in a loop
+tz-locale-matrix	root	dynamic	ready	advisory	node	apps/*/tests	several TZ, DST, leap year, non-UTF8
+cross-arch	root	dynamic	nightly	advisory	podman	**/*	arm64 and amd64
+compat-rolling	root	dynamic	ready	required	node	apps/*/routes.json	new server vs previous client, and inverse
+bench-micro	root	dynamic	label	advisory	node	apps/*/src/*.js	microbenchmarks with statistical comparison
+load-k6	root	dynamic	label	advisory	k6	apps/*/routes.json	p95 latency and error rate against main
+web-vitals	root	dynamic	label	advisory	lighthouse	apps/*/routes.json	Lighthouse budgets
+image-size	root	dynamic	ready	advisory	podman	**/Dockerfile	container image size and RSS
+query-analysis	root	dynamic	ready	required	node	db/migrate/**	N+1 detection, EXPLAIN plan regression
+migrate-fwd-back	root	dynamic	ready	required	podman	db/migrate/**	apply forward and backward, measure locks
+dast-zap	root	dynamic	label	required	zap	apps/*/routes.json	OWASP ZAP against the preview
+authz-matrix	root	dynamic	ready	required	node	apps/*/routes.json	every endpoint by every role, plus anonymous
+egress-denied	root	dynamic	ready	advisory	podman	package.json	build with network egress denied
+image-scan	root	dynamic	ready	required	trivy	**/Dockerfile	image scan, non-root, read-only rootfs
+security-headers	root	dynamic	ready	required	node	apps/*/routes.json	security headers and CSP on live responses
+pii-logs	root	dynamic	ready	required	node	apps/*/src/*.js	PII detectors on test-run log output
+preview-env	root	dynamic	ready	required	node	apps/*/routes.json	ephemeral environment per PR, smoke tested
+visual-regression	root	dynamic	ready	required	playwright	apps/*/routes.json	screenshot diffs, component and page
+a11y-runtime	root	dynamic	ready	required	playwright	apps/*/routes.json	axe-core, keyboard-only, RTL
+traffic-replay	root	dynamic	nightly	advisory	node	apps/*/routes.json	replay recorded requests, diff responses
+fault-injection	root	dynamic	label	required	podman	apps/*/src/*.js	latency, resets, partitions; assert timeouts
+dependency-down	root	dynamic	ready	required	node	apps/*/src/*.js	each dependency unavailable in turn
+otel-assertions	root	dynamic	ready	required	node	apps/*/src/*.js	required spans, metrics and log events emitted
+log-schema	root	dynamic	ready	advisory	node	apps/*/src/*.js	log schema and volume budget
+promtool-rules	root	dynamic	push	required	promtool	**/*.rules.yml	alert rule unit tests
+tf-plan-comment	root	dynamic	ready	required	terraform	**/*.tf	plan posted, block on destroy of stateful
+k8s-dry-run	root	dynamic	ready	required	kubectl	**/*.yaml	server-side dry run, kind deploy test
+dbt-tests	root	dynamic	ready	required	dbt	**/*.sql	dbt build on state:modified
+model-eval	root	dynamic	label	required	python3	**/*.pkl	evaluation regression, determinism, fairness
+smoke-estate	root	dynamic	push	required	node	apps/*/routes.json	walk the estate as a browser would
+health-converge	root	dynamic	push	required	node	apps/*/routes.json	guard 5 -- convergence, not liveness

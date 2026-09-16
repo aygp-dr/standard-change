@@ -30,14 +30,14 @@ than conventional. Each row names the component that carries it and the
 =spec.org= section that governs it; this table indexes that document, it does
 not restate it.
 
-| Goal                                  | What makes it structural                      | In =spec.org=          |
-|---------------------------------------+-----------------------------------------------+------------------------|
-| Intent is declared, not performed     | =change:start=, the one label a person writes | §Labels                |
-| A verdict names what it measured      | records carry instrument, build, environment  | §Verification contract |
-| A refusal is typed, and delivered     | "could not check" blocks, and is posted       | §Gates                 |
-| Entitlement is not correctness        | window, freeze and berth, read at reliance    | §The guards            |
-| The PR carries what authorizes        | estate flags deliberately live elsewhere      | §Conformance           |
-| The rules are under their own control | changing a guard is itself a normal change    | §Controls audit        |
+| Goal                                  | What makes it structural                       | In =spec.org=          |
+|---------------------------------------+------------------------------------------------+------------------------|
+| Intent is declared, not performed     | =release:start=, the one label a person writes | §Labels                |
+| A verdict names what it measured      | records carry instrument, build, environment   | §Verification contract |
+| A refusal is typed, and delivered     | "could not check" blocks, and is posted        | §Gates                 |
+| Entitlement is not correctness        | window, freeze and berth, read at reliance     | §The guards            |
+| The PR carries what authorizes        | estate flags deliberately live elsewhere       | §Conformance           |
+| The rules are under their own control | changing a guard is itself a normal change     | §Controls audit        |
 
 * Dashboard
 

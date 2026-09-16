@@ -1,4 +1,4 @@
-#+TITLE: 025 — staging entry under gate flakiness, and what a red run does to the berth
+#+TITLE: 028 — staging entry under gate flakiness, and what a red run does to the berth
 #+DATE: 2026-09-15
 
 * Hypotheses
@@ -45,9 +45,9 @@ agreements and exits non-zero on any of them.
 
 * Run
 
-: ./experiments/025-staging-entry-stress/staging_entry_sim.py
-: ./experiments/025-staging-entry-stress/staging_entry_sim.py --check
-: ./experiments/025-staging-entry-stress/staging_entry_sim.py --sweep 10 25 50 --debug 120
+: ./experiments/028-staging-entry-stress/staging_entry_sim.py
+: ./experiments/028-staging-entry-stress/staging_entry_sim.py --check
+: ./experiments/028-staging-entry-stress/staging_entry_sim.py --sweep 10 25 50 --debug 120
 
 Measured input, read 2026-09-15 (87 PRs, every state):
 

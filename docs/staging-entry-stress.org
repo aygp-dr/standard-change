@@ -3,7 +3,7 @@
 
 Our gate checks, our label distribution, our singleton berth. Everything here
 is measured from this repo or derived in closed form from it; the tooling and
-the hypotheses it was built to test are =experiments/025-staging-entry-stress/=.
+the hypotheses it was built to test are =experiments/028-staging-entry-stress/=.
 
 * The short version
 
@@ -221,9 +221,9 @@ which is why D1 has never produced a visible failure.
 
 * Reproducing
 
-: ./experiments/025-staging-entry-stress/staging_entry_sim.py
-: ./experiments/025-staging-entry-stress/staging_entry_sim.py --check
-: ./experiments/025-staging-entry-stress/staging_entry_sim.py --sweep 10 25 50 --debug 120
+: ./experiments/028-staging-entry-stress/staging_entry_sim.py
+: ./experiments/028-staging-entry-stress/staging_entry_sim.py --check
+: ./experiments/028-staging-entry-stress/staging_entry_sim.py --sweep 10 25 50 --debug 120
 
 =--check= asserts five independent agreements (Jensen's direction, the
 constant-n collapse, the ratio identity, sim-vs-closed-form on six cells, and
