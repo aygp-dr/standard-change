@@ -1,0 +1,129 @@
+#+TITLE: Carried forward: what this project teaches the next one
+#+DATE: 2026-09-16
+
+Findings first, each with the incident that earned it and the trigger that
+says when to reach for it. Then the procedures that pass the portability
+test and belong in =aygp-dr/skills= staging, named with their incident, so
+they are not written from principle. The general layer is in
+=methodology.org=; this file holds only what was different here.
+
+* Findings
+
+** Two operators on one forge need an identity for the machine and a lease for the lock
+
+Two grinders on two hosts wrote the same label lock without being told
+about each other (scenarios D21; experiments 022, 023 F3). A label has no
+owner, so "release mine" is not an operation, and every script ran as
+whichever person's token was active, so a machine's removal read as a
+person's. Carry forward: before a second operator joins, the pipeline gets
+an identity of its own (a bot account or an App) and the lock becomes a
+record with a holder and a deadline, with the label as the visible state.
+Trigger: the first time =ListAgents= or the forge shows a second live
+session on the same estate.
+
+** The prefix or the tense must say who wrote a label
+
+Five owners in 023 could read what happened to their change only after
+being told what a marker and an intent were. The tense-pair grammar (the
+person says the verb, the runner answers the participle, one namespace)
+made the writer legible from the label alone and gave the missing
+acknowledgement for free: a verb with no participle means nobody is
+listening. Carry forward: decide the writer-per-namespace rule before the
+first label is written, and never let one tag be both the request and the
+record unless a runner exists to answer it. Trigger: the second writer of
+any label.
+
+** The scheduler's order must be the person's, and the label carries no time
+
+The scheduler ordered by PR number and took a change with a window four
+days ahead before the one just started (2026-09-16 00:34Z). Carry forward:
+a queue keyed to the forge's ids is not a queue; the time of the intent
+lives in the timeline or the record, and the driver reads the calendar
+before it reads anything else. Trigger: the first calendar.
+
+** A writing script gets a dry mode before it is tested
+
+A run of =driver.sh= mistaken for a dry run deployed a change to both
+blocks ahead of its window and had to be backed out (2026-09-16). The
+script had no dry mode. Carry forward: any script that writes to the forge
+or the estate has =DRY_RUN=1= that stops after every check and before the
+first write, added with the first write. Trigger: the first
+=gh pr edit= or deploy call in a new script.
+
+** "No window" and "no calendar" are different answers
+
+The calendar was a git ref the mini had never fetched, so =windows= printed
+nothing and the driver read it as "no window". The three-valued rule the
+gates already obeyed (a check that cannot look is not a pass) applies to
+every read, the calendar included. Carry forward: a read that can fail to
+reach its source returns unreachable, and unreachable blocks. Trigger: any
+read of a source that lives on another host.
+
+** The sealed spec, the held-out defects and the numbered rebuilds are the grading procedure
+
+Rebuild 000 refuted its own hypothesis because the builder had been handed
+the post-mortem of the defects it was graded on. 001 held the defect set
+out; 002 was graded against a sealed spec whose reviewer's findings were
+withheld from the builder. Carry forward: a rebuild's hypothesis is graded
+against a held-out set the builder never sees, the spec is sealed at a
+version before the rebuild starts, and the reviewer's contradiction scan
+is embargoed until grading. Trigger: any "rebuild from the spec" task.
+
+** Oracles that can only pass prove nothing; two transcriptions catch what one hides
+
+Every rule is a constant the checker flips, and the check fails unless the
+named invariant fails; the same machine is transcribed twice (TLA+ from
+the declaration, Python from the scripts) and the two must agree. The
+seventeenth rule's unpruned model passed 113 million states and filled the
+disk; the pruning was found by asking what the semantics allowed, and the
+positive run then took 76 minutes over 102 million states. Carry forward:
+budget the positive run (disk for the state queue, a wake lock, a guard),
+and quote no state count without its date. Trigger: the first model with
+more than a dozen rules.
+
+** The estate's stand-in must answer the same question as the estate
+
+The mini ran the jail estate as worktree blocks with the same port map and
+the same build header, so every gate asked "what is this front serving"
+the same way on both. What did not travel: the calendar ref, the other
+operator's schedule, and the desktop's local-network permission, which
+refused Homebrew clients while Apple's =nc= connected. Carry forward: a
+stand-in is defined by the header and the port map, and every cross-host
+read is listed before the first run. Trigger: the first run on a second
+host.
+
+** A review is a fan-out with a drawer per claim, and it has a price
+
+The reference survey and the promotion survey were verified by citation
+auditors nine rows each, each row getting a property drawer with the
+verdict and the source; the paper was reviewed by an L7 for structure, a
+specialist for the build, and a role reviewer for the reader it was written
+for. Three reviews of a 200-page paper cost about 8.4 million tokens and
+$41 at Opus-class rates, 86% of it cache reads (=experiments/027=). Carry
+forward: mechanical exploration goes to the cheapest model that can follow
+a procedure; judgement goes to the expensive one; the drawer is the record
+either way. Trigger: any document that will be read by someone who did not
+watch it being written.
+
+** Count tokens by the maximum within a message id
+
+The first published spend was 1.9 times the truth because a transcript
+writes one usage record per streaming update (017 F1). Carry forward: the
+counting rule is in =experiments/017-token-metrics/derive.py= and
+=experiments/027-review-cost/tally.py=; the lever is turns, not tokens.
+Trigger: any cost figure.
+
+* Skill candidates for aygp-dr/skills staging, each with its incident
+
+| candidate                              | the incident                                          | anti-goal                                             |
+|----------------------------------------+-------------------------------------------------------+-------------------------------------------------------|
+| dry-mode-before-first-write            | driver.sh deployed #61 during a "dry run", 2026-09-16 | never test a writing script by running it              |
+| three-valued-reads                     | the unfetched calendar read as "no window"            | never map unreachable to the passing value             |
+| held-out-rebuild-grading               | rebuild 000 graded on its own answer key              | never hand the builder the reviewer's findings         |
+| tense-pair-labels                      | five owners could not read "marker" or "intent" (023) | never let one tag be request and record without a runner |
+| fan-out-review-with-drawers            | 45 survey rows, 5 auditors, 26/12/7 verdicts           | never publish a citation without its drawer            |
+| max-per-message-token-count            | 017 F1, 1.9x                                          | never sum streaming usage rows                         |
+| second-operator-checklist              | D21: three identities, one lock                        | never start a second grinder without a machine identity |
+
+None is created here. The rule is that a skill lives in the skills
+repository's staging with its incident named, and is installed from there.
