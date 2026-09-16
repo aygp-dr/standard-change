@@ -1,7 +1,7 @@
 #+TITLE: The scenario index
 #+DATE: 2026-09-15
 
-Generated from =scenarios.org= at =544f42e=. L-scenarios are the lifecycle
+Generated from =scenarios.org= at =6c353ce=. L-scenarios are the lifecycle
 catalogue; D-scenarios are the defect and run reports. The paper cites them by
 id; this is the one-line meaning of each.
 
