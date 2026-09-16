@@ -476,7 +476,7 @@ Nothing is wrong with this category; try again shortly.</p>
 <p class=v>catalogue: unavailable (${esc(d.reason)})</p>`;
   if (!d.found)
     return `<h2>No results</h2>
-<p>We have nothing in <code>${name}</code>. It may have been renamed or removed.</p>
+<p>We have nothing in <code>${name}</code>. It may have been renamed or removed — <a href="/search">search everything</a> instead.</p>
 <p class=v>catalogue: ok — this category is not in it</p>`;
   return `<h2>${esc(d.title)}</h2>
 <p>${d.items.length} result(s) in <code>${name}</code></p>
