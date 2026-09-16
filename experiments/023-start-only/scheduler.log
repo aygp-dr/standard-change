@@ -166,3 +166,14 @@
 00:20:16Z  scheduler  #107 settled
 00:34:05Z  scheduler  watching aygp-dr/standard-change for change:start every 20s
 00:34:07Z  scheduler  change:start on #61
+00:48:09Z  scheduler  watching aygp-dr/standard-change for release:start every 20s
+00:48:10Z  scheduler  release:start on #65
+00:48:32Z  driver #65  behind main and conflicting; refused and reset
+00:48:32Z  scheduler  #65 refused: behind main
+Post "https://api.github.com/graphql": net/http: TLS handshake timeout
+00:50:58Z  scheduler  release:start on #60
+00:52:18Z  driver #60  updated from main: 188ad5d -> a9645ea
+00:52:26Z  driver #60  claimed the lock for a9645ea
+  uat REFUSED: the journey is not what was accepted
+00:53:03Z  driver #60  ABORT at uat: the as-is Playwright journey was refused on staging (a flow change without its acceptance diff?)
+00:55:42Z  scheduler  #60 ended: driver exit 1
