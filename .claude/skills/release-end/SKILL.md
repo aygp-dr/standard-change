@@ -15,7 +15,7 @@ survive.
 
 - The PR is OPEN and not MERGED. A merged change is settle's, not abort's.
 - It is in flight: it carries at least one of the start label,
-  `change:scheduled`, `deploy:staging`, `deploy:production`. abort on a bare
+  `release:scheduled`, `deploy:staging`, `deploy:production`. abort on a bare
   PR clears nothing and writes a false closure.
 - A reason is given. abort.sh requires one; a closure with no cause is not a
   record.
@@ -28,7 +28,7 @@ survive.
 
 The closure record comment, then everything abort.sh does in order:
 deployment records to failure, the current window closed with the code,
-every marker cleared, the closure code, the lock released, `change:end`.
+every marker cleared, the closure code, the lock released, `release:ended`.
 
 ## What it refuses, and says
 
@@ -52,6 +52,6 @@ the person (024 F7: a machine fault should not spend the person's word).
 ## How the person knows
 
 The "Change closed: code" comment with build, reason and labels at closure;
-the PR left with `app:*`, the class, the closure code and `change:end`;
+the PR left with `app:*`, the class, the closure code and `release:ended`;
 `./change/schedule.sh list` showing the window closed with the same code;
 `./change/lock.sh status` free.

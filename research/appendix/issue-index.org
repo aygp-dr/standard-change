@@ -32,7 +32,7 @@ reader elsewhere has no tracker, so this is the one-line meaning of each.
 | #85 | open | dashboard hardcodes staging :9201 / production :9200, the pre-correction scheme |
 | #86 | open | pbt reports an ImportError as 'clean model reports a violation' |
 | #87 | closed | labeller re-derives itil:standard/normal beside a declared itil:emergency |
-| #88 | open | watch.sh adds change:requested to a change that is already change:scheduled |
+| #88 | open | watch.sh adds release:started to a change that is already release:scheduled |
 | #89 | open | label writes that the declaration retires, does not own, or never performs |
 | #90 | open | reap.sh reads only the window's end: it strips a berth mid-flight and erases the last label of a merged, unset |
 | #91 | open | browser walk on block 0 (dff0887): four storefront enhancement opportunities, and what the smoke proxy measure |
@@ -41,7 +41,7 @@ reader elsewhere has no tracker, so this is the one-line meaning of each.
 | #109 | open | Final gate as commit statuses + required checks: the host reports, the forge merges |
 | #120 | open | spec self-contradiction: 9100 is both 'a dead end by construction' and the production front router |
 | #121 | open | spec uses change:standard/change:normal for CLASSIFICATION, which is the itil:* namespace |
-| #122 | open | change:end is a trigger that clears labels, not a tombstone: the merge is the record |
+| #122 | open | release:ended is a trigger that clears labels, not a tombstone: the merge is the record |
 | #124 | open | Rebuild: the label namespaces and their boundaries (the labeller's vs the change-control machine's) |
-| #125 | open | The prefix names the writer: release:* is the person's, change:* is the pipeline's (rename release:start -> rel |
+| #125 | open | The prefix names the writer: release:* is the person's, change:* is the pipeline's (rename change:start -> rel |
 | #126 | open | Paper: contradictions between documents and the cuts a DevOps reader asked for |

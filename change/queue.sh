@@ -56,7 +56,7 @@ if [ -n "$holder" ]; then
   # re-states the intent when the lock is free; the comment below is the
   # record of why they have to. Rule LockResets in tla/Labels.tla.
   ./change/schedule.sh unschedule "$pr" "refused at the lock: staging held by #$holder" >/dev/null 2>&1 || true
-  for l in deploy:staging blocked:queue change:scheduled change:requested release:start release \
+  for l in deploy:staging blocked:queue release:scheduled release:started release:start release \
            staging:hold staging:deployed staging:healthy staging:e2e staging:e2e-failed \
            staging:smoke staging:smoke-failed staging:uat staging:in-progress; do
     gh pr edit "$pr" --repo "$repo" --remove-label "$l" >/dev/null 2>&1 || true

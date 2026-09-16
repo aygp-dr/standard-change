@@ -7,7 +7,7 @@
 (* three axes README.org keeps separate into a handful of booleans:        *)
 (*                                                                         *)
 (*   CLASS      itil:standard | itil:normal | itil:emergency               *)
-(*   LIFECYCLE  change:requested -> change:scheduled -> change:complete    *)
+(*   LIFECYCLE  release:started -> release:scheduled -> release:completed    *)
 (*   ACTION     deploy:staging (the berth), <env>:deployed, deploy:production *)
 (*   plus OBSERVATIONS on the head (<env>:healthy, e2e/smoke, uat),        *)
 (*   READINESS (draft), a person's staging:hold, the BOOKING that entitles *)
@@ -40,7 +40,7 @@ CONSTANTS PRs,
           EstateGuard,       \* preflight: an emergency in flight stops standard and normal
           BerthGuard,        \* guard 1: deploy:staging is a singleton across the repo
           ClassGuard,        \* preflight.sh:187: two classes is an undefined class -- refused
-          LifecycleExclusive,\* schedule.sh: booking removes change:requested
+          LifecycleExclusive,\* schedule.sh: booking removes release:started
           ReapFreesBerth,    \* reap.sh: a lapsed window releases deploy:staging it still held
           SettleClears,      \* settle.sh:244-252: cleanup clears every transient label
           ReapSparesInFlight,\* a lapsed window is not reaped while its change is deploying
@@ -49,7 +49,7 @@ CONSTANTS PRs,
           HoldGuard,         \* staging:hold (a person's intent) stops promotion, at the moment of promoting
           HealthyBeforeVerdict,\* an instrument measures staging only once staging:healthy is recorded
           LockResets,        \* refused at the lock: every marker goes, human intent included; the person re-states it
-          MergeIsTheTombstone,\* a MERGED change does not keep change:end -- the forge's MERGED is the record (the owner, 2026-09-15)
+          MergeIsTheTombstone,\* a MERGED change does not keep release:ended -- the forge's MERGED is the record (the owner, 2026-09-15)
           UnaffectedMerges   \* release:skip: nothing to release, so the only act left is the merge -- and only if the diff touches no unit
 
 Classes   == {"standard", "normal", "emergency"}
@@ -72,11 +72,11 @@ VARIABLES
     verdict,      \* verdict[p] \in Verdicts: the staging instruments' last word (e2e, smoke)
     uat,          \* uat[p]: staging:uat -- a person accepted THIS head
     healthy,      \* healthy[p]: production:healthy -- guard 5 converged on THIS head
-    closed,       \* closed[p]: change:failed or change:backed-out (abort.sh)
+    closed,       \* closed[p]: release:failed or release:backed-out (abort.sh)
     served,       \* served[p]: production converged on THIS head (a fact, not the label)
     merged,       \* merged[p]: the forge records MERGED
     pir,          \* pir[p]: the post-implementation review is posted (settle.sh:150-168)
-    cleaned,      \* cleaned[p]: the change:end LABEL is present on the PR
+    cleaned,      \* cleaned[p]: the release:ended LABEL is present on the PR
     tidied,       \* tidied[p]: the cleanup RAN and cleared every other label (settle.sh:244-252)
     unit,         \* unit[p]: the labeller attached at least one app:* -- the diff touches something deployable
     unaffected,   \* unaffected[p]: release:skip -- a person's claim that the estate is unaffected
@@ -233,7 +233,7 @@ AddRelease(p) ==
 (***************************************************************************)
 (* change/watch.sh:37-38 -- consume the trigger FIRST, then record the ask. *)
 (* Under LifecycleExclusive the ask is not re-recorded on a change that is *)
-(* already scheduled; watch.sh:38 adds change:requested unconditionally,   *)
+(* already scheduled; watch.sh:38 adds release:started unconditionally,   *)
 (* so the script implements LifecycleExclusive = FALSE here (#88).         *)
 (***************************************************************************)
 Watch(p) ==
@@ -247,7 +247,7 @@ Watch(p) ==
                    badClaim, badClass, badPromote, badVerdict, emgWaited, refusedDirty,
                    badUnaffected>>
 
-\* A person adds change:requested directly (label-owners.tsv: human).
+\* A person adds release:started directly (label-owners.tsv: human).
 Request(p) ==
     /\ Open(p) /\ "requested" \notin life[p] /\ "scheduled" \notin life[p] /\ ~unaffected[p]
     /\ life' = [life EXCEPT ![p] = @ \cup {"requested"}]
@@ -344,7 +344,7 @@ Activate(p) ==
 (* A change that asks for staging while another holds it is not queued and  *)
 (* not annotated: change/queue.sh clears EVERY marker it carries -- the     *)
 (* window, the lifecycle, the observations, and the human intent            *)
-(* (release:start / change:requested / release / staging:hold) -- and says   *)
+(* (release:start / release:started / release / staging:hold) -- and says   *)
 (* who holds the lock. The person re-states the intent when the lock is     *)
 (* free. "Since I have to": a refusal that leaves a queue label behind is a  *)
 (* print statement that later reads as a claim.                             *)
@@ -516,15 +516,15 @@ EmergencyWaits(e) ==
 (* merge. merge-on-healthy.yml -> release.sh is the AUTOMATIC path: fires  *)
 (* on production:healthy, merges, clears the action labels, records        *)
 (* nothing (RecordOnMerge = FALSE is the tree). change/settle.sh is the    *)
-(* RECORDING path: change:complete, merge if not merged, the PIR, cleanup. *)
+(* RECORDING path: release:completed, merge if not merged, the PIR, cleanup. *)
 (*                                                                         *)
-(* THE TWO TERMINAL WORDS (the owner, 2026-09-14). change:complete is the  *)
+(* THE TWO TERMINAL WORDS (the owner, 2026-09-14). release:completed is the  *)
 (* pipeline's OUTCOME and it drives the side effects: the merge to main,   *)
 (* the PIR, and whatever else must hear that the change shipped (a ticket, *)
-(* a message). change:end is the tombstone the cleanup writes when it has  *)
+(* a message). release:ended is the tombstone the cleanup writes when it has  *)
 (* cleared every other label: it drives nothing, it only says the clearing *)
 (* was settlement and not a refusal or a reaper. `cleaned` below IS        *)
-(* change:end, and CleanIsClean is its invariant. A person writes neither; *)
+(* release:ended, and CleanIsClean is its invariant. A person writes neither; *)
 (* the person's words are release:start and staging:hold.                   *)
 (***************************************************************************)
 MergeOnHealthy(p) ==
@@ -540,11 +540,11 @@ MergeOnHealthy(p) ==
        THEN /\ life'    = [life    EXCEPT ![p] = {}]
             /\ pir'     = [pir     EXCEPT ![p] = TRUE]
             \* THE TOMBSTONE IS NOT WRITTEN ON THE MERGE PATH [MergeIsTheTombstone].
-            \* settle.sh clears change:complete with the argument that once the
+            \* settle.sh clears release:completed with the argument that once the
             \* forge records MERGED the label "restates a fact the platform owns,
             \* and two records of one fact can disagree while the platform's
-            \* cannot" -- and then wrote change:end, which is that same
-            \* restatement. #52 proved the label can drift: it carried change:end
+            \* cannot" -- and then wrote release:ended, which is that same
+            \* restatement. #52 proved the label can drift: it carried release:ended
             \* through an entire successful deploy while still open. mergedAt
             \* cannot drift. (the owner, 2026-09-15)
             /\ tidied'  = [tidied  EXCEPT ![p] = TRUE]
@@ -589,10 +589,10 @@ Pir(p) ==
                    estateEmg, badClaim, badClass, badPromote, badVerdict, emgWaited,
                    refusedDirty, badUnaffected>>
 
-\* settle.sh:244-252 -- cleanup. Every transient label, change:complete included.
+\* settle.sh:244-252 -- cleanup. Every transient label, release:completed included.
 Cleanup(p) ==
     \* Guarded on `tidied`, not on `cleaned`. They were one variable; once the
-    \* merge path stops leaving change:end, "the tombstone is showing" can no
+    \* merge path stops leaving release:ended, "the tombstone is showing" can no
     \* longer stand in for "the cleanup has run" or this action re-fires forever.
     /\ pir[p] /\ ~tidied[p]
     /\ tidied'  = [tidied  EXCEPT ![p] = TRUE]
@@ -624,7 +624,7 @@ Abort(p) ==
     \* The tombstone STAYS here. An aborted change has no mergedAt, so nothing
     \* else distinguishes settlement from a refusal at the lock, the reaper, or
     \* an eviction -- all of which also leave a change with no labels. This is
-    \* the case change:end was invented for, and the only one it still serves.
+    \* the case release:ended was invented for, and the only one it still serves.
     /\ closed'  = [closed  EXCEPT ![p] = TRUE]
     /\ tidied'  = [tidied  EXCEPT ![p] = TRUE]
     /\ cleaned' = [cleaned EXCEPT ![p] = TRUE]
@@ -773,9 +773,9 @@ AtMostOneHolder == Cardinality(Holder) <= 1
 \* no claim was made that a rule should have refused              [FreezeGuard, EstateGuard]
 NoRefusedClaim == badClaim = FALSE
 
-\* cleanup released everything transient, change:complete included [SettleClears]
+\* cleanup released everything transient, release:completed included [SettleClears]
 \* CleanIsClean is stated over `tidied` (the cleanup RAN), not over `cleaned`
-\* (the change:end label is showing). It used to be one variable, and if it had
+\* (the release:ended label is showing). It used to be one variable, and if it had
 \* stayed one, removing the label from the merge path would have emptied this
 \* invariant instead of narrowing it -- a check that cannot fail, which is the
 \* defect this file exists to avoid. Over `tidied` it still binds every path.
@@ -788,7 +788,7 @@ CleanIsClean ==
 \* a merged change that has lost its last lifecycle label has its record [RecordOnMerge]
 MergedHasRecord == \A p \in PRs : (merged[p] /\ life[p] = {}) => pir[p]
 
-\* ONCE THE CLEANUP HAS RUN, A MERGED CHANGE DOES NOT STILL CARRY change:end.
+\* ONCE THE CLEANUP HAS RUN, A MERGED CHANGE DOES NOT STILL CARRY release:ended.
 \* [MergeIsTheTombstone]   (the owner, 2026-09-15: "it's merged, i know the
 \* change, if needed, has ended")
 \*
@@ -799,7 +799,7 @@ MergedHasRecord == \A p \in PRs : (merged[p] /\ life[p] = {}) => pir[p]
 \* restates a fact the platform owns and can disagree with it (#52 did).
 \*
 \* The abort path is deliberately untouched: an aborted change has no mergedAt,
-\* so change:end is the only thing separating settlement from a refusal at the
+\* so release:ended is the only thing separating settlement from a refusal at the
 \* lock, the reaper, or an eviction. This invariant does not reach it.
 NoTombstoneOnMerged ==
     \A p \in PRs : (merged[p] /\ tidied[p]) => ~cleaned[p]

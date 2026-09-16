@@ -1,5 +1,5 @@
 #!/bin/sh
-# driver.sh <pr> -- one change, from release:start to change:end, on the node
+# driver.sh <pr> -- one change, from release:start to release:ended, on the node
 # target. The process that "takes over" once a person has said start.
 #
 # WHAT IT IS. activate.sh ported to targets/node for the mini's estate: the
@@ -66,8 +66,8 @@ git fetch -q origin
 # "no window" and ran #61 ahead of the one it had. If the change SAYS it is
 # scheduled and the calendar cannot be read, that is unreachable, and
 # unreachable blocks (CLAUDE.md: preflight exit 4 blocks). Exit 4.
-if printf '%s\n' $labels | grep -qx 'change:scheduled'; then
-  git rev-parse --verify --quiet refs/idp/schedule >/dev/null || { log "blocked: change:scheduled is on and the calendar (refs/idp/schedule) is not readable here"; exit 4; }
+if printf '%s\n' $labels | grep -qx 'release:scheduled'; then
+  git rev-parse --verify --quiet refs/idp/schedule >/dev/null || { log "blocked: release:scheduled is on and the calendar (refs/idp/schedule) is not readable here"; exit 4; }
 fi
 future=$(./change/schedule.sh windows "$PR" 2>/dev/null | awk -v now="$(date -u +%FT%TZ)" '$3 > now {print $1"  from "$3; exit}')
 if [ -n "$future" ]; then
@@ -84,13 +84,13 @@ fi
 # tickets carried verdicts from a release that never ended, and a retired
 # label. A person saying start on such a ticket must not have to sweep it
 # first -- the markers are a previous release's, and the release that left them
-# owed a change:end it never wrote. So start pays that debt: every marker of a
+# owed a release:ended it never wrote. So start pays that debt: every marker of a
 # previous release goes, the person's own words (staging:hold, backfill-owed)
 # stay, and the comment says what went so the sweep has an author (D21).
 swept=''
 for l in $labels; do
   case "$l" in
-    release:start|staging:hold|change:backfill-owed|blocked:lock|app:*|itil:*|control-plane) ;;
+    release:start|staging:hold|release:backfill-owed|blocked:lock|app:*|itil:*|control-plane) ;;
     staging:*|deploy:*|production:*|blocked:*|berth:*|release|release:start|change:*)
       gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 && swept="$swept \`$l\`" ;;
   esac
@@ -131,7 +131,7 @@ if ! git merge-base --is-ancestor origin/main "origin/$branch" 2>/dev/null; then
     say "Brought up to \`main\` by the driver: \`$before\` was behind, and \`main\` is moving faster than a person can rebase. The forge merged \`main\` into this branch (nothing of yours was rewritten); the head under release is now \`$sha\`."
     log "updated from main: $before -> $sha"
   else
-    for l in release:start deploy:staging change:scheduled staging:e2e staging:smoke staging:uat staging:deployed staging:healthy; do
+    for l in release:start deploy:staging release:scheduled staging:e2e staging:smoke staging:uat staging:deployed staging:healthy; do
       gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
     done
     # SAY WHAT CONFLICTED. "#108's owner: the ticket never said what conflicted,

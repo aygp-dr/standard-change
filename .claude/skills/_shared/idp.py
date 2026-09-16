@@ -278,7 +278,7 @@ def main():
     c.add_argument("--note")
     c.set_defaults(fn=cmd_checkout)
 
-    r = sub.add_parser("release"); r.add_argument("env"); r.set_defaults(fn=cmd_release)
+    r = sub.add_parser("release:start"); r.add_argument("env"); r.set_defaults(fn=cmd_release)
 
     cl = sub.add_parser("clear")
     cl.add_argument("env"); cl.add_argument("--reason", required=True)

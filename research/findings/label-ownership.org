@@ -28,10 +28,10 @@ believes the measurement, not by an agent summarising a terminal.
 | =staging:smoke=        | =gates/smoke.sh --pr=                 | no                     |
 | =production:healthy=   | =gates/health.sh --pr=                | no                     |
 | =staging:uat=          | *a person* -- for acceptance, the person IS the instrument | yes, via =change/observe.sh= |
-| =release=              | a person -- it is intent, not a measurement | yes               |
+| =release:start=              | a person -- it is intent, not a measurement | yes               |
 | =hold:staging=         | a person                              | yes                    |
 | =deploy:<env>=         | the workflow doing the deploying      | no                     |
-| =change:*=             | the pipeline, as the record advances  | =change:requested= only |
+| =change:*=             | the pipeline, as the record advances  | =release:started= only |
 
 *The violation that started this.* =production:healthy= was typed by hand
 because =health.sh= had no =--pr= flag, unlike =e2e.sh= and =smoke.sh=. A gate
@@ -124,7 +124,7 @@ the label checkable.
 
 The agent's legitimate moves are to run the instrument, to report what it said,
 and to say plainly when it could not run. It may also carry a human's intent
-(=release=, =hold:staging=) when asked, because intent is the human's to give.
+(=release:start=, =hold:staging=) when asked, because intent is the human's to give.
 
 * Rule 4 -- a label with two writers needs a tiebreak written down
 

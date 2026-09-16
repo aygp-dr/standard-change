@@ -135,11 +135,11 @@ One signal is a coincidence. Two is a conclusion.
 | window ended, result unset | `./change/reap.sh` | edit the schedule by hand |
 | berth held, holder proven dead | `./change/lock.sh release` **and** remove `deploy:staging` | clear the label only — the two records disagree and both must go |
 | lease outlived its holder | add `berth:stale` and say why on the PR | silently release |
-| `change:end`/`complete` on an **open** PR | remove it | remove the app/itil labels with it |
-| `change:scheduled` after its window was reaped | remove it | re-book — a reaper that rebooks is a scheduler nobody asked for |
+| `release:ended`/`complete` on an **open** PR | remove it | remove the app/itil labels with it |
+| `release:scheduled` after its window was reaped | remove it | re-book — a reaper that rebooks is a scheduler nobody asked for |
 | a change aborted with no closure code | `./change/abort.sh <pr> failed` | invent a label |
 
-**Never** re-assert a human's intent. `release:start` and `change:requested` are
+**Never** re-assert a human's intent. `release:start` and `release:started` are
 human-owned; if a change lost its intent to a machine failure, say so on the PR
 and let a person restate it. Automation speaking for a person is the defect
 `gates/label-audit.py` was built to refuse.

@@ -99,7 +99,7 @@ owner's "model only from the PR tag perspective".
 
 * What the current tree does with it
 
-Nothing yet beyond the one rename. The model keeps =release= (the verb),
+Nothing yet beyond the one rename. The model keeps =release:start= (the verb),
 =life= (the pipeline's lifecycle set), =hold=, =unaffected= and =cleaned=
 as separate variables, which is option 2 in structure. The skills
 =/release-start=, =/release-schedule= and =/release-end= already speak

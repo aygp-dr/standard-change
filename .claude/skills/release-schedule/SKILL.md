@@ -30,7 +30,7 @@ ISO 8601 UTC and must not learn the phrases. Groups come from
 ## The one thing it writes
 
 One window row in `refs/idp/schedule`, by compare-and-swap. block also adds
-`change:scheduled` today; under #125 that is the pipeline's record and stays
+`release:scheduled` today; under #125 that is the pipeline's record and stays
 the pipeline's.
 
 ## What it refuses, and says
@@ -52,6 +52,6 @@ reap.sh); touch the class, the approval, or any observation.
 
 ## How the person knows
 
-block prints the id and S..E; `change:scheduled` appears; this skill posts
+block prints the id and S..E; `release:scheduled` appears; this skill posts
 the one comment block does not: the window id, and that reserving is not
 deploying and the guards run again when it opens.

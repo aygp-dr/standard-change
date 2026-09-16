@@ -40,7 +40,7 @@ One PR is a tuple; two PRs and the estate make a state.
 | observation | staging verdict ∈ {none, pass, fail}; staging:uat; production:healthy | e2e.sh:202 / smoke.sh:173; observe.sh:44; health.sh:99 | labeller.yml:101 on synchronize; settle; abort |
 | readiness | draft | the author, at open | =gh pr ready= -- the author, only |
 | booking | none / queued / designated | schedule.sh block | cancel, reap, settle |
-| closure | change:failed / change:backed-out | abort.sh:113-114 | never |
+| closure | release:failed / release:backed-out | abort.sh:113-114 | never |
 | settlement | served (a fact), merged, PIR posted, cleaned | health.sh; merge-on-healthy.yml→release.sh or settle.sh:127; settle.sh:150-168; settle.sh:244-252 | served: a push or an abort |
 | estate | freeze, emergency | a person, on issue #1 | a person |
 
@@ -106,14 +106,14 @@ is the person's view of the same machine and draws fewer states.
 | 6 | =ClassGuard= | preflight.sh:187 -- two classes is an undefined class; refused, and a person resolves | =NoDeployWithTwoClasses= | same |
 | 7 | =LifecycleExclusive= | label-owners.tsv group =lifecycle= -- at most one active change:* | =OneLifecycle= | same |
 | 8 | =ReapFreesBerth= | reap.sh:77 -- a lapsed window releases the berth it held | =NoUnbookedDeploy= | same |
-| 9 | =SettleClears= | settle.sh:244-252 -- cleanup clears every transient label, change:complete included | =CleanIsClean= | same |
+| 9 | =SettleClears= | settle.sh:244-252 -- cleanup clears every transient label, release:completed included | =CleanIsClean= | same |
 | 10 | =ReapSparesInFlight= | a lapsed window is not reaped while its change carries deploy:production | =NoUnbookedDeploy= | same |
-| 11 | =RecordOnMerge= | the path that merges also records -- change:complete and the PIR | =MergedHasRecord= | same |
+| 11 | =RecordOnMerge= | the path that merges also records -- release:completed and the PIR | =MergedHasRecord= | same |
 | 12 | =EmergencyPreempts= | a declared, booked, ready =itil:emergency= evicts a standard or normal holder of the berth (README §5b); *specified, unbuilt* | =EmergencyNeverWaits= | same |
 | 13 | =HoldGuard= | promote.yml -- a person's =staging:hold= stops =deploy:production= landing, at the moment of promoting | =NoPromoteUnderHold= | same |
 | 14 | =HealthyBeforeVerdict= | e2e and smoke measure staging only once =staging:healthy= is recorded; the next step keys on the observation, not the action | =VerdictOnHealthy= | same |
 | 15 | =LockResets= | queue.sh -- refused at the lock, a change keeps no marker: window, lifecycle, observations and human intent all go; the person re-states it | =LockRefusalResets= | same |
-| 16 | =MergeIsTheTombstone= | settle.sh -- once the forge records MERGED the change does not keep =change:end=; the abort path keeps it, having no mergedAt | =NoTombstoneOnMerged= | same |
+| 16 | =MergeIsTheTombstone= | settle.sh -- once the forge records MERGED the change does not keep =release:ended=; the abort path keeps it, having no mergedAt | =NoTombstoneOnMerged= | same |
 | 17 | =UnaffectedMerges= | =release:skip= -- a person's claim that the estate is untouched: no berth, no window, no observation, the merge is the only act, and only when the labeller attached no =app:*=; a claim the labeller contradicts is refused until a person withdraws one | =UnaffectedNeverDeploys= | same (the sim finds the violation at depth 2: declare, then merge with a unit) |
 
 Rule 12 is the one rule here that is *specified and unbuilt*: no script evicts a holder, and the model adds no new states for it -- every state an eviction reaches, a reaped window already reached -- so it costs nothing to carry until the ADR decides who performs it.
@@ -126,10 +126,10 @@ state by three roads: a deployment with no reservation behind it, once by
 claiming without booking, once by a window lapsing under a claim, and once by
 a window lapsing under a production deploy. =BerthHasCause= is also in the
 config and is implied by =NoUnbookedDeploy= in this model, where a booking
-and =change:scheduled= are set and cleared together.
+and =release:scheduled= are set and cleared together.
 
-=OneLifecycle= counts *active* states only. settle.sh writes =change:complete=
-at :105 while =change:scheduled= is still on and clears both at :244-252, so
+=OneLifecycle= counts *active* states only. settle.sh writes =release:completed=
+at :105 while =release:scheduled= is still on and clears both at :244-252, so
 a terminal label beside an active one is the script's own order, not a
 violation; the declaration says "≤1 active" for the same reason.
 
@@ -169,17 +169,17 @@ five states.
 
 ** 2. watch.sh records the ask on a change that is already booked [E]
 
-=watch.sh:37-38= consumes =release= and then adds =change:requested=
+=watch.sh:37-38= consumes =release:start= and then adds =release:started=
 unconditionally. A change that was booked first and released second -- the
 normal order when a person wants to watch it go out -- ends with
-=change:requested= *and* =change:scheduled=. TLC's counterexample:
+=release:started= *and* =release:scheduled=. TLC's counterexample:
 AddRelease, Book, Watch. The model implements =LifecycleExclusive= as "the ask
 is not re-recorded on a scheduled change"; the script does not (#88).
 
 ** 3. The reaper reads only the clock [E]
 
 =reap.sh:10-14= closes every open window whose end has passed and removes
-=change:scheduled= and, if held, =deploy:staging=. It reads nothing about the
+=release:scheduled= and, if held, =deploy:staging=. It reads nothing about the
 change. Two consequences, both found once the merge and settlement were
 modelled (#90):
 
@@ -191,14 +191,14 @@ modelled (#90):
   implements it off; =NoUnbookedDeploy= is what fails.
 - *After the automatic merge.* =merge-on-healthy.yml= runs =release.sh=,
   which merges and clears =deploy:*= and =production:healthy= but leaves
-  =change:scheduled= and posts no PIR; the workflow itself says settlement
+  =release:scheduled= and posts no PIR; the workflow itself says settlement
   must run from a host that can see the estate. If the window lapses before
-  someone runs =settle.sh=, reap removes =change:scheduled= and the PR is
+  someone runs =settle.sh=, reap removes =release:scheduled= and the PR is
   merged with no lifecycle label and no record. =RecordOnMerge= is the rule;
   the tree implements it off; =MergedHasRecord= is what fails.
 
 The reaper's own comment says it deliberately does not re-book and does not
-re-add =change:requested=, and both are right. What it should also not do
+re-add =release:started=, and both are right. What it should also not do
 is act on a change that is deploying or merged, and it has no way to know
 either, because it reads the schedule and not the PR.
 
@@ -221,7 +221,7 @@ retired labels because nothing reads them.
 - =release:start= is declared with owner "the pipeline" and written by no
   script. The model dropped it; the declaration should either gain a writer
   (activate.sh, at the berth claim) or lose the row. There is no
-  =release:completed= either: the terminal label is =change:complete=, set by
+  =release:completed= either: the terminal label is =release:completed=, set by
   settle.sh before the merge and cleared by its own cleanup once the forge
   records MERGED -- the record after that is the PIR and the deployment
   annotation; no label carries it.
@@ -230,8 +230,8 @@ retired labels because nothing reads them.
 
 ** 6. What reap leaves behind is documented and modelled
 
-=reap.sh= removes =change:scheduled= and leaves *no* lifecycle label, on the
-stated ground that re-adding =change:requested= would be automation speaking
+=reap.sh= removes =release:scheduled= and leaves *no* lifecycle label, on the
+stated ground that re-adding =release:started= would be automation speaking
 for a person. The model does the same; the Forfeited state in README.org's
 diagram is this.
 

@@ -101,7 +101,7 @@ the handful of terms this repo sharpened past their ITIL definitions.
   the in-runner run against the PR build. The first proves the build, the
   second proves the deployment. Only the second authorizes production.
 - *stale lock* - a deployment lock older than 60 minutes, presumed to belong to
-  a runner that died before =release=. Preflight clears it, and the clearance
+  a runner that died before =release:start=. Preflight clears it, and the clearance
   is recorded in the stale run's PIR. A clearance that leaves no record is a
   refutation condition, not a convenience.
 - *blocked vs failed* - =blocked:lock= and =blocked:freeze= mean the change was

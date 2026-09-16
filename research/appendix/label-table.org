@@ -1,8 +1,8 @@
 #+TITLE: The label table, as declared
 #+DATE: 2026-09-15
 
-Generated from =change/label-owners.tsv= at =6c353ce= by =research/generate.py=.
-48 labels. A label with no row here has no owner and cannot be trusted
+Generated from =change/label-owners.tsv= at =2a5d25b= by =research/generate.py=.
+47 labels. A label with no row here has no owner and cannot be trusted
 (=findings/label-ownership.org=). Columns: persistent (survives settlement),
 a person may add, a person may clear; the first sentence of the declaration.
 
@@ -13,19 +13,18 @@ a person may add, a person may clear; the first sentence of the declaration.
 | =itil:normal= | labeller | yes | no | no | derived; same |
 | =control-plane= | labeller | yes | no | no | derived from gates/, change/, .github/ -- NARROWER than itil:normal, which also globs router/ and targets/ |
 | =labeler:skip= | human | yes | yes | yes | the opt-out that transfers ownership of the derived labels |
-| =change:requested= | human | no | yes | no | the human's part of starting a change; the pipeline clears it |
-| =change:scheduled= | scheduler | no | no | no | set when a window is booked |
-| =change:complete= | change/settle.sh | yes | no | no | The pipeline's OUTCOME: production converged on this head, and it DRIVES the side effects -- the merge to main |
-| =change:end= | change/settle.sh | yes | no | no | The TOMBSTONE |
-| =release:start= | the pipeline | no | no | no | ACTION: the release has BEGUN for the booked change request |
+| =release:started= | human | no | yes | no | the human's part of starting a change; the pipeline clears it |
+| =release:scheduled= | scheduler | no | no | no | set when a window is booked |
+| =release:completed= | change/settle.sh | yes | no | no | The pipeline's OUTCOME: production converged on this head, and it DRIVES the side effects -- the merge to main |
+| =release:ended= | scheduler | yes | no | no | The TOMBSTONE |
 | =release:skip= | human | yes | yes | yes | INTENT, a verb: skip the estate |
-| =release= | human | no | yes | no | INTENT |
+| =release:start= | human | no | yes | no | INTENT |
 | =hold:staging= | REJECTED | no | no | no | REJECTED SEMANTICS 2026-09-13 |
-| =deploy:staging= | workflow | no | no | no | ACTION in flight, and the berth claim guard 1 reads |
+| =deploy:staging= | scheduler | no | no | no | ACTION in flight, and the berth claim guard 1 reads |
 | =deploy:production= | workflow | no | no | no | INTENT to deploy to production, landed by promote.yml when staging:smoke is recorded with staging:e2e beside i |
-| =staging:deployed= | workflow | no | no | no | ACTION DONE: the deployer says the staging install finished for this head |
+| =staging:deployed= | scheduler | no | no | no | ACTION DONE: the deployer says the staging install finished for this head |
 | =staging:healthy= | gates/health.sh --pr | no | no | no | observation: guard 5's instrument on STAGING -- the environment serves this head |
-| =production:deployed= | workflow | no | no | no | ACTION DONE: the production install finished for this head; production:healthy is the observation that follows |
+| =production:deployed= | scheduler | no | no | no | ACTION DONE: the production install finished for this head; production:healthy is the observation that follows |
 | =staging:hold= | human | no | yes | yes | INTENT, a person's: "not to production yet" |
 | =staging:e2e= | gates/e2e.sh --pr | no | no | no | observation; the gate is the instrument |
 | =staging:e2e-failed= | gates/e2e.sh --pr | no | no | no | observation |
@@ -37,7 +36,7 @@ a person may add, a person may clear; the first sentence of the declaration.
 | =production:healthy= | gates/health.sh --pr | no | no | no | observation |
 | =staging:passed= | RETIRED | no | no | no | named no measurement and no environment; replaced by the staging:* stack |
 | =staging:failed= | RETIRED | no | no | no | same |
-| =deployed:production= | RETIRED | no | no | no | replaced by change:complete plus the deployment record |
+| =deployed:production= | RETIRED | no | no | no | replaced by release:completed plus the deployment record |
 | =blocked:queue= | change/queue.sh | no | no | no | RETIRED 2026-09-14 |
 | =blocked:lock= | change/lock.sh | no | no | no | set and cleared by the lock |
 | =blocked:diverged= | workflow | no | no | yes | a human may clear it after rebasing |
@@ -48,11 +47,11 @@ a person may add, a person may clear; the first sentence of the declaration.
 | =staging:in-progress= | workflow | no | no | no | action in flight |
 | =production:e2e-failed= | gates/e2e.sh --pr | no | no | no | observation |
 | =production:smoke-failed= | gates/smoke.sh --pr | no | no | no | observation |
-| =change:failed= | change/abort.sh | yes | no | no | TERMINAL |
-| =change:backed-out= | change/abort.sh | yes | no | no | TERMINAL |
-| =change:backfill-owed= | change/abort.sh | yes | yes | yes | AN UNPAID CHANGE RECORD |
-| =release:start= | human | no | yes | yes | INTENT |
+| =release:failed= | change/abort.sh | yes | no | no | TERMINAL |
+| =release:backed-out= | change/abort.sh | yes | no | no | TERMINAL |
+| =release:backfill-owed= | change/abort.sh | yes | yes | yes | AN UNPAID CHANGE RECORD |
+| =release:start= | human | no | yes | yes | INTENT, a verb |
 | =berth:stale= | reap | yes | no | yes | The staging lease outlived its holder -- berth held, window gone, build serving nowhere |
 | =review:proxy= | change/review.sh | yes | no | no | A recorded proxy approval |
-| =change:abandoned= | change/abort.sh | yes | no | no | CLOSURE |
-| =change:superseded= | change/abort.sh | yes | no | no | CLOSURE |
+| =release:abandoned= | change/abort.sh | yes | no | no | CLOSURE |
+| =release:superseded= | change/abort.sh | yes | no | no | CLOSURE |

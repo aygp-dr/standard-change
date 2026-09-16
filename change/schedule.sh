@@ -196,7 +196,7 @@ case "${1:-}" in
     env="${CHANGE_ENV:-staging}"
     # A MERGED CHANGE CANNOT BE BOOKED. Nothing checked, so a runaway loop
     # reserved windows for #28 after it settled -- and `block` adds
-    # change:scheduled, which put the label back on a change settle.sh had just
+    # release:scheduled, which put the label back on a change settle.sh had just
     # cleared. The PR then claimed a reservation for work already in production.
     #
     # The evidence that it was scheduled is that it SHIPPED; the forge's MERGED
@@ -204,7 +204,7 @@ case "${1:-}" in
     state=$(gh pr view "$pr" --repo "$repo" --json state -q .state 2>/dev/null || echo '')
     if [ "$state" = MERGED ] || [ "$state" = CLOSED ]; then
       echo "refused: #$pr is $state. A change that has landed does not need a window," >&2
-      echo "  and booking one re-adds change:scheduled to a change settle.sh cleared." >&2
+      echo "  and booking one re-adds release:scheduled to a change settle.sh cleared." >&2
       exit 2
     fi
     sha=$(gh pr view "$pr" --repo "$repo" --json headRefOid -q '.headRefOid' | cut -c1-7)
@@ -242,19 +242,19 @@ case "${1:-}" in
     printf '%s' "$id" > .change-event-id
 
     # THE CHANGE RECORD MOVES TO SCHEDULED. label-owners.tsv has declared
-    # `change:scheduled` with owner `scheduler` and the note "set when a window
+    # `release:scheduled` with owner `scheduler` and the note "set when a window
     # is booked" since the beginning, and nothing wrote it: nine booked changes
     # carried no lifecycle label at all, so "is this scheduled?" could only be
     # answered by reading the calendar. A declared label nobody writes is a
     # documented intention, not a state.
     #
     # ITIL 4: assessed and authorized -> SCHEDULED is the transition a booking
-    # makes. The lifecycle group is <=1 active, so change:requested comes off --
+    # makes. The lifecycle group is <=1 active, so release:started comes off --
     # the ask has been answered. CLEARING a human-owned label is allowed where
     # asserting it is not (research/findings/label-ownership.org: adding and removing are
     # different acts); the scheduler may answer an ask, it may not invent one.
     gh pr edit "$pr" --repo "$repo" \
-      --add-label change:scheduled --remove-label change:requested >/dev/null 2>&1 || true
+      --add-label release:scheduled --remove-label release:started >/dev/null 2>&1 || true
 
     echo "$id  $env  $start .. $end  pr=#$pr groups=$groups sha=$sha"
     ;;
@@ -277,7 +277,7 @@ case "${1:-}" in
   #
   # The inverse of `block`, and it is ONE VERB because it is one decision. Doing
   # it by hand meant `windows`, then `close ... cancelled` per id, then
-  # `gh pr edit --remove-label change:scheduled` -- three commands where
+  # `gh pr edit --remove-label release:scheduled` -- three commands where
   # forgetting the third leaves the PR claiming a reservation the calendar has
   # already given away. That is the two-sources-for-one-fact defect, reachable
   # by anyone who gets bored halfway.
@@ -300,14 +300,14 @@ case "${1:-}" in
     if [ "$_n" -eq 0 ]; then
       echo "  #$_pr held no open window; nothing to give back" >&2
     else
-      gh pr edit "$_pr" --repo "$repo" --remove-label change:scheduled >/dev/null 2>&1 || true
+      gh pr edit "$_pr" --repo "$repo" --remove-label release:scheduled >/dev/null 2>&1 || true
       gh pr comment "$_pr" --repo "$repo" --body \
 "Unscheduled: $_n window(s) given back, closed \`cancelled\`.
 
 **Reason:** $_why
 
-\`change:scheduled\` cleared. This is *cancelled*, not *expired* — somebody decided, rather than the slot lapsing. The change is still approved and its observations still stand; it simply is not booked. Re-book with \`./change/schedule.sh block $_pr <groups> <minutes>\`." >/dev/null 2>&1 || true
-      echo "  change:scheduled cleared -- approved, unbooked"
+\`release:scheduled\` cleared. This is *cancelled*, not *expired* — somebody decided, rather than the slot lapsing. The change is still approved and its observations still stand; it simply is not booked. Re-book with \`./change/schedule.sh block $_pr <groups> <minutes>\`." >/dev/null 2>&1 || true
+      echo "  release:scheduled cleared -- approved, unbooked"
     fi
     ;;
 

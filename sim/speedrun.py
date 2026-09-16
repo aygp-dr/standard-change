@@ -124,7 +124,7 @@ def report(r):
 PLAN = {
  "submitted":            ("open a PR touching apps/<x>",
                           "labeller attaches app:<x> and itil:standard"),
- "window refused":       ("add change:requested while another change holds the berth",
+ "window refused":       ("add release:started while another change holds the berth",
                           "blocked:queue, and a comment naming the holder"),
  "gate red":             ("push a commit that fails a unit test",
                           "gate.yml red; promote.yml must refuse"),
@@ -138,7 +138,7 @@ PLAN = {
                           "guard 5 UNCONVERGED, rollback to the idle colour, PIR records it"),
  "completed":            ("a clean change end to end",
                           "production:healthy, then merge, then the berth frees"),
- "re-requested":         ("rebase a forfeited change and re-add change:requested",
+ "re-requested":         ("rebase a forfeited change and re-add release:started",
                           "it takes the next free window"),
 }
 

@@ -26,8 +26,8 @@ them here — two copies of one rule is the defect this repo keeps finding.
 |---|---|---|
 | I1 | at most one open PR carries `deploy:staging` | the berth. Guard 1 has admitted two holders (D22) |
 | I2 | at most one open PR carries `deploy:production` | the path to production is a singleton |
-| I3 | no open PR carries a terminal label | `change:end`/`complete`/`failed`/`backed-out` claim a state an open change is not in |
-| I4 | no PR is finished **and** moving | #52 carried `change:end` through an entire successful deploy |
+| I3 | no open PR carries a terminal label | `release:ended`/`complete`/`failed`/`backed-out` claim a state an open change is not in |
+| I4 | no PR is finished **and** moving | #52 carried `release:ended` through an entire successful deploy |
 | I5 | the six declared exclusive groups hold | declared in `label-owners.tsv`; nothing read them until this gate |
 
 ## How to look
@@ -55,9 +55,9 @@ say which. Never report an estate you could not observe as healthy — that is
 often.
 
 **Name the change, not just the count.** "2 findings" is useless to someone who
-has to act. "#55 and #70 carry `change:end` while open" is actionable.
+has to act. "#55 and #70 carry `release:ended` while open" is actionable.
 
-**Distinguish a violation from a symptom.** A stale `change:scheduled` after a
+**Distinguish a violation from a symptom.** A stale `release:scheduled` after a
 window was reaped is bookkeeping. Two PRs holding `deploy:staging` means a
 deployment is happening that nobody is coordinating.
 

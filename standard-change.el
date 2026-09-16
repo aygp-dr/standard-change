@@ -244,7 +244,7 @@ worse view rather than to no view."
     ("deploy:"     . "ACTION in flight. deploy:staging IS the berth.")
     ("blocked:"    . "why a guard refused.")
     ("review:"     . "who accepted it, and whether they were a person.")
-    ("release"     . "human INTENT to ship. A person adds it; automation clears it."))
+    ("release:start"     . "human INTENT to ship. A person adds it; automation clears it."))
   "What each prefix MEANS. Deliberately not a list of labels -- the labels
 live in the declaration and are read from it. This is the part a reader
 needs that a tsv column cannot carry.")

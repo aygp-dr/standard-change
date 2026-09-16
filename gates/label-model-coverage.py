@@ -13,10 +13,10 @@ from a label that existed in the shell scripts and in nobody's model:
   - change:emergency was written in spec.org 23 times and declared nowhere;
     gates/preflight.sh matches with `grep -cx`, so a change labelled the way
     the spec specified would not have matched the code that read it.
-  - change:failed and change:backed-out were owned by change/abort.sh and DID
+  - release:failed and release:backed-out were owned by change/abort.sh and DID
     NOT EXIST ON THE FORGE, so every abort silently failed to record its
     outcome (`|| true`).
-  - staging:deployed, staging:healthy, production:deployed, change:end and
+  - staging:deployed, staging:healthy, production:deployed, release:ended and
     staging:hold were live on the forge for hours before any declaration.
   - hold:staging is declared REJECTED and is still enforced in three scripts.
 

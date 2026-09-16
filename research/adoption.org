@@ -42,7 +42,7 @@ the fact. The person watches it on the PR.
 | staging is installed and observed    | driver, then the instruments    | =staging:deployed=, then =staging:healthy=, then =staging:e2e= =staging:smoke= =staging:uat= | 004; 014; label-ownership rule 1; rule 14 |
 | promotion                            | the forge                       | =deploy:production= lands on =staging:smoke= unless =release:hold= is present        | label-state-machine rule 13                      |
 | production is installed and observed | driver, then the instrument     | =production:deployed=, then =production:healthy=                                     | 004                                              |
-| settlement                           | the host that can see production | =change:complete=, the merge, the PIR comment, every marker cleared                 | label-ownership rule 2; rule 16                  |
+| settlement                           | the host that can see production | =release:completed=, the merge, the PIR comment, every marker cleared                 | label-ownership rule 2; rule 16                  |
 
 The merge is the record. A shipped change ends with its =app:*= and class
 labels, a PIR comment, and =mergedAt=. Nothing else stays on.
@@ -67,7 +67,7 @@ run on the head and the merge is the record. No berth, no window, no observation
 
 =release:end= is the person's word to stop a release that is in flight.
 The pipeline closes the change with a code that names a fact:
-=change:failed= when production never served it, =change:backed-out= when
+=release:failed= when production never served it, =release:backed-out= when
 it did and a person returned production to a named build. Every marker
 goes. The window closes with the same code. The berth is released. The
 class and =app:*= stay. The person's =release:start= is spent; saying it
@@ -83,10 +83,10 @@ A repository with a change calendar puts one step before the driver. The
 person says =release:scheduled= instead of =release:start=. The scheduler
 reads the estate first: is the berth free, is there an open window on this
 environment, is the estate frozen. It books the first window that can hold
-the work and writes =change:scheduled= with the window id. When the window
+the work and writes =release:scheduled= with the window id. When the window
 opens the guards run again, because reserving is not deploying
 (five-properties P2; 003). Then the core case runs unchanged. A window that
-lapses unattempted is closed =expired= by the reaper, =change:scheduled= is
+lapses unattempted is closed =expired= by the reaper, =release:scheduled= is
 removed, and the change waits for a person to ask again
 (label-state-machine §Disagreements 3).
 
@@ -118,7 +118,7 @@ sequenceDiagram
     D->>R: install the head
     R-->>F: production:deployed then production:healthy
     D->>R: settle asks what is serving now
-    D->>F: change:complete, merge, PIR, clear every marker
+    D->>F: release:completed, merge, PIR, clear every marker
     F-->>P: merged, the record
 #+end_src
 
@@ -189,7 +189,7 @@ per row; the rows are independent.
 | closing the estate             | labels on an estate issue · a repository variable · environment protection · a calendar freeze             | labels on issue #1: =freeze=, =emergency= (README §5b); the estate is a third subject (spec 0.5)                         |
 | a stale head                   | refuse and ask for a rebase · the forge updates the branch · a merge queue rebases                         | refuse livelocked against a trunk moving every four minutes; forge update-branch (023 F1)                                 |
 | acceptance (UAT)               | a person records it · the as-is journey replayed by a browser · none                                        | replay, recorded as replay; "a person accepted it" when none had was read by five of five owners (023 F4)                |
-| the end of a change            | a tombstone label · the merge is the record and =change:end= only clears · closure codes                   | the merge is the record (#122)                                                                                            |
+| the end of a change            | a tombstone label · the merge is the record and =release:ended= only clears · closure codes                   | the merge is the record (#122)                                                                                            |
 | a change that failed at staging | leave the markers · end the release and clean up                                                          | end and clean up; five unended releases left five dirty tickets (#103)                                                    |
 | ordering                       | PR number · time of intent · a booked window · a queue                                                    | PR number; the label carries no time, so who asked first is not on the list (023)                                         |
 | substrate for staging/production | jails · dev blocks on a laptop · a multi-app host (Vercel-shaped) · Cloudflare · static hosting            | jails on hydra, blocks on the mini (=substrate-emulation=, =hosting-survey=, =deployment-targets=)                        |

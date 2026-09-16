@@ -60,7 +60,7 @@ function reserve(c, body) {
   const w = { id: `CHG-${start.replace(/[-:]/g, "").slice(0, 13)}-${c.pr}.${++seq}`, change: c.id, env: body.env || "staging",
     start, end, mode: body.at ? "designated" : "queued", result: null, sha: c.head };
   windows.push(w); c.window = w; c.lifecycle = "scheduled";
-  c.labels = c.labels.filter((l) => l !== "change:requested").concat("change:scheduled");
+  c.labels = c.labels.filter((l) => l !== "release:started").concat("release:scheduled");
   return { code: 201, body: w };
 }
 
@@ -98,7 +98,7 @@ function closure(c, body) {
   if (body.code === "backed-out" && !body.to) return refusal(422, "usage", "backed-out without `to`", "the word asserts an estate action", "name the sha production was returned to", 2);
   if (c.window && c.window.result === null) c.window.result = "failed";
   c.lease = null; c.window = null; c.lifecycle = body.code;
-  c.labels = c.labels.filter((l) => !/^(deploy:|staging:|production:|change:scheduled|release)/.test(l)).concat(`change:${body.code}`);
+  c.labels = c.labels.filter((l) => !/^(deploy:|staging:|production:|release:scheduled|release)/.test(l)).concat(`change:${body.code}`);
   return { code: 200, body: c };
 }
 
@@ -108,7 +108,7 @@ function evictFor(e) {
   h.lease = null; h.lifecycle = "opened";
   if (h.window) { h.window.result = "cancelled"; }
   const w = h.window; h.window = null; h.observations = { staging: "none", uat: false, production: "none" };
-  h.labels = h.labels.filter((l) => !/^(deploy:staging|staging:|change:scheduled)/.test(l));
+  h.labels = h.labels.filter((l) => !/^(deploy:staging|staging:|release:scheduled)/.test(l));
   return [{ change: h.id, window: w?.id, reason: `evicted by emergency #${e.pr}: loses the berth, the window and its observations; keeps class, approval and head; not closed` }];
 }
 
@@ -119,7 +119,7 @@ function reap() {
     const c = changes.get(w.change);
     if (c?.labels.includes("deploy:production") || c?.merged) { spared.push(w); continue; }
     w.result = "expired"; reaped.push(w);
-    if (c) { c.window = null; c.lease = null; c.lifecycle = "opened"; c.labels = c.labels.filter((l) => !/^(change:scheduled|deploy:staging)$/.test(l)); }
+    if (c) { c.window = null; c.lease = null; c.lifecycle = "opened"; c.labels = c.labels.filter((l) => !/^(release:scheduled|deploy:staging)$/.test(l)); }
   }
   return { code: 200, body: { reaped, spared } };
 }
@@ -172,7 +172,7 @@ createServer(async (req, res) => {
     if (m === "POST" && idem.has(key)) return json(res, ...idem.get(key));
     let r;
     if (mm[2] === "reservation" && m === "POST") r = reserve(c, await read(req));
-    else if (mm[2] === "reservation" && m === "DELETE") { if (!c.window) return res.writeHead(404).end(); c.window.result = "cancelled"; c.window = null; c.lifecycle = "opened"; c.labels = c.labels.filter((l) => l !== "change:scheduled"); return res.writeHead(204).end(); }
+    else if (mm[2] === "reservation" && m === "DELETE") { if (!c.window) return res.writeHead(404).end(); c.window.result = "cancelled"; c.window = null; c.lifecycle = "opened"; c.labels = c.labels.filter((l) => l !== "release:scheduled"); return res.writeHead(204).end(); }
     else if (mm[2] === "activation" && m === "POST") r = activate(c);
     else if (mm[2] === "settlement" && m === "POST") r = settle(c, await read(req));
     else if (mm[2] === "closure" && m === "POST") r = closure(c, await read(req));

@@ -297,7 +297,7 @@ for.
      (t (when w (idp-org--set (alist-get :pos w) "RESULT" "passed"))
         (idp-org--set (alist-get :pos c) "LIFECYCLE" "complete")
         (idp-org-ok "settled" (cons "attested" "convergence-probe") (cons "confidence" "sampled")
-                    (cons "samples" (length observations)) (cons "then" "change:complete, merge, PIR, cleanup"))))))
+                    (cons "samples" (length observations)) (cons "then" "release:completed, merge, PIR, cleanup"))))))
 #+end_src
 
 ** Closure, cancel, reap

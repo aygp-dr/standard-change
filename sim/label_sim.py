@@ -6,7 +6,7 @@ from the declaration, so that a state the scripts can reach shows up here as
 a reachable state rather than as an incident. Three axes, plus the estate:
 
   CLASS      itil:standard | itil:normal | itil:emergency
-  LIFECYCLE  change:requested -> change:scheduled -> change:complete
+  LIFECYCLE  release:started -> release:scheduled -> release:completed
   ACTION     deploy:staging (the berth), <env>:deployed, deploy:production
   ESTATE     freeze, emergency -- facts about the world, not about any PR
 

@@ -99,7 +99,7 @@ def main():
             # Asserting a label is a claim; clearing one withdraws a claim, and
             # the pipeline is allowed to withdraw claims it did not make. That is
             # the stated rule for `release`: a person adds it, automation removes
-            # it. change/schedule.sh answering a change:requested by booking it,
+            # it. change/schedule.sh answering a release:started by booking it,
             # and change/reap.sh releasing a berth held by a dead window, are the
             # same shape.
             #
@@ -179,7 +179,7 @@ def main():
     # and never used), not by reading.
     #
     # It matters: staging:deployed, staging:healthy, production:deployed,
-    # change:end and staging:hold were all written by scripts and live on the
+    # release:ended and staging:hold were all written by scripts and live on the
     # forge for hours before any declaration named them. This is the check that
     # was supposed to say so, and it was silent because its answer went nowhere.
     undeclared = {l for l in writes if matches(l, decl) is None}

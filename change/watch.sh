@@ -26,7 +26,7 @@ ONCE=0; [ "${1:-}" = "--once" ] && ONCE=1
 log() { printf '%s  %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 
 tick() {
-  pr=$(gh pr list --repo "$R" --state open --label release \
+  pr=$(gh pr list --repo "$R" --state open --label release:start \
         --json number -q '[.[].number] | first // empty')
   [ -n "$pr" ] || return 0
 
@@ -35,7 +35,7 @@ tick() {
   # forever on a trigger nobody is watching. Re-requesting is a human act, and
   # it should be, because whatever killed the run is a thing to look at.
   gh pr edit "$pr" --repo "$R" --remove-label release >/dev/null
-  gh pr edit "$pr" --repo "$R" --add-label change:requested >/dev/null 2>&1 || true
+  gh pr edit "$pr" --repo "$R" --add-label release:started >/dev/null 2>&1 || true
 
   groups=$(./change/groups.sh "$pr")
   if [ -z "$groups" ]; then

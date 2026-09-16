@@ -212,7 +212,7 @@ gate still catches what it caught before.
 
 ** Why merge is not the end of a pipeline change
 
-=change:complete= currently means the same thing for both classes: merged,
+=release:completed= currently means the same thing for both classes: merged,
 production observed, annotations cleared. For a pipeline change that is the
 *start* of the evidence, not the end of it.
 
@@ -249,7 +249,7 @@ actually passing through it.
 
 A pipeline change carries a counter rather than a completion:
 
-: change:complete            artifact -- production observed, done
+: release:completed            artifact -- production observed, done
 : change:soaking (2/3)       pipeline -- merged, 2 of 3 changes have shipped through it
 
 and =settle.sh=, on any change, increments the soak of every pipeline change
