@@ -114,7 +114,7 @@ is the person's view of the same machine and draws fewer states.
 | 14 | =HealthyBeforeVerdict= | e2e and smoke measure staging only once =staging:healthy= is recorded; the next step keys on the observation, not the action | =VerdictOnHealthy= | same |
 | 15 | =LockResets= | queue.sh -- refused at the lock, a change keeps no marker: window, lifecycle, observations and human intent all go; the person re-states it | =LockRefusalResets= | same |
 | 16 | =MergeIsTheTombstone= | settle.sh -- once the forge records MERGED the change does not keep =change:end=; the abort path keeps it, having no mergedAt | =NoTombstoneOnMerged= | same |
-| 17 | =UnaffectedMerges= | =release:unaffected= -- a person's claim that the estate is untouched: no berth, no window, no observation, the merge is the only act, and only when the labeller attached no =app:*=; a claim the labeller contradicts is refused until a person withdraws one | =UnaffectedNeverDeploys= | same (the sim finds the violation at depth 2: declare, then merge with a unit) |
+| 17 | =UnaffectedMerges= | =release:skip= -- a person's claim that the estate is untouched: no berth, no window, no observation, the merge is the only act, and only when the labeller attached no =app:*=; a claim the labeller contradicts is refused until a person withdraws one | =UnaffectedNeverDeploys= | same (the sim finds the violation at depth 2: declare, then merge with a unit) |
 
 Rule 12 is the one rule here that is *specified and unbuilt*: no script evicts a holder, and the model adds no new states for it -- every state an eviction reaches, a reaped window already reached -- so it costs nothing to carry until the ADR decides who performs it.
 

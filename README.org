@@ -273,9 +273,12 @@ else must hear that the change shipped (a ticket, a message). Cleanup then
 clears it — once the forge records =MERGED=, the label restates a fact the
 platform owns, and two records of one fact can disagree while the platform's
 cannot. The person's three words are =change:start=, =staging:hold= and
-=release:unaffected= (nothing to release: the only act left is the merge, and
-only if the labeller attached no =app:*=); =complete= is the pipeline's, and
-=end= is the pipeline's on one path only.
+=release:skip= (skip the estate: nothing to release, the only act left is
+the merge, and only if the labeller attached no =app:*=); =complete= is the
+pipeline's, and =end= is the pipeline's on one path only. The grammar these
+spellings will become in rebuild 005, one namespace where the person says the
+verb and the runner answers the participle, is set out in
+=research/findings/release-grammar.org=.
 
 *** The merge is the tombstone
 

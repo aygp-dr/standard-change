@@ -19,7 +19,7 @@ ISO 8601 UTC and must not learn the phrases. Groups come from
 - Run `./change/reap.sh` first: next-available appends behind dead windows
   (024 F9).
 - The PR is OPEN. block refuses MERGED and CLOSED with exit 2; say it first.
-- Groups is non-empty. With none, the word is `release:unaffected`.
+- Groups is non-empty. With none, the word is `release:skip`.
 - The time is in the future. when.sh refuses what it cannot read; do not guess.
 - The duration is at or above the floor: 3 + soak + apps - 1, plus 10 for a
   control-plane change (exit 6). Never pass `--short`.

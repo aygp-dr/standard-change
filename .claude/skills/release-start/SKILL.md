@@ -17,8 +17,8 @@ Today the label string is `change:start` (driver.sh); after issue #125 it is
 
 - The PR is OPEN and not a draft. driver.sh does not check draft; preflight's
   DraftGuard and unaffected.sh do, so this skill must.
-- It carries at least one `app:*`. With none, the word is `release:unaffected`.
-- It does not carry `release:unaffected`. unaffected.sh refuses the pair; say so.
+- It carries at least one `app:*`. With none, the word is `release:skip`.
+- It does not carry `release:skip`. unaffected.sh refuses the pair; say so.
 - It does not already carry the start label. A trigger that stays on re-fires
   (023 F6 started two drivers).
 - It does not carry `deploy:staging`: it is already in flight.
@@ -34,8 +34,8 @@ Today the label string is `change:start` (driver.sh); after issue #125 it is
 ## What it refuses, and says
 
 - "#N is a draft."
-- "#N carries release:unaffected; both cannot be true; withdraw one."
-- "#N has no app:* label; nothing to release; say release:unaffected."
+- "#N carries release:skip; both cannot be true; withdraw one."
+- "#N has no app:* label; nothing to release; say release:skip."
 - "#N already said start at T; a second start is not a faster start."
 - "The berth is held by #M since T; your start will stay said and be retried
   every 20 s; nothing is asked of you."

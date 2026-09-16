@@ -38,6 +38,7 @@ described in Part I without touching the labels it already has.
 
 * Part I: How to read this, and how to adopt it
 #+INCLUDE: "adoption.org" :minlevel 3
+#+INCLUDE: "findings/release-grammar.org" :minlevel 3
 #+INCLUDE: "history/five-properties.org" :minlevel 3
 #+INCLUDE: "findings/labels-are-the-only-channel.org" :minlevel 3
 #+INCLUDE: "findings/the-method.org" :minlevel 3

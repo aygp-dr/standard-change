@@ -222,7 +222,7 @@ def actions(st, R):
         if "scheduled" in q.life or q.berth:
             yield f"Abort({p})", put(st, i, q._replace(closed=True, life=q.life - {"scheduled"}, berth=False,
                                                       release=False, **CLEAR_BUILD))
-        # release:unaffected -- a person's claim that the estate is untouched; the only
+        # release:skip -- a person's claim that the estate is untouched; the only
         # act left is the merge, and only when the labeller agrees (no app:*).
         # A claim that contradicts the labeller is withdrawn by a person. [UnaffectedMerges]
         # said FIRST, about a change nothing else has been said about (also what keeps the space checkable)

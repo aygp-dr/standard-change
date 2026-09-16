@@ -50,7 +50,7 @@ CONSTANTS PRs,
           HealthyBeforeVerdict,\* an instrument measures staging only once staging:healthy is recorded
           LockResets,        \* refused at the lock: every marker goes, human intent included; the person re-states it
           MergeIsTheTombstone,\* a MERGED change does not keep change:end -- the forge's MERGED is the record (the owner, 2026-09-15)
-          UnaffectedMerges   \* release:unaffected: nothing to release, so the only act left is the merge -- and only if the diff touches no unit
+          UnaffectedMerges   \* release:skip: nothing to release, so the only act left is the merge -- and only if the diff touches no unit
 
 Classes   == {"standard", "normal", "emergency"}
 Lifecycle == {"requested", "scheduled", "complete", "abandoned", "superseded"}
@@ -79,7 +79,7 @@ VARIABLES
     cleaned,      \* cleaned[p]: the change:end LABEL is present on the PR
     tidied,       \* tidied[p]: the cleanup RAN and cleared every other label (settle.sh:244-252)
     unit,         \* unit[p]: the labeller attached at least one app:* -- the diff touches something deployable
-    unaffected,   \* unaffected[p]: release:unaffected -- a person's claim that the estate is unaffected
+    unaffected,   \* unaffected[p]: release:skip -- a person's claim that the estate is unaffected
                   \* Split from `cleaned` 2026-09-15. They were one variable, which made
                   \* "the tidying happened" and "the tombstone is showing" inseparable --
                   \* so removing the label from a merged change would have made
@@ -646,7 +646,7 @@ Abort(p) ==
                    badUnaffected>>
 
 (***************************************************************************)
-(* UNAFFECTED. release:unaffected is a person's claim that the deployable   *)
+(* UNAFFECTED. release:skip is a person's claim that the deployable   *)
 (* estate is not touched by this change: nothing to install, nothing to     *)
 (* observe, so the only act left is the merge (the owner, 2026-09-15: "can  *)
 (* that just merge to the default branch without additional intervention"). *)

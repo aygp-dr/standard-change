@@ -55,7 +55,7 @@ person never runs a gate, deploys, approves or merges (023 §Verdict).
 would promote and lands nothing while it is present. Only the person lifts
 it (label-state-machine rule 13; precedence-and-locks §Rejected).
 
-=release:unaffected= says "the estate is untouched". The scheduler checks it
+=release:skip= says "the estate is untouched". The scheduler checks it
 against the labeller: any =app:*= beside it is refused. With none, the gates
 run on the head, a reviewer that is not the author approves, and the merge
 is the record. No berth, no window, no observation
@@ -160,7 +160,7 @@ wherever "further" is in the adopting repository, where =staging:hold= would
 bind the person's word to one repository's environment names, which change
 with the kind of repository being supported (=history/promotion-models.org=:
 seven kinds behind one word). A person's words are =release:start=,
-=release:hold=, =release:unaffected=, =release:scheduled= and =release:end=. They are said about a branch, which
+=release:hold=, =release:skip=, =release:scheduled= and =release:end=. They are said about a branch, which
 is what makes branch deployment legible: the branch is deployed and verified
 on the person's word, and the merge follows the verification (GitHub flow's
 original order, =history/pipeline-history.org= §Branching policies); the
