@@ -1,0 +1,47 @@
+#+TITLE: The evidence census: what was tested, by which instrument, how often, with what result
+#+DATE: 2026-09-15
+
+One table, so the amount of checking is legible and so that the counts
+scattered through the paper have one home. Snapshot: commit =fd6e740= on
+2026-09-15. Where a count is not in the tree, the cell says so rather than
+carrying a number from memory; the L7 review of this paper found four
+disagreeing rule counts, each a true snapshot of a different day.
+
+| instrument                  | subject                         | negative control                         | size                                                | result                                   | lives at                        |
+|-----------------------------+---------------------------------+------------------------------------------+-----------------------------------------------------+------------------------------------------+---------------------------------|
+| gate-selftest               | the gates                       | =fixtures/<gate>/fail=, run first        | 6 fixture sets (audit, docs, gh, observations, shebang, smoke) | a gate that passes its failing fixture has no verdict | =gates/=, =Makefile=  |
+| observation-test.sh         | guard 4, production-first       | a frozen pre-#16 guard must authorize    | 10 cases + 1 detection                              | before authorizes, after refuses         | =gates/fixtures/observations=   |
+| labeller-test.py            | the labeller's withdrawal step  | each of W1 to W6 reintroduced            | 6 scoped checks                                     | green                                    | =gates/=                        |
+| lint-shell, shfmt, shellcheck, shebang | every shell script    | none                                     | 59 tracked scripts                                  | 0 findings                               | =gates/=, =change/=, =targets/= |
+| docs-lint                   | every org file                  | none                                     | 82 files                                            | 0 findings                               | =gates/docs-lint.py=            |
+| label-audit                 | every label write in the tree   | none                                     | 48 labels declared                                  | 20 findings, reported as a floor         | =gates/label-audit.py=          |
+| label-model-coverage        | labels vs the model             | none                                     | every declared label must be a model row            | gating (ADR 0005)                        | =gates/label-model-coverage.py= |
+| TLC, StandardChange         | promotion, guard 4b             | Guard4b off, ProdFirst off               | 3 runs, 830 states                                  | negatives fail as required               | =tla/check.sh=                  |
+| TLC, Concurrent             | berths                          | MergeGuard4b off, LabellerOwns off       | 4 runs                                              | negatives fail as required               | =tla/check.sh=                  |
+| TLC, Labels                 | the label machine, 2 changes    | each of 17 constants off                 | 17 negatives + 1 positive; 37 actions, 16 invariants, 31 variables | 17/17 name their invariant; positive: no error over 102,726,288 distinct states, depth 37, at 17 rules (2026-09-16; the unpruned model passed 113M states and filled the disk, and was pruned where the semantics allowed) | =tla/Labels.tla=, =tla/check.sh= |
+| label_sim.py                | the same machine, from scripts  | =--disable <rule>=                       | BFS to a stated bound; random walks past it         | the same invariant per rule, 16 of 17 (rule 16 is in the model only) | =sim/label_sim.py=   |
+| cross_check.py              | TLC vs the simulator            | per rule                                 | one question per rule                               | agreement required, or the run fails     | =sim/cross_check.py=            |
+| pbt-pipeline.py             | pipeline properties over op permutations | none                            | see the file                                        | sampling does not find D4; enumeration does (WALKTHROUGH §5) | =gates/pbt-pipeline.py= |
+| mutate.sh                   | the guards                      | mutation                                 | see the file                                        | see the file                             | =experiments/012-guard-mutation= |
+| live: scheduled slots       | calendar and guards             | none                                     | 5 slots                                             | 1 activated, 0 to production             | 003                             |
+| live: rolling fleet         | guard 5                         | the old check on a half-migrated fleet   | 12 + 8 samples                                      | old check 6/12, new refuses              | 004                             |
+| live: release night         | the whole pipeline              | the estate as witness                    | 17 cutovers, 18 attempts                            | 3 control failures, 0 user-visible       | 016                             |
+| live: browser journey       | the uat proxy                   | a person                                 | 1 build, 8 pages                                    | the proxy measured routing, not the journey | 020                          |
+| live: agents                | legibility to owners            | none                                     | 5 + 5 + 5 changes                                   | 5/5, 5/5, 1/5 landed                     | 022, 023, 024                   |
+| rebuilds                    | the spec                        | held-out defects                         | 3 rebuilds                                          | 000 refuted its own grading; 001 and 002 graded against spec 0.5 | =experiments/019=, the-method §6 |
+
+* How the label machine grew
+
+From =git log -- tla/Labels.tla=, so that no future count is quoted without
+its date. Every number elsewhere in the paper is one of these rows.
+
+| when (UTC)      | rules | actions | invariants | variables |
+|-----------------+-------+---------+------------+-----------|
+| 09-14 10:09     |     9 |      20 |          7 |        14 |
+| 09-14 11:00     |    11 |      25 |          9 |        19 |
+| 09-14 13:26     |    12 |      25 |         10 |        20 |
+| 09-14 18:44     |    14 |      29 |         12 |        26 |
+| 09-14 19:02     |    15 |      31 |         13 |        27 |
+| 09-15 05:20     |    16 |      31 |         14 |        28 |
+| 09-15 12:19     |    17 |      34 |         15 |        31 |
+| 09-15 13:23     |    17 |      37 |         16 |        31 | positive: 102,726,288 states, no error (2026-09-16) |

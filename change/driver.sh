@@ -1,5 +1,5 @@
 #!/bin/sh
-# driver.sh <pr> -- one change, from change:start to change:end, on the node
+# driver.sh <pr> -- one change, from release:start to release:ended, on the node
 # target. The process that "takes over" once a person has said start.
 #
 # WHAT IT IS. activate.sh ported to targets/node for the mini's estate: the
@@ -8,7 +8,7 @@
 # is the pipeline's own script; this file only orders them and stops on the
 # first refusal. It was written on 2026-09-14 after five agents ran the same
 # sequence by hand (experiments/022) and the owner asked for the experiment
-# again with the human doing one thing: say change:start.
+# again with the human doing one thing: say release:start.
 #
 # WHAT IT DOES NOT DO. Rebase. A machine rewriting a person's branch is a push
 # on their behalf; a change behind main is refused with a comment and loses
@@ -17,8 +17,9 @@
 # PIR by settle.sh. Approve as a person: the approval is the second identity's
 # standing delegation and the review says so.
 #
-# Exit: 0 landed and settled; 5 lock held; 6 behind main; 1 aborted (a step
-# failed and abort.sh ended the release); 2 usage.
+# Exit: 0 landed and settled (or a dry run); 4 calendar unreachable for a
+# scheduled change; 5 lock held; 6 behind main and conflicting; 7 deferred to
+# its window; 1 aborted (a step failed and abort.sh ended the release); 2 usage.
 set -eu
 PR="${1:?usage: driver.sh <pr>}"
 R="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
@@ -49,27 +50,52 @@ deploy() { # deploy <env> <sha>
 state=$(gh pr view "$PR" --repo "$R" --json state -q .state)
 [ "$state" = OPEN ] || { log "#$PR is $state; nothing to drive"; exit 2; }
 labels=$(gh pr view "$PR" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')
-case " $labels " in *" change:start "*) ;; *) log "no change:start on #$PR; a person has not said start"; exit 2 ;; esac
+case " $labels " in *" release:start "*) ;; *) log "no release:start on #$PR; a person has not said start"; exit 2 ;; esac
 sha=$(gh pr view "$PR" --repo "$R" --json headRefOid -q '.headRefOid' | cut -c1-7)
 git fetch -q origin
+
+# --- 0a. a booked window in the future is the person's calendar -----------------
+# The scheduler orders by PR number and #61 carried release:start beside a
+# window booked for four days later (2026-09-15 00:34Z): this driver reached
+# guard 0 and merged main into its branch before being stopped. A change whose
+# window lies ahead is the SCHEDULED case; the driver runs it when the window
+# opens, and says so once. Exit 7: deferred.
+# THREE VALUES, not two: "no window" and "no calendar" are different answers.
+# The calendar is a git ref; on this host it was absent (refs/idp/schedule is
+# not on the forge), so `windows` printed nothing and the driver read that as
+# "no window" and ran #61 ahead of the one it had. If the change SAYS it is
+# scheduled and the calendar cannot be read, that is unreachable, and
+# unreachable blocks (CLAUDE.md: preflight exit 4 blocks). Exit 4.
+if printf '%s\n' $labels | grep -qx 'release:scheduled'; then
+  git rev-parse --verify --quiet refs/idp/schedule >/dev/null || { log "blocked: release:scheduled is on and the calendar (refs/idp/schedule) is not readable here"; exit 4; }
+fi
+future=$(./change/schedule.sh windows "$PR" 2>/dev/null | awk -v now="$(date -u +%FT%TZ)" '$3 > now {print $1"  from "$3; exit}')
+if [ -n "$future" ]; then
+  log "deferred: window $future"
+  exit 7
+fi
+# DRY RUN. `DRIVER_DRY_RUN=1 ./change/driver.sh <pr>` stops here, after every
+# check and before any write. The script had no such mode on 2026-09-16 and a
+# "dry run" of it deployed #61.
+[ "${DRIVER_DRY_RUN:-0}" = 1 ] && { log "dry run: would proceed to the sweep, guard 0 and the lock for $sha"; exit 0; }
 
 # --- 0b. a release begins clean -----------------------------------------------
 # "But now all of the tickets are dirty" (the owner, 2026-09-14 23:39Z): five
 # tickets carried verdicts from a release that never ended, and a retired
 # label. A person saying start on such a ticket must not have to sweep it
 # first -- the markers are a previous release's, and the release that left them
-# owed a change:end it never wrote. So start pays that debt: every marker of a
+# owed a release:ended it never wrote. So start pays that debt: every marker of a
 # previous release goes, the person's own words (staging:hold, backfill-owed)
 # stay, and the comment says what went so the sweep has an author (D21).
 swept=''
 for l in $labels; do
   case "$l" in
-    change:start|staging:hold|change:backfill-owed|blocked:lock|app:*|itil:*|control-plane) ;;
+    release:start|staging:hold|release:backfill-owed|blocked:lock|app:*|itil:*|control-plane) ;;
     staging:*|deploy:*|production:*|blocked:*|berth:*|release|release:start|change:*)
       gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 && swept="$swept \`$l\`" ;;
   esac
 done
-[ -z "$swept" ] || { say "Starting clean: markers of a previous release that never ended were cleared by the driver on \`change:start\`:$swept. Nothing they said is evidence about \`$sha\`."; log "swept:$swept"; }
+[ -z "$swept" ] || { say "Starting clean: markers of a previous release that never ended were cleared by the driver on \`release:start\`:$swept. Nothing they said is evidence about \`$sha\`."; log "swept:$swept"; }
 
 # --- 0c. is the berth free? Look before touching anything ---------------------
 # Guard 0 ran on every retry while the berth was busy and the forge merged
@@ -105,7 +131,7 @@ if ! git merge-base --is-ancestor origin/main "origin/$branch" 2>/dev/null; then
     say "Brought up to \`main\` by the driver: \`$before\` was behind, and \`main\` is moving faster than a person can rebase. The forge merged \`main\` into this branch (nothing of yours was rewritten); the head under release is now \`$sha\`."
     log "updated from main: $before -> $sha"
   else
-    for l in change:start deploy:staging change:scheduled staging:e2e staging:smoke staging:uat staging:deployed staging:healthy; do
+    for l in release:start deploy:staging release:scheduled staging:e2e staging:smoke staging:uat staging:deployed staging:healthy; do
       gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
     done
     # SAY WHAT CONFLICTED. "#108's owner: the ticket never said what conflicted,
@@ -114,7 +140,7 @@ if ! git merge-base --is-ancestor origin/main "origin/$branch" 2>/dev/null; then
     files=$(gh pr view "$PR" --repo "$R" --json files -q '[.files[].path]|join(" ")')
     base=$(git merge-base origin/main "origin/$branch" 2>/dev/null || true)
     since=$(git log --format='%s' "${base:-origin/main}..origin/main" -- $files 2>/dev/null | grep -o '(#[0-9]*)' | tr -d '()' | sort -u | tr '\n' ' ')
-    say "Refused: \`$sha\` is behind \`main\` and the forge could not merge \`main\` into it (a conflict). Files of this change: \`$files\`. Landed on them since you branched: ${since:-nothing this driver can name}. Every marker has been cleared, the intent (\`change:start\`) included. Resolve it, push, and say \`change:start\` again."
+    say "Refused: \`$sha\` is behind \`main\` and the forge could not merge \`main\` into it (a conflict). Files of this change: \`$files\`. Landed on them since you branched: ${since:-nothing this driver can name}. Every marker has been cleared, the intent (\`release:start\`) included. Resolve it, push, and say \`release:start\` again."
     log "behind main and conflicting; refused and reset"; exit 6
   fi
 fi
@@ -124,7 +150,7 @@ holder=$(gh pr list --repo "$R" --state open --label deploy:staging --json numbe
 [ -z "$holder" ] || { log "lock held by #$holder"; exit 5; }
 ./change/lock.sh acquire "$PR" staging >/dev/null || { log "lock record held"; exit 5; }
 # CONSUME THE INTENT FIRST (watch.sh's rule): a trigger that stays on re-fires.
-gh pr edit "$PR" --repo "$R" --remove-label change:start --add-label deploy:staging >/dev/null
+gh pr edit "$PR" --repo "$R" --remove-label release:start --add-label deploy:staging >/dev/null
 log "claimed the lock for $sha"
 
 # --- 3. staging: install, health, then the instruments ------------------------

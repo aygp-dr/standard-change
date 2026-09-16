@@ -14,7 +14,7 @@
 # a gate. `gh pr merge` walked straight past it.
 #
 # WHAT IT TRUSTS, AND WHY. It cannot probe production: no GitHub runner can
-# reach any environment here (docs/label-ownership.org, rule 2). So it relies
+# reach any environment here (research/findings/label-ownership.org, rule 2). So it relies
 # on what gates/health.sh recorded when it ran where production IS visible.
 #
 # It used to rely on the production:healthy LABEL, with the reasoning that

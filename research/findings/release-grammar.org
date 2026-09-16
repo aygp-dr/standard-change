@@ -1,0 +1,109 @@
+#+TITLE: Modelling release:*: the options, and what each lets the model say
+#+DATE: 2026-09-15
+
+The owner's question of 2026-09-15: a developer, release engineer or
+operator owns the =release:*= tags, even when a tool applies them on their
+behalf. Should the words follow the Ruby state-machine convention, a verb for
+the event and a past participle for the state? Four options were on the
+table. The decision for rebuild 005 is the first; the tree keeps its current
+spellings until then, with one rename made now (=release:unaffected= is
+=release:skip=, a verb like the others).
+
+* Option 1: one namespace, two tenses (chosen for rebuild 005)
+
+The person says the verb; the runner answers the participle. The tense is the
+writer, so a reader needs no owner table to know who wrote a label.
+
+| the person says (a verb) | the runner answers (a participle) | the pair means                                                   |
+|--------------------------+-----------------------------------+------------------------------------------------------------------|
+| =release:start=          | =release:started=                 | the verb was consumed; a driver holds this change                |
+| =release:schedule=       | =release:scheduled=               | a window is booked; the id is in the comment                     |
+| =release:hold=           | =release:held=                    | promotion was refused while the hold is on; the person lifts it  |
+| =release:end=            | =release:ended=                   | every marker cleared; a closure code says why                    |
+| =release:skip=           | =release:skipped=                 | the estate untouched, the labeller agreed, the merge is the record |
+|                          | =release:completed=               | production converged on this head; merge and PIR follow          |
+|                          | =release:failed=, =release:backed-out=, =release:abandoned=, =release:superseded= | closure codes; they stay |
+
+Three properties fall out, and each is an invariant the model can check.
+
+- *The mismatch is the signal.* A verb with no participle beside it means no
+  runner is listening. That is the fact a person needs first, and the one
+  the 024 owners could not get: a dead scheduler leaves its last
+  reassurance behind and nothing on the ticket says it is dead. Under this
+  grammar the ticket says it by omission, which a poll can read.
+- *A participle exists only because a runner wrote it.* One tag never does
+  both jobs. The owner's phrasing: "not that a single tag does the same
+  thing unless we had a runner." A label that is both the request and the
+  record is the defect 014 found in another form, a claim with no
+  measurement behind it.
+- *The verb is consumed.* A verb that stays on re-fires (023 F6 started two
+  drivers from one start). The runner removes the verb as it writes the
+  participle, in one edit where the forge allows it.
+
+Nothing in =release:*= is about a build or an environment. =deploy:*=,
+=<env>:deployed= and the observations stay as the instruments' facts. The
+estate's =freeze= and =emergency= stay on the estate issue.
+
+* Option 2: two prefixes, the prefix is the writer (issue #125)
+
+=release:*= for the person's words, =change:*= for the pipeline's record.
+Simpler to audit by file (nothing but the driver consumes =release:*=), and
+it is what the tree partly has today. Its cost is the second namespace: a
+reader must know which prefix is which, and the pipeline's answer to a verb
+lives under a different prefix from the verb, so the mismatch signal is a
+join across two names rather than a glance at one.
+
+* Option 3: one tag per step, no answer
+
+=release:start= consumed, =deploy:staging= as the visible effect, no
+acknowledgement. This is the tree as it ran in 023. Five of five owners
+reported the silence after saying start as their first confusion, and the
+scheduler was given a comment to say "heard". A comment is not a label; a
+poll cannot read it and a second operator's tooling cannot either. Rejected
+by the runs.
+
+* Option 4: labels plus a record elsewhere
+
+The lock record on the estate issue, the evidence comments, the PIR. These
+are not alternatives to the tags; they are what carries the values a tag
+cannot (a build sha, a window id, a reason). The rule that keeps them from
+competing with the tags: a tag is a fact about the change's state, and a
+record is what the fact was measured against. D21 is what happens when the
+lock is only a tag.
+
+* How option 1 is modelled
+
+The model's state becomes the set of labels on each pull request, plus the
+forge's own =merged=, plus the estate's two labels. Every hidden fact the
+current model carries (=served=, =tidied=, the history flags) is either a
+participle the runner writes or a check on a transition. That is the
+owner's "model only from the PR tag perspective".
+
+- Each pair is two booleans per change, =verb= and =participle=. The
+  person's actions set verbs; only runner actions set participles, and every
+  runner action that sets a participle clears the matching verb.
+- Invariants that become stateable: =ParticipleHasRunner= (no participle is
+  ever set by a person's action; with the Interfere rule on, this is the
+  invariant that fails, which is the point), =VerbConsumed= (no verb survives
+  the runner action that answers it), =OneAnswer= (at most one participle of
+  a pair is on), and =NoAnswerWithoutAsk= (=started= implies a =start= was
+  consumed on this head, which needs the head as part of the state, as 014
+  needs it for observations).
+- Closure codes are participles with no verb: the runner's outcomes. The
+  invariant =CodeIsTerminal= says no verb is accepted on a change that
+  carries one, which is what "the intent is spent" means.
+- The estate stays outside the change's tuple: =freeze= and =emergency= are
+  read by =Activate= and never written by a change's action.
+- The seventeen rules survive the rename with their constants; what changes
+  is that the label strings in comments match the labels a reader sees.
+
+* What the current tree does with it
+
+Nothing yet beyond the one rename. The model keeps =release:start= (the verb),
+=life= (the pipeline's lifecycle set), =hold=, =unaffected= and =cleaned=
+as separate variables, which is option 2 in structure. The skills
+=/release-start=, =/release-schedule= and =/release-end= already speak
+option 1 from the person's side, since a skill is named for the verb it
+says. The rename lands with rebuild 005, and the six-thing mandate applies:
+one rule, one invariant, one negative, the simulator's row, the owner row,
+the doc row.

@@ -1,14 +1,14 @@
 #!/bin/sh
-# settle.sh <pr> -- the terminal transition. change:complete, then clear.
+# settle.sh <pr> -- the terminal transition. release:completed, then clear.
 #
-# THE TERMINAL STATE IS change:complete, NOT production:healthy AND NOT
+# THE TERMINAL STATE IS release:completed, NOT production:healthy AND NOT
 # staging:uat, and the difference is not pedantry:
 #
 #   staging:uat          an observation about a BUILD -- a person accepted
 #                        7cd3281, which says nothing about 8370c74
 #   production:healthy   an observation about a BUILD -- the estate converged
 #                        on this one
-#   change:complete      about the CHANGE RECORD. Nothing remains to observe.
+#   release:completed      about the CHANGE RECORD. Nothing remains to observe.
 #
 # Observations expire when the head moves; labeller.yml withdraws them on
 # synchronize for exactly that reason. A change record does not expire, because
@@ -141,8 +141,8 @@ esac
 # COMPLETE, and that is a fact about the change rather than about the forge.
 # Set before the merge, because the merge is what follows completion, not what
 # constitutes it. Cleanup clears it once the forge records the merge.
-gh pr edit "$pr" --repo "$R" --add-label change:complete >/dev/null 2>&1 || true
-ok "change:complete -- validation done, merging"
+gh pr edit "$pr" --repo "$R" --add-label release:completed >/dev/null 2>&1 || true
+ok "release:completed -- validation done, merging"
 
 # A FAILED MERGE MUST STOP SETTLEMENT. This was `gh pr merge ... && ok`, so a
 # refusal printed nothing and execution continued: the PIR was posted, the
@@ -190,7 +190,7 @@ case "$colour" in
 esac
 gh pr comment "$pr" --repo "$R" --body "## Post-implementation review
 
-**\`change:complete\`** — the terminal state. Everything below is recorded here because the labels are about to be cleared, and a label is working state, not the record.
+**\`release:completed\`** — the terminal state. Everything below is recorded here because the labels are about to be cleared, and a label is working state, not the record.
 
 | | |
 |---|---|
@@ -277,14 +277,14 @@ fi
 #    are a lease on an environment, and leaving one set means the NEXT change
 #    can never start. Clearing them is the release, not the tidying.
 #
-#    change:complete IS cleared here. It was set before the merge as the
+#    release:completed IS cleared here. It was set before the merge as the
 #    terminal state of VALIDATION; once the forge records MERGED it restates
 #    a fact the platform owns, and two records of one fact can disagree while
 #    the platform's cannot.
 #
 #    NOT cleared: app:* and itil:* describe what the change WAS.
 #    describe what the change was, and remain true after it shipped.
-for l in change:start change:requested change:scheduled change:complete release release:start \
+for l in release:start release:started release:scheduled release:completed release release:start \
          staging:deployed staging:healthy production:deployed \
         deploy:staging deploy:production \
          staging:e2e staging:smoke staging:uat staging:passed staging:failed \
@@ -294,12 +294,12 @@ for l in change:start change:requested change:scheduled change:complete release 
          deployed:production blocked:queue blocked:lock blocked:diverged release; do
   gh pr edit "$pr" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
 done
-# THE TOMBSTONE, last. change:end says the clearing above was settlement --
+# THE TOMBSTONE, last. release:ended says the clearing above was settlement --
 # a refusal at the lock, the reaper and an eviction also leave a change with
 # no labels, and a reader should be able to tell those apart. It drives
-# nothing; change:complete drove the merge and the PIR before it was cleared.
-gh pr edit "$pr" --repo "$R" --add-label change:end >/dev/null 2>&1 || true
-ok "berth released; validation labels cleared, change:complete included; change:end written"
+# nothing; release:completed drove the merge and the PIR before it was cleared.
+gh pr edit "$pr" --repo "$R" --add-label release:ended >/dev/null 2>&1 || true
+ok "berth released; validation labels cleared, release:completed included; release:ended written"
 
 echo
 echo "  settled: #$pr merged -- the forge is the record now"

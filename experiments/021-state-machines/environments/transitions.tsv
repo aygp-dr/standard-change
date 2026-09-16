@@ -46,7 +46,7 @@ S22_staging_serving	S53_blocked_diverged	main moved	forge_event	guard 4b -- arti
 S22_staging_serving	S80_unreachable	the instrument cannot reach :9200 mid-run	gate_verdict	INDETERMINATE -- I could not check is not it passed	gate	yes	0.08	gates/preflight.sh:124
 S22_staging_serving	S60_failed	abort.sh failed	human	none	human	no	0.03	change/abort.sh:123
 S23_staging_observed	S24_cleared	promote adds deploy:production	label_add	guard 2 on the head SHA, gate-selftest included -- a suite whose self-test never ran has no verdict	workflow	yes	0.70	spec.org:1191
-S23_staging_observed	S22_staging_serving	a push -- the labeller withdraws the observations	forge_event	a verdict must name the build it is about	labeller	yes	0.15	docs/label-state-machine.org:62
+S23_staging_observed	S22_staging_serving	a push -- the labeller withdraws the observations	forge_event	a verdict must name the build it is about	labeller	yes	0.15	research/findings/label-state-machine.org:62
 S23_staging_observed	S53_blocked_diverged	main moved	forge_event	guard 4b at reliance, not at request	workflow	yes	0.12	spec.org:1012
 S23_staging_observed	S60_failed	abort.sh failed	human	none	human	no	0.03	change/abort.sh:123
 S24_cleared	S30_idle_loaded	deploy.sh production-<idle colour> <sha>	deploy_event	never deploy into the colour the front is serving	driver	yes	0.67	targets/node/deploy.sh:42

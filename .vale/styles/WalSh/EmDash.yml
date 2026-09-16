@@ -1,0 +1,5 @@
+extends: existence
+message: "Use '--' (org-mode) instead of em dash '%s'. Literal em dashes are an LLM artifact."
+level: error
+raw:
+  - '\x{2014}'

@@ -398,3 +398,43 @@ form of naming available to a schema.
   hidden in the code.
 - The correction to =scenarios.org= D16's "roughly ninety seconds" is recorded
   here and *not* applied to D16.
+
+* The night as a timeline
+
+Added 2026-09-15 from the per-PR rows above. What the tables could not show:
+the bimodal lead time is queue time, and the independent witness starts late.
+
+#+begin_src mermaid :eval never-export
+gantt
+    title Release night 2026-09-13/14 UTC, from experiment 016
+    dateFormat YYYY-MM-DD HH:mm:ss
+    axisFormat %H:%M
+    todayMarker off
+    section changes, first commit to serving
+    PR 6                :2026-09-13 13:41:03, 2026-09-13 23:41:39
+    PR 9                :2026-09-13 14:30:40, 2026-09-13 15:42:05
+    PR 11               :2026-09-13 15:43:19, 2026-09-13 16:13:46
+    PR 19               :2026-09-13 16:38:59, 2026-09-13 16:54:42
+    PR 20               :2026-09-13 16:43:50, 2026-09-13 17:40:20
+    PR 28               :2026-09-13 17:03:44, 2026-09-13 23:32:24
+    PR 31               :2026-09-13 17:23:06, 2026-09-13 17:28:57
+    PR 33               :2026-09-13 17:50:39, 2026-09-14 00:01:17
+    PR 36               :2026-09-13 18:12:26, 2026-09-13 18:58:33
+    PR 38               :2026-09-13 18:41:15, 2026-09-13 23:51:12
+    PR 39               :2026-09-13 18:47:17, 2026-09-13 19:10:08
+    PR 42               :2026-09-13 19:11:01, 2026-09-14 00:31:15
+    PR 43               :2026-09-13 19:11:04, 2026-09-13 19:22:40
+    PR 40               :crit, 2026-09-13 19:37:31, 2026-09-14 00:41:11
+    PR 44               :2026-09-13 19:37:33, 2026-09-14 00:21:17
+    PR 53               :2026-09-13 23:20:13, 2026-09-14 02:01:12
+    PR 54               :crit, 2026-09-13 23:20:22, 2026-09-14 02:11:09
+    section estate
+    emergency declared, standard and normal refused :crit, 2026-09-13 22:55:13, 2026-09-13 23:07:11
+    section independent witness
+    none, PIR self-report only (11 of 17 cutovers) :2026-09-13 15:42:05, 2026-09-13 23:45:58
+    dashboard mirror polling the front :active, 2026-09-13 23:45:58, 2026-09-14 02:12:00
+    section unplanned remediation
+    PR 42 record withdrawn, build never served :milestone, 2026-09-13 19:44:34, 1m
+    PR 40 served unmerged, rolled back in 72s  :crit, 2026-09-14 00:41:11, 2026-09-14 00:42:23
+    PR 54 refused by guard 4, served, rolled back in 47s :crit, 2026-09-14 02:11:09, 2026-09-14 02:11:57
+#+end_src

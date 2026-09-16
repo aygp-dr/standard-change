@@ -1,0 +1,690 @@
+#+TITLE: Promotion models: what "environment" means in forty-five pipelines
+#+DATE: 2026-09-15
+#+OPTIONS: ^:nil
+
+The owner's survey table, then what it says. The table is data as supplied
+(one row per source, a progression left to right, a note on what kind of thing
+the progression is); the classification and the reading below are this
+document's. Companion to =research/history/pipeline-history.org= (the timeline of pipeline
+semantics) and =spec.org= §Port tiers (this estate's own progression).
+
+* The survey
+
+| source              | progression                                                              | note | verdict        | xref            |
+|---------------------+--------------------------------------------------------------------------+---------------------------------------------------+----------------+-----------------|
+| =itil=                | dev, sit, uat, pre-prod, prod                                            | environments | disputed       | [[#pm-itil][§]] |
+| =sap=                 | dev, qas, prd                                                            | environments; transport landscape | correct        | [[#pm-sap][§]] |
+| =twelve-factor=       | development, staging, production                                         | environments | correct        | [[#pm-twelve-factor][§]] |
+| =frameworks-general=  | dev, test, prod                                                          | runtime mode | correct        | [[#pm-frameworks-general][§]] |
+| =rails=               | development, test, production                                            | runtime mode; staging added by convention | correct        | [[#pm-rails][§]] |
+| =django=              | local, staging, production                                               | runtime mode; convention not built in | corrected      | [[#pm-django][§]] |
+| =aspnet-core=         | development, staging, production                                         | runtime mode | correct        | [[#pm-aspnet-core][§]] |
+| =symfony=             | dev, test, prod                                                          | runtime mode | correct        | [[#pm-symfony][§]] |
+| =laravel=             | local, production                                                        | runtime mode | correct        | [[#pm-laravel][§]] |
+| =elixir=              | dev, test, prod                                                          | runtime mode | correct        | [[#pm-elixir][§]] |
+| =node=                | development, test, production                                            | runtime mode | disputed       | [[#pm-node][§]] |
+| =capistrano=          | staging, production                                                      | deploy targets | correct        | [[#pm-capistrano][§]] |
+| =heroku=              | review, development, staging, production                                 | pipeline stages | correct        | [[#pm-heroku][§]] |
+| =vercel=              | development, preview, production                                         | deploy targets; preview per branch | corrected      | [[#pm-vercel][§]] |
+| =netlify=             | branch-deploy, deploy-preview, production                                | deploy targets | correct        | [[#pm-netlify][§]] |
+| =cloudflare-pages=    | preview, production                                                      | deploy targets | correct        | [[#pm-cloudflare-pages][§]] |
+| =amazon=              | alpha, beta, gamma, onebox, prod                                         | pipeline stages; prod split into waves | corrected      | [[#pm-amazon][§]] |
+| =google=              | dev, staging, canary, prod                                               | environments | disputed       | [[#pm-google][§]] |
+| =google-populations=  | fishfood, dogfood, teamfood, prod                                        | user populations | disputed       | [[#pm-google-populations][§]] |
+| =microsoft-rings=     | ring0, ring1, ring2, ring3, ring4                                        | user populations | corrected      | [[#pm-microsoft-rings][§]] |
+| =windows-insider=     | canary, dev, beta, release-preview, ga                                   | channels | corrected      | [[#pm-windows-insider][§]] |
+| =azure-app-service=   | staging-slot, production-slot                                            | deploy targets; promotion by swap | correct        | [[#pm-azure-app-service][§]] |
+| =chrome=              | canary, dev, beta, stable, extended-stable                               | channels | correct        | [[#pm-chrome][§]] |
+| =firefox=             | nightly, beta, release, esr                                              | channels | correct        | [[#pm-firefox][§]] |
+| =debian=              | experimental, unstable, testing, stable, oldstable                       | package suites | correct        | [[#pm-debian][§]] |
+| =ubuntu=              | proposed, updates, security, release                                     | package pockets | corrected      | [[#pm-ubuntu][§]] |
+| =freebsd=             | current, stable, release                                                 | source branches | correct        | [[#pm-freebsd][§]] |
+| =linux-kernel=        | linux-next, mainline, stable, longterm                                   | source branches | correct        | [[#pm-linux-kernel][§]] |
+| =rust=                | nightly, beta, stable                                                    | channels | correct        | [[#pm-rust][§]] |
+| =node-release-lines=  | current, active-lts, maintenance                                         | release lines | correct        | [[#pm-node-release-lines][§]] |
+| =semver=              | alpha, beta, rc, release                                                 | artifact maturity | corrected      | [[#pm-semver][§]] |
+| =maven=               | snapshot, release                                                        | artifact maturity | correct        | [[#pm-maven][§]] |
+| =npm=                 | next, latest                                                             | dist-tags | corrected      | [[#pm-npm][§]] |
+| =pypi=                | testpypi, pypi                                                           | registries | correct        | [[#pm-pypi][§]] |
+| =cloud-vendors=       | private-preview, public-preview, ga                                      | feature maturity | disputed       | [[#pm-cloud-vendors][§]] |
+| =kubernetes=          | alpha, beta, ga                                                          | feature gates | corrected      | [[#pm-kubernetes][§]] |
+| =redhat-bugzilla=     | new, assigned, post, modified, on_qa, verified, release_pending, closed  | issue status | corrected      | [[#pm-redhat-bugzilla][§]] |
+| =mozilla-bugzilla=    | affected, fixed, verified                                                | per-train flag values | corrected      | [[#pm-mozilla-bugzilla][§]] |
+| =aws-control-tower=   | sandbox, dev, prod                                                       | organizational units | disputed       | [[#pm-aws-control-tower][§]] |
+| =aws-codepipeline=    | source, build, deploy                                                    | pipeline stages | correct        | [[#pm-aws-codepipeline][§]] |
+| =gcp-cloud-deploy=    | dev, staging, prod                                                       | targets; docs example | correct        | [[#pm-gcp-cloud-deploy][§]] |
+| =kargo=               | test, uat, prod                                                          | stages; docs example | correct        | [[#pm-kargo][§]] |
+| =flux=                | staging, production                                                      | cluster directories; convention | correct        | [[#pm-flux][§]] |
+| =traffic-exposure=    | shadow, dark-launch, canary, blue-green, full                            | rollout strategy | disputed       | [[#pm-traffic-exposure][§]] |
+| =standard-change=     | dev-block, staging, idle-colour, front                                   | environments; see §This estate for the ports | corrected      | [[#pm-standard-change][§]] |
+
+* Seven kinds of progression, one word
+
+Every row is called a progression and most of them are called environments in
+conversation. They are seven different subjects. What moves from left to
+right is different in each, and so is what "promote" means.
+
+| kind                    | what moves            | promote means                                       | rows                                                                                   |
+|-------------------------+-----------------------+-----------------------------------------------------+----------------------------------------------------------------------------------------|
+| place (environment)     | the artifact          | install the same build somewhere more real          | itil, sap, twelve-factor, google, flux, gcp-cloud-deploy, kargo, pypi (two registries, uploaded twice), this estate |
+| runtime mode            | nothing               | pick a config; the word names a switch, not a place | frameworks-general, rails, django, aspnet-core, symfony, laravel, elixir, node         |
+| deploy target           | the artifact          | as place, but the target is a product feature       | capistrano, vercel, netlify, cloudflare-pages, azure-app-service                       |
+| pipeline stage          | control               | the next stage may run                              | heroku, amazon, aws-codepipeline                                                       |
+| audience (population)   | the users             | let more people see what is already installed       | google-populations, microsoft-rings, traffic-exposure                                  |
+| channel / suite / line  | the label on a build  | re-tag; the bits do not move                        | windows-insider, chrome, firefox, rust, debian, ubuntu, freebsd, linux-kernel, node-release-lines, npm, maven, semver, cloud-vendors, kubernetes |
+| record status           | a claim about a change | someone asserts the next thing is true              | redhat-bugzilla, mozilla-bugzilla                                                      |
+
+Three observations follow.
+
+*The framework rows are not environments at all.* =RAILS_ENV=, =NODE_ENV=,
+=APP_ENV= select a configuration inside one process. Rails' "staging added by
+convention" and Django's "convention not built in" say it plainly: the
+framework has a switch, and the place is something the operator invents.
+Reading a runtime mode as a place is how "we deployed to staging" comes to mean
+"we ran with the staging config on a laptop".
+
+*Audience and place are orthogonal, and the big shops separate them.* Amazon's
+row is places ending in "prod split into waves"; Google's row is places and
+its second row is audiences over the same places; Microsoft's rings are
+audiences with no place named at all. Blue-green (the =traffic-exposure= row)
+is an audience model too: both colours are the same place, and promotion moves
+the front. The build does not move.
+
+*The channel rows promote by re-labelling.* A Chrome build reaches stable by
+being called stable; a Debian package reaches testing by ageing; =npm dist-tag
+add= moves =latest= without publishing. The artifact is immutable and the
+progression is a pointer. That is the model closest to a label-driven
+pipeline, and it is also the one in which "where is it" has no answer beyond
+"which pointer names it".
+
+* Where the label namespaces sit in this
+
+The seven kinds are the boundary question from the rebuild
+(issue on namespace boundaries, filed 2026-09-15) seen from outside.
+
+- =app:*=, =itil:*= are the record's *classification*: what the change is.
+  No row in the survey has this axis, because every row is about a build or an
+  audience and none is about a change. ITIL is the source of the word and the
+  survey's ITIL row records its environments and leaves out its change types.
+- =deploy:staging=, =deploy:production=, =staging:deployed=,
+  =production:deployed= are *place*: the artifact is installed at a tier. The
+  estate's tiers are places with ports, not runtime modes, which is why a
+  worktree block and staging can serve the same build and still be different
+  things.
+- =staging:e2e=, =staging:smoke=, =staging:uat=, =production:healthy= are
+  *record status* in Mozilla's sense: a per-build flag ("verified on this
+  train") that says nothing about any other build. The labeller's synchronize
+  withdrawal exists because a flag with no build attached is Bugzilla's
+  =verified= with no version.
+- =change:start=, =change:scheduled=, =change:complete=, the closure codes are
+  *pipeline stage* and *record status*: control, then a claim.
+- The idle colour and the front are *audience*: blue-green. Promotion to
+  production in this estate is two acts the survey keeps apart, install on the
+  idle colour (place) and swap the front (audience), and =production:healthy=
+  is observed after the second.
+- There is no *channel* in this estate. The artifact is a sha and nothing
+  re-tags it; a change reaches production by being installed, not by being
+  called production. The merge to =main= is the nearest thing to a channel
+  move, and it is the record catching up with the place, which is why it comes
+  last.
+
+* This estate
+
+The survey row reads =dev-block, staging, idle-colour, front=. The ports as
+=spec.org= §Port tiers states them on 2026-09-13: dev blocks =9000 + 10n= for
+n ≤ 9, staging =9200=, production blue =9210=, green =9220=, the front =9230=.
+The row's "100N0" is the older e2e default (issue #84) and not a tier.
+
+Two things the survey makes visible about the estate. It has every kind but
+channel and audience-by-population, and its one audience mechanism, the
+colour swap, is not a label; it is a fact about the front that
+=production:healthy= reports. And its "staging" is a place in the ITIL sense
+and a deploy target in the Capistrano sense at once, which is the ambiguity
+the port tiers were written to remove: the number says which.
+
+* Sources, verified
+
+Every row of the survey was checked against a primary source on 2026-09-15 by
+five citation auditors, nine rows each, in the annotation model of
+=pipeline-history.org=: a property drawer per row with =:CUSTOM_ID:= as the
+join key (=pm-<source>=), =:VERIFIED:=, =:VERDICT:= in ={correct, corrected,
+disputed, needs-citation}=, =:SOURCE:= the one primary URL, and =:FINDING:=
+what the source says. The table above links each row to its entry; the entry
+carries the row *as verified*, which is what to cite. Verdicts: 26
+correct, 12 corrected, 7 disputed,
+0 needing a citation.
+
+What verification changed, in the order it matters to a reader:
+
+- Rows that were generalisations stitched from more than one source, now
+  said so: =google= (SRE book package labels plus a Cloud Deploy docs
+  example), =google-populations= (teamfood has no Google-authored source),
+  =traffic-exposure= (no source lists the five as one ladder),
+  =cloud-vendors= (Azure's vocabulary; Google and AWS differ), =itil= (ITIL
+  4 says "live environments" and "environments for testing or staging"; the
+  five names are practitioner convention).
+- Rows whose set was not fixed by the source: =node= (development and
+  production only; test has no primary backing), =django= (settings
+  modules, no environment concept, "local" appears nowhere), =laravel=
+  (skeleton defaults), =capistrano= (customisable), =aws-codepipeline=
+  (stage names are the user's; Source/Build/Deploy is the docs example),
+  =aws-control-tower= (only Sandbox is vendor-defined).
+- Rows the source has since moved past: =windows-insider= (as of June 2026
+  the channels are Experimental, Beta, Release Preview; GA was never a
+  channel), =microsoft-rings= (the live page says tiers; Ring 4 is the most
+  deferred).
+- Rows that were subsets or omissions: =mozilla-bugzilla= (ten flag values;
+  the row is the happy path), =redhat-bugzilla= (ON_DEV omitted),
+  =ubuntu= (backports omitted; the only documented promotion is
+  proposed to updates), =amazon= (one-box sits inside gamma and at the head
+  of every wave; spelled one-box).
+- Rows whose note overstated: =semver= (a precedence example, not a
+  progression), =npm= (next is a convention), =kubernetes= (feature
+  stages, toggled by gates), =maven= (the release plugin rebuilds, so the
+  bits do move), =pypi= (two registries, uploaded twice: a place, not a
+  channel; §Seven kinds amended).
+- This estate: the row's "100N0" is the old e2e default (=gates/e2e.sh:31=,
+  issue #84); the tiers are =9000 + 10n=, 9200, 9210/9220, 9230 as the port
+  map in =spec.org= states them. No heading in spec.org is titled "Port
+  tiers"; the port map is under "Router and ports".
+
+Fetch limits recorded by the auditors: web.archive.org is unreachable from
+this host; the English Amazon Builders' Library page returned a script shell,
+so the Spanish localisation was read; two long vendor pages were pulled with
+curl rather than a summariser.
+
+** itil
+:PROPERTIES:
+:CUSTOM_ID: pm-itil
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: disputed
+:SOURCE: https://www.peoplecert.org/browse-certifications/it-governance-and-service-management/ITIL-1/itil-4-practitioner-deployment-management-3796
+:FINDING: ITIL 4 names "live environments" and "other environments for testing or staging"; SIT, UAT and pre-prod are practitioner convention, not ITIL's words. AXELOS glossary and practice-guide pages return only a header; the practice guide itself is paywalled.
+:END:
+| =itil= | development, test, staging, live | environments; ITIL names live/testing/staging, the sit/uat/pre-prod chain is practitioner convention |
+The vendor's own statement of the practice is to "move new or changed hardware, software, documentation, processes, or any other component to live environments, and ... deploy components to other environments for testing or staging" -- three named environments, one of them "live" rather than "prod". This is a place progression: the same release moves between controlled environments. The xref is [[https://www.peoplecert.org/browse-certifications/it-governance-and-service-management/ITIL-1/itil-4-practitioner-deployment-management-3796][ITIL 4 Practitioner: Deployment Management (PeopleCert)]]. Caveat: the supplied row (dev, sit, uat, pre-prod, prod) is a common enterprise reading of ITIL, not ITIL's text; keep it only if the note says so, and cite a practitioner source for it separately.
+
+** sap
+:PROPERTIES:
+:CUSTOM_ID: pm-sap
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://help.sap.com/doc/saphelp_gbt10/1.0/en-US/63/a30a4ac00811d2851c0000e8a57770/content.htm
+:FINDING: SAP Library "System Landscape": "a three-system landscape ... development system DEV, a quality assurance system QAS and a production system PRD"; change requests are "transported" DEV -> QAS -> PRD.
+:END:
+| =sap= | dev, qas, prd | environments; transport landscape |
+SAP's own words are "We recommend a three-system landscape in which each of the central clients has its own SAP System" -- the development system DEV (client CUST), the quality assurance system QAS (client QTST), the production system PRD (client PROD) -- and promotion is that released change requests "are transported into the quality assurance client" and then "into the production client". A place progression; SAP calls the units "systems" and the whole a "system landscape", so the note's "transport landscape" is a paraphrase of the Change and Transport System. SAP does not use the phrase. The xref is [[https://help.sap.com/doc/saphelp_gbt10/1.0/en-US/63/a30a4ac00811d2851c0000e8a57770/content.htm][System Landscape (SAP Library - Change and Transport System)]]. Caveat: this page does not itself use "consolidation route" and "delivery route"; those live in the TMS route configuration pages.
+
+** twelve-factor
+:PROPERTIES:
+:CUSTOM_ID: pm-twelve-factor
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://12factor.net/dev-prod-parity
+:FINDING: Factor X names "development" and "production" throughout and lists "all deploys of the app (developer environments, staging, production)"; the section heading is "Dev vs production environments".
+:END:
+| =twelve-factor= | development, staging, production | environments |
+The factor is stated as "keep development and production as similar as possible", and the full list appears once, in the backing-services rule: "all deploys of the app (developer environments, staging, production) should be using the same type and version of each of the backing services". Twelve-factor calls each of these a "deploy" -- a running instance of the app -- so this is a place progression and the artifact moves. The xref is [[https://12factor.net/dev-prod-parity][The Twelve-Factor App: X. Dev/prod parity]]. Caveat: the source's exact phrase is "developer environments", not "development"; staging is named only in that one parenthetical.
+
+** frameworks-general
+:PROPERTIES:
+:CUSTOM_ID: pm-frameworks-general
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://symfony.com/doc/current/configuration.html#configuration-environments
+:FINDING: Generalisation, not a source. Symfony: "three environments: dev ... prod ... test"; Elixir Mix: ":dev - the default environment, :test - the environment mix test runs on, :prod". Both spell exactly dev/test/prod.
+:END:
+| =frameworks-general= | dev, test, prod | runtime mode; generalisation over frameworks whose switch uses these three literal names |
+This row is a generalisation and should say so; the two frameworks that use these three literal names are Symfony, whose APP_ENV "begins with three environments: dev for local development, prod for production servers, test for automated tests", and Elixir Mix, whose MIX_ENV has ":dev - the default environment, :test - the environment mix test runs on, :prod - the environment your dependencies run on". A runtime-mode row: the value selects configuration, and nothing is installed anywhere. The xrefs are [[https://symfony.com/doc/current/configuration.html#configuration-environments][Symfony: Configuration Environments]] and [[https://mix.hexdocs.pm/Mix.html][Mix (hexdocs)]]. Caveat: Mix documents its environment as build-time and warns against reading Mix.env at runtime, so "runtime mode" is loose for that one; Rails and Node spell the same three as development/test/production.
+
+** rails
+:PROPERTIES:
+:CUSTOM_ID: pm-rails
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://guides.rubyonrails.org/configuring.html#creating-rails-environments
+:FINDING: "By default Rails ships with three environments: "development", "test", and "production"." Staging is the guide's own example of adding one: "Such a server is commonly called a "staging server". To define an environment called "staging" ... create a file called config/environments/staging.rb".
+:END:
+| =rails= | development, test, production | runtime mode; staging added by convention |
+Rails' own words are "By default Rails ships with three environments: "development", "test", and "production"", and ENV["RAILS_ENV"] "defines the Rails environment (production, development, test, and so on) that Rails will run under". A runtime-mode row: the environment is a config file selected by name, and the guide's staging example is explicitly a user-created fourth file, "no different than the default ones". The xref is [[https://guides.rubyonrails.org/configuring.html#creating-rails-environments][Configuring Rails Applications: Creating Rails Environments]]. Caveat: verified against the guide source on GitHub main because the rendered page was truncated on fetch; wording is identical.
+
+** django
+:PROPERTIES:
+:CUSTOM_ID: pm-django
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://docs.djangoproject.com/en/stable/topics/settings/
+:FINDING: Django has no environment concept; it has DJANGO_SETTINGS_MODULE ("Python path syntax, e.g. mysite.settings"). The deployment checklist speaks only of "settings for development" and "a private settings module for production". "local" and "staging" appear nowhere as environment names. Progression corrected to development, production; note corrected.
+:END:
+| =django= | development, production | settings modules, not environments; local/staging are not Django terms |
+Django's settings topic says "When you use Django, you have to tell it which settings you're using. Do this by using an environment variable, DJANGO_SETTINGS_MODULE", whose value "should be in Python path syntax, e.g. mysite.settings"; the only progression Django's own docs imply is the deployment checklist's advice to "publish suitable settings for development, and to use a private settings module for production". A runtime-mode row in the weakest sense: there is no switch at all, only a choice of module, so the seven-kinds table's "convention not built in" is right and the three names supplied are the convention, not Django's. The xrefs are [[https://docs.djangoproject.com/en/stable/topics/settings/][Django settings]] and [[https://docs.djangoproject.com/en/stable/howto/deployment/checklist/][Deployment checklist]]. Caveat: "local" occurs on the checklist only as "local development", "local file" and "local-memory caching", never as a value.
+
+** aspnet-core
+:PROPERTIES:
+:CUSTOM_ID: pm-aspnet-core
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/environments
+:FINDING: "Although the environment can be any string value, the following environment values are provided by the framework: Development, Staging, Production"; read from DOTNET_ENVIRONMENT / ASPNETCORE_ENVIRONMENT; Production is the default when unset.
+:END:
+| =aspnet-core= | Development, Staging, Production | runtime mode |
+Microsoft's page is titled "ASP.NET Core runtime environments" and opens "ASP.NET Core configures app behavior based on the runtime environment, which usually reflects where the app is running"; the three framework-provided values are spelled Development, Staging and Production, with Staging described as "provided by the framework for staging an app prior to live deployment". A runtime-mode row by the vendor's own title: the value is read from DOTNET_ENVIRONMENT or ASPNETCORE_ENVIRONMENT, "can be any string value", and "If ... aren't set, the Production environment is the default". The xref is [[https://learn.microsoft.com/en-us/aspnet/core/fundamentals/environments][ASP.NET Core runtime environments (Microsoft Learn)]]. Caveat: the vendor capitalises the values; the survey lower-cases them.
+
+** symfony
+:PROPERTIES:
+:CUSTOM_ID: pm-symfony
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://symfony.com/doc/current/configuration.html#configuration-environments
+:FINDING: "A typical Symfony application begins with three environments: dev for local development, prod for production servers, test for automated tests"; selected by APP_ENV; the docs' custom-environment example is staging.
+:END:
+| =symfony= | dev, test, prod | runtime mode |
+Symfony's own words are "A typical Symfony application begins with three environments: dev for local development, prod for production servers, test for automated tests", chosen by editing "the value of the APP_ENV variable to change the environment in which the application runs". A runtime-mode row: an environment is a config/packages/<name>/ directory plus a variable, and the docs show adding "a staging environment where the client can test the project before going to production" by creating config/packages/staging/. The xref is [[https://symfony.com/doc/current/configuration.html#configuration-environments][Symfony Configuration: Configuration Environments]]. Caveat: the source lists them dev, prod, test; the survey's dev, test, prod ordering is the reader's, not Symfony's.
+
+** laravel
+:PROPERTIES:
+:CUSTOM_ID: pm-laravel
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://laravel.com/docs/12.x/configuration#determining-the-current-environment
+:FINDING: "The current application environment is determined via the APP_ENV variable from your .env file"; skeleton .env.example sets APP_ENV=local, config/app.php defaults env('APP_ENV', 'production'); doc examples use local and staging.
+:END:
+| =laravel= | local, production | runtime mode; documentation and skeleton defaults, not a fixed set |
+Laravel's docs say "The current application environment is determined via the APP_ENV variable from your .env file", and the two values Laravel itself writes down are local (the laravel/laravel skeleton's .env.example, "APP_ENV=local") and production (config/app.php, "'env' => env('APP_ENV', 'production')"). A runtime-mode row: APP_ENV is a free string that App::environment() compares against, and the docs' own examples are App::environment('local') and App::environment(['local', 'staging']), with .env.staging as the example for env:encrypt --env=staging. The xrefs are [[https://laravel.com/docs/12.x/configuration#determining-the-current-environment][Laravel Configuration: Determining the Current Environment]] and [[https://github.com/laravel/laravel/blob/12.x/.env.example][laravel/laravel .env.example (12.x)]]. Caveat: the pair is a documentation example and the design is not fixed; staging appears in the same docs as a third example value, so "local, production" is the skeleton pair rather than an exhaustive list.
+
+** elixir
+:PROPERTIES:
+:CUSTOM_ID: pm-elixir
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://mix.hexdocs.pm/Mix.html
+:FINDING: Mix docs: "By default, Mix provides three environments: :dev - the default environment, :test - the environment mix test runs on, :prod - the environment your dependencies run on"; "The environment can be changed via the command line by setting the MIX_ENV environment variable"
+:END:
+| =elixir= | dev, test, prod | runtime mode |
+Mix names its environments =:dev=, =:test=, =:prod= and selects one per invocation through =MIX_ENV=; nothing is deployed anywhere, so this is a runtime mode. The three are described as what Mix provides "by default", not as a closed set, so the row is a documented default rather than a fixed design. Xref: [[https://mix.hexdocs.pm/Mix.html][Mix -- Environments]] (the old hexdocs.pm/mix/Mix.html URL now 301s here).
+
+** node
+:PROPERTIES:
+:CUSTOM_ID: pm-node
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: disputed
+:SOURCE: https://nodejs.org/en/learn/getting-started/nodejs-the-difference-between-development-and-production
+:FINDING: Node.js docs: "There is no difference between development and production in Node.js"; only "development" and "production" are named as NODE_ENV values; Express names "(usually, development or production)"; neither primary source names "test"
+:END:
+| =node= | development, production | runtime mode; convention, no fixed set |
+Node.js itself documents no environments: the runtime says there is no development/production distinction and that some npm libraries read =NODE_ENV=, defaulting to =development=, so one should "Always run your Node.js with the NODE_ENV=production set". Express's performance guide likewise names only development and production. The row's =test= is a test-runner convention (Jest, Mocha) with no backing in either primary source, so the three-value progression overstates what is documented; the kind is runtime mode regardless. Xref: [[https://nodejs.org/en/learn/getting-started/nodejs-the-difference-between-development-and-production][Node.js, the difference between development and production]] and [[https://expressjs.com/en/advanced/best-practice-performance.html][Express -- Production best practices: performance and reliability]].
+
+** capistrano
+:PROPERTIES:
+:CUSTOM_ID: pm-capistrano
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://github.com/capistrano/capistrano/blob/master/README.md
+:FINDING: README: cap install "creates all the necessary configuration files and directory structure for a Capistrano-enabled project with two stages, staging and production"; "To customize the stages that are created, use: $ bundle exec cap install STAGES=local,sandbox,qa,production"
+:END:
+| =capistrano= | staging, production | deploy targets; default stages, customisable |
+Capistrano's own term is "stage": =cap install= writes =config/deploy/staging.rb= and =config/deploy/production.rb=, and =cap staging deploy= / =cap production deploy= push the same checkout to a different server set, which is a deploy target. The README's =STAGES=local,sandbox,qa,production= example shows the pair is a generated default, not a fixed design. Xref: [[https://github.com/capistrano/capistrano/blob/master/README.md][Capistrano README -- Quick start]]; capistranorb.com's configuration page only says settings may be "stage specific" in =config/deploy/<stage_name>.rb=.
+
+** heroku
+:PROPERTIES:
+:CUSTOM_ID: pm-heroku
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://devcenter.heroku.com/articles/pipelines
+:FINDING: Dev Center lists the pipeline stages Development, Review, Staging, Production; defines Downstream via "a development --> staging --> production pipeline"; the common workflow is review app -> staging app -> promote to production
+:END:
+| =heroku= | review, development, staging, production | pipeline stages |
+Heroku Pipelines names exactly these four stages and calls them stages; "promote" copies the built slug from one stage's app to the downstream stage's app, so this is a pipeline stage progression. The source lists them Development, Review, Staging, Production and treats Review and Development as parallel upstreams of Staging rather than a strict sequence; the row's order follows the page's workflow narrative (review app first). Xref: [[https://devcenter.heroku.com/articles/pipelines][Heroku Dev Center -- Pipelines]].
+
+** vercel
+:PROPERTIES:
+:CUSTOM_ID: pm-vercel
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://vercel.com/docs/deployments/environments
+:FINDING: Environments page: "Vercel provides three default environments -- Local, Preview, and Production"; env-vars page names Production, Preview, Development, with Development "used when running your project locally with vercel dev"; a preview deployment is created per push to a non-production branch, per PR, or per vercel without --prod, with branch-specific and commit-specific URLs. Note changed: development is not a deploy target
+:END:
+| =vercel= | development, preview, production | environments; development is local, preview per non-production branch and commit |
+Vercel's three built-in environments are Production (the production branch or =vercel --prod=), Preview (any other branch, PR, or plain =vercel=), and Development, which the environments page now heads "Local Development Environment" and which exists only to scope variables for =vercel dev= / =vercel env pull=. Preview and Production are deploy targets; Development is a local runtime mode, so "deploy targets" was wrong for the first element. Preview deployments are per commit with a branch-alias URL, and Pro/Enterprise teams can add Custom Environments such as =staging= with their own branch tracking and domain. Xref: [[https://vercel.com/docs/deployments/environments][Vercel -- Environments]] and [[https://vercel.com/docs/environment-variables][Vercel -- Environment variables]].
+
+** netlify
+:PROPERTIES:
+:CUSTOM_ID: pm-netlify
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://docs.netlify.com/site-deploys/overview/
+:FINDING: Deploy overview names three deploy types -- "Production deploy" ("a deploy from the production branch"), "Deploy Preview" ("a deploy generated from a pull request, merge request, or agent run"), "Branch deploy" ("a deploy generated from a branch that is not your production branch") -- and five deploy contexts: production, deploy-preview, branch-deploy, preview-server, dev
+:END:
+| =netlify= | branch-deploy, deploy-preview, production | deploy targets; deploy-context identifiers |
+Netlify's deploy types are production deploys, Deploy Previews and branch deploys, each published to its own URL (=deploy-preview-42--site=, =staging--site=, the production domain), which makes them deploy targets. The row's spellings are Netlify's deploy-context identifiers rather than the prose names; the source lists =production= first and does not order branch deploys and Deploy Previews relative to each other, and it also defines =preview-server= and =dev= contexts the row omits. Xref: [[https://docs.netlify.com/site-deploys/overview/][Netlify -- Deploy overview]].
+
+** cloudflare-pages
+:PROPERTIES:
+:CUSTOM_ID: pm-cloudflare-pages
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://developers.cloudflare.com/pages/configuration/preview-deployments/
+:FINDING: "Preview deployments allow you to preview new versions of your project without deploying it to production"; a unique preview URL is created per pull request and per non-production branch; commits to the production branch update the pages.dev and custom domains; branch build controls: "Pages will default to setting your production environment to the branch you first push"
+:END:
+| =cloudflare-pages= | preview, production | deploy targets |
+Cloudflare Pages has two deployment kinds: production deployments from the production branch (defaulting to the first branch pushed) that update =<project>.pages.dev= and custom domains, and preview deployments for every other branch and pull request, each with its own URL. Both are places the built site is served from, so deploy target is the right kind. Xref: [[https://developers.cloudflare.com/pages/configuration/preview-deployments/][Cloudflare Pages -- Preview deployments]] and [[https://developers.cloudflare.com/pages/configuration/branch-build-controls/][Cloudflare Pages -- Branch deployment controls]].
+
+** amazon
+:PROPERTIES:
+:CUSTOM_ID: pm-amazon
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://aws.amazon.com/es/builders-library/automating-safe-hands-off-deployments/
+:FINDING: Liguori (es localization; the English URL 301s to builder.aws.com, which served no article body): the pipeline deploys to "varios entornos de preproducción, por ejemplo, alfa, beta y gamma"; "La etapa de caja individual en gamma implementa el último código en la unidad de implementación más pequeña"; "Las implementaciones en cada oleada de producción comienzan con una etapa de caja individual". One-box is not one position between gamma and prod; spelling is one-box
+:END:
+| =amazon= | alpha, beta, gamma, one-box, prod | pipeline stages; one-box stage in gamma and at the head of every production wave; production split into waves of regions and zones |
+Clare Liguori's Builders' Library article describes a pipeline whose pre-production stages deploy to environments named, "for example", alpha, beta and gamma, followed by a production phase split into many stages that deploy region by region (and zone by zone) in waves. A one-box stage -- the newest code on a single VM or container taking a slice of traffic -- occurs inside gamma and again at the start of each production wave, so the row's single =onebox= slot between gamma and prod flattens two placements into one. These are pipeline stages: what promotes is control over whether the next stage may run, with metric alarms and time windows as blockers. Xref: [[https://aws.amazon.com/es/builders-library/automating-safe-hands-off-deployments/][Automatización de implementaciones seguras y sin intervención -- Amazon Builders' Library (es)]]; the English canonical is https://aws.amazon.com/builders-library/automating-safe-hands-off-deployments/, unverifiable here after redirect.
+
+** google
+:PROPERTIES:
+:CUSTOM_ID: pm-google
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: disputed
+:SOURCE: https://sre.google/sre-book/release-engineering/
+:FINDING: SRE book ch. 8: "Labels can be applied to an MPM package to indicate a package's location in the release process (e.g., dev, canary, or production)"; "A typical canary deployment involves starting a few jobs in our production environment"; Cloud Deploy terminology gives "a simple delivery pipeline that has the following stages: dev, staging, prod". No Google source names dev, staging, canary, prod as one sequence
+:END:
+| =google= | dev, canary, production | package labels (SRE book); dev, staging, prod is a Cloud Deploy documentation example; canary is a phase inside production |
+The SRE book's Release Engineering chapter names dev, canary and production, but as labels on an MPM package marking its "location in the release process", and it places canary inside the production environment rather than before it -- closer to the channel kind than to a place. Google Cloud Deploy's terminology page uses dev, staging, prod as an illustrative delivery-pipeline example with user-named targets, the last "prod (or whatever name you use)". The row's four-step sequence is a generalisation stitched from both; each source is a documentation example; neither fixes a design. Xref: [[https://sre.google/sre-book/release-engineering/][Site Reliability Engineering -- Release Engineering]] and [[https://docs.cloud.google.com/deploy/docs/terminology][Cloud Deploy terminology]].
+
+** google-populations
+:PROPERTIES:
+:CUSTOM_ID: pm-google-populations
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: disputed
+:SOURCE: https://developers.google.com/machine-learning/guides/rules-of-ml
+:FINDING: Rules of ML #23 defines "fishfooding (using a prototype within your team)" and "dogfooding (using a prototype within your company)"; "teamfood" has no Google-authored source, and where the press uses it, it sits between fishfood and dogfood, not after
+:END:
+| =google-populations= | fishfood, dogfood, prod | user populations; teamfood is folklore |
+Google's own text documents two populations, fishfood (the team) and dogfood (the company), as a nested pair; it does not name a third. The row's "teamfood" appears only in third-party reporting (9to5Google's Fuchsia coverage) and there in the order fishfood, teamfood, dogfood, so the row both cites an undocumented term and mis-orders it. This is an audience progression: the build is the same and the population widens. Xref [[https://developers.google.com/machine-learning/guides/rules-of-ml][Rules of Machine Learning, Rule #23]]; the Google Testing Blog's 2014 dogfooding post uses the word but defines nothing, and neither the SRE book nor the workbook uses fishfood.
+
+** microsoft-rings
+:PROPERTIES:
+:CUSTOM_ID: pm-microsoft-rings
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://learn.microsoft.com/en-us/devops/operate/safe-deployment-practices
+:FINDING: Azure DevOps "Safe deployment practices" gives a 0-4 table but calls them "Tier", each tier being Users plus Data Center; Windows deployment docs name rings Preview, Limited, Broad; only the Essential Eight page numbers "Ring 0" to "Ring 4", as device groups with deferral, and Ring 4 is critical devices, not everyone else
+:END:
+| =microsoft-rings= | ring0, ring1, ring2, ring3, ring4 | user populations and data centres; Microsoft's current word is tier |
+The 0-4 progression is Microsoft's, but in the Azure DevOps source it is "an example tier model" used "by a major team at Microsoft": Tier 0 internal only, 1 customers using a breadth of the product, 2 public accounts, 3 large internal accounts and European customers, 4 everyone else, each paired with a data-centre scope, so audience and place move together rather than audience alone. The Windows-servicing document defines a ring as "a group of users or devices that receive a particular update concurrently" and names three, Preview, Limited, Broad, with "Canaries > Early Adopters > Users" among the alternatives; the Essential Eight guidance is the one live page that literally says Ring 0 through Ring 4, and there Ring 4 is the most deferred (critical devices), so a numbered ring is not always the widest audience. Kind: audience. Xref [[https://learn.microsoft.com/en-us/devops/operate/safe-deployment-practices][Safe deployment practices - Azure DevOps]], [[https://learn.microsoft.com/en-us/windows/deployment/update/create-deployment-plan][Create a deployment plan]], [[https://learn.microsoft.com/en-us/compliance/anz/e8-patch-os][Essential Eight patch operating systems]]; the old URL /azure/devops/migrate/phase-rollout-with-rings now redirects to the classic release pipelines overview, which names only "Prod ring 1" and "Prod ring 2". Documentation example; the design is not fixed.
+
+** windows-insider
+:PROPERTIES:
+:CUSTOM_ID: pm-windows-insider
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://learn.microsoft.com/en-us/windows-insider/flighting
+:FINDING: Channels are now "Experimental channel", "Beta channel", "Release Preview"; the 24 April 2026 Insider blog maps "Dev Channel > Experimental", "Beta Channel > Beta", "Canary Channel 28000 series > Experimental (26H1)", "Canary Channel 29500 series > Experimental (Future Platforms)"; GA is not a channel anywhere in the source
+:END:
+| =windows-insider= | experimental, beta, release-preview | channels; canary, dev, beta, release-preview until 2026-04; ga is not a channel |
+Microsoft releases "Insider Preview builds through channels", and as of the June 2026 retail launch the channels are Experimental (with a Future Platforms core version inside it), Beta, and Release Preview; the page warns "you may see the old channel names until your device updates". The row's "ga" is the retail release the channels precede, not a channel, so it is dropped; the row's four pre-April names were correct for their date and are kept as a dated caveat. Kind: channel, since a device moves between channels by re-enrolment and the build is what the channel names. Xref [[https://learn.microsoft.com/en-us/windows-insider/flighting][Deeper look at running Windows Insider Preview Builds]] and [[https://blogs.windows.com/windows-insider/2026/04/24/were-moving-to-experimental-and-beta-announcing-new-builds/][We're moving to Experimental and Beta! (24 April 2026)]]; the April post does not mention Release Preview, which the flighting page retains.
+
+** azure-app-service
+:PROPERTIES:
+:CUSTOM_ID: pm-azure-app-service
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://learn.microsoft.com/en-us/azure/app-service/deploy-staging-slots
+:FINDING: "Deployment slots are live apps with their own host names. App content and configuration elements can be swapped between two deployment slots, including the production slot"; "staging" is the example slot name and the routing cookie value
+:END:
+| =azure-app-service= | staging-slot, production-slot | deploy targets; promotion by swap |
+The source's own terms are "deployment slot", "the default production slot", and "swap"; a non-production slot is created with any name, the docs' example and the =x-ms-routing-name=staging= cookie both use "staging", and promotion is "swap the two slots by switching their routing rules", after which the former production build sits in the staging slot for rollback. Kind: deploy target, with the swap itself an audience move (routing rules, plus optional Traffic % routing to a slot). Xref [[https://learn.microsoft.com/en-us/azure/app-service/deploy-staging-slots][Set Up Staging Environments - Azure App Service]]. Caveat: "staging" is a documentation convention, not a built-in slot; only "production" is fixed.
+
+** chrome
+:PROPERTIES:
+:CUSTOM_ID: pm-chrome
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://support.google.com/chrome/a/answer/9027636
+:FINDING: Chrome Enterprise lists the channels as Stable, Extended Stable, Beta, Dev, Canary; "Users on the Extended Stable channel get feature updates less frequently, but still receive security fixes"
+:END:
+| =chrome= | canary, dev, beta, stable, extended-stable | channels |
+Google's enterprise help names exactly five release channels, Canary ("a future version of Chrome that's still in development"), Dev ("a 9-12 week preview"), Beta ("a 4-6 week preview"), Stable, and Extended Stable; the row lists the same set in promotion order, where the source lists them stability-first. Kind: channel; a build is re-tagged as it advances and Extended Stable is a slower-cadence pointer over the same releases, not a further stage of the same build. Xref [[https://support.google.com/chrome/a/answer/9027636][Chrome browser release channels (Chrome Enterprise Help)]]. The chromium.org dev-channel page returned no content on fetch, so the enterprise page is the source of record here.
+
+** firefox
+:PROPERTIES:
+:CUSTOM_ID: pm-firefox
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://wiki.mozilla.org/Release_Management/Release_Process
+:FINDING: Mozilla's release process names Firefox Nightly, Firefox Beta, Firefox Dev Edition, Firefox Release, Firefox ESR; "Every 2 weeks, we merge the code from firefox-main to our firefox-beta branch" and "a final build is validated by our QA and tagged for release into the firefox-release branch"
+:END:
+| =firefox= | nightly, beta, release, esr | channels; Developer Edition is built from the beta branch |
+Mozilla's process page names the four channels the row has, plus Developer Edition, which is a separate build off the beta branch rather than a stage between beta and release, and ESR, which is a parallel long-support line cut from a release rather than a promotion beyond it. Kind: channel; a merge from =firefox-main= to =firefox-beta= to =firefox-release= is the re-tag, and the same source tree is what moves. Xref [[https://wiki.mozilla.org/Release_Management/Release_Process][Release Management/Release Process - MozillaWiki]]; the download page at [[https://www.firefox.com/en-US/channel/desktop/][Firefox desktop channels]] offers Beta, Developer Edition, Nightly and ESR, with Release as the default product (mozilla.org's channel URL now 301s to firefox.com).
+
+** debian
+:PROPERTIES:
+:CUSTOM_ID: pm-debian
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://www.debian.org/doc/manuals/debian-faq/ftparchives.en.html
+:FINDING: Debian FAQ ch.6 defines stable, testing, unstable, experimental and oldstable; "Packages are installed into the 'testing' directory after they have undergone some degree of testing in unstable"
+:END:
+| =debian= | experimental, unstable, testing, stable, oldstable | package suites |
+The FAQ's archive chapter has all five names in Debian's own spelling: experimental "for packages which are still being developed, and with a high risk of breaking your system", unstable "a snapshot of the current development system", testing fed from unstable after ageing, stable "the most recent release", and oldstable "the one from before 'stable'". Kind: suite; a package reaches testing by ageing in unstable and stable by a release freeze, and the archive re-points the suite symlink at a codename, which is the pure re-labelling case. Xref [[https://www.debian.org/doc/manuals/debian-faq/ftparchives.en.html][The Debian FTP archives (Debian GNU/Linux FAQ ch.6)]]; the releases index at debian.org/releases describes only stable, testing and unstable in prose.
+
+** ubuntu
+:PROPERTIES:
+:CUSTOM_ID: pm-ubuntu
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://wiki.ubuntu.com/SecurityTeam/FAQ
+:FINDING: "Ubuntu has several pockets that further divide the archive: release, security, updates, proposed and backports"; "packages in updates are not directly built, but rather copied from proposed after they have been tested"; row omitted backports and listed the pockets in an order the source does not give
+:END:
+| =ubuntu= | release, security, updates, proposed, backports | package pockets; only proposed to updates is a promotion |
+Ubuntu's own list is release, security, updates, proposed and backports, spelled as =<release>-<pocket>=; the release pocket "is frozen and does not change" once the version ships, security is built against release and security only, and the one documented move is a package being "copied from proposed after they have been tested" into updates. So the row's left-to-right reading as a promotion holds for proposed to updates and nowhere else; security is a sibling, not a stage, and nothing is promoted into release. Kind: suite (pocket); the copy is a re-label of an already-built binary. Xref [[https://wiki.ubuntu.com/SecurityTeam/FAQ][SecurityTeam/FAQ - Ubuntu Wiki]]; the Canonical packaging guide URL for the archive explanation now redirects to documentation.ubuntu.com/project/ and was not usable as a source.
+
+** freebsd
+:PROPERTIES:
+:CUSTOM_ID: pm-freebsd
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://docs.freebsd.org/en/books/handbook/leading/
+:FINDING: Handbook: "FreeBSD-CURRENT is the 'bleeding edge' of FreeBSD development"; "FreeBSD-STABLE is the development branch from which major releases are made"; releases are cut as e.g. "14.3-RELEASE" with "14.3-RELEASE-p7" patch levels; releng page names the branches main, stable/N, releng/N.M
+:END:
+| =freebsd= | current, stable, release | source branches |
+In the project's spelling the branches are FreeBSD-CURRENT (git =main=), FreeBSD-STABLE (=stable/N=, "changes go into this branch at a slower pace and with the general assumption that they have first been tested in FreeBSD-CURRENT"), and the release engineering branches (=releng/N.M=, "supported errata fix branch"), from which N.M-RELEASE and its -pK patch levels are tagged. Kind: line (source branch); a change is merged from CURRENT to STABLE ("MFC") and a release is a branch point plus a tag, so what moves is the commit's membership. No built artifact moves. Xref [[https://docs.freebsd.org/en/books/handbook/leading/][FreeBSD Handbook: Updating and Upgrading FreeBSD]] and [[https://www.freebsd.org/releng/][FreeBSD Release Engineering]]. The row's lower-case "current, stable, release" is a normalisation of -CURRENT, -STABLE, -RELEASE and is accepted as such.
+
+** linux-kernel
+:PROPERTIES:
+:CUSTOM_ID: pm-linux-kernel
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://www.kernel.org/category/releases.html
+:FINDING: kernel.org front page rows are mainline, stable, longterm, linux-next; releases page defines Prepatch, Mainline, Stable, Longterm and omits linux-next; howto.html names the "linux-next integration testing tree" as one of the "kernel branches"
+:END:
+| =linux-kernel= | linux-next, mainline, stable, longterm | source branches |
+kernel.org's releases page defines "Mainline tree is maintained by Linus Torvalds", "After each mainline kernel is released, it is considered 'stable'", and "several 'longterm maintenance' kernel releases"; the process howto lists "Linus's mainline tree, Various stable trees with multiple major numbers, Subsystem-specific trees, linux-next integration testing tree" under "kernel branches", so "source branches" is the source's own word. This is the channel / suite / line kind: a commit is not moved, it is merged into linux-next, then mainline, then backported into stable. Two caveats: the releases page has a Prepatch/RC category between linux-next and mainline that the row omits, and longterm is a stable series that was selected for longer maintenance, not a stage a stable build is promoted to. Xref [[https://www.kernel.org/category/releases.html][Linux kernel releases]] and [[https://www.kernel.org/doc/html/latest/process/howto.html][HOWTO do Linux kernel development]].
+
+** rust
+:PROPERTIES:
+:CUSTOM_ID: pm-rust
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://doc.rust-lang.org/book/appendix-07-nightly-rust.html
+:FINDING: "There are three release channels for Rust: Nightly, Beta, Stable"; beta branches from the nightly main branch every six weeks and "The stable branch is produced from the beta branch"
+:END:
+| =rust= | nightly, beta, stable | channels |
+The Rust book's Appendix G names exactly three "release channels", Nightly, Beta and Stable, and describes the six-week "train model" in which a release "leaves the station" on beta and "arrives as a stable release" six weeks later. Channel kind: the same commit is re-labelled as it moves down the train. Xref [[https://doc.rust-lang.org/book/appendix-07-nightly-rust.html][Appendix G - How Rust is Made and "Nightly Rust"]]. Caveat: the source's case is Nightly/Beta/Stable; the row uses the lowercase toolchain names.
+
+** node-release-lines
+:PROPERTIES:
+:CUSTOM_ID: pm-node-release-lines
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://github.com/nodejs/Release
+:FINDING: nodejs/Release README defines Current, Active LTS, Maintenance (and End-of-Life) and uses "release line" throughout; nodejs.org spells the third phase Maintenance LTS
+:END:
+| =node-release-lines= | current, active-lts, maintenance | release lines |
+The Release Working Group README defines "Current" ("Should incorporate most of the non-major (non-breaking) changes that land on nodejs/node main branch"), "Active LTS" and "Maintenance", and says "the term 'supported release lines' will be used to refer to all release lines that are not End-of-Life". Channel / line kind: a major version keeps its number and its phase label changes on a schedule. Xref [[https://github.com/nodejs/Release][nodejs/Release]] and [[https://nodejs.org/en/about/previous-releases][Node.js releases]]. Caveats: End-of-Life is a fourth phase the row omits, and nodejs.org now states that "Starting with Node.js 27, the release cycle will be annual and every major version will move to LTS status after its six-month Current phase (and six additional months of Alpha phase)", so the odd/even rule and the phase list are in flux.
+
+** semver
+:PROPERTIES:
+:CUSTOM_ID: pm-semver
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://semver.org/
+:FINDING: semver.org item 9 defines pre-release identifiers generically; alpha, beta, rc appear only in the item 11 precedence example "1.0.0-alpha < 1.0.0-alpha.1 < 1.0.0-alpha.beta < 1.0.0-beta < 1.0.0-beta.2 < 1.0.0-beta.11 < 1.0.0-rc.1 < 1.0.0"; note changed from "artifact maturity" to "pre-release identifiers; precedence example, not a fixed progression"
+:END:
+| =semver= | alpha, beta, rc, release | pre-release identifiers; precedence example, not a fixed progression |
+Item 9 says only that "A pre-release version MAY be denoted by appending a hyphen and a series of dot separated identifiers" and that "Pre-release versions have a lower precedence than the associated normal version"; the spec's own examples are "1.0.0-alpha, 1.0.0-alpha.1, 1.0.0-0.3.7, 1.0.0-x.7.z.92". The order alpha, beta, rc is real only as ASCII sort order in the item 11 example, and "release" is not a semver term (the spec says "normal version"). Channel kind in the sense that a label on the version string changes, but it is a documentation example and the design is not fixed. Xref [[https://semver.org/][Semantic Versioning 2.0.0]].
+
+** maven
+:PROPERTIES:
+:CUSTOM_ID: pm-maven
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://maven.apache.org/guides/getting-started/index.html#what-is-a-snapshot-version
+:FINDING: "a SNAPSHOT version is the 'development' version before the final 'release' version"; "During the release process, a version of x.y-SNAPSHOT changes to x.y"
+:END:
+| =maven= | snapshot, release | artifact maturity |
+The Getting Started guide says "The SNAPSHOT value refers to the 'latest' code along a development branch, and provides no guarantee the code is stable or unchanging. Conversely, the code in a 'release' version (any version value without the suffix SNAPSHOT) is unchanging." Two states, so "artifact maturity" is a fair gloss of the source's development/release pair. Caveat for the channel kind: a SNAPSHOT artifact is never re-tagged as the release; the release plugin rewrites the POM version and rebuilds, so the bits do move here, unlike npm or Rust. Xref [[https://maven.apache.org/guides/getting-started/index.html#what-is-a-snapshot-version][Maven Getting Started Guide: What is a SNAPSHOT version?]].
+
+** npm
+:PROPERTIES:
+:CUSTOM_ID: pm-npm
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://docs.npmjs.com/cli/v10/commands/npm-dist-tag
+:FINDING: "Publishing a package sets the latest tag to the published version unless the --tag option is used"; "The next tag is used by some projects to identify the upcoming version"; "Other than latest, no tag has any special significance to npm itself"; note changed from "dist-tags" to "dist-tags; next by convention"
+:END:
+| =npm= | next, latest | dist-tags; next by convention |
+npm-dist-tag documents one built-in tag: "By default, npm install <pkg> (without any @<version> or @<tag> specifier) installs the latest tag." Every other tag is user-defined; the page offers "stable, beta, dev, canary" as examples and mentions next as a project convention for "the upcoming version". Channel kind in its purest form: "npm dist-tag add" moves the pointer and no artifact is republished. Xref [[https://docs.npmjs.com/cli/v10/commands/npm-dist-tag][npm-dist-tag]].
+
+** pypi
+:PROPERTIES:
+:CUSTOM_ID: pm-pypi
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://packaging.python.org/en/latest/guides/using-testpypi/
+:FINDING: "TestPyPI is a separate instance of the Python Package Index (PyPI) that allows you to try out the distribution tools and process without worrying about affecting the real index"; separate database, separate accounts, "may be periodically pruned"
+:END:
+| =pypi= | testpypi, pypi | registries |
+The Python Packaging User Guide describes TestPyPI as "a separate instance of the Python Package Index (PyPI)" with "a separate database from the live PyPI", so two registries is what the source says, though its own nouns are "instance" and "index". Caveat on kind: nothing is promoted from TestPyPI to PyPI; the same distribution is uploaded twice, so this behaves as a place (two independent stores) rather than a channel pointer, and the seven-kinds table's channel placement overstates it. Xref [[https://packaging.python.org/en/latest/guides/using-testpypi/][Using TestPyPI]].
+
+** cloud-vendors
+:PROPERTIES:
+:CUSTOM_ID: pm-cloud-vendors
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: disputed
+:SOURCE: https://learn.microsoft.com/en-us/lifecycle/faq/azure-infrastructure
+:FINDING: Azure lifecycle FAQ: Private preview, Public preview, General Availability (GA); Google Cloud launch stages: Preview, General Availability, Deprecated with "[Legacy] Early access, alpha, beta"; AWS Service Terms: "Beta Service" covers anything "labeled 'beta', 'preview', 'pre-release', or 'experimental'" versus generally available; the row's progression is Azure's vocabulary only
+:END:
+| =cloud-vendors= | private-preview, public-preview, ga | feature maturity; Azure vocabulary, vendors differ |
+Azure's lifecycle FAQ lists "five primary lifecycle stages": "Private preview", "Public preview", "General Availability (GA)", "Deprecation & Previous-gen", "Retirement", and defines private preview as "an invitation-only stage" and public preview as "available to all Azure customers". Google's current launch stages are "Preview" ("ready for testing by customers ... intended for use in test environments only"), "General Availability" and "Deprecated", with "Early access, alpha, beta" marked "[Legacy]"; AWS's Service Terms do not define a ladder at all, folding "beta, preview, pre-release, or experimental" into one "Beta Service" bucket opposed to "generally available". Audience kind as much as channel: each stage is a statement about who may use the same deployed feature. The three-step row is Azure's, so mark it disputed rather than a cross-vendor fact. Xref [[https://learn.microsoft.com/en-us/lifecycle/faq/azure-infrastructure][Azure infrastructure lifecycle FAQ]], [[https://cloud.google.com/terms/launch-stages][Google Cloud product launch stages]], [[https://aws.amazon.com/service-terms/][AWS Service Terms, Betas and Previews]].
+
+** kubernetes
+:PROPERTIES:
+:CUSTOM_ID: pm-kubernetes
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/
+:FINDING: "A feature can be in Alpha, Beta or GA stage"; "A General Availability (GA) feature is also referred to as a stable feature"; note changed from "feature gates" to "feature stages; toggled by feature gates"
+:END:
+| =kubernetes= | alpha, beta, ga | feature stages; toggled by feature gates |
+The Feature Gates reference has a "Feature stages" section stating "A feature can be in Alpha, Beta or GA stage": Alpha is "Disabled by default. Might be buggy", Beta is enabled by default with feedback solicited, and "A General Availability (GA) feature is also referred to as a stable feature. It means: The feature is always enabled; you cannot disable it. The corresponding feature gate is no longer needed." The gate is the switch; the stage is what progresses, so the note now names the stage and mentions the gate. Channel kind: the code ships in every release and only its stage label and default change; the gate table also carries a "Deprecated" stage the row omits. Xref [[https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/][Kubernetes Feature Gates]].
+
+** redhat-bugzilla
+:PROPERTIES:
+:CUSTOM_ID: pm-redhat-bugzilla
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://bugzilla.redhat.com/page.cgi?id=fields.html#bug_status
+:FINDING: Source STATUS section lists NEW, ASSIGNED, POST, MODIFIED, ON_DEV, ON_QA, VERIFIED, RELEASE_PENDING, CLOSED; row omitted ON_DEV (between MODIFIED and ON_QA, "use of this state is optional")
+:END:
+| =redhat-bugzilla= | new, assigned, post, modified, on_dev, on_qa, verified, release_pending, closed | issue status; ASSIGNED and ON_DEV optional |
+Red Hat Bugzilla's Bug Fields page documents nine status values in this order: NEW, ASSIGNED, POST, MODIFIED, ON_DEV, ON_QA, VERIFIED, RELEASE_PENDING, CLOSED, with CLOSED carrying a separate resolution field. The kind is record status: each step is a named role (Assigned Engineer, Assigned Quality Engineer, Release Configuration Management Engineer) asserting the next thing is true of the fix. Xref [[https://bugzilla.redhat.com/page.cgi?id=fields.html#bug_status][Red Hat Bugzilla – Bug Fields, STATUS]]. The source marks both ASSIGNED and ON_DEV as optional, so the row's eight-step path is a legal traversal but not the documented set.
+
+** mozilla-bugzilla
+:PROPERTIES:
+:CUSTOM_ID: pm-mozilla-bugzilla
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: https://firefox-source-docs.mozilla.org/bug-mgmt/guides/status-flags.html
+:FINDING: status_firefoxN values are ---, ?, unaffected, affected, fixed, verified, disabled, verified disabled, wontfix, fix-optional; the row's affected, fixed, verified is the happy-path subset, the note now says so
+:END:
+| =mozilla-bugzilla= | affected, fixed, verified | per-train status_firefoxN flag values; happy path only, also ---, ?, unaffected, wontfix, fix-optional, disabled, verified disabled |
+Mozilla's Firefox source docs ("Release Status Flags") give the per-release =status_firefoxN= flag ten values: =---= (unknown), =?= (seeking information), =unaffected=, =affected=, =fixed=, =verified=, =disabled=, =verified disabled=, =wontfix=, =fix-optional=. Only affected → fixed → verified is a progression; the rest are terminal or branching claims, and the source warns that flag =wontfix= is not the bug resolution WONTFIX. Kind: record status, one flag per train rather than one status per bug. Xref [[https://firefox-source-docs.mozilla.org/bug-mgmt/guides/status-flags.html][Firefox Source Docs – Status Flags]]. The wiki.mozilla.org Tracking_Flags page cited in some secondary sources returns 404 and the BMO BugFields page does not cover these values; the source-docs page is the live primary.
+
+** aws-control-tower
+:PROPERTIES:
+:CUSTOM_ID: pm-aws-control-tower
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: disputed
+:SOURCE: https://docs.aws.amazon.com/controltower/latest/userguide/how-control-tower-works.html
+:FINDING: Landing zone creates two OUs, Security and Sandbox (optional); "dev" and "prod" are not named anywhere on the page, they are customer-registered OUs, so the row overstates what Control Tower defines
+:END:
+| =aws-control-tower= | sandbox, dev, prod | organizational units; only Security and Sandbox are landing-zone OUs, dev/prod are customer convention |
+"How AWS Control Tower works" says setup "Creates two AWS Organizations organizational units (OUs): Security, and Sandbox (optional)", with the Security OU holding the Log Archive and Audit accounts and the Sandbox OU holding enrolled workload accounts; further OUs are whatever the customer registers. Read as a progression the kind is place (accounts are moved between OUs, and OU membership decides which controls apply), but the source defines no dev or prod OU and no promotion between OUs. Xref [[https://docs.aws.amazon.com/controltower/latest/userguide/how-control-tower-works.html][How AWS Control Tower works – Structure of an AWS Control Tower Landing Zone]]. Kept the row's three names because they are what practitioners do build; the note now says which of them the vendor owns.
+
+** aws-codepipeline
+:PROPERTIES:
+:CUSTOM_ID: pm-aws-codepipeline
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://docs.aws.amazon.com/codepipeline/latest/userguide/concepts.html
+:FINDING: Stages are user-named ("a build stage", "a deployment stage"); valid action types are source, build, test, deploy, approval, and invoke; Source/Build/Deploy is the docs' running example, not a fixed stage list
+:END:
+| =aws-codepipeline= | source, build, deploy | pipeline stages; docs example, stage names are user-chosen |
+CodePipeline concepts: "Each pipeline is made up of a series of stages", a stage "is a logical unit you can use to isolate an environment and to limit the number of concurrent changes in that environment", and "Valid CodePipeline action types are source, build, test, deploy, approval, and invoke." Stage names are free text; the Source → Build → Deploy sequence is the example the user guide and console wizard use. Kind: pipeline stage, and the source is explicit that what moves is control, via transitions that can be disabled and re-enabled. Xref [[https://docs.aws.amazon.com/codepipeline/latest/userguide/concepts.html][CodePipeline concepts]]. Test and Approval are equally common stage names and are omitted from the row; the row is a documentation example and the design is not fixed.
+
+** gcp-cloud-deploy
+:PROPERTIES:
+:CUSTOM_ID: pm-gcp-cloud-deploy
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://docs.cloud.google.com/deploy/docs/terminology
+:FINDING: Terminology page illustrates a delivery pipeline's promotion sequence with targets dev, staging, prod; the schema reference uses dev, staging, production; the GKE quickstart uses qsdev, qsprod
+:END:
+| =gcp-cloud-deploy= | dev, staging, prod | targets; docs example |
+Cloud Deploy defines a delivery pipeline as "A representation of the workflow that delivers an application to each target in a deployment progression" and a target as "The specific runtime environment (Kubernetes cluster, Cloud Run service, or other supported runtime) into which to deploy the application"; the terminology page's illustration of the promotion sequence is dev → staging → prod. Kind: place, and the product's own word for moving between them is "promote" (=gcloud deploy releases promote=). Xref [[https://docs.cloud.google.com/deploy/docs/terminology][Cloud Deploy Terminology]]. Documentation example, not a fixed design: the schema reference spells the last target =production= and the quickstart uses =qsdev=/=qsprod=; =cloud.google.com/deploy/docs/...= now 301s to =docs.cloud.google.com=.
+
+** kargo
+:PROPERTIES:
+:CUSTOM_ID: pm-kargo
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://docs.kargo.io/quickstart/
+:FINDING: Quickstart creates "Three Stage resources that define how Freight moves through your pipeline" named test, uat, prod
+:END:
+| =kargo= | test, uat, prod | stages; docs example |
+Kargo's quickstart installs a Warehouse, a PromotionTask, and three =Stage= resources named =test=, =uat=, =prod=, through which Freight is promoted in order. The core-concepts page defines a Stage as "a promotion target. It represents some desired state that needs to be altered by a promotion process", and its own inline examples use =test= and =staging=, so the names are illustrative. Kind: place, though a Kargo Stage is strictly a desired-state record that a promotion mutates, which is closer to this estate's label-as-state model than to a running cluster. Xref [[https://docs.kargo.io/quickstart/][Kargo Quickstart]]. Documentation example; the design is not fixed.
+
+** flux
+:PROPERTIES:
+:CUSTOM_ID: pm-flux
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: correct
+:SOURCE: https://fluxcd.io/flux/guides/repository-structure/
+:FINDING: Both the monorepo and repo-per-team layouts show clusters/production and clusters/staging; "Each cluster state is defined in a dedicated dir e.g. clusters/production"
+:END:
+| =flux= | staging, production | cluster directories; convention |
+Flux's repository-structure guide shows =clusters/staging= and =clusters/production= as the per-cluster directories in both the monorepo and repo-per-team examples, each referencing app and infrastructure overlays. There is no promotion primitive in Flux itself; moving a change from staging to production is a git operation (merge, tag, or overlay edit) that the two Kustomizations then reconcile independently. Kind: place. Xref [[https://fluxcd.io/flux/guides/repository-structure/][Flux – Ways of structuring your repositories]]. The guide presents these as illustrative layouts ("e.g."), not a required naming scheme.
+
+** traffic-exposure
+:PROPERTIES:
+:CUSTOM_ID: pm-traffic-exposure
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: disputed
+:SOURCE: https://sre.google/workbook/canarying-releases/
+:FINDING: No single source lists shadow, dark-launch, canary, blue-green, full; SRE workbook defines canarying and blue/green (and "traffic teeing", the nearest thing to shadow); Fowler defines Blue-Green Deployment (2010) and Dark Launching (2020); "full" is an unnamed default
+:END:
+| =traffic-exposure= | shadow, dark-launch, canary, blue-green, full | rollout strategy; composite, no single source |
+The SRE Workbook chapter defines canarying as "a partial and time-limited deployment of a change in a service and its evaluation", treats blue/green as "two instances of a system: one that is serving traffic (green), and another that is ready to serve traffic (blue)", and mentions traffic teeing (copying production traffic to a test system) without the word "shadow". Fowler's bliki gives [[https://martinfowler.com/bliki/BlueGreenDeployment.html][BlueGreenDeployment]] (1 March 2010: "two production environments, as identical as possible") and [[https://martinfowler.com/bliki/DarkLaunching.html][DarkLaunching]] (29 April 2020: new back-end behaviour "calling it from existing users without the users being able to tell"). Kind: audience, as §Seven kinds already places it, since the build is installed and what changes is who or what sees it. Xref [[https://sre.google/workbook/canarying-releases/][SRE Workbook – Canarying Releases]]. The left-to-right order is the survey's, not a source's; nobody documents these five as one ladder, and "shadow" and "full" have no primary definition here.
+
+** standard-change
+:PROPERTIES:
+:CUSTOM_ID: pm-standard-change
+:VERIFIED: 2026-09-15 citation-auditor
+:VERDICT: corrected
+:SOURCE: spec.org §Router and ports › The port map (the tier table CLAUDE.md calls §Port tiers)
+:FINDING: Spec table: dev worktree blocks 9000 + 10n (n ≤ 9), staging 9200, production blue 9210, green 9220, production front 9230; "100N0" is gates/e2e.sh's stale ROUTER_URL default (http://127.0.0.1:10000), issue #84, not a tier
+:END:
+| =standard-change= | dev-block, staging, idle-colour, front | environments; ports 9000+10n (n ≤ 9), 9200, 9210/9220, 9230 |
+=spec.org= under "Router and ports" › "The port map" states "Three tiers, and the number says which: dev(9000+), team(9100+) and protected(9200+)", with the table giving =9000–9099= dev worktree blocks at =9000 + 10n= for n ≤ 9, =9200= staging, =9210= production blue replica, =9220= production green replica, =9230= production front proxying to the live colour, and =9240–9299= reserved; CLAUDE.md §Conventions repeats the same numbers and records the 2026-09-13 correction from the earlier 9200/9201 scheme. Kind: place for dev-block and staging, audience for the colour swap (both colours are the same place; the front moves), which is the mixed model §This estate already describes. Xref [[file:../../spec.org::*The port map][spec.org – The port map]] and [[https://github.com/aygp-dr/standard-change/issues/84][issue #84 – e2e.sh defaults ROUTER_URL to :10000]]. The supplied "100N0" comes from =gates/e2e.sh= line 31, =base="${ROUTER_URL:-http://127.0.0.1:10000}"=, which predates the 9000-block correction and is the defect issue #84 records; no heading literally titled "Port tiers" exists in spec.org, so the citation above uses the heading that does.
+

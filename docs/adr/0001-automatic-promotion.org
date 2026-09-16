@@ -146,7 +146,7 @@ invalidation, and with it the ratio.
 A release train attacks the same ratio from the other side by validating a
 batch once — measured at *0.58 validations per ship against 13.63*, a 23×
 reduction, at the cost of mean latency (2.6 h vs 12.5 h). See
-=docs/release-strategies.org=; that note also finds the throughput-optimal
+=research/history/release-strategies.org=; that note also finds the throughput-optimal
 train is red more often than green, and that the analytic optimum sits at a
 92–99% predicted emergency share on this repo's own balance curve — i.e.
 unreachable. A short (≈1 h) train captures ~98% of the available amortization
@@ -323,7 +323,7 @@ repos each importing an unversioned OneUI from a sixth deploy together exactly
 as they do now. The work that pays is *versioning the shared artifact so a
 consumer can lag* — and that is a different task from moving files, which is
 the failure mode most likely to make A2 disappointing. See
-=docs/cross-cutting-coupling.org= and issue #10.
+=research/findings/cross-cutting-coupling.org= and issue #10.
 
 *Open, not scheduled:* the classifier has no notion of blast radius, and
 =idp.py change risk= — which does — is not wired into the pipeline. PR #5
@@ -383,7 +383,7 @@ still need somewhere to run, which is what staging remains for.
 ** Option A3 — release trains
 
 Batch whatever is ready on a cadence and validate the batch once.
-=docs/release-strategies.org= measured it: *0.58 validations per shipped change
+=research/history/release-strategies.org= measured it: *0.58 validations per shipped change
 against 13.63*, a 23× reduction, at 2.6 h mean latency against 12.5 h.
 
 It attacks the ratio directly rather than the capacity, which makes it the only
@@ -408,7 +408,7 @@ Every deployment is a deployment *of main*; features are independently tested,
 merged, and then main is what ships. Guard 0 becomes *unstateable* — there is
 no branch to be behind — and the berth stops needing to bind a branch.
 
-What it costs is what =docs/release-strategies.org= names: *"on main" becomes
+What it costs is what =research/history/release-strategies.org= names: *"on main" becomes
 intent, not evidence.* The merge happens before the production evidence exists,
 so the thing that says a change is good is a merge rather than an observation.
 It also leaves guard 4b's predicate merely relocated from a branch to a SHA,
@@ -622,7 +622,7 @@ The finding above — ten to twenty validation runs per shipped change — is ab
 it does not parallelize at all.
 
 It also sharpens why release trains win by so much (0.58 validations per ship
-against 13.63, =docs/release-strategies.org=). A train does not merely amortize
+against 13.63, =research/history/release-strategies.org=). A train does not merely amortize
 gate runs. *It amortizes the human*: one acceptance covers the batch, and
 acceptance is the resource that has no second copy.
 
@@ -806,7 +806,7 @@ not been walked at all.
 3. *Is a failed deployment still =change:complete= eligible?* The ITIL machine
    says =implementing → failed=, and =failed → implementing= (guile) or
    =failed → assessing= (our copy). *The two disagree*
-   (=docs/idp-service.org=) and the disagreement only appears on failure.
+   (=research/history/changeflow-state-machine.org=) and the disagreement only appears on failure.
 4. *Does the window survive a failure?* If a deploy fails at 17:05 in a
    17:00–17:30 window, is the remainder still the change's to retry in, or
    forfeited? Nothing decides.

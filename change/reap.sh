@@ -58,21 +58,21 @@ ONLY="${CHANGE_ENV:-}"
 
   # AND IT IS NO LONGER SCHEDULED. A change that fell out of its window is not
   # scheduled any more -- it is authorized and waiting for a slot, which is the
-  # state it was in before the booking. Leaving change:scheduled on it would
+  # state it was in before the booking. Leaving release:scheduled on it would
   # make the PR assert a reservation the calendar has just closed, and a label
   # that outlives the fact it names is how an audit ends up trusting the wrong
   # one of two sources.
   #
   # It does NOT become failed: nothing was attempted. And it does NOT go back to
-  # change:requested -- that label is the HUMAN'S ASK, owner `human` in the
+  # release:started -- that label is the HUMAN'S ASK, owner `human` in the
   # declaration, and automation re-asserting it is the pipeline speaking for a
   # person. gates/label-audit.py refused the first version of this for exactly
   # that reason. The change is left with no lifecycle label, which is the honest
   # state: it was scheduled, it no longer is, and nobody has asked for a new
   # window yet. Asking is a person's act.
   gh pr edit "$pr" --repo "$R" \
-    --remove-label change:scheduled >/dev/null 2>&1 \
-    && echo "      change:scheduled removed -- unscheduled, not failed"
+    --remove-label release:scheduled >/dev/null 2>&1 \
+    && echo "      release:scheduled removed -- unscheduled, not failed"
   if [ -n "$held" ]; then
     gh pr edit "$pr" --repo "$R" --remove-label deploy:staging >/dev/null 2>&1 \
       && echo "      deploy:staging released -- the berth was held by a lapsed window"

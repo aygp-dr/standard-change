@@ -1,0 +1,82 @@
+#+TITLE: standard-change: the history and the research
+#+SUBTITLE: Everything that was read, tried and found, assembled for a rebuild; none of the internals
+#+DATE: 2026-09-15
+#+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
+#+SETUPFILE: preamble.org
+
+This document is the research directory of the repository, assembled by
+=#+INCLUDE= from =history/=, =substrates/=, =findings/= here and =experiments/= so it can be
+rebuilt as HTML or PDF (=gmake research=). It is in the order a rebuilder needs: how to adopt it, what was found,
+the experiments, where it can run, then the history of the ideas as an
+appendix, with the tables the paper cites last. It leaves out the internals: the spec, the scripts,
+the gates, the shell review. A repository with a risk designation, something
+deployable and a pipeline that governs deployment can take the tracking layer
+described in Part I without touching the labels it already has.
+
+* Part I: How to read this, and how to adopt it
+#+INCLUDE: "adoption.org" :minlevel 3
+#+INCLUDE: "findings/release-grammar.org" :minlevel 3
+#+INCLUDE: "history/five-properties.org" :minlevel 3
+#+INCLUDE: "findings/labels-are-the-only-channel.org" :minlevel 3
+#+INCLUDE: "findings/the-method.org" :minlevel 3
+#+INCLUDE: "findings/evidence-census.org" :minlevel 3
+#+INCLUDE: "substrates/conformance-ladder.org" :minlevel 3
+#+INCLUDE: "../spec.org::*Nomenclature" :only-contents t :minlevel 3
+#+INCLUDE: "../docs/exit-codes.org" :minlevel 3
+#+INCLUDE: "findings/glossary.org" :minlevel 3
+
+* Part II: What was found
+#+INCLUDE: "findings/label-ownership.org" :minlevel 3
+#+INCLUDE: "findings/concurrent-change.org" :minlevel 3
+#+INCLUDE: "findings/label-state-machine.org" :minlevel 3
+#+INCLUDE: "findings/changing-the-pipeline.org" :minlevel 3
+#+INCLUDE: "findings/changing-the-rules.org" :minlevel 3
+#+INCLUDE: "findings/cross-cutting-coupling.org" :minlevel 3
+#+INCLUDE: "findings/testing-problems.org" :minlevel 3
+#+INCLUDE: "findings/time-spent.org" :minlevel 3
+#+INCLUDE: "findings/reviewer-identity.org" :minlevel 3
+#+INCLUDE: "../experiments/021-state-machines/REVIEW.org" :minlevel 3
+#+INCLUDE: "../experiments/021-state-machines/PARING.org" :minlevel 3
+
+* Part III: The experiments, in order
+#+INCLUDE: "../experiments/001-d4-staging-regression/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/003-scheduled-slots/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/004-rolling-deploy/README.org" :minlevel 3
+#+INCLUDE: "../experiments/014-observation-records/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/016-dora/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/017-token-metrics/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/020-browser-uat/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/022-five-agent-grind/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/024-five-owners/notes.org" :minlevel 3
+
+* Part IV: Substrates, hosting and what a platform can enforce
+#+INCLUDE: "history/substrate-mapping.org" :minlevel 3
+#+INCLUDE: "substrates/substrate-emulation.org" :minlevel 3
+#+INCLUDE: "substrates/hosting-survey.org" :minlevel 3
+#+INCLUDE: "substrates/deployment-targets.org" :minlevel 3
+#+INCLUDE: "substrates/github-environments.org" :minlevel 3
+#+INCLUDE: "substrates/ci-and-the-estate.org" :minlevel 3
+#+INCLUDE: "substrates/ci-portability.org" :minlevel 3
+#+INCLUDE: "../experiments/013-freebsd-browser/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/002-gitea-actions/README.org" :minlevel 3
+
+* Part V: History of the ideas
+#+INCLUDE: "history/pipeline-history.org" :minlevel 3
+#+INCLUDE: "history/release-strategies.org" :minlevel 3
+#+INCLUDE: "history/reference-survey.org" :minlevel 3
+#+INCLUDE: "history/release-standards.org" :minlevel 3
+#+INCLUDE: "history/promotion-models.org" :minlevel 3
+#+INCLUDE: "history/affected-by-construction.org" :minlevel 3
+#+INCLUDE: "history/label-standards-survey.org" :minlevel 3
+#+INCLUDE: "history/deployment-signalling-survey.org" :minlevel 3
+#+INCLUDE: "history/classification-frameworks.org" :minlevel 3
+#+INCLUDE: "history/changeflow-state-machine.org" :minlevel 3
+#+INCLUDE: "history/precedence-and-locks.org" :minlevel 3
+#+INCLUDE: "history/deploy-ledger-comparison.org" :minlevel 3
+#+INCLUDE: "history/storefront-deployments.org" :minlevel 3
+
+* Appendix: the tables the paper cites
+#+INCLUDE: "appendix/label-table.org" :minlevel 3
+#+INCLUDE: "appendix/scenario-index.org" :minlevel 3
+#+INCLUDE: "appendix/issue-index.org" :minlevel 3

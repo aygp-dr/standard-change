@@ -133,7 +133,7 @@ paths:
         `settled` or `unconverged`. Never takes a verdict. `confidence` is
         `sampled` when the platform cannot enumerate its replicas and
         `attested` when it can; never defaulted to the stronger value. On
-        `settled` the IDP writes `change:complete`, merges if not merged,
+        `settled` the IDP writes `release:completed`, merges if not merged,
         posts the PIR, and clears every transient label — in that order.
       parameters: [ { $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/idem" } ]
       requestBody:
@@ -235,7 +235,7 @@ paths:
       summary: close lapsed windows (change/reap.sh); the scheduler's housekeeping
       description: |
         Every open window whose end has passed is closed `expired`; its change
-        loses `change:scheduled` and, if it still held the berth, the berth —
+        loses `release:scheduled` and, if it still held the berth, the berth —
         unless the change carries `deploy:production` (rule ReapSparesInFlight)
         or the forge says MERGED (rule RecordOnMerge). Nothing is re-booked and
         nothing goes back to `requested`: asking is a person's act.

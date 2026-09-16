@@ -1,0 +1,6 @@
+extends: existence
+message: "Never use '%s'. Find a precise alternative (critical, essential, structural, required)."
+level: error
+tokens:
+  - load-bearing
+  - load bearing

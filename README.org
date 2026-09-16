@@ -63,8 +63,8 @@ when =main= moves underneath you are all real and all deliberately absent here
 stateDiagram-v2
     direction TB
     [*] --> Opened: PR opened, labeller sets app:* and itil:standard
-    Opened --> Started: a person adds change:start
-    Started --> Scheduled: window reserved -> change:scheduled
+    Opened --> Started: a person adds release:start
+    Started --> Scheduled: window reserved -> release:scheduled
     Scheduled --> Implementing: window opens, guards re-run, berth claimed -> deploy:staging
     Scheduled --> Forfeited: window lapses unattempted -> expired
     Implementing --> Deployed: install finished -> staging:deployed
@@ -76,15 +76,15 @@ stateDiagram-v2
     Accepted --> Promoted: staging:smoke lands deploy:production (promote.yml), unless held
     Promoted --> Live: install finished -> production:deployed, then guard 5 -> production:healthy
     Live --> Authorized: guard 4 reads the stack -- a reviewer APPROVED this head, gates green on it, every observation taken on it
-    Authorized --> Complete: settle asks production what it is serving NOW -> change:complete
+    Authorized --> Complete: settle asks production what it is serving NOW -> release:completed
     Complete --> Merged: squash merge, branch deleted
     Merged --> Recorded: PIR posted, while the labels are still there to read
-    Recorded --> Tidied: cleanup clears every transient label, change:complete included, berth released
+    Recorded --> Tidied: cleanup clears every transient label, release:completed included, berth released
     Tidied --> [*]: no tombstone on this path -- the forge's mergedAt is the record
     Forfeited --> Started: the person states the intent again
 
-    Deployed --> Closed: abort from any state past the berth claim -> change:failed or change:backed-out
-    Closed --> [*]: change:end, written last -- there is no mergedAt here, so the tombstone is the only thing saying this clearing was deliberate
+    Deployed --> Closed: abort from any state past the berth claim -> release:failed or release:backed-out
+    Closed --> [*]: release:ended, written last -- there is no mergedAt here, so the tombstone is the only thing saying this clearing was deliberate
 
     note right of Scheduled
         reserving is not deploying
@@ -120,9 +120,9 @@ sequenceDiagram
     Dev->>GH: push -> PR
     GH->>GH: labeller: app:*, itil:standard
     GH->>GH: gates -> lint, test, e2e, gate-selftest (green @sha)
-    Dev->>GH: change:start
+    Dev->>GH: release:start
     Dev->>IDP: reserve a window
-    IDP-->>GH: change:scheduled
+    IDP-->>GH: release:scheduled
     IDP->>Stg: window opens -> re-run guards, claim the berth (deploy:staging), deploy changed apps
     Stg-->>GH: install finished -> staging:deployed
     Stg-->>GH: guard 5 on staging -> staging:healthy
@@ -137,35 +137,31 @@ sequenceDiagram
     alt production is serving this head
         IDP->>Prod: settle: what are you serving, right now?
         Prod-->>IDP: x-build-sha, colour
-        IDP->>GH: change:complete -- validation done
+        IDP->>GH: release:completed -- validation done
         IDP->>GH: merge, squash, delete the branch
         IDP->>GH: the PIR, posted while the labels are still readable
-        IDP->>GH: cleanup -- clear every transient label, change:complete included, berth released
-        Note over IDP,GH: no change:end here. mergedAt is the record
+        IDP->>GH: cleanup -- clear every transient label, release:completed included, berth released
+        Note over IDP,GH: no release:ended here. mergedAt is the record
         GH-->>Dev: shipped
     else it did not make it
-        IDP->>GH: the closure record, then change:failed or change:backed-out
+        IDP->>GH: the closure record, then release:failed or release:backed-out
         IDP->>GH: clear every marker, close the window, release the berth
-        IDP->>GH: change:end, last -- nothing else says this clearing was deliberate
+        IDP->>GH: release:ended, last -- nothing else says this clearing was deliberate
     end
 #+end_src
 
 ** One label starts a change
 
-A person adds *=change:start=* and that is the whole of their part — one
-label, not two: it supersedes =change:requested= plus =release=, which were
-two human-owned labels for one fact. Everything after is the system acting or
-observing, and the *name shape* says which:
+A person adds *=release:start=* and that is the whole of their part: one
+label, one fact. Everything after is the system acting or observing, and the
+*name shape* says which:
 
 | shape                | kind        | example               | added by hand? |
 |----------------------+-------------+-----------------------+----------------|
-| =change:start=       | intent      | someone said go       | *yes*          |
+| =release:start=       | intent      | someone said go       | *yes*          |
 | =staging:hold=       | *intent*    | someone said not yet  | *yes*          |
 | =deploy:<env>=       | action      | work is in flight     | no             |
 | =<subject>:<state>=  | observation | *a check came back*   | no             |
-
-(=hold:<env>= was a third hand-added shape; it is superseded — see §How to
-stop a change.)
 
 =production:healthy= reads as a check result because that is what it is.
 =deploy:staging= is not a way to ask for a deployment — it marks that the
@@ -198,7 +194,7 @@ discrete acts in order, and the order is the content:
    That is guard 5 re-derived from a host that can see the estate, and it is
    better evidence than any label — so =production:healthy= is deliberately
    *not* required here.
-2. *sets =change:complete=* — validation is done. Before the merge, because
+2. *sets =release:completed=* — validation is done. Before the merge, because
    the merge follows completion rather than constituting it, and because this
    is the label that *drives* the merge and the PIR.
 3. *merges* — squash, branch deleted. A refused merge *stops settlement here*:
@@ -207,7 +203,7 @@ discrete acts in order, and the order is the content:
    recovery, not a silent success.
 4. *posts the PIR, and writes the deployment annotation* — while the labels
    are still on the change to be read into it.
-5. *cleans up* — clears every transient label, =change:complete= included, and
+5. *cleans up* — clears every transient label, =release:completed= included, and
    with it the berth.
 
 *Steps 3 and 5 are two acts, in sequence, and the gap between them is real.*
@@ -229,15 +225,13 @@ change sat in the process and it is no longer in the process.
 clearing — see §The merge is the tombstone below. The *abort* path
 (=change/abort.sh=) has the same shape and one more step: the closure record
 first, then the deployment records withdrawn, the window redlined, every
-marker cleared, the closure code (=change:failed= or =change:backed-out=), the
-berth released — and then =change:end=, last.
+marker cleared, the closure code (=release:failed= or =release:backed-out=), the
+berth released — and then =release:ended=, last.
 
 *The deployment annotation is written here too, and only here.* Not when the
-deploy starts. The deployer used to open a record =in_progress= and resolve it
-later — GitHub's own model — and every record it opened resolved to *failure*,
-because =deploy-staging= dies at =queue.sh= before deploying (issue #25). PRs
-read "1 failed deployment" while the estate served that build perfectly: the
-record described the *workflow run*, not the environment.
+deploy starts: a record opened at the start and resolved later resolves to
+failure whenever the run dies before deploying, and a record that resolves to
+failure for a deploy that never happened is a lie about the estate.
 
 By settlement, production has been observed serving the build. There is nothing
 left to intend, so the annotation is written from a fact. It is keyed to the
@@ -258,12 +252,12 @@ cannot be answered from the records — that question belongs to the berth.
 
 *Two namespaces, and they are different kinds of fact.* Mixing them is the
 defect that made "a PR has at most one =change:*=" impossible to state, because
-=itil:standard= plus =change:complete= was a legitimate pair:
+=itil:standard= plus =release:completed= was a legitimate pair:
 
 | namespace  | kind             | members                                              | cardinality |
 |------------+------------------+------------------------------------------------------+-------------|
 | =itil:*=   | *classification* | =itil:standard= · =itil:normal= · =itil:emergency=   | exactly one |
-| =change:*= | *lifecycle*      | =change:start= → =change:scheduled= → =change:complete= | one active |
+| =change:*= | *lifecycle*      | =release:start= → =release:scheduled= → =release:completed= | one active |
 
 =itil:*= is the ITIL change type and says *what kind of change this is*.
 =change:*= says *where the change record has got to*. A change is classified
@@ -273,37 +267,42 @@ once and moves through the lifecycle many times.
 what a change touches and what kind of change it is — which gates to run,
 which groups to deploy, which rules apply. Neither authorizes anything.
 Permission to deploy is four other things, each from a different source: a
-person's =change:start=, a reviewer's approval, green gates on the head,
+person's =release:start=, a reviewer's approval, green gates on the head,
 and an open window. A change with every derived label and none of those four
 does not move. The one derived-looking label that changes *precedence* is
 =itil:emergency=, and it is not derived: a person declares it, and it exempts
 the change from the freeze and the queue, never from the gates.
 
-=change:complete= is the pipeline's *outcome*: set when every guard has passed
+=release:completed= is the pipeline's *outcome*: set when every guard has passed
 and production is observed serving the build, *before* the merge, because the
 merge follows completion rather than constituting it — and it is the label
 that *drives the side effects*: the merge to =main=, the PIR, and whatever
 else must hear that the change shipped (a ticket, a message). Cleanup then
 clears it — once the forge records =MERGED=, the label restates a fact the
 platform owns, and two records of one fact can disagree while the platform's
-cannot. The person's two words are =change:start= and =staging:hold=;
-=complete= is the pipeline's, and =end= is the pipeline's on one path only.
+cannot. The person's three words are =release:start=, =staging:hold= and
+=release:skip= (skip the estate: nothing to release, the only act left is
+the merge, and only if the labeller attached no =app:*=); =complete= is the
+pipeline's, and =end= is the pipeline's on one path only. The grammar these
+spellings will become in rebuild 005, one namespace where the person says the
+verb and the runner answers the participle, is set out in
+=research/findings/release-grammar.org=.
 
 *** The merge is the tombstone
 
 /Two records of one fact can disagree; the platform's cannot. A label
 restating a fact the platform already owns is not a second record, it is a
 future contradiction with a timestamp./ That argument is why cleanup clears
-=change:complete=, and it condemns =change:end= on the same path for the same
+=release:completed=, and it condemns =release:ended= on the same path for the same
 reason: the merge already says the change ended, and the forge's =mergedAt=
 says it in a field nothing in this repository can write.
 
-The evidence is not hypothetical. PR #52 carried =change:end= through an
+The evidence is not hypothetical. PR #52 carried =release:ended= through an
 entire successful deploy *while still open* — the tombstone said the cleanup
 had run on a change that had not started tidying. =mergedAt= cannot do that.
 
 The objection was also a shape objection (the owner, 2026-09-15): clearing
-every label, then adding =change:end= to say the clearing happened, then
+every label, then adding =release:ended= to say the clearing happened, then
 clearing that too is /a bunch of dishes on the counter, then putting all in
 the dishwasher, then putting a postit note indicating that you cleaned up the
 kitchen, then tossing the postit/.
@@ -313,17 +312,17 @@ So the rule is split by path, not dropped:
 | path                    | what closes it                              | tombstone |
 |-------------------------+---------------------------------------------+-----------|
 | *merged*                | =mergedAt=, written by the forge            | *never*   |
-| *aborted* (closed unmerged) | =change:failed= / =change:backed-out=, by =change/abort.sh= | *=change:end=, last* |
+| *aborted* (closed unmerged) | =release:failed= / =release:backed-out=, by =change/abort.sh= | *=release:ended=, last* |
 
 An aborted change has no =mergedAt=. A refusal at the lock, the reaper and an
-eviction all leave a change with no labels too, so on that path =change:end=
+eviction all leave a change with no labels too, so on that path =release:ended=
 is the only thing separating a deliberate settlement from those — which is the
 case it was invented for, and now the only one it serves. The invariant is
 =NoTombstoneOnMerged= in =tla/Labels.tla=, under constant
 =MergeIsTheTombstone=.
 
 Measured 2026-09-15, because the document should not be read as a report on
-the script: =change/settle.sh= still adds =change:end= after the clearing, and
+the script: =change/settle.sh= still adds =release:ended= after the clearing, and
 all ten of #110–#119 are =MERGED= carrying it. The model and this section
 state the rule; the merge path's write has not been removed yet.
 
@@ -356,9 +355,9 @@ they are reachable today and the diagram does not show them:
 |-------+-------------------+--------|
 | =deploy:production= beside a later =staging:fail= | promoted on a pass; an instrument re-runs on staging and fails; nothing withdraws the intent | *open* — should a failing verdict after promotion withdraw =deploy:production=? |
 | =deploy:staging= and =deploy:production= with no =*:deployed=, no =*:healthy=, no verdict | a push: the labeller withdraws every observation and every deployed/healthy fact, and leaves the action labels | *open* — the intent was for a build that no longer exists |
-| a change with no lifecycle label and a staging verdict still on it | the reaper: it removes =change:scheduled= and =deploy:staging= and leaves the observations | documented; the observations are about a head that has not changed, on an environment that is gone |
+| a change with no lifecycle label and a staging verdict still on it | the reaper: it removes =release:scheduled= and =deploy:staging= and leaves the observations | documented; the observations are about a head that has not changed, on an environment that is gone |
 
-A fourth — =change:failed= beside =deploy:production= — was reachable because
+A fourth — =release:failed= beside =deploy:production= — was reachable because
 =abort.sh= cleared =deploy:staging= and not =deploy:production=; it clears
 both now.
 
@@ -373,36 +372,31 @@ the two labels a person adds are opposites in both directions:
 
 | label | added by | removed by |
 |----------------+---------------------------+--------------------------------|
-| =change:start= | *a person only* — intent  | *automation* — the driver consumes it when it claims the berth |
+| =release:start= | *a person only* — intent  | *automation* — the driver consumes it when it claims the berth |
 | =staging:hold= | *a person only* — "not to production yet" | *a person only*; cleanup at settlement |
-| =hold:staging= (superseded) | *a person only* | *a person only*             |
 
-A person must add =change:start= because it is the intent to ship and no machine
+A person must add =release:start= because it is the intent to ship and no machine
 may infer it. Automation must remove it because a trigger that stays on
 re-fires, and the second firing deploys a change that is already live.
 
-=hold:staging= is the mirror. A person must lift it, because the entire
+=staging:hold= is the mirror. A person must lift it, because the entire
 content of a hold is that a human has not looked yet — and only that human
 knows when they have. A hold a machine can clear is not a hold, it is a delay.
 
 *** =deploy:staging= is the lock, and a refusal at it resets the change
 
-Decided 2026-09-14. =deploy:staging= is the environment lock: one change
+=deploy:staging= is the environment lock: one change
 holds it, guard 1 reads it, nothing else is the lock. A change that asks for
 staging while another holds it is not queued and not annotated. =queue.sh=
 clears *every marker it carries* — the window (closed =cancelled=), the
-lifecycle, the observations, and the human intent (=change:start=,
-=change:requested=, =release=, =staging:hold=) — and leaves one comment
+lifecycle, the observations, and the human intent (=release:start=, =staging:hold=) — and leaves one comment
 naming the holder. The person re-states the intent when the lock is free.
-=blocked:queue= is retired: a label left behind by a refusal is a print
-statement that later reads as a claim. Rule =LockResets= in =tla/Labels.tla=;
+Rule =LockResets= in =tla/Labels.tla=;
 the negative run shows the refused change keeping its markers in six states.
 
-*** =staging:hold= — the one human stop, re-introduced at one scope
+*** =staging:hold= — the one human stop, at one scope
 
-=hold:staging= was rejected on 2026-09-13 because it was a third way to stop
-a deploy at a third scope with no rule for which applied. =staging:hold= is
-the same human intent — /I want to look before this goes to production/ —
+=staging:hold= is the human intent — /I want to look before this goes to production/ —
 with exactly one reader and one scope: =promote.yml= reads it at the moment
 it would land =deploy:production=, and lands nothing while it is present.
 Nothing else reads it; the berth is not released; the gates keep running;
@@ -412,75 +406,16 @@ off.
 
 *** How to stop a change
 
-*=hold:staging= is rejected semantics* as of 2026-09-13
-(=docs/precedence-and-locks.org=). It was a per-change hold and the only human
-stop the pipeline modelled, which made it look necessary. The human stops were
-always there and they are earlier:
+The human stops are earlier than any per-change hold:
 
 | to stop                   | do this                        | scope |
 |---------------------------+--------------------------------+-------|
-| it should not go at all   | *do not add =change:start=*     | that change |
+| it should not go at all   | *do not add =release:start=*     | that change |
 | it is not fit to ship     | *do not approve*                | that change |
 | nothing should go now     | *=freeze=*                      | the estate |
 | this outranks everything  | *=itil:emergency=*              | the estate's ordering |
 
 A change nobody wants promoted is simply not requested and not approved.
-=hold:staging= added a fourth way to stop a deploy at a fifth scope, with no
-rule for which applied when two were present — the two-writers-one-fact defect
-that =itil:*= and =change:*= were split to remove.
-
-What is lost: *"I approve this, and I want to look at staging first"* is now
-expressed by not approving until after looking. Strictly slower, and honest —
-the approval then means what it says.
-
-*** Superseded: the old text on =hold:staging=
-
-[The original description follows, kept because the reasoning it records is still worth reading.]
-
-Sometimes you want to look at staging yourself. =hold:staging= is how, and it
-is the only human stop in the pipeline:
-
-| | |
-|---------------------+--------------------------------------------------------|
-| *what it does*      | the change stops after =staging:passed=; production is untouched |
-| *who adds it*       | a person, at any time, including mid-run                |
-| *who removes it*    | *a person.* Never the workflow                          |
-| *when it is read*   | at the instant of promotion — guard 4c — not at the staging pass |
-| *on expiry*         | *forfeit*, never promote                                |
-
-Four properties, and each is load-bearing:
-
-1. *Only a person lifts it.* A hold the machine can clear on your behalf is
-   not a hold, it is a delay. The workflow may read this label and may refuse
-   on it; it may never remove it.
-
-2. *It is read at promotion, not at the staging pass.* You can add it while
-   the authorizing e2e is still running and it will still be honoured. This is
-   the same law as guard 4b — *a guard whose subject can change after it is
-   checked must be re-checked at the moment it is relied on* — applied to a
-   person rather than to trunk.
-
-3. *Releasing it re-runs the guards.* A hold is time, and time is exactly what
-   guard 4b watches. A hold long enough to be worth taking is long enough for
-   =main= to move underneath you, so removing the label does not resume a
-   half-finished deployment; it re-enters the guards.
-
-4. *It expires to forfeit, never to ship.* The berth is a singleton, so a hold
-   wedges every other change in the repo — it cannot be indefinite. But the
-   safe direction on timeout is *down*: release the berth, withdraw the
-   staging pass, make the change ask again. A hold that timed out into a
-   production deployment would be the most dangerous label in this repository,
-   because it would ship precisely the change someone had said to look at.
-
-*It is deliberately atypical.* Reaching for it often is a signal about the
-gates, not about the change — it means the suite is not trusted to authorize a
-promotion, and the thing to fix is the suite. The label exists so that
-distrust has somewhere to go that is *visible and counted*, rather than being
-expressed as a pipeline nobody turns on.
-
-*What it costs, stated plainly.* Holding claims the path to production and
-then does nothing with it. Every other change queues behind a human reading a
-page. That is a real price and it is the argument for using it rarely.
 
 * Where a person has to act
 
@@ -488,7 +423,7 @@ Everything else in this pipeline is a derivation. These are the points where it
 *stops and waits for a human*, and they are deliberate — each one is a judgement
 the pipeline is not entitled to make.
 
-** 1. Asking for a window — =change:scheduled=
+** 1. Asking for a window — =release:scheduled=
 
 : ./change/schedule.sh block <pr> "<groups>" <minutes>            # next available
 : ./change/schedule.sh block <pr> "<groups>" <minutes> --at <iso> # a named hour
@@ -566,7 +501,7 @@ is what closes the estate. Two things follow, and only one is built:
 | *whoever is in staging leaves.* A declared, booked, ready =itil:emergency= takes the berth from a standard or normal holder | *specified, unbuilt* | =tla/Labels.tla= =Evict=, rule =EmergencyPreempts=; today the emergency dies at guard 1, "staging held by #N" |
 
 The eviction is not an abort. The evicted change did nothing wrong, so it is
-not =change:failed=: it loses exactly what was about the staging it is
+not =release:failed=: it loses exactly what was about the staging it is
 losing — the berth, its window (closed =cancelled=), its observations — and
 keeps its class, its approval and its head. It gets no lifecycle label back,
 for the reaper's reason: asking for a new window is a person's act. The
@@ -672,7 +607,7 @@ flowchart TB
     W2 --> E2
     E1 -.->|"cannot promote"| X(("✗"))
     E2 -.->|"cannot promote"| X
-    W1 -->|"change:start<br/>guards 0 and 1"| S
+    W1 -->|"release:start<br/>guards 0 and 1"| S
     S -->|"authorizing e2e passes<br/>guards 2, 4, 4b"| P
     P -->|"health check passes<br/>settle re-measures NOW"| M["merge to main"]
     M -->|"then, as a second act"| CU["cleanup<br/>every transient label<br/>berth released"]
@@ -691,14 +626,6 @@ flowchart TB
 | =production= front | *9230*     | *protected* | 1           | —         | —                            |
 | =production-blue= | *9210*      | *protected* | 1 (live or idle) | —    | a cutover to green           |
 | =production-green= | *9220*     | *protected* | 1 (live or idle) | —    | a cutover to blue            |
-
-This table said =staging= 9201 / =production= 9200 until 2026-09-14 — the
-scheme from before the 2026-09-13 correction, and reversed. It is corrected
-here against =environments.tsv=, which is the declaration. The same stale pair
-was still hardcoded in =change/activate.sh= and sent the *authorizing* e2e run
-at :9201, which is one app replica rather than the router front: every route
-except core's 404s behind it, so the gate refused a healthy estate. A fact
-copied into a second place is a fact that can disagree with itself.
 
 *The port number is the tier.* An address below 9100 is disposable, 9100–9199
 is real but cannot promote, and 9200+ is the path to production — so "which

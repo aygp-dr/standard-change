@@ -1,7 +1,7 @@
 #!/bin/sh
 # deploy-run <pr> [--hold] -- start a change. A light wrapper over `gh label`.
 #
-# This is the whole of a person's part. It adds change:requested and stops.
+# This is the whole of a person's part. It adds release:started and stops.
 # Everything after is the system acting or observing, and the name shape of
 # each label says which (.claude/skills/_shared/vocabulary.md).
 #
@@ -12,7 +12,7 @@
 # is change/activate.sh now, and activation calls it.
 #
 # So there is no promote button here, and there is no deploy button either.
-# The only verbs a person has are: ask (change:requested), hold (hold:staging),
+# The only verbs a person has are: ask (release:started), hold (hold:staging),
 # and release the hold.
 set -eu
 cd "$(dirname "$0")"
@@ -61,7 +61,7 @@ fi
 GROUPS=$(./change/groups.sh "$PR")
 [ -n "$GROUPS" ] || { echo "refused: #$PR carries no app:* label — nothing to deploy" >&2; exit 2; }
 
-gh pr edit "$PR" --repo "$R" --add-label change:requested
+gh pr edit "$PR" --repo "$R" --add-label release:started
 echo "#$PR requested  groups=$GROUPS"
 if WIN=$(./change/schedule.sh current "$PR" staging 2>/dev/null); then
   echo "  window $WIN is open and covers now — the scheduler may activate at any moment"

@@ -36,7 +36,7 @@ WORKFLOWS = {
 # The labels the state machine transitions through. Named by kind, because a
 # repo with request labels and no observation labels is running something else.
 LABELS = {
-    "change:requested":  "request — the only one a person adds",
+    "release:started":  "request — the only one a person adds",
     "itil:standard":   "derived",
     "itil:normal":     "derived",
     "itil:emergency":  "request — the authorized bypass",

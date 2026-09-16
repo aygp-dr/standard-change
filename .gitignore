@@ -44,3 +44,6 @@ ports.tsv
 # which checks it saw clear. Fifth instance of the rule -- a CMDB does not live
 # in the app repo (ports.tsv, front.pid, targets/node/live).
 .idp/
+research/build/
+.DS_Store
+research/appendix/

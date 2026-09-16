@@ -11,7 +11,7 @@ prose, and the estate has been reaching states they forbid all day:
     in the forge timeline at 02:51:42Z)
   - five PRs simultaneously carrying staging:uat, which one berth cannot
     produce (issue #103)
-  - a change:end tombstone on a PR that is still open and still deploying
+  - a release:ended tombstone on a PR that is still open and still deploying
 
 This reads the DECLARATION and applies it to the FORGE.
 
@@ -45,16 +45,16 @@ from pathlib import Path
 #       The path to production is a singleton for the same reason.
 #
 #   I3  NO open PR carries a terminal label.
-#       change:end / change:complete / change:failed / change:backed-out all
+#       release:ended / release:completed / release:failed / release:backed-out all
 #       assert the change is finished. On an open PR that is a claim about a
 #       state it is not in.
 #
 #   I4  NO PR is finished AND moving.
-#       A terminal label beside deploy:*, change:start or change:scheduled.
-#       #52 carried change:end through an entire successful deploy and merge.
+#       A terminal label beside deploy:*, release:start or release:scheduled.
+#       #52 carried release:ended through an entire successful deploy and merge.
 #
 #   I6  THE BOOKINGS AND THE LABELS AGREE.
-#       One estate, one calendar: the set of PRs carrying change:scheduled
+#       One estate, one calendar: the set of PRs carrying release:scheduled
 #       must equal the set holding an open window. A window with no label is
 #       a slot the calendar is holding for nobody -- and `schedule.sh block`
 #       queues behind it, which is how "next available" ended up four days
@@ -75,9 +75,9 @@ DECL = Path(__file__).resolve().parent.parent / "change" / "label-owners.tsv"
 
 # Labels that assert the change is FINISHED. An open PR carrying one is
 # claiming a closure it has not reached.
-TERMINAL = {"change:end", "change:complete", "change:failed", "change:backed-out",
-            "change:abandoned", "change:superseded"}
-# change:end is the TOMBSTONE -- it says cleanup ran. It does not say what the
+TERMINAL = {"release:ended", "release:completed", "release:failed", "release:backed-out",
+            "release:abandoned", "release:superseded"}
+# release:ended is the TOMBSTONE -- it says cleanup ran. It does not say what the
 # change DID. These do, and one of them must accompany it.
 # The FOUR change closures. spec.org §Nomenclature, corrected 2026-09-15:
 # a change completes, is backed out, is ABANDONED, or is SUPERSEDED. It is
@@ -85,18 +85,18 @@ TERMINAL = {"change:end", "change:complete", "change:failed", "change:backed-out
 #
 # abandoned and superseded were added to the forge and to the declaration and
 # NOT ADDED HERE, so the audit went on reporting tombstone-without-closure for
-# #55 while #55 carried change:abandoned. A closure code the checker does not
+# #55 while #55 carried release:abandoned. A closure code the checker does not
 # know about is not a closure code -- the same defect as a label the
 # declaration does not know about, one layer up.
-CLOSURE = {"change:complete", "change:failed", "change:backed-out",
-           "change:abandoned", "change:superseded"}
-# A settle briefly holds change:end on a PR that is open, between the label
+CLOSURE = {"release:completed", "release:failed", "release:backed-out",
+           "release:abandoned", "release:superseded"}
+# A settle briefly holds release:ended on a PR that is open, between the label
 # write and the merge landing. That window is about a second. Sixty is
 # generous and still catches everything that matters.
 GRACE_S = 60
 # Labels that assert the change is MOVING right now.
 IN_FLIGHT = {"deploy:staging", "deploy:production", "staging:in-progress",
-             "change:scheduled", "change:start"}
+             "release:scheduled", "release:start"}
 # Singletons: at most one open PR may carry these across the whole estate.
 ESTATE_SINGLETON = {"deploy:staging": "the berth (guard 1)",
                     "deploy:production": "the production path"}
@@ -134,7 +134,7 @@ def audit(open_prs, groups, retired, declared, booked=None):
         held = [p["n"] for p in open_prs if lab in p["labels"]]
         if len(held) > 1:
             add("singleton", f"{len(held)} open PRs carry `{lab}` -- {what} admits one", held)
-    # I3, with a grace window. A settle holds change:end on an open PR for about
+    # I3, with a grace window. A settle holds release:ended on an open PR for about
     # a second between writing the label and the merge landing; firing on that
     # would train a reader to ignore the check. Past GRACE_S it is a real
     # finding: the change is closed and still open.
@@ -146,21 +146,21 @@ def audit(open_prs, groups, retired, declared, booked=None):
                 f"`{lab}` asserts the change is finished, on {len(carry)} OPEN PR(s) "
                 f"idle > {GRACE_S}s", carry)
 
-    # AND THE PART NOBODY CAN RESOLVE FROM THE LABELS. change:end is the
+    # AND THE PART NOBODY CAN RESOLVE FROM THE LABELS. release:ended is the
     # tombstone -- it records that cleanup RAN. It does not record what the
     # change did. Without a closure code beside it, an open PR carrying it is
     # unresolvable: it might need resubmitting (failed, backed-out) or merging
     # (complete), and nothing on the change says which.
     #
-    # This is not theoretical. change:failed and change:backed-out DID NOT
+    # This is not theoretical. release:failed and release:backed-out DID NOT
     # EXIST on the forge until 2026-09-15, and change/abort.sh writes them with
     # `|| true` -- so every abort before then produced exactly this state.
     orphan = [p["n"] for p in open_prs
-              if "change:end" in p["labels"] and not (p["labels"] & CLOSURE)
+              if "release:ended" in p["labels"] and not (p["labels"] & CLOSURE)
               and (p.get("age_s") is None or p["age_s"] > GRACE_S)]
     if orphan:
         add("tombstone-without-closure",
-            "`change:end` with no closure code: cannot tell whether these need "
+            "`release:ended` with no closure code: cannot tell whether these need "
             "RESUBMITTING (failed/backed-out) or MERGING (complete)", orphan)
     for p in open_prs:
         t, f = p["labels"] & TERMINAL, p["labels"] & IN_FLIGHT
@@ -174,18 +174,18 @@ def audit(open_prs, groups, retired, declared, booked=None):
                 add("exclusive", f"#{p['n']} breaks `{name}` (max {card}): {got}", [p["n"]])
     # I6 -- the calendar and the labels are two records of one fact.
     if booked is not None:
-        labelled = {str(p["n"]) for p in open_prs if "change:scheduled" in p["labels"]}
+        labelled = {str(p["n"]) for p in open_prs if "release:scheduled" in p["labels"]}
         orphan_window = sorted(booked - labelled, key=int)
         orphan_label = sorted(labelled - booked, key=int)
         if orphan_window:
             add("booking-without-label",
                 f"{len(orphan_window)} open window(s) held by a change with no "
-                f"`change:scheduled`: the calendar is holding a slot for nobody, "
+                f"`release:scheduled`: the calendar is holding a slot for nobody, "
                 f"and `schedule.sh block` queues behind it",
                 [int(n) for n in orphan_window])
         if orphan_label:
             add("label-without-booking",
-                f"{len(orphan_label)} change(s) claim `change:scheduled` with no "
+                f"{len(orphan_label)} change(s) claim `release:scheduled` with no "
                 f"open window on the calendar",
                 [int(n) for n in orphan_label])
 
@@ -194,7 +194,7 @@ def audit(open_prs, groups, retired, declared, booked=None):
         if carry:
             add("retired", f"`{lab}` is declared {why} and is on {len(carry)} open PR(s)", carry)
     ns = ("change:", "deploy:", "staging:", "production:", "blocked:", "itil:",
-          "release", "berth:", "review:", "deployed:")
+          "release:start", "berth:", "review:", "deployed:")
     seen = defaultdict(list)
     for p in open_prs:
         for lab in p["labels"]:
@@ -220,24 +220,24 @@ def selftest(groups, retired, declared) -> int:
          [P(1, "deploy:staging"), P(2, "deploy:staging")]),
         ("I2 two PRs hold production", "singleton",
          [P(1, "deploy:production"), P(2, "deploy:production")]),
-        ("I3 a tombstone on an open PR", "terminal-on-open", [P(1, "change:end")]),
+        ("I3 a tombstone on an open PR", "terminal-on-open", [P(1, "release:ended")]),
         ("I4 finished and moving at once", "finished-and-moving",
-         [P(1, "change:end", "deploy:staging")]),
+         [P(1, "release:ended", "deploy:staging")]),
         ("I5 two classes on one PR", "exclusive",
          [P(1, "itil:standard", "itil:normal")]),
         ("H1 a RETIRED label in use", "retired", [P(1, "staging:passed")]),
         ("H2 an undeclared pipeline label", "undeclared", [P(1, "staging:invented")]),
         ("I3b a tombstone with no closure code", "tombstone-without-closure",
-         [P(1, "change:end")]),
+         [P(1, "release:ended")]),
     ]
     # I6 needs the calendar, so it is driven separately.
     i6 = [
         ("I6 a window held by a change with no label", "booking-without-label",
          [P(1, "app:core")], {"1"}),
         ("I6 a label claiming a window that does not exist", "label-without-booking",
-         [P(1, "change:scheduled")], set()),
+         [P(1, "release:scheduled")], set()),
         ("I6 label and booking agree", None,
-         [P(1, "change:scheduled")], {"1"}),
+         [P(1, "release:scheduled")], {"1"}),
     ]
     bad = 0
     for name, kind, state in cases:
@@ -251,7 +251,7 @@ def selftest(groups, retired, declared) -> int:
         print(f"  {'ok  ' if ok6 else 'BAD '} {name:<46} -> {kind or 'no I6 finding'}")
         bad += 0 if ok6 else 1
 
-    fresh = audit([P(1, "change:end", age=5)], groups, retired, declared)
+    fresh = audit([P(1, "release:ended", age=5)], groups, retired, declared)
     okf = not fresh
     print(f"  {'ok  ' if okf else 'BAD '} {'GRACE: a settle in flight is not a finding':<38} -> "
           f"{'suppressed' if okf else [f['kind'] for f in fresh]}")

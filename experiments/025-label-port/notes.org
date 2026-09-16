@@ -1,0 +1,55 @@
+#+TITLE: 025 -- porting change:* to release:*, on the forge and in the tree, with the audits
+#+DATE: 2026-09-16
+
+* Hypothesis
+
+The record labels can be ported from =change:*= to the =release:*= grammar
+(the person says the verb, the runner answers the participle) as one
+scripted step, on the forge and in the tree, without any pull request losing
+a label and without any gate's count getting worse. Falsified if a closed
+change loses its closure code, or if the label audit, the model coverage
+gate, the docs gate, the frames check or the simulator report more than
+before.
+
+* Success criterion
+
+After =port.sh all=: zero =change:*= labels on the forge and zero
+=change:*= strings in the current-status files; every PR that carried a
+=change:*= label carries the =release:*= one; the audits at or below their
+previous counts (label audit 15, model coverage 17, docs 0, frames ok,
+simulator holds).
+
+* Running
+
+#+begin_example
+./experiments/025-label-port/port.sh plan    # the map, the forge's labels, the files
+./experiments/025-label-port/port.sh forge   # gh label edit --name: the PRs keep their labels
+./experiments/025-label-port/port.sh tree    # sed over the current-status files; history is skipped
+./experiments/025-label-port/port.sh audit
+#+end_example
+
+* 2026-09-16 01:12Z, the run
+
+| step  | observed                                                                                           |
+|-------+----------------------------------------------------------------------------------------------------|
+| forge | nine labels renamed in place; the bare =release= merged into =release:start= (no PR carried it) and deleted |
+| tree  | 37 files rewritten; =gates/fixtures/=, =docs/=, =spec.org=, =scenarios.org=, the history documents and experiments 001 to 024 untouched |
+| audit | docs 0 findings; label audit 15 (unchanged); model coverage 17 (unchanged); frames ok; simulator holds; 0 =change:*= on the forge, 0 in the tree |
+
+Two rows of the owner table were reworded by hand after the port, because
+a string rename is not a semantic one: =release:started= is the runner's
+answer (it was =change:requested=, declared human), and =release:ended= is
+the runner's answer to =release:end= and the record an aborted release
+leaves (it was =change:end=, the tombstone).
+
+* What the port does not do
+
+The net-new participles of the grammar (=release:held=, =release:skipped=,
+and =release:started= written by the driver rather than only by watch.sh)
+are not written yet; each is one owner row, one write, one clear, one model
+row. =staging:hold= keeps its spelling for now. Rebuild 005 carries both.
+
+* Verdict
+
+Holds. The port is one command each way, and the forge's rename kept every
+closed change's closure code on it.

@@ -211,11 +211,11 @@ const AVAILABILITY = {
 // "we do not have that" versus "we cannot tell you right now".
 export function panel(d) {
   if (d.sku === undefined) return '';   // not a product page
-  const sku = esc(d.sku || '(none)');
+  const sku = esc(d.sku || '(no SKU)');
   if (d.catalogue === 'unavailable')
     return `<h2>Product unavailable right now</h2>
 <p>We cannot show <code>${sku}</code> right now — the catalogue is unavailable.
-This product has not gone away; try again shortly.</p>
+This product has not gone away; please try again in a few minutes.</p>
 <p class=v>catalogue: unavailable (${esc(d.reason)})</p>`;
   if (!d.found)
     return `<h2>Product not found</h2>

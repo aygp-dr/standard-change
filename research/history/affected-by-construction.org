@@ -1,0 +1,469 @@
+#+TITLE: Affected by construction: what the graph systems decide, and what a label can borrow
+#+DATE: 2026-09-15
+#+OPTIONS: ^:nil
+
+In this estate a person may put =release:unaffected= on a pull request. It
+says the deployable estate is untouched. =change/unaffected.sh= checks the
+claim against one thing: the =app:*= labels the labeller derived from the
+diff. If any is present the claim is refused (exit 3); if none is, the gates
+must be green and the merge is the record. The unit is the deployable, the
+class is the risk designation, the berth is the one-at-a-time lock, and
+=change:start= is the person's one word (=research/adoption.org=).
+
+The monorepo build systems answer the same question a different way. They
+keep a graph, they take the diff, and "affected" is whatever the graph says
+depends on the diff. Nothing is claimed. This document reads those systems
+from their own documentation, then asks what a label-driven pipeline can
+take from them without giving up the boundary that keeps =app:*= the
+labeller's and =release:unaffected= a person's.
+
+Fetch record: =cacm.acm.org= and =dl.acm.org= returned 403 on every route
+and =medium.com= once, so Potvin and Levenberg and the Pinterest post were
+read through a text proxy. The confidence lines say where that matters.
+
+* Bazel
+:PROPERTIES:
+:CUSTOM_ID: abc-bazel
+:VERIFIED: 2026-09-15 researcher
+:SOURCES: https://bazel.build/query/language, https://bazel.build/query/guide, https://github.com/bazel-contrib/target-determinator, https://raw.githubusercontent.com/bazel-contrib/target-determinator/main/README.md, https://github.com/Tinder/bazel-diff, https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/45861.pdf, https://research.google/pubs/taming-google-scale-continuous-testing/, https://research.google/pubs/why-google-stores-billions-of-lines-of-code-in-a-single-repository/, https://cacm.acm.org/research/why-google-stores-billions-of-lines-of-code-in-a-single-repository/, https://sre.google/sre-book/release-engineering/
+:CONFIDENCE: high for the query language, the two determinators and Memon; medium for Potvin and Levenberg (text proxy) and for Rapid, whose chapter never says "affected"
+:END:
+
+Bazel's unit is the target and the graph is the thing every query returns.
+"Every expression evaluates to a partially-ordered set of targets, or
+equivalently, a graph (DAG) of targets"
+([[https://bazel.build/query/language][The Bazel Query Reference]]). Reverse
+dependencies are a function over that graph: =rdeps(u, x)= "evaluates to the
+reverse dependencies of the argument set x within the transitive closure of
+the universe set u", with an optional third argument that is "an upper bound
+on the depth of the search". The universe is the first thing to notice. A
+reverse-dependency query is bounded by what the caller told it to look at.
+
+=allrdeps= removes the argument and moves the bound to a flag: it "behaves
+just like the rdeps operator, except that the 'universe set' is whatever the
+=--universe_scope= flag evaluated to", and is "Only available with Sky
+Query". The reference gives the equivalence directly: "if
+=--universe_scope=//foo/...= was passed, then =allrdeps(//bar)= is equivalent
+to =rdeps(//foo/..., //bar)=". The query guide frames the use: "You might
+want to know the set of targets that depends on some target"
+([[https://bazel.build/query/guide][Bazel Query How-To]]).
+
+Bazel itself stops there. It answers "what depends on these targets". It
+does not answer "which targets did this commit change", because it does not
+expose the hashes it uses internally (Uber, below, on why). Two projects fill
+the gap.
+
+[[https://github.com/bazel-contrib/target-determinator][target-determinator]]
+"is a binary (and Go API) used to determine which Bazel targets changed
+between two git commits". It "lists targets to stdout, one-per-line, which
+were affected between <before-revision> and the currently checked-out
+revision". The candidate set is a query: =-targets= "Accepts any valid bazel
+query expression" and defaults to =//...=. The work is a pair of =cquery=
+runs and a hash of each configured target, cached under a key that includes
+"The Bazel version (=bazel info release=)". =-before-query-error-behavior=
+takes =fatal= or =ignore-and-build-all= and defaults to the second: if the
+before revision cannot be queried, everything is affected. =-ignore-file=
+names "Files to ignore for git operations" ("These files shan't affect the
+Bazel graph"), a person excluding a file from the derivation. A companion
+=driver= "runs the same logic as =target-determinator=, then tests all
+identified targets".
+
+[[https://github.com/Tinder/bazel-diff][bazel-diff]] hashes in the open: a
+"canonical SHA256 value representing all attributes and inputs into a
+target", built from "the rule implementation hash, the SHA256 value for
+every attribute of the rule and then the summation of the SHA256 value for
+all =rule_inputs=". Run =generate-hashes= at the previous revision, again at
+the current one, and compare the two files to "get our impacted set of
+targets". Because the rule implementation is in the hash, a change to a
+macro changes every target that uses it.
+
+Google's own account of the consumer is Memon et al.,
+[[https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/45861.pdf][Taming Google-Scale Continuous Testing]]
+(ICSE 2017, SEIP track; the publication page at
+[[https://research.google/pubs/taming-google-scale-continuous-testing/][research.google]]
+lists seven authors). Section II defines the term this document is about.
+"A CL contains files that were changed by the developers. TAP starts with
+these, uses build dependencies in the BUILD files (and other programming
+language-specific implicit dependencies) rules to create a reverse
+dependency structure that eventually outputs all test targets that directly
+or indirectly depend on the modified files; these are called AFFECTED test
+targets." The scale is the reason the set matters: "In an average day, TAP
+integrates and tests ... more than 13K code projects, requiring 800K builds
+and 150 Million test runs." TAP cannot run every affected target per change,
+so it cuts milestones, "typically cut every 45 minutes during peak", and
+"test targets are executed only at their latest affecting CL". The paper's
+headline number is about the affected set's looseness: of "5.5 Million
+affected tests that we analyzed for a time period, only 63K ever failed".
+Affected is an upper bound. The graph says what could break.
+
+Potvin and Levenberg,
+[[https://research.google/pubs/why-google-stores-billions-of-lines-of-code-in-a-single-repository/][Why Google Stores Billions of Lines of Code in a Single Repository]]
+(CACM 59, 2016, pp. 78-87), give the premise the graph rests on: "Changes to
+the dependencies of a project trigger a rebuild of the dependent code." And
+the presubmit that consumes it: "the highly customizable Google 'presubmit'
+infrastructure provides automated testing and analysis of changes before
+they are added to the codebase." The text was read through a proxy after
+direct fetches returned 403; the quotes are as the proxy rendered them.
+
+Rapid is the release side. The SRE book's chapter
+([[https://sre.google/sre-book/release-engineering/][Release Engineering]])
+says "Engineers use Blaze to define build targets (e.g., the output of a
+build, such as a JAR file), and to specify the dependencies for each
+target", and that "Rapid uses the requested integration revision number
+(often obtained automatically from our continuous test system) to create a
+release branch". The chapter never says Rapid consumes an affected-target
+set. The revision Rapid builds is one TAP has tested, and what it builds is
+a named set of targets. The join between "affected" and "released" is at the
+revision, and the claim that Rapid deploys only affected services is
+unsupported by this source.
+
+* Buck2 and Pants
+:PROPERTIES:
+:CUSTOM_ID: abc-buck2-pants
+:VERIFIED: 2026-09-15 researcher
+:SOURCES: https://github.com/facebookincubator/buck2-change-detector, https://raw.githubusercontent.com/facebookincubator/buck2-change-detector/main/README.md, https://raw.githubusercontent.com/facebookincubator/buck2-change-detector/main/btd/README.md, https://buck2.build/docs/users/commands/targets/, https://www.pantsbuild.org/stable/docs/using-pants/advanced-target-selection
+:CONFIDENCE: high; every claim is a README or reference sentence
+:END:
+
+Meta's tool names the practice. "For a Buck2 project, given which files have
+changed, figure out which targets have changed. This process is also known
+as target determination"
+([[https://github.com/facebookincubator/buck2-change-detector][Buck2 Change Detector]]).
+The pipeline is five steps: find the changed files, dump "the Buck2 targets
+and dependencies before applying the changes", dump them again after, "From
+that information figure out which targets might be impacted", then "Run a
+=buck2 build $TARGETS && buck2 test $TARGETS=". The output is the set of
+targets "that transitively depend on the relevant changes".
+
+The dump is =buck2 targets=, whose =--show-target-hash= will "Print a stable
+hash of each target after the target name", by default from "the contents of
+all files referenced from the targets"
+([[https://buck2.build/docs/users/commands/targets/][buck2 targets]]). Buck2
+exposes the hash Bazel keeps internal, which is why the detector needs no
+=cquery=.
+
+=btd= reports depth. "BTD reports the list of changed targets at level 0
+(immediate impact), and increasing levels (dependencies of something in a
+lower level)"
+([[https://raw.githubusercontent.com/facebookincubator/buck2-change-detector/main/btd/README.md][btd README]]).
+The top-level README says what depth is for: "sometimes a change in a key
+dependency will cause an infeasible number of targets to be generated", so
+"you may wish to avoid recompiling targets many steps away - at the risk of
+potentially allowing a breakage into the repo". That is a trade the tool
+names and leaves to the operator. The universe is a flag here too:
+=--universe cell//...=.
+
+Pants folds the same idea into target selection. "Because Pants understands
+Git, it can find which files have changed since a certain commit through the
+=--changed-since= option"
+([[https://www.pantsbuild.org/stable/docs/using-pants/advanced-target-selection][Advanced target selection]]).
+"By default, =--changed-since= will only run over files directly changed.
+Often, though, you will want to run over any dependents of those changed
+files, meaning any targets that depend on the changed files." The flag is
+=--changed-dependents= with =direct= or =transitive=. The direct form is
+Buck2's level 0; the transitive form is Bazel's =rdeps=. Pants states its
+blind spot in the same paragraph: "Pants does not understand transitive
+third-party dependencies in this context", and "any change to a single
+dependency within a lockfile or a target generator (such as
+=python_requirements=) will consider all users of any dependency changed,
+transitively". A lockfile edit affects everything that uses any lock, which
+is the coarse answer given when the fine one is unavailable.
+
+* Nx, Turborepo, Lerna, moon, Rush
+:PROPERTIES:
+:CUSTOM_ID: abc-javascript-monorepos
+:VERIFIED: 2026-09-15 researcher
+:SOURCES: https://nx.dev/docs/features/ci-features/affected, https://nx.dev/docs/reference/project-configuration, https://nx.dev/docs/reference/nx-json, https://nx.dev/docs/reference/inputs, https://turborepo.dev/docs/reference/run, https://turborepo.dev/docs/reference/configuration, https://lerna.js.org/docs/features/version-and-publish, https://raw.githubusercontent.com/lerna/lerna/main/libs/commands/changed/README.md, https://moonrepo.dev/docs/run-task, https://rushjs.io/pages/commands/rush_change/, https://rushjs.io/pages/maintainer/publishing/, https://rushjs.io/pages/best_practices/change_logs/
+:CONFIDENCE: high; all from the projects' own reference pages (turborepo.com now redirects to turborepo.dev)
+:END:
+
+The JavaScript tools compute from a project graph and a git range, and they
+differ in what they do with the result: run tasks, or publish.
+
+*Nx* states the derivation in three steps. When you run =nx affected -t
+test=, Nx will "Use Git to determine the files you changed in your PR. Use
+the project graph to determine which projects the files belong to. Determine
+which projects depend on the projects you modified"
+([[https://nx.dev/docs/features/ci-features/affected][Run Only Tasks Affected by a PR]]).
+"The affected command takes a =base= and =head= commit. The default =base= is
+your =main= branch, and the default =head= is your current file system." The
+result drives any task, =build=, =test=, =lint=, =e2e=, and can be drawn:
+=nx graph --affected=. The graph is inferred: "Some dependencies cannot be
+deduced statically, so you can set them manually" through
+=implicitDependencies=
+([[https://nx.dev/docs/reference/project-configuration][Project Configuration]]).
+
+*Turborepo* puts the range inside the filter. =--filter= selects targets "from
+your repository's graph" by package, directory, or "Using Git specifiers,
+specify packages with source control changes": =--filter=[HEAD^1]=,
+=--filter=...[origin/my-feature]= for dependents of a branch's changes
+([[https://turborepo.dev/docs/reference/run][turbo run]]). =--affected= is
+"equivalent to =--filter=...[main...HEAD]=", and "The comparison requires
+everything between base and head to exist in the checkout". A shallow clone
+gives a wrong answer with no warning beyond that sentence.
+
+*Lerna* computes for a different verb. =lerna changed= will "List local
+packages that have changed since the last tagged release", and its output "is
+a list of packages that would be the subjects of the next =lerna version= or
+=lerna publish= execution"
+([[https://raw.githubusercontent.com/lerna/lerna/main/libs/commands/changed/README.md][lerna changed]]).
+The base is a tag, since the question is "what needs a new version", and the
+answer feeds =lerna publish=, which "also pushes the packages to NPM"
+([[https://lerna.js.org/docs/features/version-and-publish][Version and Publish]]).
+The set can be overridden both ways: =--force-publish= adds,
+=--ignore-changes= subtracts.
+
+*moon* keys on task inputs. With =--affected=, "we extract locally changed
+(created, modified, staged, etc) files from your configured VCS, and exit
+early if no files intersect with the task's inputs"
+([[https://moonrepo.dev/docs/run-task][Run a task]]). Affected here is per
+task and per declared input, the finest grain in this survey.
+
+*Rush* is the odd one, and the one closest to this estate. The tool still
+diffs: =rush change --target-branch= will "compare the checked out branch
+with the specified branch to determine which projects were changed"
+([[https://rushjs.io/pages/commands/rush_change/][rush change]]). Then it
+asks a person. =rush change= "Asks a series of questions and then generates a
+=<branchname>-<timestamp>.json= file in the common folder", one per changed
+project, carrying a type from MAJOR, MINOR, PATCH, NONE, HOTFIX. "The
+=publish= command will consume these files and perform the proper version
+bumps"; =rush publish= will "gather all change files to figure out what kind
+of version increase is needed"
+([[https://rushjs.io/pages/maintainer/publishing/][Publishing]]). The
+enforcement is a verify step: =rush change --verify= "fails if a developer
+modifies a public package without providing related change files". So the
+diff decides which projects need a declaration; the person supplies it; a
+gate refuses the pull request whose declarations do not cover its diff. NONE
+is a declaration that a changed project needs no release.
+
+* Deploy-side use of affected sets
+:PROPERTIES:
+:CUSTOM_ID: abc-deploy-side
+:VERIFIED: 2026-09-15 researcher
+:SOURCES: https://www.uber.com/blog/continuous-deployment/, https://www.uber.com/blog/controlling-the-rollout-of-large-scale-monorepo-changes/, https://www.uber.com/blog/go-monorepo-bazel/, https://medium.com/pinterest-engineering/how-we-designed-our-continuous-integration-system-to-be-more-than-50-faster-b70a59342fe2, https://dropbox.tech/infrastructure/continuous-integration-and-deployment-with-bazel, https://airbnb.tech/infrastructure/migrating-airbnbs-jvm-monorepo-to-bazel/
+:CONFIDENCE: high for Uber (three first-party posts); medium for Pinterest (read through a text proxy, medium.com returned 403); Dropbox is gate-side rather than deploy-side and is presented as such; Airbnb yields one phrase and no account
+:END:
+
+Two organisations have published a deploy-side account in their own words.
+A third gates deployment on the affected set without deploying from it.
+
+*Uber.* The 2020 post explains why the hash tool exists: "SubmitQueue needs
+to know the list of build targets affected by a given commit", and Bazel
+"does not expose hash keys of actions or targets from its command line
+interface", so their tool "traverses through Bazel's build graph,
+calculating the hash for each build target"
+([[https://www.uber.com/blog/go-monorepo-bazel/][Building Uber's Go Monorepo with Bazel]],
+2020-05-13). The 2024 post takes the set to production. The Go monorepo has
+"more than 1,000 commits per day"; "The set of services that actually have
+their code binaries impacted by a commit could be computed via the
+repository's Bazel graph", and the CD system advances "every service's
+production environments to run a build with all relevant changes on the Git
+repository's main branch"
+([[https://www.uber.com/blog/continuous-deployment/][Continuous deployment for large monorepos]],
+2024-08-26). The 2025 post handles the large sets: "Whenever a change is
+committed to main in one of our repositories, it's analyzed to determine the
+set of services it affects"; "1.4% of commits affect more than 100 services
+and 0.3% of commits affect more than 1,000 services"; those roll out by
+tier, "X% of tier 5 services must be successfully deployed before we unblock
+automatic deployments of tier 4"
+([[https://www.uber.com/blog/controlling-the-rollout-of-large-scale-monorepo-changes/][Controlling the Rollout of Large-Scale Monorepo Changes]],
+2025-08-28). A commit whose affected set is empty deploys nothing, and the
+post never needs to say so.
+
+*Pinterest.* Optimus "is a monorepo that houses 120+ java services". The CI
+"looks at the files that were changed and runs the appropriate query to find
+the affected targets"; "The above command uses the rdeps query function to
+find the reverse dependencies of the source files". Release is a target
+kind: "Each Pinterest custom release rule is actually a Bazel macro that
+generates two custom release rules: =artifact_ci_release= and
+=artifact_dev_release=", and the release targets in the affected set run
+independently
+([[https://medium.com/pinterest-engineering/how-we-designed-our-continuous-integration-system-to-be-more-than-50-faster-b70a59342fe2][How we designed our Continuous Integration System to be more than 50% Faster]],
+2021-02-18). What ships is "affected" intersected with "kind = release".
+
+*Dropbox* uses the set on the gate. "We modified our continuous integration
+system to extract this dependency information from Bazel (via bazel query)
+and use it to compute the set of tests affected by a particular commit." The
+deploy-side rule is =release_tests=: "we allow every deployable package to
+specify 'release tests', the set of tests required to pass before pushing
+it", so "=ping_server.sqfs= would be deployable on commits where every test
+in =//ping_server/= and its subpackages had passed"
+([[https://dropbox.tech/infrastructure/continuous-integration-and-deployment-with-bazel][Continuous integration and deployment with Bazel]],
+2019-12-11). That is the affected set deciding readiness rather than
+deciding what ships.
+
+*Airbnb* could not be sourced for this claim. The JVM monorepo post lists
+"Affected targets calculation" among the things Bazel gave every repo and
+says nothing about deployment
+([[https://airbnb.tech/infrastructure/migrating-airbnbs-jvm-monorepo-to-bazel/][Migrating Airbnb's JVM Monorepo to Bazel]]).
+Any statement that Airbnb deploys only affected services is unsupported by
+that post.
+
+* Where the graph is wrong
+:PROPERTIES:
+:CUSTOM_ID: abc-where-the-graph-is-wrong
+:VERIFIED: 2026-09-15 researcher
+:SOURCES: https://bazel.build/query/language, https://raw.githubusercontent.com/bazel-contrib/target-determinator/main/README.md, https://github.com/Tinder/bazel-diff, https://raw.githubusercontent.com/facebookincubator/buck2-change-detector/main/btd/README.md, https://www.pantsbuild.org/stable/docs/using-pants/advanced-target-selection, https://nx.dev/docs/reference/project-configuration, https://nx.dev/docs/features/ci-features/affected, https://nx.dev/docs/reference/inputs, https://turborepo.dev/docs/reference/configuration, https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/45861.pdf
+:CONFIDENCE: medium; the target-determinator README documents its fallback and cache key, and does not document per-file-kind handling of WORKSPACE or rule changes, so that specific claim is left unmade
+:END:
+
+Every system above has a sentence admitting the graph is incomplete, and a
+mechanism that widens the answer when it is.
+
+*Implicit dependencies.* Memon names them in the definition itself: TAP uses
+"build dependencies in the BUILD files (and other programming
+language-specific implicit dependencies)". Nx admits inference has limits,
+"Some dependencies cannot be deduced statically", and offers
+=implicitDependencies= in three forms: a name, a negation (=!anotherlib=)
+that removes a detected edge, and a glob (=shop-*=). The negation matters.
+It is a person correcting the graph downward, the same act as
+=release:unaffected=.
+
+*Generated files and third-party locks.* Pants: "any change to a single
+dependency within a lockfile or a target generator ... will consider all
+users of any dependency changed, transitively." Nx: "By default, Nx will
+mark all projects as affected whenever your package manager's lock file
+changes." Both answer a fine-grained question with the coarse set, on
+purpose.
+
+*Configuration and infrastructure with no build edge.* Turborepo's
+=globalDependencies= is "A list of globs that you want to include in all
+task hashes. If any file matching these globs changes, all tasks will miss
+cache", and "By default, the root =package.json=, lockfile, and source files
+in internal packages that the root package depends on are included in the
+global hash and can't be ignored"
+([[https://turborepo.dev/docs/reference/configuration][Configuring turbo.json]]).
+Nx's =sharedGlobals= "include things that Nx should always look at when
+determining computation hashes. For instance, this could be the OS where
+the command is being run or the version of Node"
+([[https://nx.dev/docs/reference/inputs][Inputs and Named Inputs]]). Buck2's
+detector invalidates its target dump when any =BUCK=, =PACKAGE=, =.bzl=,
+=.buckconfig= or =**/buckconfigs/**= file changes, on the stated assumption
+that "these might be included into =.buckconfig= files". A rule file is
+treated as a change to every target the rule can reach.
+
+*The build tool itself.* target-determinator puts "The Bazel version" in its
+cache key and defaults =-before-query-error-behavior= to
+=ignore-and-build-all=: when the before state cannot be evaluated, the
+affected set is the universe. It names what it cannot see, user and system
+bazelrc files, environment variables and the host, and warns that a
+variable read through =--workspace_status= or =--action_env= "may produce
+spurious differences" under caching. bazel-diff folds the rule
+implementation into every target hash, so a =.bzl= edit propagates without a
+special case; its README says it "Works on =bzl= files, =WORKSPACE= files,
+=BUILD= files and regular files" and no more. Neither README documents a
+per-kind rule for WORKSPACE or MODULE changes, so this document claims none.
+
+*The bound.* Bazel's =rdeps= is defined "within the transitive closure of
+the universe set u", and =allrdeps= is bounded by =--universe_scope=. A
+dependent outside the universe is unaffected by definition, and the same
+holds for =btd --universe= and Nx's project graph. That is the structural
+form of the estate's own gap, where =external/mock= takes no =shared/= edge
+"because mock is not ours to redeploy" (=.github/labeler.yml=).
+
+*The over-approximation.* Memon's 5.5 million affected against 63 thousand
+failing is the cost of every widening above. Buck2's depth cut is the
+opposite lever, priced "at the risk of potentially allowing a breakage into
+the repo". No system in this survey trims by default.
+
+* What this repository could borrow
+:PROPERTIES:
+:CUSTOM_ID: abc-what-to-borrow
+:VERIFIED: 2026-09-15 researcher
+:SOURCES: https://nx.dev/docs/features/ci-features/affected, https://rushjs.io/pages/maintainer/publishing/, https://rushjs.io/pages/commands/rush_change/, https://turborepo.dev/docs/reference/configuration, https://raw.githubusercontent.com/bazel-contrib/target-determinator/main/README.md, https://bazel.build/query/language
+:CONFIDENCE: medium; the repository reading is from its own files (.github/labeler.yml, change/unaffected.sh, change/scheduler.sh, change/groups.sh, tla/Labels.tla, CLAUDE.md) and the mapping is this document's argument, kept to what the sections above showed
+:END:
+
+Start from what the estate already does, read in the survey's terms.
+
+The labeller is a two-level dependency graph written as globs. =apps/plp/**=
+affects =plp=; =shared/**= affects all four, because "shared/ is pinned by
+every app and CI/CD will redeploy all of them" (=.github/labeler.yml=). That
+second rule is Turborepo's =globalDependencies= and Nx's lockfile rule with
+one difference: it names the dependents instead of saying "all tasks". The
+labeller's header records that a derived =shared= label was "Considered and
+rejected", on the ground that "Declarative beats derivable": a reader of
+=app:core app:plp app:pdp app:checkout= needs no glossary. The escape hatch
+is =labeler:skip= plus hand-set =app:*=, "one, or none". =change/groups.sh=
+reads the labels and never the diff, "Deriving them a second time here would
+be a second implementation of the same rule, free to disagree with the
+first." So the estate is already Nx's three steps with the third step
+flattened into the globs: files from git, projects from the files, and
+dependents pre-expanded by hand.
+
+=release:unaffected= is then checked by =change/unaffected.sh= lines 25-28:
+collect the =app:*= labels; if any is present, refuse with "Both cannot be
+true. A person removes the label that is wrong." The TLA+ rule is the same
+sentence as a conjunct, =(UnaffectedMerges => ~unit[p])= in =MergeUnaffected=
+(=tla/Labels.tla=). In the vocabulary of §Bazel that conjunct reads:
+=rdeps(units, changed-files)= is empty. The contradiction "unaffected while
+touching a unit" is exactly "the person said empty and the graph said
+otherwise". Nothing about the check needs to change to be graph-derived. What
+changes is where the edges come from.
+
+*What becomes derived.* The edges. =CLAUDE.md= already says "The router
+config, the labeller config, and the journey list are all generated from
+=apps/*/routes.json=", and =router/generate.sh= joins =apps/*/routes.json=
+with =external/*/routes.json=. A dependency file at the same level, one row
+per edge over =apps/=, =shared/=, =router/=, =change/=, =gates/= and
+=.github/=, is the estate's =BUILD=. Generate =labeler.yml= from it the way
+=router/routes.json= is generated. The rows the survey supports, each with
+its precedent:
+
+| edge                                  | precedent                                                   |
+|---------------------------------------+-------------------------------------------------------------|
+| =shared/= -> every =app:*=            | Turborepo =globalDependencies=; Nx lockfile rule            |
+| =apps/<x>/= -> =app:<x>=              | Nx step two, "which projects the files belong to"           |
+| =apps/<x>/routes.json= -> =router/=   | a generated file's input (bazel-diff hashes =rule_inputs=)  |
+| =router/=, =targets/= -> no unit      | Dropbox: a gate on readiness rather than a thing shipped    |
+| =gates/=, =change/=, =.github/= -> no unit, =control-plane= | btd invalidating on =.bzl= and =.buckconfig= |
+| =external/= -> nothing                | outside =--universe_scope=                                  |
+
+Under that file, "affected set is empty" is a computed fact: the diff
+touches no path with an edge into a unit. The labeller writes no =app:*=,
+=unaffected.sh= finds none, and the check passes for the reason the graph
+gives. The labeller's header keeps its guarantee, since the generated
+=labeler.yml= still lists the four names in full. Derivable feeds
+declarative and leaves it in place.
+
+*What stays a declaration.* Three things, each with a precedent above.
+
+- The claim itself. =release:unaffected= is Rush's change type =NONE=: a
+  person says "this touched a project and needs no release", and
+  =rush change --verify= "fails if a developer modifies a public package
+  without providing related change files". The estate's verify is
+  =unaffected.sh=. Rush refuses a diff with no declaration; the estate
+  refuses a declaration the diff contradicts. Same gate, the diff on one
+  side and a person on the other.
+- The override downward. =labeler:skip= with =app:*= set by hand is Nx's
+  =!anotherlib=: a person removing an edge the graph asserted. It is
+  visible on the PR, which the labeller's header requires, and the graph
+  file must not grow an "except when" column to hide it.
+- The override upward. Deploying all four though the diff says none is
+  target-determinator's =ignore-and-build-all=. The estate has no label for
+  it and the survey gives no reason to add one until a real change wants
+  it; editing =shared/= says it today.
+
+*What the contradiction check becomes.* Today it is a string match on label
+names. Derived, it is =affected(diff) ∩ units = ∅=, with =affected= the
+transitive closure over the dependency file. The two agree whenever the
+labeller ran and differ only under =labeler:skip=, where the person's set is
+the one to use, since that is the point of the override. So the check keeps
+reading labels, as =groups.sh= insists, and the graph moves upstream of the
+labeller. That is where Nx, Turborepo and =btd= put it: the graph produces
+the set, every downstream step reads the set, and nobody recomputes.
+
+*What the sources do not support borrowing.* Milestones (Memon) answer a
+throughput problem this estate lacks; the berth is one PR at a time. Depth
+trimming (=btd=) is off by default even at Meta. An inferred graph (Nx) is
+more than four apps and one shared directory warrant. And no source lets the
+graph write the release decision. Every system that derives an affected set
+hands the decision to something else: a task runner, a publish step, a
+person with a change file. The label stays a person's word, the graph tells
+the person whether the word is true, and the merge records that they agreed.
+
+One fact about the working tree as read: =change/label-owners.tsv= gained
+its =release:unaffected= row on 2026-09-15, owner =human=, "INTENT, a
+person's", uncommitted at the time of writing, alongside an untracked
+=change/unaffected.sh=. The owner column already says what this section
+argues. Whatever the graph derives, the row that names the person stays.

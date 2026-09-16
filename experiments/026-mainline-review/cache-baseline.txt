@@ -1,0 +1,19 @@
+./gates/docs-lint.py
+exit code: 0
+output: 91 org files, 0 findings
+
+python3 tla/frames.py --check
+exit code: 0
+output: (none)
+
+python3 gates/label-audit.py
+exit code: 1
+output: 47 labels declared, 24 written in-tree, 13 finding(s)
+
+python3 gates/label-model-coverage.py
+exit code: 1
+output: 17 label(s) in the pipeline and in no model
+
+python3 sim/label_sim.py --bound 8 --walks 0
+exit code: 1
+output: VERDICT violated NoUnbookedDeploy

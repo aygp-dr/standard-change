@@ -10,7 +10,10 @@ jobs:
     # nothing has promoted since -- deploy:production was added by hand on
     # 2026-09-14. smoke is the last instrument on staging; e2e must already be
     # recorded on the same head, and the gates must be green on it.
-    if: github.event.label.name == 'staging:smoke'
+    # ... and since 2026-09-16, only once staging:uat is also recorded: #60 landed
+    # deploy:production on staging:smoke and was refused by the journey seconds
+    # later. Promotion fires on whichever of smoke and uat lands last.
+    if: github.event.label.name == 'staging:smoke' || github.event.label.name == 'staging:uat'
     runs-on: ubuntu-latest
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
@@ -43,14 +46,26 @@ jobs:
           case " $labels " in
             *" staging:hold "*) echo "::notice::staging:hold is on #$PR -- a person said not yet; deploy:production not landed"; exit 78 ;;
           esac
-      - name: require staging:e2e on the same change
+      - name: require staging:e2e, staging:smoke and staging:uat on the same change
+        id: req
         run: |
+          echo "ready=false" >> "$GITHUB_OUTPUT"
           labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]|join(" ")')
           case " $labels " in
             *" staging:e2e "*) echo "staging:e2e present" ;;
-            *) echo "::error::staging:smoke without staging:e2e -- smoke alone does not authorize"; exit 1 ;;
+            *) echo "::error::promotion without staging:e2e -- not authorized"; exit 1 ;;
           esac
+          case " $labels " in
+            *" staging:smoke "*) echo "staging:smoke present" ;;
+            *) echo "not yet: staging:smoke is not recorded"; exit 0 ;;
+          esac
+          case " $labels " in
+            *" staging:uat "*) echo "staging:uat present" ;;
+            *) echo "not yet: staging:uat (the accepted journey) is not recorded"; exit 0 ;;
+          esac
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: promote
+        if: steps.req.outputs.ready == 'true'
         run: |
           gh pr edit "$PR" --add-label deploy:production
-          gh pr comment "$PR" --body "staging:e2e and staging:smoke recorded on \`${{ github.event.pull_request.head.sha }}\` and the gates are green on it. Landing \`deploy:production\`."
+          gh pr comment "$PR" --body "staging:e2e, staging:smoke and staging:uat recorded on \`${{ github.event.pull_request.head.sha }}\` and the gates are green on it. Landing \`deploy:production\`."

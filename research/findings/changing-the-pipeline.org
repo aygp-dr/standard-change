@@ -1,0 +1,276 @@
+#+TITLE: Why a pipeline this small is already hard to change
+#+DATE: 2026-09-13
+
+* The claim
+
+This pipeline is *not complicated*. Six guards, eight shell scripts, four
+fixture apps, roughly fifteen hundred lines. It is smaller than the CI setup of
+most production repositories.
+
+It is already past the point where an agent -- or a person -- can change it
+safely, and the reason is not size. *Nothing binds the implementation to the
+model.* Every test in this repository tests a model of the pipeline. None of
+them tests the pipeline.
+
+* The evidence, from one hour
+
+A one-line change (a pink background on =checkout=) was walked through the
+whole flow on 2026-09-13. Findings, in the order they appeared:
+
+| # | defect                                                        | found by            |
+|---+---------------------------------------------------------------+---------------------|
+| 1 | =/statics/= prefix ownership returned 200 for anything        | a gate, rewritten minutes earlier |
+| 2 | event ids were slot+pr, so =close= resolved two windows        | reading output      |
+| 3 | window flooring produced a 90-second window                   | *luck* -- booking at :58 |
+| 4 | clash check excluded self, so #9 booked staging twice          | accident, while testing #2 |
+| 5 | guard 3 ran after guard 1, leaking the berth on refusal        | reading step order  |
+| 6 | =deploy-run= was a second implementation of the control flow   | *human review*      |
+| 7 | e2e asserts =x-routed-to=, which only the stand-in router sets | *the deployment*    |
+| 8 | jails run =app.py=, not =apps/*/src/server.js=                | *the deployment*    |
+| 9 | *guard 5 passes on a SHA that does not exist*                  | *investigating 7 and 8* |
+
+*One of nine was caught by a test.* One. And that one was caught by a gate
+written in the same hour, which had not yet had time to rot.
+
+** Finding 9 is the one that matters
+
+: ./targets/bastille/deploy.sh staging deadbee
+: HEALTH_MODE=manifest ./gates/health.sh http://127.0.0.1:9200 deadbee
+: ok checkout /checkout (4/4 on deadbee)
+: ...
+: exit=0
+
+=deadbee= is not a commit in this repository.
+
+=deploy.sh= writes =/var/run/version.json= from the SHA it is handed.
+=health.sh= reads that file back. The guard compares the deployer's assertion
+to itself, so it holds for *any* string. It is the same defect as the
+tautological contract test found earlier in this project -- =render().routes=
+compared against the file =render= had just read -- except it is sitting on
+*guard 5*, the guard whose row in the vocabulary says *"no bypass, ever"*.
+
+The guard had been green on every deployment. Green meant nothing, and nothing
+in the repository could have told us that.
+
+* Why the existing tests could not have caught any of it
+
+Three model-checking assets exist, and they are good ones:
+
+- =tla/Concurrent.tla= -- TLC, exhaustive over a bounded state space
+- =gates/pbt-pipeline.py= -- Hypothesis =RuleBasedStateMachine=, stateful
+- =sim/pipeline_sim.py= -- a discrete-event simulator
+
+Grep all three for a call into =change/queue.sh=, =change/activate.sh=,
+=change/schedule.sh= or =targets/bastille/deploy.sh=:
+
+: $ grep -c "subprocess\|queue.sh\|activate.sh" gates/pbt-pipeline.py sim/pipeline_sim.py
+: 0
+: 0
+
+*Zero.* Counting the TLA+ specs, the Python model, the simulator and the shell
+scripts, there are *four independent encodings of the same state machine*, and
+no mechanism keeps them in agreement. They drift silently, and the drift is
+only discovered when someone runs the real thing and squints at the output.
+
+This is the same defect class as the three earlier ones in this project:
+=sim/= deferring where =queue.sh= refuses, =switch.sh status= reporting the
+config file instead of the running router, and the contract test comparing a
+file to itself. *A model that cannot be wrong about the system is not a model
+of the system.*
+
+* What mutation testing would say
+
+A guard is verified iff breaking it turns something red. The experiment is
+mechanical -- neuter each guard, run the suite, see what notices:
+
+Predicted, then confirmed by the measurement below:
+
+| mutation                                  | does any test go red? |
+|-------------------------------------------+-----------------------|
+| guard 0 -- drop the =BEHIND= check          | no                    |
+| guard 1 -- drop the berth-holder check      | no                    |
+| guard 2 -- accept non-green gates           | no                    |
+| guard 3 -- deploy with no window            | no                    |
+| guard 4b -- drop the merge-time re-check    | no                    |
+| guard 4c -- ignore =hold:staging=           | no                    |
+| guard 5 -- drop convergence entirely        | no                    |
+| schedule -- allow overlapping windows       | no                    |
+
+Every mutant survives. That was the prediction; here is the measurement, which
+is stronger, because a mutation test is pointless on a file nothing runs.
+
+Each of the five control-plane scripts was instrumented with a single line
+appending its own name to a log, the full local suite was run, and the log was
+read:
+
+: $ sort -u experiments/012-guard-mutation/executed.log
+: (empty)
+: total invocations: 0
+
+*Zero.* =gmake test=, the labeller oracle, the property tests, the scenario
+tests, =gates/e2e.sh= and the documents gate -- the entire suite -- do not
+execute =change/queue.sh=, =change/release.sh=, =change/activate.sh=,
+=change/schedule.sh= or =targets/bastille/deploy.sh= even once.
+
+So the mutation table above is not a finding in its own right; it is an
+arithmetic consequence of this one. You cannot break a guard in a way any test
+notices, because no test reaches the file the guard lives in. =gmake test= runs
+node unit tests for four fixture apps. =gates/e2e.sh= exercises HTTP routing.
+=pbt-pipeline.py= walks a Python model of the pipeline. The control plane -- the
+actual subject of this repository -- has *no test that runs it*.
+
+Guard 5 is the proof that this is not hypothetical. It was already broken, in
+the way a mutation test would have introduced deliberately, and it stayed green.
+
+* Why this is worse for an agent than for a person
+
+A person carries context a repository does not state: that =app.py= is a
+stand-in, that the jails never ran the node apps, that =x-routed-to= came from
+the local router. An agent reads =gates/e2e.sh=, sees an assertion on
+=x-routed-to=, and reasonably concludes the estate sets that header. It is
+written down, it is asserted, it passes locally. Nothing contradicts it until a
+deployment does.
+
+Worse, an agent *makes the pipeline look more correct while making it less
+correct*, and does so in good faith. Findings 1 and 5 in the table were both
+introduced by an agent (me) *in the act of improving the pipeline*, within
+minutes:
+
+- adding =/statics/= to the router made the fallthrough claim every path
+  beneath it, silently turning "core is the default location" into "core
+  returns 200 for anything"
+- adding guard 3 placed it after guard 1, so a change deployed outside its
+  window would leave the berth claimed and wedge every other change
+
+Both were caught, and it is worth being precise about how: the first by a gate
+rewritten in the same edit, the second by rereading the step order. *Neither by
+the test suite.* On a longer horizon, without a human reading the diff, both
+would have shipped -- and both would have been green.
+
+* The distinguishing property
+
+The guards divide cleanly, and the division is the practical lesson:
+
+| property                         | guards that have it          | guards that do not |
+|----------------------------------+------------------------------+--------------------|
+| the subject cannot fake the answer | 0 (git), 1 (label), 3 (calendar), 4c (label) | *5 (deployer writes the manifest)* |
+| checkable without deploying      | 0, 1, 2, 3, 4b, 4c           | 5                  |
+| re-checked at the point of reliance | 4b, 4c                    | 0, 2 (booking only) |
+
+Guard 5 is the only guard whose subject *writes its own answer*, and it is the
+only one that turned out to be fake. That is not a coincidence, and it
+generalises into the rule worth carrying out of this:
+
+*A check is only as good as the independence of its oracle.* If the thing being
+checked supplies the evidence, there is no check -- only a restatement.
+
+* What would have to be true to trust this pipeline again
+
+In order, cheapest first:
+
+1. *Guard 5 must reject a fabricated SHA.* The running app must derive its
+   build identity from the source it actually loaded -- a content hash -- rather
+   than from an environment variable the deployer sets. Then =version.json= and
+   the app's self-report are two independent witnesses, and they can disagree.
+2. *The jails must run the apps the tests exercise*, not =app.py=. Until then,
+   every green gate is a statement about code that is never deployed.
+3. *The e2e gate must pass against nginx*, since nginx is what serves staging
+   and production. A gate that only runs against the stand-in authorizes
+   nothing.
+4. *Mutation testing over the guards*, wired into =gate-selftest=, which
+   already asserts the weaker form of this for gates ("prove every gate can
+   fail"). Extend it from gates to the control plane.
+5. *Trace validation.* Have =activate.sh=, =queue.sh= and =schedule.sh= append
+   =(state, event, guard, verdict)= to a log, and check the trace is a
+   behaviour =Concurrent.tla= permits. This is what collapses four encodings of
+   the state machine into one, and it is the standard TLA+ answer to exactly
+   this problem.
+
+Items 1–3 are not tests. They are the precondition for tests to mean anything.
+
+* The practice that answers this: a pipeline change is proven by USE
+
+Standing practice from the repo owner, recorded 2026-09-13: *pipeline changes
+need multiple deployments.*
+
+This is the answer to the problem stated above, and it is better than the five
+items in the list before it, because it does not require the pipeline to be able
+to verify itself. It sidesteps that entirely.
+
+** Two classes of change, two definitions of done
+
+| | proven by | how many |
+|------------------+----------------------------------------+----------|
+| *artifact* (=apps/=, =shared/=) | its own deployment          | one      |
+| *pipeline* (=gates/=, =change/=, =.github/=) | *subsequent deployments that used it* | *N*  |
+
+An artifact change is proven when the thing it changes is observed running. A
+pipeline change changes *how future changes are verified*, so the only evidence
+that it works is future changes being verified by it. One green run of the
+changed gate against one change proves the gate can run. It does not prove the
+gate still catches what it caught before.
+
+** Why merge is not the end of a pipeline change
+
+=release:completed= currently means the same thing for both classes: merged,
+production observed, annotations cleared. For a pipeline change that is the
+*start* of the evidence, not the end of it.
+
+A worked case from today. #22 rewrote how =change/guard4.sh= reads evidence -- 
+repeatable observations moved from labels to point-in-time records. It merged
+with:
+
+- its own tests green (10/10 in a new hermetic suite)
+- a frozen copy of the old guard, proving the defect reproduced
+- =gate-selftest= green, both directions
+
+All of which proves the *new* behaviour is present. None of which proves the
+guard still refuses everything it used to refuse, in every combination real
+changes will present. That evidence can only come from changes #23, #24, #25…
+actually passing through it.
+
+** What this implies that the repo does not yet do
+
+1. *A pipeline change should not be counted proven at settlement.* It needs a
+   soak, and the soak is counted in *deployments*; hours do not count. "Three changes
+   have shipped through the new guard" is evidence; "it merged on Tuesday" is
+   not.
+2. *The soak needs somewhere to live.* Nothing records that a given deployment
+   exercised a given pipeline change. The deployment records name a build; they
+   do not name which version of the control plane verified it.
+3. *Auto-merge for =pipeline= is refused by this practice*, independently of the
+   risk argument. A change that is not proven until N deployments later cannot
+   be merged unattended by the very mechanism it alters.
+4. *Rollback is harder and nobody has asked.* Rolling back an artifact change is
+   a colour switch. Rolling back a pipeline change after three changes have
+   shipped through it means deciding what those three changes were verified by.
+
+** The shape of the mechanism, if it is built
+
+A pipeline change carries a counter rather than a completion:
+
+: release:completed            artifact -- production observed, done
+: change:soaking (2/3)       pipeline -- merged, 2 of 3 changes have shipped through it
+
+and =settle.sh=, on any change, increments the soak of every pipeline change
+merged since the last settlement. At N the label flips. Before N, the pipeline
+change is revertable as a unit and is the first suspect for anything odd.
+
+Not built. Recorded because it changes what *done* means for a whole class of
+change, and because it is the only proposal so far that does not require
+solving "the pipeline cannot test itself".
+
+* The conclusion, stated plainly
+
+The instinct that a pipeline is "write once, then nearly impossible to change"
+is usually explained by complexity. That is not what is happening here. This
+pipeline is simple and is still nearly impossible to change safely, because
+*it has no way to tell you when you have broken it.*
+
+Complexity is not the barrier. *Unfalsifiability* is. Note
+that this repository does better than most -- it has a model checker, property
+tests, a simulator, gate self-tests, and an explicit rule that a gate which
+cannot fail verifies nothing. It still shipped a guard that passes on
+=deadbee=.
+
+See =docs/adr/0001-automatic-promotion.org=, Option 0.

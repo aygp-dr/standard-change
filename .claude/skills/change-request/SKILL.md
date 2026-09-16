@@ -10,7 +10,7 @@ what the pipeline is made of:
 
 | skill | owns | label kind |
 |---|---|---|
-| **change-request** | what a person asks for | **request** — `change:requested` |
+| **change-request** | what a person asks for | **request** — `release:started` |
 | change-activate | what the workflow does | **action** — `deploy:<env>` |
 | change-settle | what came back | **observation** — `<subject>:<state>` |
 
@@ -22,10 +22,10 @@ first of three verbs (`docs/idp-api.org`). It never starts a deployment.
 
 ## The label to add
 
-**`change:requested`** — the only label a person adds to start a change.
+**`release:started`** — the only label a person adds to start a change.
 
 It raises the request. It does not book a window, claim a berth, or deploy.
-Everything after is the system: `change:scheduled` when a window is booked,
+Everything after is the system: `release:scheduled` when a window is booked,
 `deploy:staging` while the deployment is running, `staging:passed` and
 `production:healthy` when checks come back.
 

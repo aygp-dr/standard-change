@@ -33,11 +33,11 @@ and name which one.
 | shape | kind | who | safe to add by hand? |
 |---|---|---|---|
 | `app:*`, `itil:standard` | derived | the labeller, from the diff | no — resynced every push |
-| `change:requested` | **request** | **a human** | **yes — this is the whole of their part** |
+| `release:started` | **request** | **a human** | **yes — this is the whole of their part** |
 | `deploy:<env>` | action | the workflow | no — it marks work in flight |
 | `<subject>:<state>` | observation | a gate | **no** — it asserts a measurement |
 
-**`change:requested` is the only label a person adds to start a change.**
+**`release:started` is the only label a person adds to start a change.**
 Everything after is the system acting or observing.
 
 ### Two namespaces: annotations, and the record
@@ -49,8 +49,8 @@ The sharper cut, and the one that says which labels may be cleared:
 | `staging:*`, `production:*` | **build/deploy annotations.** Facts about a BUILD in an ENVIRONMENT | ephemeral — they expire when the head moves, and are cleared per change |
 | `change:*` | **the record.** Facts about the CHANGE | durable — it is the thing being recorded |
 
-`change:requested` → `change:scheduled` → **`change:complete`**. That is the
-state machine, and `change:complete` is the terminal state.
+`release:started` → `release:scheduled` → **`release:completed`**. That is the
+state machine, and `release:completed` is the terminal state.
 
 `production:healthy` is not terminal and neither is `staging:uat`, because
 neither is about the change — they are about a build that happens to be the
@@ -73,7 +73,7 @@ may *remove* one, and collapsing the two gets both wrong:
 |---|---|---|
 | `release` | **a person only.** It is intent: "take this one all the way now" | **automation.** The scheduler consumes it when it picks the change up |
 | `hold:staging` | **a person only** | **a person only** — a hold a machine can lift is not a hold |
-| `change:requested` | a person | automation, as the change moves on |
+| `release:started` | a person | automation, as the change moves on |
 | `deploy:<env>` | automation | automation |
 | `<subject>:<state>` | automation | automation, when the observation stops being true |
 

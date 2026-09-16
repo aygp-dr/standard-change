@@ -185,4 +185,4 @@ completed failed rejected cancelled=. =revalidate= on a lease is what the
 and the =confidence= field is the thing CDEvents lacks — it has no authenticity
 model. =in-toto= has the attestation envelope but no deployment predicate. So
 this shape is not novel, it is the *unbridged gap* between the two, which is
-capability C6 (=docs/release-standards.org=).
+capability C6 (=research/history/release-standards.org=).

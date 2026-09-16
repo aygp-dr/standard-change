@@ -27,7 +27,7 @@ what the captured data cannot support.
 
 ** F1 -- the published total was the sum of its own revisions
 
-=docs/time-spent.org= shipped *2,245,451,282* tokens. The true figure is
+=research/findings/time-spent.org= shipped *2,245,451,282* tokens. The true figure is
 *1,182,809,707*. A transcript writes one usage record per streaming update, not
 one per API call: 4,291 rows carry 2,171 distinct message ids, 1.98 rows per
 call. Summing rows counts most calls twice.
@@ -39,7 +39,7 @@ measurement. The structural fix is in =schema.sql=: PRIMARY KEY (ledger_id,
 api_message_id), so the second snapshot is an upsert and the double count is
 unrepresentable.
 
-Corrected in =docs/time-spent.org= rather than left to stand.
+Corrected in =research/findings/time-spent.org= rather than left to stand.
 
 ** F2 -- cost per unit, and it is not where the volume is
 
@@ -94,3 +94,26 @@ failure in accounting form.
   an invoice. =rate_card= keeps prices out of the observation table for exactly
   this reason.
 - The DDL is =[H]=: no PostgreSQL on hydra, same caveat as 016.
+
+* 2026-09-16 run: the mini's session of 2026-09-14/16, same counting rule
+
+Tallied from the session transcript and its subagent task files with the
+rule above (every usage field taken as the MAX within a message id). The
+session spans the five-agent grinds (022, 023), the research writeup, the
+three reviews, the rule 17 model, the label port (025), and the release
+runs of #62 and #60. Hydra's sessions are not visible from the mini and are
+not counted; nothing here is per oracle, per spec version or per rebuild,
+because no ledger keys spend to those and the transcript does not either.
+
+| ledger                    | calls | total tokens | input  | output  | cache read  | cache write |
+|---------------------------+-------+--------------+--------+---------+-------------+-------------|
+| main session              |   727 |  356,032,759 | 16,876 | 939,837 | 350,227,067 |   4,848,979 |
+| subagents (73 task files) |   577 |   43,086,908 | 16,522 | 717,725 |  38,366,096 |   3,986,565 |
+| both                      | 1,304 |  399,119,667 |        |         |             |             |
+
+Same shape as F2: cache reads are 97% of the tokens; output is 0.4%. The
+release night (F1) cost 1.18 billion over roughly ten hours of two
+operators; this session's 0.4 billion over two days is one operator with
+the subagents doing the reading. What is still missing is the ledger the
+hypothesis asked for: spend keyed to the unit of work. The transcript keys
+it to the message.

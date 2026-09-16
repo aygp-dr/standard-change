@@ -120,7 +120,7 @@ case "${1:-}" in
     pr="$2"
     st=$(read_state); sha=$(echo "$st" | jq -r .sha); cur=$(echo "$st" | jq -r .body)
     new=$(echo "$cur" | jq --arg t "$(now)" --arg pr "$pr" \
-      'del(.holder) | .log += [{at:$t, event:"release", pr:$pr}]')
+      'del(.holder) | .log += [{at:$t, event:"release:start", pr:$pr}]')
     write_state "$sha" "$new"
     echo "released"
     ;;
