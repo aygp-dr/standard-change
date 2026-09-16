@@ -47,3 +47,9 @@ ports.tsv
 research/build/
 .DS_Store
 research/appendix/
+
+# Logs. A grind writes them constantly and they are the likeliest accidental
+# carrier of a token, a header or a PR body. Ignored by default; the three
+# under experiments/ that are tracked stay tracked -- gitignore does not
+# untrack -- because they are recorded evidence, and they were scanned clean.
+*.log
