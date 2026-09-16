@@ -10,8 +10,7 @@ The person's word. The process (`change/scheduler.sh` consuming through
 word correctly and to tell the person what will happen, so that a start
 said twice or said on the wrong change does not thrash the pipeline.
 
-Today the label string is `change:start` (driver.sh); after issue #125 it is
-`release:start`. One constant changes; the contract does not.
+The label is `release:start` (renamed from `change:start` on 2026-09-16; the rest of the tense-pair grammar waits for rebuild 005).
 
 ## Preconditions, checked before writing
 

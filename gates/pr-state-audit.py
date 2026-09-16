@@ -50,7 +50,7 @@ from pathlib import Path
 #       state it is not in.
 #
 #   I4  NO PR is finished AND moving.
-#       A terminal label beside deploy:*, change:start or change:scheduled.
+#       A terminal label beside deploy:*, release:start or change:scheduled.
 #       #52 carried change:end through an entire successful deploy and merge.
 #
 #   I6  THE BOOKINGS AND THE LABELS AGREE.
@@ -96,7 +96,7 @@ CLOSURE = {"change:complete", "change:failed", "change:backed-out",
 GRACE_S = 60
 # Labels that assert the change is MOVING right now.
 IN_FLIGHT = {"deploy:staging", "deploy:production", "staging:in-progress",
-             "change:scheduled", "change:start"}
+             "change:scheduled", "release:start"}
 # Singletons: at most one open PR may carry these across the whole estate.
 ESTATE_SINGLETON = {"deploy:staging": "the berth (guard 1)",
                     "deploy:production": "the production path"}

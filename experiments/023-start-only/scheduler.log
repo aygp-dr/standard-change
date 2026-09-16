@@ -164,3 +164,5 @@
   MARKER NOT SENT: http://127.0.0.1:7510/webhook unreachable. The release stands; only the marker is missing.
 00:20:16Z  driver #107  SETTLED #107 (6b97fae): landed 2026-09-15T00:19:09Z, merged 2026-09-15T00:19:23Z
 00:20:16Z  scheduler  #107 settled
+00:34:05Z  scheduler  watching aygp-dr/standard-change for change:start every 20s
+00:34:07Z  scheduler  change:start on #61

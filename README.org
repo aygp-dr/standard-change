@@ -49,7 +49,7 @@ when =main= moves underneath you are all real and all deliberately absent here
 stateDiagram-v2
     direction TB
     [*] --> Opened: PR opened, labeller sets app:* and itil:standard
-    Opened --> Started: a person adds change:start
+    Opened --> Started: a person adds release:start
     Started --> Scheduled: window reserved -> change:scheduled
     Scheduled --> Implementing: window opens, guards re-run, berth claimed -> deploy:staging
     Scheduled --> Forfeited: window lapses unattempted -> expired
@@ -106,7 +106,7 @@ sequenceDiagram
     Dev->>GH: push -> PR
     GH->>GH: labeller: app:*, itil:standard
     GH->>GH: gates -> lint, test, e2e, gate-selftest (green @sha)
-    Dev->>GH: change:start
+    Dev->>GH: release:start
     Dev->>IDP: reserve a window
     IDP-->>GH: change:scheduled
     IDP->>Stg: window opens -> re-run guards, claim the berth (deploy:staging), deploy changed apps
@@ -138,14 +138,14 @@ sequenceDiagram
 
 ** One label starts a change
 
-A person adds *=change:start=* and that is the whole of their part — one
+A person adds *=release:start=* and that is the whole of their part — one
 label, not two: it supersedes =change:requested= plus =release=, which were
 two human-owned labels for one fact. Everything after is the system acting or
 observing, and the *name shape* says which:
 
 | shape                | kind        | example               | added by hand? |
 |----------------------+-------------+-----------------------+----------------|
-| =change:start=       | intent      | someone said go       | *yes*          |
+| =release:start=       | intent      | someone said go       | *yes*          |
 | =staging:hold=       | *intent*    | someone said not yet  | *yes*          |
 | =deploy:<env>=       | action      | work is in flight     | no             |
 | =<subject>:<state>=  | observation | *a check came back*   | no             |
@@ -249,7 +249,7 @@ defect that made "a PR has at most one =change:*=" impossible to state, because
 | namespace  | kind             | members                                              | cardinality |
 |------------+------------------+------------------------------------------------------+-------------|
 | =itil:*=   | *classification* | =itil:standard= · =itil:normal= · =itil:emergency=   | exactly one |
-| =change:*= | *lifecycle*      | =change:start= → =change:scheduled= → =change:complete= | one active |
+| =change:*= | *lifecycle*      | =release:start= → =change:scheduled= → =change:complete= | one active |
 
 =itil:*= is the ITIL change type and says *what kind of change this is*.
 =change:*= says *where the change record has got to*. A change is classified
@@ -259,7 +259,7 @@ once and moves through the lifecycle many times.
 what a change touches and what kind of change it is — which gates to run,
 which groups to deploy, which rules apply. Neither authorizes anything.
 Permission to deploy is four other things, each from a different source: a
-person's =change:start=, a reviewer's approval, green gates on the head,
+person's =release:start=, a reviewer's approval, green gates on the head,
 and an open window. A change with every derived label and none of those four
 does not move. The one derived-looking label that changes *precedence* is
 =itil:emergency=, and it is not derived: a person declares it, and it exempts
@@ -272,7 +272,7 @@ that *drives the side effects*: the merge to =main=, the PIR, and whatever
 else must hear that the change shipped (a ticket, a message). Cleanup then
 clears it — once the forge records =MERGED=, the label restates a fact the
 platform owns, and two records of one fact can disagree while the platform's
-cannot. The person's three words are =change:start=, =staging:hold= and
+cannot. The person's three words are =release:start=, =staging:hold= and
 =release:skip= (skip the estate: nothing to release, the only act left is
 the merge, and only if the labeller attached no =app:*=); =complete= is the
 pipeline's, and =end= is the pipeline's on one path only. The grammar these
@@ -364,11 +364,11 @@ the two labels a person adds are opposites in both directions:
 
 | label | added by | removed by |
 |----------------+---------------------------+--------------------------------|
-| =change:start= | *a person only* — intent  | *automation* — the driver consumes it when it claims the berth |
+| =release:start= | *a person only* — intent  | *automation* — the driver consumes it when it claims the berth |
 | =staging:hold= | *a person only* — "not to production yet" | *a person only*; cleanup at settlement |
 | =hold:staging= (superseded) | *a person only* | *a person only*             |
 
-A person must add =change:start= because it is the intent to ship and no machine
+A person must add =release:start= because it is the intent to ship and no machine
 may infer it. Automation must remove it because a trigger that stays on
 re-fires, and the second firing deploys a change that is already live.
 
@@ -382,7 +382,7 @@ Decided 2026-09-14. =deploy:staging= is the environment lock: one change
 holds it, guard 1 reads it, nothing else is the lock. A change that asks for
 staging while another holds it is not queued and not annotated. =queue.sh=
 clears *every marker it carries* — the window (closed =cancelled=), the
-lifecycle, the observations, and the human intent (=change:start=,
+lifecycle, the observations, and the human intent (=release:start=,
 =change:requested=, =release=, =staging:hold=) — and leaves one comment
 naming the holder. The person re-states the intent when the lock is free.
 =blocked:queue= is retired: a label left behind by a refusal is a print
@@ -410,7 +410,7 @@ always there and they are earlier:
 
 | to stop                   | do this                        | scope |
 |---------------------------+--------------------------------+-------|
-| it should not go at all   | *do not add =change:start=*     | that change |
+| it should not go at all   | *do not add =release:start=*     | that change |
 | it is not fit to ship     | *do not approve*                | that change |
 | nothing should go now     | *=freeze=*                      | the estate |
 | this outranks everything  | *=itil:emergency=*              | the estate's ordering |
@@ -663,7 +663,7 @@ flowchart TB
     W2 --> E2
     E1 -.->|"cannot promote"| X(("✗"))
     E2 -.->|"cannot promote"| X
-    W1 -->|"change:start<br/>guards 0 and 1"| S
+    W1 -->|"release:start<br/>guards 0 and 1"| S
     S -->|"authorizing e2e passes<br/>guards 2, 4, 4b"| P
     P -->|"health check passes<br/>settle re-measures NOW"| M["merge to main"]
     M -->|"then, as a second act"| CU["cleanup<br/>every transient label<br/>berth released"]

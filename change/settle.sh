@@ -284,7 +284,7 @@ fi
 #
 #    NOT cleared: app:* and itil:* describe what the change WAS.
 #    describe what the change was, and remain true after it shipped.
-for l in change:start change:requested change:scheduled change:complete release release:start \
+for l in release:start change:requested change:scheduled change:complete release release:start \
          staging:deployed staging:healthy production:deployed \
         deploy:staging deploy:production \
          staging:e2e staging:smoke staging:uat staging:passed staging:failed \

@@ -56,13 +56,13 @@ if [ -n "$holder" ]; then
   # re-states the intent when the lock is free; the comment below is the
   # record of why they have to. Rule LockResets in tla/Labels.tla.
   ./change/schedule.sh unschedule "$pr" "refused at the lock: staging held by #$holder" >/dev/null 2>&1 || true
-  for l in deploy:staging blocked:queue change:scheduled change:requested change:start release \
+  for l in deploy:staging blocked:queue change:scheduled change:requested release:start release \
            staging:hold staging:deployed staging:healthy staging:e2e staging:e2e-failed \
            staging:smoke staging:smoke-failed staging:uat staging:in-progress; do
     gh pr edit "$pr" --repo "$repo" --remove-label "$l" >/dev/null 2>&1 || true
   done
   gh pr comment "$pr" --repo "$repo" --body \
-    "Refused at the lock: staging is held by #$holder. Every marker on this change has been cleared -- its window, its lifecycle, its observations and the intent that asked for it -- so that nothing here reads as a claim while it waits. When #$holder settles or its window lapses, say \`change:start\` again (rebase onto \`main\` first if it moved)."
+    "Refused at the lock: staging is held by #$holder. Every marker on this change has been cleared -- its window, its lifecycle, its observations and the intent that asked for it -- so that nothing here reads as a claim while it waits. When #$holder settles or its window lapses, say \`release:start\` again (rebase onto \`main\` first if it moved)."
   exit 5
 fi
 

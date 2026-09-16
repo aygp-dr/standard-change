@@ -23,10 +23,10 @@ sequenceDiagram
 
     Note over H,S: no actor can see any other. There is no session,<br/>no shared lock file, no message bus.
 
-    H->>PR: +change:start
+    H->>PR: +release:start
     S->>PR: reads labels
     A->>PR: reads labels
-    Note over S,A: both see change:start. Neither sees the other.
+    Note over S,A: both see release:start. Neither sees the other.
 
     A->>PR: +deploy:staging
     S->>PR: +deploy:staging

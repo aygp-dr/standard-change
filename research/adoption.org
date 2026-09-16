@@ -171,7 +171,7 @@ Everything else is written by the thing that knows the fact, and an
 observation is written only by the instrument that measured it
 (=findings/label-ownership.org=, experiments 014 and 023 F4). In this
 repository's tree on 2026-09-15 the person's word is still spelled
-=change:start= and the hold =staging:hold=; the rename to the table above is
+=release:start= and the hold =staging:hold=; the rename to the table above is
 filed for the two operators to make together.
 
 * Every decision, with its options and where each was watched

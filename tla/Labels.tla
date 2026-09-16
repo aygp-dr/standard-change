@@ -344,7 +344,7 @@ Activate(p) ==
 (* A change that asks for staging while another holds it is not queued and  *)
 (* not annotated: change/queue.sh clears EVERY marker it carries -- the     *)
 (* window, the lifecycle, the observations, and the human intent            *)
-(* (change:start / change:requested / release / staging:hold) -- and says   *)
+(* (release:start / change:requested / release / staging:hold) -- and says   *)
 (* who holds the lock. The person re-states the intent when the lock is     *)
 (* free. "Since I have to": a refusal that leaves a queue label behind is a  *)
 (* print statement that later reads as a claim.                             *)
@@ -525,7 +525,7 @@ EmergencyWaits(e) ==
 (* cleared every other label: it drives nothing, it only says the clearing *)
 (* was settlement and not a refusal or a reaper. `cleaned` below IS        *)
 (* change:end, and CleanIsClean is its invariant. A person writes neither; *)
-(* the person's words are change:start and staging:hold.                   *)
+(* the person's words are release:start and staging:hold.                   *)
 (***************************************************************************)
 MergeOnHealthy(p) ==
     /\ Open(p) /\ healthy[p] /\ ~merged[p]

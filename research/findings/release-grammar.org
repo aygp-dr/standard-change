@@ -55,7 +55,7 @@ join across two names rather than a glance at one.
 
 * Option 3: one tag per step, no answer
 
-=change:start= consumed, =deploy:staging= as the visible effect, no
+=release:start= consumed, =deploy:staging= as the visible effect, no
 acknowledgement. This is the tree as it ran in 023. Five of five owners
 reported the silence after saying start as their first confusion, and the
 scheduler was given a comment to say "heard". A comment is not a label; a

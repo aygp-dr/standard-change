@@ -139,7 +139,7 @@ One signal is a coincidence. Two is a conclusion.
 | `change:scheduled` after its window was reaped | remove it | re-book — a reaper that rebooks is a scheduler nobody asked for |
 | a change aborted with no closure code | `./change/abort.sh <pr> failed` | invent a label |
 
-**Never** re-assert a human's intent. `change:start` and `change:requested` are
+**Never** re-assert a human's intent. `release:start` and `change:requested` are
 human-owned; if a change lost its intent to a machine failure, say so on the PR
 and let a person restate it. Automation speaking for a person is the defect
 `gates/label-audit.py` was built to refuse.
@@ -157,7 +157,7 @@ gh pr list --repo aygp-dr/standard-change --state open --label deploy:staging --
 
 Stuck looks like: the berth held for longer than a cycle (~2 min) with no new
 label on the holder; or **nobody** holding the berth while several changes carry
-`change:start` and nothing is moving; or `lock.sh status` and the
+`release:start` and nothing is moving; or `lock.sh status` and the
 `deploy:staging` holder naming different PRs.
 
 That last one is not hypothetical — `change/lock.sh:17` says in its own words

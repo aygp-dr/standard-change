@@ -24,7 +24,7 @@ case " $labels " in *" release:skip "*) ;; *) echo "no release:skip on #$PR"; ex
 if [ "$(printf '%s' "$j" | jq -r .isDraft)" = true ]; then echo "#$PR is a draft"; exit 3; fi
 units=$(printf '%s\n' $labels | grep '^app:' | tr '\n' ' ' || true)
 if [ -n "$units" ]; then
-  say "Refused: \`release:skip\` says the estate is untouched, and the labeller attached \`${units% }\` from the diff. Both cannot be true. A person removes the label that is wrong: withdraw \`release:skip\` and say \`change:start\`, or explain in the PR why the labeller is wrong and fix the labeller."
+  say "Refused: \`release:skip\` says the estate is untouched, and the labeller attached \`${units% }\` from the diff. Both cannot be true. A person removes the label that is wrong: withdraw \`release:skip\` and say \`release:start\`, or explain in the PR why the labeller is wrong and fix the labeller."
   echo "refused: unaffected with $units"; exit 3
 fi
 # the non-deployment gates, on the head

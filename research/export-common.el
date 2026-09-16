@@ -169,7 +169,7 @@ heading and every other keyword after the master's own header is dropped."
 ;;; (mmdc) renders each block at export time and the block becomes a figure.
 ;;; Two facts found on 2026-09-15: mmdc needs a browser, given by
 ;;; ../puppeteer.json (the desktop Chrome); and mermaid 10.9 refuses a colon
-;;; inside a state transition's label, which every label here has (change:start),
+;;; inside a state transition's label, which every label here has (release:start),
 ;;; so the rendering copy writes those colons as #58; and the org source is
 ;;; untouched. A block mmdc cannot render stays verbatim and says so in the log.
 ;;; REVIEW: LaTeX gets a vector PDF at the diagram's natural size (--pdfFit)

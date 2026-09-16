@@ -51,7 +51,7 @@ a person may add, a person may clear; the first sentence of the declaration.
 | =change:failed= | change/abort.sh | yes | no | no | TERMINAL |
 | =change:backed-out= | change/abort.sh | yes | no | no | TERMINAL |
 | =change:backfill-owed= | change/abort.sh | yes | yes | yes | AN UNPAID CHANGE RECORD |
-| =change:start= | human | no | yes | yes | INTENT |
+| =release:start= | human | no | yes | yes | INTENT |
 | =berth:stale= | reap | yes | no | yes | The staging lease outlived its holder -- berth held, window gone, build serving nowhere |
 | =review:proxy= | change/review.sh | yes | no | no | A recorded proxy approval |
 | =change:abandoned= | change/abort.sh | yes | no | no | CLOSURE |
