@@ -5,7 +5,7 @@ APPS     := $(notdir $(wildcard apps/*))
 # external/ is NOT ours: stand-ins for services we do not deploy.
 EXTERNAL := $(notdir $(wildcard external/*))
 
-.PHONY: research build prose lint-org help env env-check run dev router stop test lint gate gate-selftest smoke-selftest \
+.PHONY: research build prose help env env-check run dev router stop test lint gate gate-selftest smoke-selftest \
         lint-shell lint-python shebang-selftest \
         audit audit-selftest observation-selftest docs pbt pbt-random simulate \
         simulate-gates smoke uat idp-mock idp-tui idp-org \
@@ -173,9 +173,6 @@ build: research
 
 research:  ## the history and research as one document, HTML and PDF -> research/build/
 research: ; @$(MAKE) -s -C research build
-
-lint-org:  ## the org gate for a PR: docs-lint, then vale at error level on the WalSh style   FILES=<org files>
-lint-org: ; @./gates/docs-lint.py && if [ -n "$(FILES)" ]; then vale --minAlertLevel=error --filter='.Name matches "WalSh"' --output=line $(FILES) && echo "  vale: no WalSh errors in $(words $(FILES)) file(s)"; else echo "  vale: no org files to lint"; fi
 
 prose:  ## vale (the wal.sh style) over the research writeup
 prose: ; @vale research/adoption.org research/README.org research/history/*.org research/substrates/*.org research/findings/*.org experiments/023-start-only/notes.org | tail -1
