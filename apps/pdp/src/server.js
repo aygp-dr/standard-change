@@ -211,7 +211,7 @@ const AVAILABILITY = {
 // "we do not have that" versus "we cannot tell you right now".
 export function panel(d) {
   if (d.sku === undefined) return '';   // not a product page
-  const sku = esc(d.sku || '(none)');
+  const sku = esc(d.sku || '(no SKU)');
   if (d.catalogue === 'unavailable')
     return `<h2>Product unavailable right now</h2>
 <p>We cannot show <code>${sku}</code> right now — the catalogue is unavailable.
