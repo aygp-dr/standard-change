@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.11
+#!/usr/bin/env python3
 """Minimal deployed app. Stdlib only -- no node, no deps, ~500MB jail total.
 
 The apps are fixtures (spec.org, Purpose); the product is the pipeline. This

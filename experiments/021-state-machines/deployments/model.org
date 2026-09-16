@@ -1,0 +1,518 @@
+#+TITLE: The pull request as a deployment state machine
+#+SUBTITLE: experiment 021 — the deployment-lifecycle lens
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:2 num:t
+
+* Hypothesis
+
+A pull request's position in the deployment lifecycle is a finite state
+machine whose transitions are label writes, gate verdicts, forge events,
+deploy events, timers and human acts — and *the states this repository
+actually reaches include several the vocabulary cannot name*. If the machine
+can be written down such that a weighted random walk from ~open~ always
+terminates, and the walk passes through the unnamed states rather than around
+them, then the vocabulary is the thing that is incomplete, not the model.
+
+*Success criterion.* 45 states, 141 transitions, every non-terminal state has
+outgoing weight, every PR state is reachable from ~dep01~, every PR state can
+reach a terminal, and 20000 weighted walks all terminate.
+
+*Run command*
+
+#+begin_src sh :eval no
+python3 - <<'PY'
+import csv, collections, random
+S={r["id"]:r for r in csv.DictReader(open("states.tsv"), delimiter="\t")}
+T=[r for r in csv.DictReader(open("transitions.tsv"), delimiter="\t")]
+term={i for i,s in S.items() if s["terminal"]=="yes"}
+out=collections.defaultdict(list)
+for t in T: out[t["from"]].append((t["to"], float(t["weight"])))
+random.seed(7)
+for _ in range(20000):
+    s, n = "dep01", 0
+    while s not in term:
+        es=[(y,w) for y,w in out[s] if w>0]; tot=sum(w for _,w in es)
+        r=random.random()*tot; acc=0
+        for y,w in es:
+            acc+=w
+            if r<=acc: s=y; break
+        n+=1
+        assert n < 20000, "did not terminate"
+print("ok")
+PY
+#+end_src
+
+*Result, 2026-09-14.* 20000/20000 walks terminate. Median 9 steps, p99 56.
+No non-terminal dead ends. Every ~dep*~ state reachable from ~dep01~ and
+every ~dep*~ state reaches a terminal. The eight ~est*~ states are
+unreachable from ~dep01~ *deliberately* — see §The estate is a different
+subject.
+
+Both Mermaid blocks below render [E, 2026-09-14], by the route
+=experiments/mermaid-check/notes.org= establishes — mermaid-cli with
+~-p pptr.json~ pointing at =/usr/local/bin/chrome=. Rendering is the only
+check a Mermaid diagram gets, so an unrendered one is an unverified one.
+
+* Framing: the subject of every state is one pull request
+
+The primitive is the *change*, and its encoding is the pull request
+(=spec.org:136=). Every state in =states.tsv= whose id begins ~dep~ is a
+state *of a PR*. Every state whose id begins ~est~ is a state of the
+*estate* — the world the PR deploys into — and is marked ~kind=estate~.
+
+The question this lens owns is: **where is this change physically running,
+and what moved it there.** So the states are cut at the points where the
+answer changes:
+
+| the answer to "where is it running"     | states                                   |
+|-----------------------------------------+------------------------------------------|
+| nowhere, and nobody has asked           | ~open~ ~requested~ ~scheduled~           |
+| nowhere, and something refused          | ~queued~ ~lock_blocked~ ~freeze_blocked~ ~abstained~ ~staging_refused~ |
+| staging                                  | ~berthed~ ~staged~ ~verified~ ~soaking~ ~accepted~ ~cleared~ |
+| the production tier, carrying no traffic | ~idle_deployed~ ~idle_verified~          |
+| production, carrying traffic             | ~live~ ~converged~ ~unconverged~ ~rollback_owed~ |
+| production, and trunk does not contain it | ~deployed_not_merged~ ~stranded~        |
+| *unknown, and the labels do not say*     | ~orphaned_berth~ ~authorized_unbooked~   |
+
+A state is *not* a label. Several states are carried by the same label set
+and separated only by a fact nobody wrote down — ~orphaned_berth~ and
+~berthed~ carry the identical ~deploy:staging~, and differ by whether a
+window is open. That asymmetry is the finding, not an artifact of the
+modelling.
+
+* What the prefixes mean, as namespaces
+
+The name shape tells you the kind, and the repository says so explicitly
+(=spec.org:2316=, =README.org:96=). Four subjects, four namespaces, and the
+estate's belongs on something that cannot be deployed.
+
+| prefix           | subject                       | semantics      | who writes it | what it is NOT |
+|------------------+-------------------------------+----------------+---------------+----------------|
+| ~app:~           | the diff                      | classification | the labeller  | permission. It is the build MANIFEST, derived and never asserted |
+| ~itil:~          | the change                    | classification | labeller, except ~itil:emergency~ | how far the change has got |
+| ~change:~        | the change RECORD             | state (lifecycle) | the pipeline, except ~change:requested~ | what kind of change it is |
+| ~deploy:<env>~   | an ACTION                     | state          | a workflow    | a request. It marks what the workflow is doing *right now*, and it is simultaneously the berth claim |
+| ~<env>:<verdict>~ | a BUILD in an ENVIRONMENT    | observation    | the instrument that measured it | a fact about the change. It expires when the head moves |
+| ~blocked:~       | why this change is not moving | state          | whichever guard refused | a verdict about the change's merit |
+| ~release~ (bare) | a person's intent             | intent         | a person      | a state. The scheduler consumes it, because a trigger that stays on re-fires |
+| ~freeze~, ~emergency~ (bare) | the ESTATE        | estate         | a person, on issue #1 | a property of any change |
+
+Three distinctions carry the weight, and each one was a defect here first:
+
+1. *Intent versus state.* ~change:requested~ and ~release~ are things a person
+   *wants*. ~deploy:staging~ and ~change:scheduled~ are things the pipeline
+   *reached*. Reading ~deploy:staging~ as "deploy me" put a thing the system
+   does in the column of things a person asks for, and a person adding it by
+   hand was asserting the guards had been re-checked when nobody had checked
+   anything (=spec.org:1085=).
+
+2. *Observation versus intent.* An observation is a measurement, by an
+   instrument, *naming a build* (=spec.org:2806=). ~production:healthy~ is
+   not "this change is fine"; it is "N samples through the front reported
+   ~a013270~". It goes stale the instant the head moves, which is why the
+   labeller withdraws every ~staging:*~ and ~production:*~ on ~synchronize~.
+   The one human-taken observation is ~staging:uat~, and it is an observation
+   precisely because =change/observe.sh:29= refuses unless the URL is serving
+   this PR's head — the person is the instrument, and the instrument is
+   still made to name the build.
+
+3. *Classification versus lifecycle versus estate.* ~itil:*~ says what kind,
+   ~change:*~ says how far, and ~freeze~/~emergency~ say what the world is
+   doing. Collapsing the last two produced the longest-lived defect in the
+   repo: one label asserting both "an emergency is in flight" and "this
+   change is exempt", so the write that closed the estate exempted its own
+   carrier (=spec.org:2822=).
+
+A fourth, smaller one that this lens cares about: ~app:*~ is
+*classification*, not state, even though it changes on every push. It
+classifies the diff. It is the manifest, and a manifest that can be asserted
+"is not a manifest — it is a wish, and the build ships whatever someone
+typed" (=spec.org:150=). ~labeler:skip~ is therefore *intent*: a person
+asking to assert what would otherwise be derived.
+
+* The diagram
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction TB
+
+    [*] --> open
+
+    open --> requested: change_requested added
+    open --> release_asked: release added
+    open --> abandoned: closed
+    requested --> scheduled: window booked
+    release_asked --> activating: scheduler consumes release
+    scheduled --> activating: window comes due
+    scheduled --> expired: window lapses unattempted
+    scheduled --> freeze_blocked: freeze declared over it
+
+    activating --> berthed: guards 3 2 0 pass then guard 1 claims
+    activating --> queued: guard 1 held by another PR
+    activating --> lock_blocked: lock held
+    activating --> freeze_blocked: preflight exit 3
+    activating --> abstained: preflight exit 4 indeterminate
+    activating --> scheduled: guard 2 red on this head
+    activating --> emergency_direct: itil_emergency declared
+    activating --> orphaned_berth: claimed on a lapsed window
+
+    queued --> activating: berth freed and re-requested
+    queued --> expired: own window lapses while waiting
+    lock_blocked --> activating: lock released or stale
+    freeze_blocked --> activating: freeze lifted
+    abstained --> activating: oracle answers within the bound
+    abstained --> expired: bound expires still indeterminate
+
+    berthed --> staged: staging serves this sha
+    berthed --> staging_refused: deploy or run failed
+    berthed --> orphaned_berth: deploy reported ok but placed nothing
+    berthed --> preempted: artifact or hotfix landed under it
+    berthed --> stale_self: head moved
+    berthed --> forfeit_on_entry: acceptance refused on entry
+
+    staged --> verified: authorizing run passes on the slot
+    staged --> staging_refused: authorizing run fails
+    verified --> soaking: held and probed throughout
+    soaking --> verified: every probe served this build
+    soaking --> queued: soak failed, back of the queue
+    soaking --> abstained: zero probes, no verdict
+    verified --> accepted: a person accepts this build
+    accepted --> cleared: guard 4 stack complete, promote
+
+    cleared --> idle_deployed: installed on the idle colour
+    cleared --> preempted: main moved, pass withdrawn
+    cleared --> abstained: guard 6 cannot derive the deploy set
+    idle_deployed --> idle_verified: e2e with no traffic on it
+    idle_deployed --> failed: idle colour failed e2e
+    idle_verified --> live: atomic cutover
+    idle_verified --> cleared: target colour not answering
+
+    live --> converged: N samples, one build
+    live --> unconverged: more than one build, or not this one
+    live --> abstained: probe got HTTP 000
+    unconverged --> rollback_owed: return the estate
+    unconverged --> live: old replica retired, converged
+
+    converged --> validated: settle re-derives and sets change_complete
+    converged --> deployed_not_merged: merge refused
+    converged --> preempted: main outran production
+    converged --> stranded: nothing drove it and the window closed
+    validated --> complete: merged, PIR, records, berth released
+    validated --> deployed_not_merged: merge refused, exit 8
+
+    emergency_direct --> idle_deployed: approved and gates green
+    emergency_direct --> backfill_owed: the debt is declared
+    emergency_direct --> failed: guard 2 red, no bypass
+    backfill_owed --> idle_deployed: the debt blocks nothing
+
+    state "states with no name" as NONAME {
+        orphaned_berth
+        deployed_not_merged
+        stranded
+        authorized_unbooked
+        rollback_owed
+    }
+
+    orphaned_berth --> authorized_unbooked: reaper releases the berth
+    orphaned_berth --> failed: aborted
+    orphaned_berth --> activating: noticed and driven in a fresh window
+    deployed_not_merged --> validated: conflict resolved, re-settle
+    deployed_not_merged --> rollback_owed: roll back to a build main has
+    deployed_not_merged --> stranded: the window closes
+    stranded --> validated: resolved and re-settled
+    stranded --> backed_out: front returned, recorded with a target
+    stranded --> authorized_unbooked: reaped without looking at production
+    rollback_owed --> backed_out: cut back and recorded
+    rollback_owed --> live: fix forward
+    rollback_owed --> stranded: nobody cuts back
+
+    expired --> authorized_unbooked: no lifecycle label at all
+    authorized_unbooked --> requested: a person asks again
+    authorized_unbooked --> release_asked: a person asks for the whole path
+    preempted --> activating: rebased, deadline extended, revalidate
+    preempted --> orphaned_berth: extension ran out holding the berth
+    preempted --> deployed_not_merged: preempted after the cutover
+    stale_self --> requested: observations withdrawn, ask stands
+    staging_refused --> orphaned_berth: failed but the berth is not released
+    staging_refused --> open: fix and push
+    staging_refused --> expired: window lapses while refused
+    forfeit_on_entry --> expired: window spent, berth released
+    forfeit_on_entry --> open: the PR carries its acceptance
+
+    complete --> [*]
+    backed_out --> [*]
+    failed --> [*]
+    abandoned --> [*]
+#+end_src
+
+The estate, which is a different subject and a different machine:
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction LR
+    state "disposition of the world" as A {
+        estate_open --> estate_frozen: freeze on issue 1
+        estate_frozen --> estate_open: freeze lifted
+        estate_open --> estate_emergency: emergency on issue 1
+        estate_emergency --> estate_open: incident closed
+    }
+    state "the singleton berth" as B {
+        berth_free --> berth_occupied: a change claims the path
+        berth_occupied --> berth_free: settled or aborted
+        berth_occupied --> berth_orphaned: holder's window lapses
+        berth_orphaned --> berth_free: reaper releases it
+    }
+    state "the deployment lock" as C {
+        lock_free --> lock_held: a deploy acquires it
+        lock_held --> lock_free: released in always, or stale at 60 min
+    }
+#+end_src
+
+* The states that have no name
+
+The brief for this lens was to model these rather than around them. Each is
+a state this repository has actually reached, and none of them has a label
+that says what is true.
+
+** orphaned_berth — a berth held with no open window
+
+~deploy:staging~ is on the PR. Guard 1 therefore refuses every other change
+in the repository. There is no open window, the change is not being driven,
+and the build may be serving nowhere at all.
+
+It is reachable four ways, and *three of them are the absence of a guard
+rather than the action of one*:
+
+- the window lapses while the berth is held. =change/reap.sh:46= exists
+  precisely for this: "settle is unreachable for a change nobody drove, and
+  a berth held by a dead window blocks everyone via guard 1 with no declared
+  cause".
+- the staging run fails. =.github/workflows/deploy-staging.yml:32= adds
+  ~staging:failed~ and removes ~staging:in-progress~ and *does not remove
+  ~deploy:staging~*. That is scenario D7's wedge, still open in the tree.
+- the deploy reports success having placed nothing
+  (=change/activate.sh:273=), so the berth is held against an environment
+  serving the previous build.
+- the berth is claimed on a window that has already lapsed, because
+  ~schedule.sh current~ returns exit 0 for an expired window
+  (=change/reap.sh:9=).
+
+The label set is identical to ~berthed~. Nothing on the PR distinguishes
+them. Only the schedule can, and only the reaper reads the schedule.
+
+** deployed_not_merged, and stranded — the one with no name at all
+
+~deployed_not_merged~ is in =spec.org:2779=: production serves a build trunk
+does not contain, and the next change branches from a main without it and
+reverts it on promotion. Reached live on #40 (=scenarios.org:429=) *by a
+script that reported the opposite*.
+
+~stranded~ is =spec.org:2793=, quoted exactly: **deployed, not merged, and
+the window is gone.** Three facts at once and nothing in the vocabulary says
+them together. I have given it a name here because the model needs one; the
+name is mine and the state is the repository's.
+
+Its exits are the interesting part:
+
+- re-settle after resolving the merge (=change/settle.sh:138=) — and note
+  that *nothing re-books a window to do this*, because settling is not
+  deploying. The model keeps that edge honest rather than inventing a
+  booking.
+- back it out, which requires naming what production was returned to
+  (=change/abort.sh:42=).
+- *be reaped*. =change/reap.sh:56= closes the window ~expired~, clears
+  ~change:scheduled~, releases the berth — and never looks at production.
+  The change lands in ~authorized_unbooked~, a state whose description
+  ("eligible, owed nothing") is *false* while production is still serving an
+  unmerged build. That edge is in =transitions.tsv= with weight 0.22 because
+  it happens, not because it is right.
+
+** authorized_unbooked — the honest state with no label
+
+After a reap the change carries *no lifecycle label at all*. Not
+~change:requested~ (that is the human's ask, and automation re-asserting it
+is the pipeline speaking for a person, =change/reap.sh:66=), not
+~change:scheduled~, not ~change:failed~. Every observation still stands and
+the approval still stands.
+
+This is the one unnamed state the repository reached *on purpose*, and the
+reasoning is written out at =change/reap.sh:59-72=. It is in the model as a
+state rather than as an absence because it has distinct exits: a person asks
+again, a person asks for the whole path, or nobody ever does.
+
+** expired is not failed
+
+~expired~ has its own closure code and its own state. Nothing was attempted,
+so nothing failed; nobody decided, so nothing was cancelled
+(=change/reap.sh:16=). D14 makes this a test the rebuild must pass: a
+refused change *still loses its window*, and marking that lapse ~failed~ is
+itself a failure (=scenarios.org:487=).
+
+The model keeps ~staging_refused~ → ~expired~ as a real edge for exactly
+this: the refusal and the lapse are two facts, and the machine must be able
+to hold both.
+
+** rollback_owed — the estate is wrong and nobody has moved yet
+
+Between "guard 5 refused" and "production was returned" there is a state in
+which production is serving the wrong build and the previous colour is still
+intact. It is not ~backed_out~, because ~change:backed-out~ *asserts an
+estate action happened* and =change/abort.sh:42= refuses the word without a
+target.
+
+There is a second finding under this state, and it is a guard-with-zero-
+refusals in the =spec.org:2679= sense:
+=.github/workflows/deploy-production.yml:46= calls
+~./targets/<target>/rollback.sh production~ on failure. **Neither
+=targets/node/= nor =targets/bastille/= contains a =rollback.sh=.** The
+automated rollback edge cannot fire. It is in =transitions.tsv= with
+*weight 0.00* and its guard column says so. The only rollback that exists is
+=targets/node/switch.sh <previous colour>=, run by a person, which is what
+the PIR tells the operator to do (=change/settle.sh:167=).
+
+* Indeterminate is a third value, and it is a state
+
+~abstained~ (=dep09=) is not "refused" and it is emphatically not "passed".
+It is reached whenever an oracle answers *I cannot tell you*:
+
+| oracle | the third answer | evidence |
+|--------+------------------+----------|
+| the change schedule | preflight exit 4, calendar unreachable | =gates/preflight.sh:7= |
+| ~deploys(c)~ for guard 6 | the diff or the labels could not be read | =spec.org:216= |
+| production, for guard 5 at the merge | not reachable from an ubuntu runner | =.github/workflows/merge-on-healthy.yml:49= |
+| production, for guard 5 at deploy | HTTP 000 | =spec.org:2722= |
+| a soak | zero probes taken | =change/soak.sh:68= |
+
+Its exits are what make it a third value rather than a synonym for refusal:
+it goes *back to activation* when the oracle answers within the bound, and
+it goes to ~expired~ when the bound runs out — never to ~failed~ and never
+onward to a deploy. Exit 4 blocks; it does not proceed
+(=CLAUDE.md=, Invariants).
+
+Note what is *not* in this state. ~unconverged~ (=dep20=) is a separate
+state, because production answered and said something false. Reachable and
+wrong is a negative observation; unreachable is an abstention. Folding them
+together is the defect =merge-on-healthy.yml:30-44= was rewritten to remove
+after it withdrew a measurement four times in nine minutes on #9.
+
+* Assumptions
+
+1. *One berth.* Staging is a singleton held by one PR at a time
+   (=spec.org:1012=). If slots return as an optimisation, ~berthed~ splits
+   by group and guard 1 stops being a single estate state.
+2. *The PR is the change.* A change with no PR — an emergency handled
+   outside the pipeline — is not in this machine at all. That is why
+   ~emergency~ lives on issue #1 and ~backfill_owed~ exists.
+3. *One state at a time.* A Markov chain cannot express that a change is
+   ~complete~ *and* ~backfill_owed~, which the label declaration explicitly
+   permits (~change:backfill-owed~ is persistent and survives settlement).
+   The model puts ~backfill_owed~ on the path *into* production instead,
+   which preserves the ordering but loses the coexistence. Named as a
+   limitation rather than smoothed over.
+4. *Weights are judgement, not measurement.* No run counts were extracted.
+   They are ordered so the modal path is the one the repository describes as
+   ordinary and the pathological states are reachable at a rate that makes
+   them show up in a 20000-walk sample. Anyone with the run history should
+   replace them.
+5. *The reaper runs.* Several exits from the unnamed states are reaper
+   edges. =change/reap.sh= has no scheduler in-tree; if it is never invoked,
+   ~orphaned_berth~ and ~stranded~ are absorbing in practice and the chain
+   stops terminating. [H] — I did not check for a cron or a timer.
+
+* What I deliberately excluded, and why
+
+Four other engineers hold four other lenses. These are theirs:
+
+- *Environments and ports* — the 9000/9100/9200 tier model, per-jail ports,
+  ~environments.tsv~ activation, the team tier that cannot promote. The
+  model touches the estate only where a deploy lands in it
+  (~idle_deployed~, ~live~), and never models a specific port.
+- *Gating* — the internal structure of guard 2, the gate self-test, check-run
+  supersession, ~local/~ statuses, mutation testing. Gate verdicts enter this
+  machine as a single ~gate_verdict~ trigger with the guard stated; how the
+  verdict was reached is not mine.
+- *Protection and overrides* — rulesets, branch protection, ~strict~,
+  approvals and the reviewer-identity problem, merge queues, the proxy
+  approval. ~guard 4~'s review requirement appears only as a guard clause.
+- *End to end* — the labeller's globs, ~routes.json~ generation, the apps
+  themselves, e2e journey content, the dashboard.
+
+Also excluded on purpose, within my own lens:
+
+- *Per-group deploy fan-out.* D2's "core and plp from the PR SHA, pdp and
+  checkout from the production SHA" is a property of one ~deploy_event~, not
+  a state. Modelling it would split ~staged~ by manifest and buy nothing for
+  the question this lens asks.
+- *The simulator (=sim/=) and the TLA+ model (=tla/=).* Both model the
+  scheduling, and =spec.org:2130= records that each invented a different
+  completion condition. I modelled the *scripts*, because they are what runs
+  the estate.
+- *=change/activate.sh= as a live path.* It refuses on this host
+  (=change/activate.sh:59=) and =research/findings/changing-the-pipeline.org= measured
+  zero invocations. I still used it as evidence, because it is the only
+  place the *full* ordered sequence — window, berth, deploy, authorizing
+  run, hold, idle colour, cutover, guard 5, settle — is written down in one
+  file. Every edge sourced from it is an edge the node path performs
+  step by step. [H] that the two orders agree in every detail.
+
+* The estate is a different subject
+
+=states.tsv= contains eight ~est*~ rows. They are *not* states of a pull
+request and they are *not reachable from ~dep01~*, deliberately. They form
+three small cycles with no terminal state, because the estate has no
+terminal state — it outlives every change.
+
+They are included because three PR transitions are guarded by them and a
+merged model needs somewhere to hang that: ~freeze_blocked~ is a PR state
+caused by ~estate_frozen~; ~queued~ is caused by ~berth_occupied~;
+~lock_blocked~ by ~lock_held~. ~berth_orphaned~ (est06) and
+~orphaned_berth~ (dep25) are the *same fact seen from two subjects* — the
+estate's path to production is wedged, and this change is the one wedging
+it. Both are kept, because a merge that collapses them loses the ability to
+say which change to go and look at.
+
+Anyone running the terminating-walk check should run it over the ~dep*~
+subgraph only.
+
+* The three edges I trust least
+
+Recorded here rather than buried, because a weight I guessed and a mechanism
+I inferred are different kinds of doubt.
+
+1. ~dep24 stranded → dep27 authorized_unbooked~ (weight 0.22). The reaper
+   will happily clear the scheduling labels on a change production is still
+   serving, because it never reads the estate. I am confident the *code*
+   does this (=change/reap.sh:56-79=); I am not confident it has ever
+   *happened*, and the resulting state is described in a way that is false
+   about the world. It may be that in practice the ~stranded~ change is
+   always noticed first. [H]
+
+2. ~dep05 activating → dep25 orphaned_berth~ (weight 0.03). Grounded in
+   =change/reap.sh:9-14=, which says ~schedule.sh current~ returns 0 for an
+   expired window and that #38 reached guard 4 authorized at 20:39 on a
+   window that ended at 20:30. Whether that path then *claims the berth*
+   — rather than being caught later — I inferred from the ordering in
+   =change/activate.sh:244-269= and did not observe. The weight is a guess
+   at a rare event, which is the least defensible kind of guess.
+
+3. ~dep16 idle_deployed → dep35 failed~ (weight 0.17). =change/activate.sh:347=
+   dies on a failed idle-colour e2e, and =change/abort.sh:13-16= says a
+   change production "never had made live" closes ~failed~. But nothing in
+   the tree *connects* those two: no caller invokes ~abort.sh~ on that path.
+   The edge is the correct closure code for the situation and may be an edge
+   no code walks. It is the same shape as guards 0 and 6 — written
+   correctly, never fired.
+
+* Refutation conditions for this model
+
+- A PR reaches a state in this repository that none of the 37 ~dep*~ rows
+  describes. The model is then incomplete in the direction that matters.
+- A weighted walk fails to terminate after the reaper edges are removed, and
+  somebody demonstrates that the reaper is in fact never invoked. Then
+  ~orphaned_berth~ and ~stranded~ are absorbing and the pipeline has two
+  silent sinks.
+- ~deploy:staging~ is observed being released by the staging-failure path,
+  refuting ~dep30 → dep25~ and closing D7.
+- A =rollback.sh= appears in a target, making the weight-0.00 edge real.

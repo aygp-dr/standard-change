@@ -41,6 +41,51 @@ const HOST = process.env.BIND || '0.0.0.0';
 // says what is RUNNING. Hardcoding the list here would make the dashboard a
 // second, silently-diverging map -- the defect this repo keeps finding.
 import { readFileSync, statSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+
+// SQLITE IS A MIRROR, NOT THE AUTHORITY.
+//
+// The schedule lives in the CAS-guarded git ref refs/idp/schedule and the
+// estate lives on the ports. This database is written FROM those, never read
+// back into a verdict -- docs/interfaces.org: "run is a cache with a timestamp,
+// never an authority".
+//
+// What it buys is the one thing the git ref and a live probe cannot: HISTORY.
+// A window that was open and is now closed vanishes from `list --open`, and a
+// build that was serving and is not vanishes the moment it is replaced. Every
+// finding today came from watching a board at the right second; a mirror means
+// the next one can be found by asking a question afterwards.
+//
+// No constraints, no indexes, no NOT NULL -- deliberately. This is a grind
+// artefact and a schema that refuses a row would lose the anomaly that made the
+// row interesting.
+const DB = new DatabaseSync(new URL('../.idp/dashboard.sqlite', import.meta.url).pathname);
+DB.exec(`
+  CREATE TABLE IF NOT EXISTS snapshot (at TEXT, live_colour TEXT, live_sha TEXT,
+                                       freeze INT, emergency INT, windows INT, envs INT);
+  CREATE TABLE IF NOT EXISTS env_seen  (at TEXT, name TEXT, port INT, up INT,
+                                        sha TEXT, app TEXT, colour TEXT, deployed_at TEXT);
+  CREATE TABLE IF NOT EXISTS window_seen (at TEXT, id TEXT, pr TEXT, env TEXT,
+                                          start TEXT, end TEXT, sha TEXT, groups TEXT,
+                                          cls TEXT, started INT, expired INT);
+`);
+function mirror(s) {
+  try {
+    DB.prepare('INSERT INTO snapshot VALUES (?,?,?,?,?,?,?)').run(
+      s.at, s.live_colour, s.live_sha,
+      s.flags.freeze ? 1 : 0, s.flags.emergency ? 1 : 0,
+      s.windows.length, s.envs.length);
+    const e = DB.prepare('INSERT INTO env_seen VALUES (?,?,?,?,?,?,?,?)');
+    for (const x of s.envs)
+      e.run(s.at, x.name, x.port, x.up ? 1 : 0, x.sha, x.app, x.colour,
+            x.deployed_at ? new Date(x.deployed_at).toISOString() : null);
+    const w = DB.prepare('INSERT INTO window_seen VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+    for (const x of s.windows)
+      w.run(s.at, x.id, String(x.pr), x.env, x.start, x.end, x.sha,
+            x.groups, Array.isArray(x.cls) ? x.cls.join(',') : null,
+            x.started ? 1 : 0, x.expired ? 1 : 0);
+  } catch { /* a mirror that fails must not break the view it mirrors */ }
+}
 const ENVS = readFileSync(new URL('../environments.tsv', import.meta.url), 'utf8')
   .split('\n')
   .filter((l) => l.trim() && !l.startsWith('#') && !l.startsWith('name\t'))
@@ -102,6 +147,16 @@ async function probe(env) {
 const sh = (cmd, args) => new Promise((res) =>
   execFile(cmd, args, { cwd: new URL('..', import.meta.url).pathname, timeout: 5000 },
     (e, out) => res(e ? '' : out)));
+
+// A NON-ZERO EXIT IS NOT ALWAYS AN ERROR. gates/pr-state-audit.py exits 1 when
+// it FINDS something -- that is its verdict, not a failure to produce one --
+// and sh() above discards stdout on any non-zero exit, so the dashboard threw
+// away 210 bytes of correct JSON and rendered "the audit did not run".
+// Findings read as inability to look: spec.org class 1, in the panel built to
+// show class-1 defects. This keeps stdout and reports the exit separately.
+const shOut = (cmd, args) => new Promise((res) =>
+  execFile(cmd, args, { cwd: new URL('..', import.meta.url).pathname, timeout: 15000 },
+    (e, out) => res({ out: out || '', failed: !!(e && e.killed) })));
 
 // WHAT the window is for, not just which number. A row reading `#42` makes the
 // reader open GitHub to find out whether staging is held by a one-line copy
@@ -261,6 +316,18 @@ async function snapshot() {
   // instead: the change is IN an environment when that environment is serving
   // its build. Same rule as everywhere else here -- prefer the fact the system
   // reports about itself over the one the caller supplied.
+  // THE INVARIANTS, ASKED OF THE FORGE. gates/pr-state-audit.py holds the five
+  // and their self-test; the dashboard does not reimplement them, because two
+  // copies of one rule is the defect this repo keeps finding. It shells out and
+  // renders what it is told. A failure to run is reported as a failure to run,
+  // never as "no violations" -- unreachable is not falsified.
+  const invariants = await shOut('python3', ['gates/pr-state-audit.py', '--json'])
+    .then(({ out, failed }) => {
+      if (failed) return { ok: false, error: 'the audit timed out' };
+      try { return { ok: true, ...JSON.parse(out) }; }
+      catch { return { ok: false, error: 'the audit produced no JSON' }; }
+    });
+
   const [envs, windows, flags] = await Promise.all([
     Promise.all(ENVS.map(probe)), schedule().catch(() => []),
     estateFlags().catch(() => ({ freeze: null, emergency: null, unknown: true,
@@ -274,14 +341,16 @@ async function snapshot() {
     const e = envs.find((x) => x.name === w.env);
     w.in_env = !!(e && e.up && e.sha && w.sha && e.sha === w.sha);
   }
-  return {
+  const snap = {
     at: new Date().toISOString(),
     dashboard: { version: VERSION, build: BUILD },
     flags,
     live_colour: front?.colour ?? null,
     live_sha: front?.sha ?? null,
-    envs, windows,
+    envs, windows, invariants,
   };
+  mirror(snap);
+  return snap;
 }
 
 // ---- WebSocket (RFC 6455), server->client text frames only ----------------
@@ -307,14 +376,63 @@ const server = createServer(async (req, res) => {
   // invalidated immediately rather than left to expire: a five-minute-stale
   // "no freeze" straight after somebody declared one is the exact reading that
   // gets a change deployed into a closed estate.
+  // A WRITE THAT CHANGES ESTATE STATE IS NOT AN ORDINARY ROUTE.
+  //
+  // `startsWith` plus destructuring accepted anything that merely BEGAN with
+  // the path: /api/estate/freeze/on/whatever matched, and so did a query
+  // string, because [3] and [4] were the only segments ever looked at. The
+  // shape is now an exact anchored match and the segment count is part of it.
+  //
+  // The rest is the "bare POST with well-known values" rule: these endpoints
+  // take no body, no parameters and no content type, so anything carrying one
+  // is not a request this API has -- it is something else pointed at it, and
+  // the safe reading of a request we do not recognise is to refuse it rather
+  // than to execute the part we do recognise.
+  const writeGuard = (req) => {
+    const len = Number(req.headers['content-length'] || 0);
+    if (len > 0 || req.headers['transfer-encoding'])
+      return 'this endpoint takes no request body';
+    if (req.headers['content-type'])
+      return 'this endpoint takes no content type';
+    // Same-origin only. A browser sends Origin on cross-origin POSTs; a
+    // mismatch means some other page is driving the estate controls. Absent
+    // Origin (curl, same-origin in some browsers) is allowed -- the LAN
+    // boundary is doing that work, and spec.org §Exposure says what happens
+    // to this assumption the moment the origin is published.
+    const o = req.headers.origin;
+    if (o) {
+      let h; try { h = new URL(o).host; } catch { return 'unparseable Origin'; }
+      if (h !== req.headers.host) return `cross-origin write refused (${h})`;
+    }
+    return null;
+  };
+  // WHO ASKED. spec.org §Exposure: a control that changes estate state records
+  // who invoked it and why, in the same write that changes the state. This is
+  // the weak form -- a socket address is not an identity -- and it is recorded
+  // as exactly that, so the PIR can tell "someone on the LAN" from "we do not
+  // know", which the previous version could not.
+  const actorOf = (req) => {
+    const a = (req.headers['x-actor'] || '').toString().slice(0, 64).replace(/[^\w .@-]/g, '');
+    const ip = req.socket?.remoteAddress || 'unknown';
+    return a ? `${a} (from ${ip})` : `unattributed (from ${ip})`;
+  };
+
+  const estateWrite = /^\/api\/estate\/(freeze|emergency)\/(on|off)$/.exec(req.url || '');
   if (req.method === 'POST' && req.url?.startsWith('/api/estate/')) {
-    const [, , , label, action] = req.url.split('/');
-    if (!['freeze', 'emergency'].includes(label) || !['on', 'off'].includes(action))
+    if (!estateWrite)
       return send(400, 'application/json', JSON.stringify({ error: 'bad toggle' }));
+    const bad = writeGuard(req);
+    if (bad) return send(400, 'application/json', JSON.stringify({ error: bad }));
+    const label = estateWrite[1], action = estateWrite[2];
+    const actor = actorOf(req);
+    const reason = (req.headers['x-reason'] || '').toString().slice(0, 200).trim();
     const flag = action === 'on' ? '--add-label' : '--remove-label';
     const r = await sh('gh', ['issue', 'edit', String(HOLDER), flag, label]);
     await sh('gh', ['issue', 'comment', String(HOLDER), '--body',
-      `\`${label}\` turned **${action}** from the IDP dashboard at ${new Date().toISOString()}.`]);
+      `\`${label}\` turned **${action}** from the IDP dashboard at ${new Date().toISOString()}.\n\n`
+      + `- by: ${actor}\n- reason: ${reason || '_none given_'}\n\n`
+      + `A socket address is not an identity. This records what is knowable here; `
+      + `see \`spec.org\` §Exposure for why that is not enough if this origin is ever published.`]);
     flagCache = { at: 0, value: null };
     const s2 = await snapshot();
     for (const c of clients) { try { c.write(frame(JSON.stringify(s2))); } catch { clients.delete(c); } }
@@ -330,6 +448,8 @@ const server = createServer(async (req, res) => {
   // no body because there is nothing to configure -- which slot to give back is
   // "all of them", since a change should hold exactly one.
   if (req.method === 'POST' && /^\/api\/schedule\/\d+\/clear$/.test(req.url || '')) {
+    const badS = writeGuard(req);
+    if (badS) return send(400, 'application/json', JSON.stringify({ error: badS }));
     const pr = req.url.split('/')[3];
     const out = await sh('./change/schedule.sh', ['unschedule', pr, 'cleared from the dashboard']);
     const s2 = await snapshot();
@@ -424,6 +544,7 @@ font-weight:700;letter-spacing:.05em;margin-right:8px;vertical-align:1px}
 .cls-none{background:#1f1f24;color:#8b93a7;border:1px dashed #4b5563}
 .prlink{color:#e6e6e6;text-decoration:none}
 .prlink:hover{color:#60a5fa;text-decoration:underline}
+.prlink:hover .br{color:#93c5fd}
 .sub{color:#8b93a7;font-size:11px;margin-top:2px}
 .rem-ok{color:#4ade80;font-size:11px;margin-left:8px}
 .rem-warn{color:#fbbf24;font-size:11px;margin-left:8px}
@@ -433,6 +554,10 @@ background:#1a1d26;color:#c9d1d9;border:1px solid #30363d}
 button:hover{background:#232733}
 button.clr{font-size:11px;padding:2px 8px;border-color:#30363d;color:#8b93a7;margin-left:8px}
 button.clr:hover{border-color:#b45309;color:#fde68a;background:#2a2010}
+.inv-ok{color:#86efac;margin:4px 0}
+.inv-unknown{color:#fcd34d;margin:4px 0}
+tr.inv-bad td{background:#2a1212}
+td.inv-kind{color:#fca5a5;white-space:nowrap}
 button.b-freeze{border-color:#2563eb;color:#93c5fd}
 button.b-freeze:hover{background:#12233d}
 button.b-emergency{border-color:#b91c1c;color:#fca5a5}
@@ -466,9 +591,36 @@ letter-spacing:.04em}
 <table><thead><tr><th>change</th><th>groups</th><th>build</th><th>window</th><th>env</th><th>window id</th></tr></thead><tbody id=w></tbody></table>
 
 <h2>environments</h2>
-<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>colour</th><th>deployed</th></tr></thead><tbody id=e></tbody></table>
+<table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>deployed</th></tr></thead><tbody id=e></tbody></table>
+
+<h2>invariants</h2>
+<div id=inv></div>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// THE INVARIANTS PANEL. Only failures are listed, because a green list of
+// five is furniture and an operator scanning a board needs the exception. The
+// clean state gets one line, and a panel that could not run says so in its own
+// words rather than showing nothing -- "no violations" and "we could not look"
+// must never render the same.
+function renderInvariants(d){
+  const el=document.getElementById('inv'); if(!el) return;
+  const v=d.invariants;
+  if(!v||!v.ok){
+    el.innerHTML='<p class="inv-unknown">INDETERMINATE &mdash; the audit did not run'+
+      (v&&v.error?': '+esc(v.error):'')+'. This is not a clean estate; it is an unread one.</p>';
+    return;
+  }
+  const f=v.findings||[];
+  if(!f.length){
+    el.innerHTML='<p class="inv-ok">all five invariants hold across '+esc(v.open)+' open pull requests</p>';
+    return;
+  }
+  el.innerHTML='<table><thead><tr><th>invariant</th><th>what is wrong</th><th>changes</th></tr></thead><tbody>'+
+    f.map(x=>'<tr class=inv-bad><td class=inv-kind>'+esc(x.kind)+'</td><td>'+esc(x.detail)+'</td><td>'+
+      (x.prs||[]).map(n=>'<a href="https://github.com/aygp-dr/standard-change/pull/'+esc(n)+'">#'+esc(n)+'</a>').join(' ')+
+      '</td></tr>').join('')+'</tbody></table>';
+}
+
 function flagbox(d){
   const f=d.flags||{};
   const cell=(label,state,extra)=>'<span class="f '+state+'">'+esc(label)+'</span>'+
@@ -631,8 +783,14 @@ function render(d){
     // you leave open and watch -- following a PR must not take the board with
     // it. rel=noopener noreferrer: the new tab gets no handle back to this one.
     '<tr class="'+(x.started&&!x.expired?'active':'')+'"><td>'+
-    (x.url?'<a class=prlink href="'+esc(x.url)+'" target=_blank rel="noopener noreferrer"><b>'+
-      esc(x.pr)+'</b></a>':'<b>'+esc(x.pr)+'</b>')+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+
+    // NUMBER AND BRANCH ARE ONE LINK. The branch used to sit outside the anchor,
+    // so the clickable target was four characters of PR number while the useful
+    // identifier -- the branch name -- was inert text beside it. A reader
+    // recognises 'tiny/core-css-estate-line' long before they recognise '#54'.
+    (x.url
+      ? '<a class=prlink href="'+esc(x.url)+'" target=_blank rel="noopener noreferrer">'+
+        '<b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':'')+'</a>'
+      : '<b>'+esc(x.pr)+'</b>'+(x.branch?' <span class=br>'+esc(x.branch)+'</span>':''))+
     (x.title?'<div class=ti>'+esc(x.title)+'</div>':'')+'</td>'+
     '<td class=dim>'+esc(x.groups||'—')+'</td>'+
     '<td class=sha>'+esc(x.sha)+'</td>'+
@@ -647,21 +805,23 @@ function render(d){
     // reservation, not that a deploy could start right now (a freeze, an
     // emergency or a held berth all still refuse). Say the narrow true thing.
     :'<tr><td colspan=6 class=dim>no reservation — nobody has booked staging</td></tr>';
+  renderInvariants(d);
   document.getElementById('e').innerHTML=d.envs.map(x=>{
     const state=x.declared?'<td class=decl>declared</td>'
       :'<td class='+(x.up?'up':'down')+'>'+(x.up?'up '+esc(x.status):'dark')+'</td>';
-    // The colour cell means two different things and must not pretend
-    // otherwise. On the FRONT it is the ACTIVATED colour -- which replica is
-    // serving customers right now. On blue or green it is only that replica
-    // naming itself, which tells you nothing about what is live.
-    let col='<td class=sw-none>—</td>';
-    if(x.name==='front'&&x.colour)
-      col='<td><span class="swatch sw-'+esc(x.colour)+'">'+esc(x.colour).toUpperCase()+
-          ' LIVE</span></td>';
-    else if(x.colour)
-      col='<td class=dim>'+esc(x.colour)+'</td>';
+    // THE COLOUR COLUMN IS GONE. It was an em-dash on every row but one: blue
+    // and green only ever named themselves, which says nothing about what is
+    // live, and the dev and team rows have no colour at all. A column empty
+    // fourteen times out of eighteen is not a column.
+    //
+    // The one fact it carried -- WHICH REPLICA THE FRONT HAS ACTIVATED -- now
+    // sits on the front's own row beside the name, where a reader is already
+    // looking when they ask what customers are getting.
+    const swatch = (x.name==='front' && x.colour)
+      ? ' <span class="swatch sw-'+esc(x.colour)+'">'+esc(x.colour).toUpperCase()+' LIVE</span>'
+      : '';
     return '<tr class="'+(x.sha&&x.sha===d.live_sha&&x.tier==='protected'?'live':'')+'">'+
-    '<td class="n-'+esc(x.name)+'">'+esc(x.name)+'</td><td class='+esc(x.tier)+'>'+esc(x.tier)+'</td>'+
+    '<td class="n-'+esc(x.name)+'">'+esc(x.name)+swatch+'</td><td class='+esc(x.tier)+'>'+esc(x.tier)+'</td>'+
     // THE LINK HOST IS WHERE YOU ARE, NOT WHERE THE PROBE WENT. The server
     // probes 127.0.0.1 because it is on the box; a reader is on the LAN. Using
     // location.hostname means the link follows whatever address the dashboard
@@ -675,7 +835,7 @@ function render(d){
         location.hostname+':'+esc(x.port)+'/">'+esc(x.port)+'</a></td>'
       : '<td class=dim>'+esc(x.port)+'</td>')+state+
     '<td class=sha>'+esc(x.sha||'—')+'</td><td class=dim>'+esc(x.app||'—')+'</td>'+
-    col+'<td class=dim>'+ago(x.deployed_at)+'</td></tr>';}).join('');
+    '<td class=dim>'+ago(x.deployed_at)+'</td></tr>';}).join('');
 }
 const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/');
 ws.onopen =()=>{};

@@ -27,14 +27,14 @@ classic checker that cannot fail.
 
 | id  | WIP diff touches                            | expect labels                              | checks                     |
 |-----+---------------------------------------------+--------------------------------------------+----------------------------|
-| L1  | =apps/core/src/pages/index.js=              | =app:core=, =change:standard=              | basic attach               |
-| L2  | =apps/pdp/= and =apps/checkout/=            | =app:pdp=, =app:checkout=, =change:standard= | multi-group attach       |
-| L3  | all four app dirs                           | four =app:*=, =change:standard=            | full fan-out               |
-| L4  | =router/nginx.conf.tmpl= only               | =change:normal=, *no* =app:*=              | normal with no group       |
-| L5  | =apps/plp/= and =.github/workflows/gate.yml= | =app:plp=, =change:normal=                | normal wins over standard  |
+| L1  | =apps/core/src/pages/index.js=              | =app:core=, =itil:standard=              | basic attach               |
+| L2  | =apps/pdp/= and =apps/checkout/=            | =app:pdp=, =app:checkout=, =itil:standard= | multi-group attach       |
+| L3  | all four app dirs                           | four =app:*=, =itil:standard=            | full fan-out               |
+| L4  | =router/nginx.conf.tmpl= only               | =itil:normal=, *no* =app:*=              | normal with no group       |
+| L5  | =apps/plp/= and =.github/workflows/gate.yml= | =app:plp=, =itil:normal=                | normal wins over standard  |
 | L6  | =README.org= only                           | none                                       | no-op diff labels nothing  |
 | L7  | =apps/pdp/fixtures/catalog.json=            | =app:pdp=                                  | non-source file still owns |
-| L8  | =gates/e2e.sh=                              | =change:normal=                            | gate change is normal      |
+| L8  | =gates/e2e.sh=                              | =itil:normal=                            | gate change is normal      |
 
 ** Removal (the half that proves ownership)
 
@@ -42,7 +42,7 @@ classic checker that cannot fail.
 |-----+-------------------------------------------------------------+-------------------------------------------------|
 | L9  | L2, then push removing all =apps/checkout/= changes          | =app:checkout= *gone*; =app:pdp= remains         |
 | L10 | L1, then a human hand-adds =app:plp=, then push any commit   | =app:plp= *removed* by the labeller              |
-| L11 | L5, then push removing the =.github/= change                 | =change:normal= gone, =change:standard= attached |
+| L11 | L5, then push removing the =.github/= change                 | =itil:normal= gone, =itil:standard= attached |
 | L12 | L1 reaching =staging:passed=, then push one more commit      | =staging:passed= *removed* (SHA binding)         |
 
 L10 is the ownership assertion: the =app:*= set is a /derived/ artifact of the
@@ -73,7 +73,7 @@ Three PRs, all touching =apps/pdp/=. The point is the queue and the rebase loop.
 
 | step | action                                    | expected                                                            |
 |------+-------------------------------------------+---------------------------------------------------------------------|
-|    1 | PR-P1, PR-P2, PR-P3 opened; gates green   | each gets =app:pdp=, =change:standard=                              |
+|    1 | PR-P1, PR-P2, PR-P3 opened; gates green   | each gets =app:pdp=, =itil:standard=                              |
 |    2 | =deploy:staging= on PR-P1                 | guard 0 pass, guard 1 pass → claims staging                         |
 |    3 | =deploy:staging= on PR-P2 (while P1 holds) | *guard 1 fails*: =blocked:queue=, =deploy:staging= removed, comment naming #P1 |
 |    4 | P1 staging e2e passes                     | =staging:passed= → promote adds =deploy:production=                 |
@@ -110,8 +110,8 @@ share one router and one mock backend.
 
 | step | action                                              | expected                                              |
 |------+-----------------------------------------------------+-------------------------------------------------------|
-|    1 | PR-E1 opened, =change:emergency= added by a human   | labeller still sets =app:*=                           |
-|    2 | =deploy:production= added directly                  | guard 4: no =staging:passed=, but =change:emergency= present → needs approval |
+|    1 | PR-E1 opened, =itil:emergency= added by a human   | labeller still sets =app:*=                           |
+|    2 | =deploy:production= added directly                  | guard 4: no =staging:passed=, but =itil:emergency= present → needs approval |
 |    3 | no approving review yet                             | *refused*, error names the missing approval           |
 |    4 | change authority approves; re-label                 | guard 2 re-checked on head SHA → proceeds             |
 |    5 | =gate-selftest= red on that SHA                     | *refused* — guard 2 has no emergency bypass           |
@@ -135,7 +135,7 @@ The scenario the catalogue was written for.
 | step | action                                                    | expected                                                    |
 |------+-----------------------------------------------------------+-------------------------------------------------------------|
 |    1 | PR-S holds staging, =staging:passed= on SHA =s1=          | =deploy:production= added by promote                        |
-|    2 | Incident. PR-E opened with =change:emergency=             | labeller sets =app:*=; PR-E does *not* request staging      |
+|    2 | Incident. PR-E opened with =itil:emergency=             | labeller sets =app:*=; PR-E does *not* request staging      |
 |    3 | =deploy:production= on PR-E                               | guard 1 not consulted — the emergency path never touches the staging queue |
 |    4 | both PRs now hold =deploy:production=                     | =concurrency: production, cancel-in-progress: false= serializes them |
 |    5 | PR-E deploys, healthy, *merges to main*                   | main now contains the hotfix                                |
@@ -354,7 +354,7 @@ Anything failing any condition is *reported and left alone*, never forced.
 The reason to specify it is *the manual cost it would remove*, and that cost is
 the thing being ground out here. Every booking today cost: read the calendar,
 pick a duration that clears the floor, check for a clash, book, watch it not be
-driven, reap it, re-book. See =docs/time-spent.org=.
+driven, reap it, re-book. See =research/findings/time-spent.org=.
 
 *An implementation is only worth it if that cost is measured first.* 001 should
 build the harness before the scheduler.
@@ -426,6 +426,314 @@ individual booking looks correct.
 The tell was visible on the dashboard immediately — a wall of identical future
 rows — which is the second time the board surfaced something no script noticed.
 
+** D13 — settlement reported a merge that did not happen
+
+Hit live on *#40* at 00:44Z, and it is the finding that justifies the whole
+manual overlay: *an autonomous loop would have reported seven successes that
+night.*
+
+*** What happened
+
+: gh         "not mergeable: the merge commit cannot be cleanly created"
+: PR state   OPEN, mergeable=CONFLICTING
+: settle.sh  "settled: #40 merged -- the forge is the record now"
+
+=change/settle.sh= had =gh pr merge ... && ok=. The merge refused, the =&&=
+short-circuited, *and execution continued*: the PIR was posted, the window was
+redlined =passed=, the validation labels were cleared, and the summary claimed
+success. Production had already been cut over to =43646f9=.
+
+*** Why it is the worst shape
+
+The change was *deployed and not merged*. That is the state with no name: the
+front serves a build =main= does not contain, and the next change branches from
+a =main= without it and reverts it on promotion. Reached by a script that
+reported the opposite, with every downstream step destroying the working state
+that would have shown it.
+
+Same shape as the =gate | sed= defect the same afternoon — a step failed, its
+status was never checked, the summary asserted the opposite. *Settlement is the
+one place that must never do this.*
+
+*** The conflict underneath
+
+#40 and #44 each add one row to =apps/core='s =PANELS= object literal. #44
+landed at 00:22, #40 tried at 00:44. The agent that scaffolded the twenty tiny
+PRs had already written this down — /"PANELS is a seam that admits one change at
+a time"/ — and capped core at four changes because of it. *The warning existed
+and nothing consumed it.*
+
+*** Two oracles I got wrong while diagnosing
+
+Recorded because the diagnosis was nearly as instructive as the defect:
+
+1. I reported all seven changes as "not on main" using
+   =git merge-base --is-ancestor=. *GitHub squash-merges*, so a branch SHA is
+   never an ancestor even when the change landed. Six had shipped fine. The
+   right oracle is the CONTENT — =PANELS= on main had =/account= and not
+   =/cart=.
+2. I twice called a rebase failure a "conflict" without reading git's message.
+   One was a *dirty index* in a worktree; one was my own lookup matching two
+   worktree paths and handing =git -C= a two-line string. Only #21's conflict
+   was real.
+
+*** Fixed
+
+=settle.sh= now exits 8 on a failed merge and runs nothing after it, printing
+=mergeable= / =mergeStateStatus= and the recovery. The rollback to a colour
+whose build IS on main is named in the message, because that is the action the
+operator needs and it is not obvious under pressure.
+
+** D14 — a deliberately broken change, and the window that expired refusing it
+
+Injected on purpose on *#56* (=tiny/plp-no-category-label=) at 02:2xZ. *Not to be
+fixed.* The point was to watch the pipeline refuse, and to watch the
+change-control window lapse while it was refused.
+
+*** The injection, and what it took to make one
+
+First attempt: change the copy the PR exists to change — =(no category)= became
+=BROKEN-ON-PURPOSE=. *24 tests passed.*
+
+That is the finding, and it arrived before the scenario did. *#56's own change is
+asserted by nothing.* The PR could ship inverted and no gate would notice, and
+several of the twenty scaffolded changes are probably in the same position — a
+one-line copy tweak whose only verification is that the file still parses.
+
+To get a failure at all, the break had to hit a *pre-existing* assertion:
+=render()= returning =app: 'BROKEN-ON-PURPOSE'= instead of =meta.app=. *3 tests
+fail.* The change under test is untestable; the app's identity is not.
+
+*** What 001 must reproduce
+
+1. *A change whose diff is covered by no assertion is a change the pipeline
+   cannot judge.* Every gate is green and the verdict means nothing. This is the
+   =gate-selftest= rule — a suite that cannot fail produces no verdict — applied
+   to a single change rather than to a suite.
+2. *The refusal must come from CI's own verdict on THIS head*, not from a local
+   run, and not from a stale run: see D15 below on superseded check runs.
+3. *A refused change must still lose its window.* Refusal is not a hold. The
+   reaper closes it =expired=, =change:scheduled= comes off, and the change is
+   left approved-and-unbooked — eligible, not failed, and owed nothing.
+
+*** The validation, stated as a test the rebuild must pass
+
+: GIVEN  a change whose head fails its unit tests
+: WHEN   its window opens
+: THEN   preflight refuses on guard 2 with the failing head named
+: AND    nothing is deployed to staging
+: AND    the window lapses and is reaped `expired`, not `failed`
+: AND    change:scheduled is cleared and the change stays approved
+
+A rebuild that ships a change with red tests has failed. A rebuild that marks
+the lapsed window =failed= has also failed — nothing was attempted, so nothing
+failed.
+
+** D15 — superseded check runs counted as current
+
+Found at 01:57Z, minutes after Actions came back, and it would have blocked all
+sixteen queued changes.
+
+GitHub keeps *every* check run attached to a SHA. The billing-era runs from
+23:20 — one =failure=, three =skipped= — were still there beside three fresh
+successes, and guard 2 reported =4 not passing, self-test 3= on a commit whose
+gates were entirely green.
+
+*A re-run supersedes.* A guard that counts history refuses on evidence that has
+been replaced. Fixed in all five queries across =gates/preflight.sh= and
+=change/guard4.sh=:
+
+: group_by(.name) | map(max_by(.started_at))
+
+Companion to /did not run is not red/ — the same rule about a different axis.
+*Unreachable is not falsified; superseded is not current.*
+
+*** Why it matters for 001
+
+Both rules exist because a check run has three independent properties the API
+flattens into one field: *did it run*, *when did it run*, and *what did it
+conclude*. Any rebuild that reads =conclusion= alone will reproduce both defects,
+and both are silent — they refuse changes that should pass, so nothing breaks
+loudly enough to investigate.
+
+** D16 — the driver walked past a refusal into production
+
+02:12Z, on *#54*. Guard 4 printed =NOT authorized= and the change was deployed
+to the idle colour and the front cut over to it anyway.
+
+*** The line
+
+: ./change/guard4.sh "$PR" | tail -1
+
+A pipeline's exit status is its LAST command's. =tail= always succeeds, so
+=set -e= saw zero and execution continued through the production deploy, the
+idle-colour e2e, and the cutover.
+
+*** Why it is the finding rather than a bug
+
+*This is the same defect as =change/activate.sh='s =gate | sed=, fixed eight
+hours earlier the same day, and then rebuilt from scratch in the driver written
+to replace it.* Knowing the rule did not prevent writing the code. The shape is
+too ordinary: piping a command to trim its output is the obvious thing to type,
+and it silently converts a guard into a print statement.
+
+Four more instances were in the same file — the soak, the UAT, the idle-colour
+e2e, and the staging walk. All five now capture the output, test the status, and
+print afterwards.
+
+*** What guard 4 was actually refusing
+
+=staging:uat= — *the label was absent while the observation record existed.*
+Guard 4 checks both on purpose: the record proves a measurement was taken, the
+label proves nobody has since withdrawn acceptance. A missing label with a
+present record means somebody withdrew it, and the guard is right to refuse.
+
+So the guard was correct, its verdict was correct, and the driver ignored it.
+
+*** Recovery, and what it cost
+
+Production was rolled back to =9583730= (#53, merged and authorized). #54's
+change is one CSS rule, so the blast radius was nil — but the estate served an
+*unmerged, unauthorized* build for roughly ninety seconds, and nothing in the
+pipeline would have said so. The driver reported the cutover as success.
+
+*** For 001
+
+A rebuild must not be able to express this. Any step whose verdict gates a later
+step has to be *unpipeable* — the runner captures, tests, then formats. Stated
+as a rule: *formatting happens after the verdict is in hand, never in the same
+expression that produces it.*
+
+** D17 — guard 0 has never fired, because the forge never says BEHIND
+
+*Measured 2026-09-14, after 163 commits landed on =main= in one night.*
+
+=change/queue.sh= implements guard 0 — /up to date with main/ — and the whole
+of its behind-detection sits inside one condition:
+
+: state=$(gh pr view "$pr" --json mergeStateStatus -q .mergeStateStatus)
+: if [ "$state" = "BEHIND" ]; then
+:     ... ./change/divergence.sh ... inert | pipeline | artifact ...
+: fi
+
+The careful part — classifying what landed under you, granting the berth for an
+=inert= docs merge and refusing for =pipeline= or above — only executes when the
+forge returns exactly =BEHIND=.
+
+*It never has.* Across the repository's life:
+
+| query | count |
+|-------+-------|
+| PRs whose comments say =BEHIND relative to main= | *0* |
+| PRs that got the =`main` moved by a <class>= refusal | *0* |
+| open PRs reporting =BEHIND= after 163 commits to main | *0 of 14* |
+
+The 14 were measured directly: 8 =CLEAN=/=UNSTABLE=, 6 =DIRTY=, none =BEHIND= —
+while every one of them was demonstrably behind trunk.
+
+*** Why
+
+=main= has branch protection with =required_status_checks.strict = true= — the
+"require branches to be up to date" flag — but =contexts: []= and =checks: []=.
+Strict mode with nothing required. GitHub appears to compute =BEHIND= only when
+there is a required check for being up-to-date to gate, so with an empty list
+the state is simply never produced. *[H] — inferred from the observation and the
+configuration; not verified by adding a required check and re-measuring.*
+
+*** Why it matters more than it looks
+
+This is class 7 — /a check that cannot fail produces no verdict/ — and it is the
+*second measured instance in the same repository*, which is the finding. The
+first is guard 6: =gates/production-first.sh=, 484 runs, never once triggered by
+a label. Two guards, both carefully written, both reasoned about in ADRs, and
+neither has ever refused anything.
+
+Both fail the same way: the guard is correct, and its *trigger condition is
+supplied by an oracle that does not produce that value in this configuration*.
+Reviewing the guard body finds nothing, because there is nothing wrong with it.
+
+*** What is NOT dead
+
+=change/divergence.sh= is still reachable — =change/release.sh= (guard 4b at the
+merge) fires on =BEHIND= *or* =DIRTY=, and =DIRTY= does occur. So the classifier
+runs; it is guard 0's entry to it that is unreachable.
+
+*** The rebuild test
+
+A pipeline cannot be graded on whether its guards are written correctly. It must
+be graded on *whether each guard has ever refused anything, and if not, why not*.
+A guard with zero lifetime refusals is a hypothesis, not a control — and the
+question to ask of it is not "is the logic right" but "can the oracle it reads
+ever emit the value it tests for".
+
+** D18 — an approved change is refused on entry to staging by the acceptance it did not update
+
+*Observed 2026-09-14 on the mini, with =gates/uat.sh= on the day it was written.*
+
+The case a change calendar cannot see, and the reason automating one is
+harder than it looks. A change alters the flow or the navigation of the
+storefront — #71 makes "Ready to continue to payment." a link; #40 and #52
+give the cart page a cart. Its unit tests are green, its reviewer approved
+it, its window is booked. On entry to staging the *acceptance* suite — the
+browser journey pinned as it was last accepted — refuses it, because nobody
+told the acceptance that the flow was going to change.
+
+*** What each layer does
+
+| layer | what it says | right? |
+|-------+--------------+--------|
+| gates (lint, test, e2e) | green on the head | yes — nothing it measures changed |
+| review | approved | yes — the change is what was asked for |
+| schedule | window booked, berth claimed at activation | yes — every guard passed at the claim |
+| =gates/uat.sh= on staging | *REFUSED: the journey is not what was accepted* | *yes* — acceptance is a record of what was accepted, and the flow is different |
+| the window | spent; the berth is released; the change goes back to needing a window | correct, and expensive |
+
+The refusal is the pipeline working. The cost is that the window was spent
+discovering something that was knowable at review time, and *no scheduler
+can know it*: the calendar sees a booked change with green gates, and the
+thing that will refuse it runs only against a deployed estate.
+
+*** What was actually observed
+
+PR #71 (=fc2ee1b=) deployed to block 1 and =gmake uat url=http://127.0.0.1:9010=
+refused it in 1.1 s — but at the *category page*, not at the payment link
+the PR changes. The branch predates plp's named product links, so the first
+page that differed from acceptance was one the PR never touched. Two lessons
+in one run:
+
+1. Acceptance refuses on the *first* difference, which is not necessarily the
+   *intended* one. The message names a page; the reader has to work out
+   whether that page is the change or the drift.
+2. This is D17's silent guard 0 seen from the other side. The forge never
+   said BEHIND, =queue.sh= never classified the drift, and the change reached
+   the estate carrying a category page from before the search feature. The
+   acceptance suite caught it by accident of ordering.
+
+*** The rule this suggests
+
+*A change to the flow carries its acceptance.* The PR that changes the
+navigation also changes =gates/uat/journey.spec.mjs=, and the reviewer reads
+the two diffs together: what the code does, and what a person will now
+accept. Then the suite is green on staging for the right reason, and the
+window is spent deploying rather than discovering. This is a review
+convention, not a guard — a guard would need to know which PRs change the
+flow, and the honest answer is "the ones whose acceptance diff is empty and
+should not be", which only a reviewer can judge.
+
+For an automated change calendar the consequence is plain: a booked, green,
+approved change can still forfeit its window on entry to staging, so the
+calendar must model *forfeit on entry* as an ordinary outcome, not an
+incident — which =schedule.sh close <id> failed= and the reaper already do.
+What the calendar cannot do is prevent it; only the PR can.
+
+*** Reproducing
+
+: gmake dev                                      # block 0 on main
+: gmake uat url=http://127.0.0.1:9000            # accepted, as-is journey held
+: git worktree add worktrees/pr71 origin/tiny/checkout-payment-link
+: (cd worktrees/pr71 && gmake port-alloc && gmake dev)      # block 1, :9010
+: gmake uat url=http://127.0.0.1:9010            # REFUSED at the category page
+
 * The gap D4 found
 
 Writing D4 refuted =spec.org= 0.2. Recorded here because the path is the value,
@@ -453,3 +761,410 @@ the workflows installed, one scenario per numbered run, with the observed label
 timeline recorded per step. The labeller scenarios (Part A) are cheap enough to
 run on every change to =.github/labeler.yml=; Part B needs a disposable repo
 and is a promotion-time check.
+
+** D18 — 100 PRs under two release policies, and four kinds of degraded infrastructure
+
+*Run 2026-09-14, =sim/grind100.py=, 100 changes, one berth, seed 20260914.*
+
+Two questions were asked together and they have different kinds of answer. The
+first — /should =release:start= just deploy, with the calendar demoted to a
+warning?/ — is a POLICY choice. The second — /what can still reach production
+when infrastructure is missing?/ — is not a choice at all: it falls out of which
+guard reads which component.
+
+*** The matrix
+
+| component down | spec policy (window blocks) | =release:start= (window advisory) |
+|----------------+-----------------------------+-----------------------------------|
+| calendar | *0 / 100* | *98 / 100* |
+| staging | 92 / 100 | 92 / 100 |
+| production unobservable | *0 / 100* | *0 / 100* |
+| forge | *0 / 100* | *0 / 100* |
+
+*** What the policy actually buys, and it is narrower than it sounds
+
+The advisory window changes *exactly one row*. With the calendar gone the spec
+policy ships nothing, because guard 3 abstains and abstaining blocks; the
+advisory policy ships 98. Everywhere else the two policies are identical to the
+change. So "demote the calendar to a warning" is not a general loosening — it is
+a fix for one failure mode, and it should be argued on that basis.
+
+*** Staging can be gone and nobody noticed
+
+92 of 100 ship with staging down, *under both policies*, and this was not
+designed — it was discovered by running it. Guard 4 reads an OBSERVATION RECORD
+naming a build, not the live staging environment (=gates/e2e.sh=: "it stays true
+about the SHA it names"). 94 changes already had a record naming their head, so
+the environment being gone was irrelevant. The 6 that failed had no record yet.
+
+What is lost when staging dies is the ability to produce NEW observations — not
+the ability to use old ones. That is the difference between a pipeline that
+checks *evidence* and one that checks *traversal*, and it is worth stating
+because it is the strongest argument in the design.
+
+*** Production unobservable is the floor, and it should be
+
+0 of 100 under either policy, emergency included. Guards 5 and 6 read the
+SERVED build, and no prior record can substitute because the subject does not
+exist until the deploy happens. There is no bypass and there should not be one:
+shipping into a production you cannot observe is not a deployment, it is a
+hope. This is the one row where "we must push anyway" has no safe answer.
+
+*** The forge is the single point of failure
+
+0 of 100. Every verdict, every observation record, every label and the change
+schedule itself live in one system. When it cannot answer, nothing is
+falsified — everything is INDETERMINATE, and indeterminate blocks. Correct
+behaviour, and a concentration of risk that no guard can mitigate because the
+guards are stored there too.
+
+*** The berth is a queue, not a rejection
+
+26 block events across 100 changes, and *all 98 eligible changes still shipped*
+— a blocked change waits and is re-offered rather than being dropped. The
+refusal names the holder ("coordinate with the holder (CHG-0083)"), which
+=blocked:queue= as a bare label never did. Naming the holder is what turns a
+refusal into a handoff.
+
+*** A defect in the first version of this experiment, recorded
+
+The first run reported =blocked-berth 0= for every policy and every infra
+state. The loop completed each change inside its own iteration, so the berth
+was never held when the next change asked — a queue with no queueing in it,
+reporting the berth as frictionless. Deployments now take time (one slot,
+three for a control-plane change) and the contention appears. A simulation that
+cannot exhibit the constraint it was built to study will report that the
+constraint costs nothing.
+
+** D19 — 80% deploy success, a 1% unhealthy production, and the cost of rolling forward
+
+*Run 2026-09-14, =sim/grind100.py=, 100 changes x 40 seeds, one berth.*
+Deployments succeed 80% of the time; 1% of cutovers are observed unhealthy by
+guard 5. Production is observable throughout. Rollback is assumed always to
+work — it is a front switch, not a deploy.
+
+*** Two failure kinds, and they are not the same event
+
+| kind | rate | who catches it | what production saw |
+|------+------+----------------+---------------------|
+| staging refuses the deploy | 20% | the gate | *nothing* — it never got there |
+| guard 5 observes unhealthy | 1% of cutovers | the estate, after the fact | the bad build |
+
+25 of 100 were caught at staging in a representative run. That is the pipeline
+working, and it is why the production incident rate is 1% of *cutovers* rather
+than 1% of changes. Conflating the two would make the gate look like a failure
+source instead of a filter.
+
+*** Rollback dominates roll-forward
+
+| | rollback | roll forward |
+|-+----------+--------------|
+| incidents | 31 | 37 |
+| slots production unhealthy | 31 | *86* |
+| mean restore per incident | *1.00 slots* | *2.32 slots* |
+| hotfixes built | 0 | 37 (*6 of them failed their own gate*) |
+| other changes' staging passes withdrawn | *0* | *51* |
+| total shipped (40 seeds) | *3032* | 3002 |
+
+Roll forward is 2.3x slower to restore and it is not the main cost. The main
+cost is *collateral*: a hotfix merges as =Divergence.HOTFIX=, which is in
+=WITHDRAWS=, so every other change waiting with a staging pass has that pass
+invalidated and must re-run. 51 passes were withdrawn across 40 seeds, and 30
+fewer changes shipped overall.
+
+And the hotfix is not privileged: 6 of 37 failed their own gate, because
+=itil:emergency= does not bypass guard 2. While that is happening, production
+is still serving the bad build.
+
+*The rule this suggests:* roll forward only when rollback is impossible —
+a schema migration, a consumed message, anything that made the previous build
+un-runnable. "We will just fix it forward" is a choice to keep production
+unhealthy for 2.3x longer and to invalidate everyone else's work.
+
+*** Methodological caveat, stated rather than buried
+
+The two arms are *not seed-matched*: 31 incidents versus 37 on the same 40
+seeds, because the two code paths consume different numbers of random draws and
+the streams diverge. The per-incident figures (1.00 vs 2.32 slots) and the
+collateral (0 vs 51) are the comparable ones; the raw incident counts are not.
+A paired design would fix the arrival and failure draws before branching.
+
+*** The degraded-infrastructure matrix is unchanged by reliability
+
+| component down | spec policy | =release:start= advisory |
+|----------------+-------------+--------------------------|
+| calendar | 0/100 | *73/100* |
+| staging | 74/100 | 74/100 |
+| production unobservable | *0/100* | *0/100* |
+| forge | *0/100* | *0/100* |
+
+Same shape as D18 at lower absolute numbers, because 20% now fail at staging.
+The advisory window still changes exactly one row.
+
+** D20 — the berth label was never written, so guard 1 never enforced anything
+
+*Measured 2026-09-14 against the forge timeline of every change shipped that
+night.* =deploy:staging= label events on #63, #64, #66, #67, #68, #69: *zero*.
+Not added, not removed, never present.
+
+*** What guard 1 is
+
+The berth singleton: at most one change may hold the path to production.
+=change/queue.sh:47= implements it by asking the forge who currently carries
+=deploy:staging=:
+
+: holder=$(gh pr list --state open --label deploy:staging ...)
+
+*** What is missing
+
+Nothing on the driven path ever ADDS that label. =queue.sh= removes it on
+refusal (=:39=, =:50=) and reads it for the holder query (=:47=). The word
+=--add-label deploy:staging= does not appear in the script. The workflow that
+was supposed to set it is =deploy-staging.yml=, which has never successfully
+run: 249 runs, 0 successes, 239 skipped, 10 failed.
+
+So guard 1 asked "who holds the berth" and the answer was *always nobody*.
+
+*** Why it looked like it worked
+
+Because the whole night was driven strictly one change at a time, by hand. The
+constraint was satisfied by the DRIVER's behaviour, not by the guard. A second
+concurrent driver would have been admitted without complaint, and the only
+evidence would have been two changes deploying into staging at once.
+
+The one time a berth DID block anything was PR #92, which carried
+=deploy:staging= — set by a workflow run earlier in the repository's life — and
+went on blocking every other change long after its build stopped serving
+anywhere. So the label's only observed effect was a false positive.
+
+*** The pattern, now with three instances
+
+| guard | lifetime refusals | why |
+|-------+-------------------+-----|
+| 0 — up to date with main | 0 | the forge never returns =BEHIND= here (D17) |
+| 1 — berth singleton | *0* | the label it reads is never written |
+| 6 — production-first | 0 | 484 runs, never triggered by a label |
+
+Three carefully written, ADR-reasoned guards, none of which has ever refused
+anything, each for a different reason and none of them a bug in the guard's
+logic. Reviewing the guard body finds nothing in all three cases.
+
+*The audit question is not "is this guard correct".* It is: /has this guard
+ever refused anything; if not, is its trigger reachable; and what is actually
+maintaining the property in the meantime?/ For guard 1 the answer to the last
+part is "a person being careful", which is not a control.
+
+** D21 — three identities, one lock, and neither operator could tell
+
+*2026-09-14, 23:25-23:33Z. Two experiments ran against the same estate without
+either being told about the other, and each recorded the other's interference
+from its own side.* =experiments/022= (five agents, #92-#96, jwalsh identity)
+and a no-scheduler grind (#97-#101, =aygp-dr= identity). The corroboration is
+the evidence: neither account depends on the other being believed.
+
+*** The forge timeline, which settles it
+
+=deploy:staging= events on #94 and #99:
+
+| when | PR | event | actor |
+|------+----+-------+-------|
+| 23:27:17 | #94 | + | jwalsh |
+| *23:27:23* | #94 | *−* | *aygp-dr* |
+| 23:29:04 | #99 | + | aygp-dr |
+| *23:29:17* | #99 | *−* | *github-actions[bot]* |
+| 23:29:09 | #94 | + | jwalsh |
+
+Three writers. The =aygp-dr= driver removed a lock =jwalsh= was holding; six
+seconds of its own log say /releasing the estate/, meaning its own. Thirteen
+seconds after taking #99's lock, a workflow removed it.
+
+=experiments/022='s table records the same event from the other side, without
+knowing what caused it: #94 /"swept once mid-hold at 23:27:23"/.
+
+*** Why it is not a race but a missing field
+
+The lock is a LABEL. A label has no owner, so =--remove-label deploy:staging=
+is the same call whether you are releasing your own lock or taking someone
+else's. There is no operation available that means /release MINE/.
+
+Guard 1 asks "is anyone holding the berth" and gets a boolean. It cannot ask
+"am *I* holding it", so a driver that believes it holds the berth and a driver
+that has been swept are indistinguishable *to themselves*.
+
+This is the L7 review's invariant 4 arriving as an incident: *the berth must be
+a lease with an owner and a deadline.* Not a label.
+
+*** The third writer is the fix for the second
+
+=main-moved.yml= fires on every push to =main= and withdraws staging verdicts
+that trunk has outrun. It is correct. It removed #99's lock at 23:29:17 because
+=main= had moved — and =main= had moved because pipeline fixes were being
+landed directly on =main= during the grind, deliberately.
+
+*So the act of repairing the pipeline withdrew the berth of the deployment the
+repair was being tested on.* Both are right in isolation. Nothing in the system
+holds both facts at once.
+
+*** What it cost, measured
+
+From =experiments/022=: #94 took *~24 minutes over five claim rounds* — lost to
+#95, refused by the other operator's #98, lost to #96, backed off a two-holder
+tie with #100, lost to #93, and swept once mid-hold. #92 took ~9.5 minutes over
+two runs, its first run swept at =production:healthy=.
+
+All five landed. The contention did not lose a change; it multiplied the time
+to land one by roughly eight.
+
+*** The thing a watcher could not see
+
+=experiments/022='s hypothesis was that a watcher of the PR list alone can tell
+who is moving to production. A two-holder tie, a sweep mid-hold, and a
+workflow-initiated release all look identical on that list: the label is simply
+absent, and absence has no author. The PR list shows the STATE of the lock and
+never its HISTORY, which is the only place the answer lives.
+
+** D22 — five owners, one task each, and one landed
+
+*2026-09-15 02:46–03:06Z. Five agents, one PR each, told only: get your change
+to production. Forbidden from editing any pipeline script and from clearing
+another change's label.* Full account in =experiments/024-five-owners/=.
+
+*One of five landed*, and only by abandoning the documented entry point and
+hand-running the eight-step node sequence.
+
+*** The three that generalise
+
+1. *The refusal that mattered most was never posted.* =driver.sh= exit 5,
+   "lock held by #N", goes to stdout only — no comment, no label, no queue
+   entry, while =README.org= promises a comment naming the holder. An owner
+   who says =change:start= and walks away sees a change that silently does
+   nothing forever. All five hand-rolled a polling loop.
+
+2. *The abort named a symptom and never the cause.* Every failed run posted
+   /"staging did not come up serving <sha>"/ while staging was healthy and
+   passed 27 e2e checks minutes later. The actual error — a missing directory
+   — reached the terminal and never the pull request. Acting on the comment
+   alone, an owner investigates a working estate.
+
+3. *Guard 1 admitted two holders.* #52 and #55 both took =deploy:staging= at
+   02:51:42Z, because the label and =lock.sh='s record are two locks acquired
+   non-atomically. A workflow stripped one eleven seconds later while its
+   driver went on believing it held the berth. D20 said guard 1 had never
+   refused; this says it *admitted a violation of the property it enforces*.
+
+*** The finding that is not about messages
+
+=change/driver.sh= hardcodes another host's estate (=:9010=/=:9020=,
+=worktrees/staging=, =/tmp/claude-501/=). On hydra those ports are live as
+=dev-1= and =dev-2=, =promotes=no= — and =:9010= was serving =b72589f=, which
+was #60's own pre-rebase head. Had the worktree existed, the driver would have
+deployed a protected change onto a dev block and *the health poll would have
+matched*, reporting staging deployed while deploying nothing. A false pass one
+SHA away.
+
+*** And the template, which the pipeline already contains
+
+The best message in the run was written by a person: the =CHANGES_REQUESTED=
+review on #60 named the rule, quoted both versions of the line, explained why,
+said what would clear it, and separated what it had checked from what it had
+not. Its owner acted without opening a script.
+
+=production-first.sh= reaches the same standard — /"it turns green by itself
+the moment gates/health.sh records production:healthy. Nothing to re-push."/ —
+saying what to do and what not to bother doing. The pipeline knows how to
+write a refusal; the abort and lock paths were not given the same care.
+
+** D23 — ten changes, five owners, no calendar: all ten landed and the evidence was corrupted anyway
+
+*2026-09-15 06:02–06:18Z. Ten one-line changes (#110-#119), five agents, two
+each. No calendar, no window, no booking: the rule was estate free, not
+frozen, no emergency.* All ten merged in sixteen minutes.
+
+*** The speed answer
+
+| | |
+|-+-|
+| fastest, berth free | *1m 11s* (#110) |
+| typical, berth free | 105-120s, remarkably uniform |
+| worst, under contention | 15m 07s (#118, ~7m of waiting across 3 attempts) |
+| berth occupancy | *~100%*, gaps between holders 0-4s |
+
+Once a change held the berth, productive work was *17-20 seconds of staging
+plus about a minute of production*. Everything else in the wall clock was
+waiting. With N agents ahead, wait is very close to N x 110s — the queue is
+deterministic, it is just invisible.
+
+*** The lock is not a mutex, and its success message is a lie
+
+=change/lock.sh acquire= is a non-atomic read-modify-write on an issue body.
+Its own header says so: /"last-write-wins ... a record with a tiebreak, not
+the mutex."/ Observed *five times across three agents*:
+
+: 06:06:12  #111 acquired
+: 06:06:14  acquire for #116 returned rc=0, printed "lock: acquired by #116"
+:           -- and `lock.sh status` read `pr: 111`
+
+Two agents each believed they held the berth. The refusal path works
+correctly; the defect is only in the concurrent-grant window, which is the
+worse half. As one owner put it: */a refusal that tells you nothing is a
+nuisance; a success that tells you something untrue is what produced the next
+finding./*
+
+*** Three instruments passed while measuring two different builds
+
+This is the finding. #116's run recorded =staging:healthy pass d782067= and
+=staging:e2e pass d782067=, then #111 deployed =09d6032= into the same slot
+mid-run, and =staging:smoke= recorded =pass on 09d6032=.
+
+Three green instruments. Two builds. And the stylesheet actually being served
+at that moment was *the base version* — neither change.
+
+*Guard 4 refused it, and guard 4 was the only thing that did.* Its
+per-instrument SHA match is what caught a corrupted evidence stack that every
+individual gate reported as green. This is the clearest vindication the
+project has produced of the rule that *a verdict must name its build*: the
+gates were all honest, all green, and collectively describing an estate that
+never existed.
+
+*** A deploy that returns 0 and leaves nothing serving
+
+=targets/node/deploy.sh staging d782067= printed =staging <- d782067 (block
+20, :9200)= and exited 0 with *nothing listening*. Health, e2e, smoke and
+observe then all failed against a dead slot, and health *withdrew* a
+previously-good label. The slot recovered ten seconds later on a third party's
+build. A false success, under contention, from the one script whose job is to
+place a build.
+
+*** Nothing gates a static file
+
+Two agents answered this independently and agreed.
+
+- =robots.txt=: no gate anywhere fetches it. =e2e.sh= probes three static
+  paths and this is not one; =smoke.sh= spiders =<a href>= and nothing links
+  it; =health.sh= only hits =/__health/=. #115 went dev -> staging ->
+  production -> merge *with no instrument reading the bytes it changed*.
+- =oneui.css=: =e2e.sh= asserts only that it returns 200 and =text/css=.
+  Both diffs were invisible. /"An empty file, the unmodified file, or a
+  stylesheet with the rules inverted would produce an identical 27-check
+  PASS."/
+
+So every green label on those two changes is a true statement about a build
+that happens to contain the change, and *none of them is a statement about the
+change*. 2b pins that a file is served; nothing pins WHICH file.
+
+*** settle.sh reports a release it does not perform
+
+Reproduced *eight times out of ten* across four independent agents. It prints
+=ok berth released=; =lock.sh status= immediately after still names the PR.
+The label side of the release happens; the lock body does not. Every agent had
+to call =lock.sh release= by hand. An operator who trusts the line strands the
+single berth until the 60-minute stale timer.
+
+*** And the briefing was wrong again, which is the honest part
+
+The manual sequence handed to all five agents *never takes the =deploy:staging=
+label* — the actual berth that guard 1 reads. No open PR held it at any point
+during the round. So the real mutex was unclaimed by everyone, and the only
+thing arbitrating the single =:9200= slot was an advisory record with a race
+in it. That is why the double-booking was possible at all, and it was in the
+instructions, not the pipeline.

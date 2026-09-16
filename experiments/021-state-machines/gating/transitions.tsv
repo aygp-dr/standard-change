@@ -1,0 +1,151 @@
+from	to	trigger	trigger_kind	guard	actor	reversible	weight	evidence
+G01	G02	labeller derives app:* and itil:* from the diff	label_add	labeler:skip absent	labeller	yes	0.75	spec.org:747-760
+G01	G03	a person sets labeler:skip	label_add	none	human	yes	0.05	spec.org:732-742
+G01	G08	the PR was opened as a draft	forge_event	none	human	yes	0.10	tla/StandardChange.tla:66-68
+G01	G93	the author closes it	forge_event	none	human	no	0.04	change/abort.sh:12-21
+G02	G04	classify step derives exactly one itil:* from the diff	label_add	is_normal xor has_app	labeller	yes	0.85	spec.org:797-825
+G02	G05	a person declares itil:emergency on a derived class	label_add	none	human	yes	0.15	gates/preflight.sh:170-190
+G03	G04	a person sets the class by hand	label_add	none	human	yes	0.90	change/label-owners.tsv:31
+G03	G05	the hand-set class collides with a declaration	label_add	none	human	yes	0.10	gates/preflight.sh:170-190
+G04	G20	gate.yml fires on opened/synchronize/labeled	forge_event	none	workflow	no	0.95	.github/workflows/gate.yml:2-5
+G04	G05	a second class is declared	label_add	none	human	yes	0.05	gates/preflight.sh:183-190
+G05	G04	a person removes the class that is wrong	label_remove	never the pipeline: deciding an emergency is a declaration	human	yes	0.75	gates/preflight.sh:186-190
+G05	G91	abandoned with its class undefined	human	none	human	no	0.15	change/abort.sh:12-21
+G20	G21	the jobs are scheduled and start	forge_event	none	workflow	no	0.70	.github/workflows/gate.yml:10-27
+G20	G25	the jobs are never started; conclusion=skipped or null	gate_verdict	notrun>0 and failed=0	gate	no	0.10	gates/preflight.sh:107-110
+G20	G26	the forge cannot be read at all	gate_verdict	bad=99 sentinel	gate	no	0.05	gates/preflight.sh:74,113
+G20	G29	gates/report.sh runs the suite on a host and posts local/ statuses	gate_verdict	gate-selftest first, and its result gates the rest	gate	no	0.15	gates/report.sh:85-94
+G21	G22	gate-selftest fails or does not pass	gate_verdict	selftest(H(c)) != pass	gate	no	0.05	.github/workflows/gate.yml:10-27
+G21	G23	latest run per name is success, selftest among them	gate_verdict	group_by(.name)|map(max_by(.started_at))	gate	yes	0.55	gates/preflight.sh:127-130
+G21	G24	a gate finds something	gate_verdict	zero findings or the gate failed	gate	yes	0.25	spec.org:1819-1821
+G21	G27	fresh runs land beside older runs on the same SHA	forge_event	none	workflow	no	0.10	scenarios.org D15
+G21	G25	the run is cancelled mid-flight	forge_event	none	workflow	no	0.05	gates/preflight.sh:107-110
+G22	G20	the suite is re-run; nothing is carried forward	gate_verdict	a gate that cannot reject its fail fixture produces no verdict that run	gate	no	1.00	spec.org:1816-1819
+G23	G06	a person adds change:requested	label_add	none	human	yes	0.60	change/label-owners.tsv:32
+G23	G28	the author pushes; the head moves	forge_event	verdicts are bound to a content hash	workflow	no	0.25	spec.org:744-746
+G23	G80	guard 6 evaluates on a label event and reports NOT YET	gate_verdict	production:healthy absent	gate	yes	0.15	gates/production-first.sh:114-116
+G24	G20	the author pushes a fix	forge_event	none	human	no	0.80	tla/StandardChange.tla:74-87
+G24	G91	the change is abandoned red	human	none	human	no	0.05	change/abort.sh:12-21
+G24	G93	the author closes it	forge_event	none	human	no	0.05	change/abort.sh:22-25
+G25	G44	preflight refuses: absent is not red, and it blocks	gate_verdict	exit 4	gate	yes	0.60	gates/preflight.sh:119-126
+G25	G20	the jobs are re-queued and start	forge_event	none	workflow	no	0.40	gates/preflight.sh:107-110
+G26	G44	preflight refuses: could not check is not a verdict	gate_verdict	exit 4	gate	yes	0.60	gates/preflight.sh:113
+G26	G20	the forge answers	forge_event	none	workflow	no	0.40	gates/preflight.sh:74
+G27	G23	the reader takes the latest run per name	gate_verdict	group_by(.name)|map(max_by(.started_at))	gate	yes	0.85	gates/preflight.sh:77-82
+G27	G24	the reader counts history and refuses on replaced evidence	gate_verdict	superseded is not current	gate	yes	0.15	scenarios.org D15
+G28	G20	the gates run again on the new head	forge_event	the old verdict stays true about a build nobody proposes	workflow	no	1.00	change/evidence.sh:16-20
+G29	G40	a person requests the berth on a locally reported build	label_add	lbad=0 and lok>=3 and lself>=1	human	yes	0.80	gates/preflight.sh:114-118
+G29	G23	CI returns and its contexts sit beside the local ones	forge_event	none	workflow	yes	0.20	gates/preflight.sh:57-67
+G06	G47	the scheduler books a window	label_add	change:requested present	scheduler	yes	0.70	change/label-owners.tsv:33
+G06	G40	the berth is requested with no window booked	label_add	none	human	yes	0.20	gates/preflight.sh:31-53
+G06	G07	a person declares this change the remedy	label_add	never inferred	human	yes	0.10	change/label-owners.tsv:56
+G47	G40	the window comes due and the berth is claimed	timer	none	scheduler	yes	0.85	change/schedule.sh
+G47	G48	the window lapses unattempted	timer	nothing was attempted, so nothing failed	reaper	no	0.15	change/reap.sh:16-22
+G48	G06	the change is still eligible and needs a new window	human	the reaper must not rebook	human	yes	0.85	change/reap.sh:16-22
+G48	G93	nobody re-requests it	human	none	human	no	0.10	change/reap.sh:74-77
+G07	G40	an emergency claims the berth	label_add	itil:emergency exempts the freeze and the queue, not guards 2 or 5	human	yes	0.90	gates/preflight.sh:286-291
+G07	G05	itil:emergency lands beside a derived class	label_add	none	human	yes	0.10	gates/preflight.sh:170-176
+G40	G41	guard 0 refuses: mergeStateStatus is BEHIND	gate_verdict	B(c) != T and class is not inert	gate	yes	0.00	change/queue.sh:24-25,38-42
+G40	G42	guard 1 refuses: another PR holds the berth	gate_verdict	|{x : holds_berth(x)}| > 1	gate	yes	0.12	change/queue.sh:46-53
+G40	G44	preflight cannot read the calendar, forge, draft flag or estate	gate_verdict	exit 4 blocks	gate	yes	0.10	gates/preflight.sh:6-8,51,139,208,285
+G40	G45	a freeze is in force on the estate holder	gate_verdict	exit 3 and no itil:emergency	gate	yes	0.05	gates/preflight.sh:292-298
+G40	G46	the lock is held, an emergency is in flight, or hold:staging stands	gate_verdict	exit 2	gate	yes	0.05	gates/preflight.sh:299-317
+G40	G05	preflight finds more than one class	gate_verdict	exit 2	gate	yes	0.03	gates/preflight.sh:183-190
+G40	G08	preflight believes the author	gate_verdict	exit 6	gate	yes	0.03	gates/preflight.sh:205-217
+G40	G43	every entry guard passes and the berth is claimed	label_add	guards 0, 1 and 3	workflow	yes	0.62	change/queue.sh:56
+G41	G20	rebase onto main; a rebase is a new tree and verdicts do not survive it	forge_event	none	human	no	0.50	tla/StandardChange.tla:92-99
+G41	G40	rebase and re-request the berth	label_add	none	human	yes	0.50	change/queue.sh:40-42
+G42	G40	the holder settles and the berth frees	label_remove	none	human	yes	0.90	change/queue.sh:50-53
+G42	G93	the change is withdrawn while queued	human	none	human	no	0.05	change/abort.sh:22-25
+G44	G40	the oracle answers and the question is asked again	gate_verdict	re-derived at reliance, not re-used	human	yes	0.70	spec.org:1060-1064
+G44	G20	the gates are re-run because the absence was theirs	forge_event	none	workflow	no	0.30	gates/preflight.sh:119-126
+G45	G40	the freeze is lifted	label_remove	a property of the world, not of any change	human	yes	0.80	gates/preflight.sh:292-298
+G45	G07	a person declares this change the remedy for the freeze	label_add	an emergency is what a freeze is for	human	yes	0.20	gates/preflight.sh:286-289
+G46	G40	the lock releases or the hold is removed by the person who set it	label_remove	only a person may remove a hold	human	yes	1.00	gates/preflight.sh:310-317
+G43	G50	staging is deployed and no instrument has reported yet	deploy_event	none	workflow	no	1.00	change/evidence.sh:31-35
+G50	G51	every required instrument records a pass naming this head	gate_verdict	verdict=pass and sha=head for e2e, smoke and uat	gate	yes	0.40	change/guard4.sh:153-181
+G50	G53	an instrument records a failure on this head	gate_verdict	verdict=fail	gate	yes	0.20	change/guard4.sh:158-160
+G50	G52	the head moves after the measurement is taken	forge_event	sha != head	workflow	no	0.10	change/guard4.sh:161-164
+G50	G54	a label is set and the record write fails	label_add	a label cannot name a build	workflow	yes	0.05	change/observe.sh:42-43
+G50	G55	an instrument records a verdict on a run whose selftest did not pass	gate_verdict	selftest(H(c)) != pass	gate	yes	0.05	gates/report.sh:85-92
+G50	G56	a failure label and its pass label both stand	label_add	written by whichever instrument ran last	workflow	yes	0.05	change/guard4.sh:186-193
+G50	G57	an instrument re-runs and writes a second record	gate_verdict	last wins, and nothing has to be withdrawn	gate	no	0.15	change/evidence.sh:86-100
+G51	G60	a person approves this head	human	commit_id = head	human	yes	0.40	change/guard4.sh:112-120
+G51	G61	a proxy record names this head	human	record says PROXY	driver	yes	0.15	change/guard4.sh:124-125
+G51	G62	no approval and no proxy record on this head	human	reviewDecision = NONE, or APPROVED of an earlier commit	gate	yes	0.25	change/guard4.sh:119,126-127
+G51	G63	the reviews endpoint cannot be read	gate_verdict	head UNCONFIRMED, reviewDecision stands, said out loud	gate	yes	0.10	change/guard4.sh:102-111,121-123
+G51	G58	the person takes their acceptance back	label_remove	record AND label for a non-repeatable observation	human	yes	0.10	change/guard4.sh:175-180
+G52	G50	the instrument re-runs on this head	gate_verdict	refuse, do not re-stamp	gate	no	0.80	change/guard4.sh:161-164
+G52	G66	guard 4 refuses on a measurement about another build	gate_verdict	evsha != short	gate	yes	0.20	change/guard4.sh:161-164
+G53	G50	the fault is fixed and the instrument re-runs	gate_verdict	last wins	gate	no	0.45	change/evidence.sh:86-90
+G53	G20	the author pushes a fix and the head moves	forge_event	none	human	no	0.30	tla/StandardChange.tla:74-87
+G53	G91	the change is closed failed	human	production never served it	human	no	0.15	change/abort.sh:12-17
+G54	G66	guard 4 refuses: a label with no record is a claim nobody can date	gate_verdict	evidence.sh latest exits 1	gate	yes	0.70	change/guard4.sh:168-170
+G54	G50	the instrument runs and writes the record	gate_verdict	none	gate	no	0.30	change/evidence.sh:53-82
+G55	G22	the void suite is the finding, not the record it wrote	gate_verdict	no other result is reportable	gate	no	0.60	gates/report.sh:88-90
+G55	G50	the selftest passes and the instruments run again	gate_verdict	none	gate	no	0.40	Makefile:77-79
+G56	G66	guard 4 refuses: a recorded failure has not been withdrawn	gate_verdict	*-failed label present	gate	yes	0.80	change/guard4.sh:186-193
+G56	G50	the instrument that ran last is re-run to resolve the pair	gate_verdict	<=1 per exclusion group	gate	no	0.20	change/label-owners.tsv:88-91
+G57	G51	the latest record is taken and the earlier one is left where it is	gate_verdict	last wins	gate	no	0.80	change/evidence.sh:86-100
+G57	G66	a reader counts both records and refuses on replaced evidence	gate_verdict	superseded is not current	gate	yes	0.20	scenarios.org D15
+G58	G66	guard 4 refuses: acceptance withdrawn	gate_verdict	label absent for an ATTESTED instrument	gate	yes	0.70	change/guard4.sh:175-180
+G58	G50	a person uses the site again and records it	human	the person is the instrument	human	no	0.30	change/observe.sh:1-13
+G60	G65	guard 4 finds the whole stack green on this head	gate_verdict	review, gates and every observation on H(c)	gate	yes	0.90	change/guard4.sh:200-202
+G60	G66	something else in the stack is red	gate_verdict	rc != 0	gate	yes	0.10	change/guard4.sh:200-202
+G61	G65	guard 4 accepts a proxy record naming this head	gate_verdict	record says PROXY and names the head	gate	yes	0.85	change/guard4.sh:124-125
+G61	G66	the proxy record names another build	gate_verdict	sha != head	gate	yes	0.15	change/guard4.sh:124-125
+G62	G66	guard 4 refuses: no consent about this build	gate_verdict	NONE and no proxy record	gate	yes	1.00	change/guard4.sh:126-127
+G63	G65	guard 4 proceeds on reviewDecision with the head unconfirmed	gate_verdict	could not ask is not the head moved	gate	yes	0.50	change/guard4.sh:121-123
+G63	G66	the rest of the stack refuses anyway	gate_verdict	rc != 0	gate	yes	0.50	change/guard4.sh:200-202
+G65	G70	the deployment is driven and deploy:production is set	deploy_event	guard 4 green on this head	driver	no	0.90	change/label-owners.tsv:44
+G65	G48	the window runs out while the change sits authorized	timer	authorized, unbooked is eligible; authorized, expired is not	reaper	no	0.10	change/reap.sh:16-22
+G66	G50	the failing instrument is re-run	gate_verdict	none	gate	no	0.45	change/guard4.sh:148-152
+G66	G20	the author pushes; everything is re-measured against the new head	forge_event	none	human	no	0.20	tla/StandardChange.tla:74-87
+G66	G91	the change is closed failed	human	a refusal is a successful outcome and is never worked around	human	no	0.08	change/abort.sh:12-17
+G66	G48	the window expires while the guard keeps refusing	timer	refusing inside a window is the window doing its job	reaper	no	0.20	change/reap.sh:16-22
+G70	G71	N samples per route all report the expected build	gate_verdict	bad=0 and distinct=1	gate	yes	0.55	gates/health.sh:67-75
+G70	G72	the samples report more than one build	gate_verdict	distinct>1	gate	yes	0.15	gates/health.sh:70-72
+G70	G73	samples came back without the expected build	gate_verdict	bad>0 with a real response	gate	yes	0.12	gates/health.sh:63,67-69
+G70	G74	the probe could not connect and 000 was counted as a bad sample	gate_verdict	code=000 folded into UNHEALTHY	gate	yes	0.13	gates/health.sh:57-63,67-69
+G70	G75	the label is set and the record write fails	deploy_event	health.sh sets rc=7 if the record fails, so this is the pre-fix shape	workflow	yes	0.05	gates/health.sh:94-96
+G71	G85	guard 6 green: the record names the head being merged	gate_verdict	served_build(production) = H(c)	gate	yes	0.80	gates/production-first.sh:96-100
+G71	G81	the head moves between the observation and the merge	forge_event	evsha != head	workflow	no	0.10	gates/production-first.sh:103-108
+G71	G82	guard 6 refuses: production is serving another build	gate_verdict	served_build(production) != T	gate	yes	0.00	spec.org:167-186
+G71	G86	the window lapses while production serves an unmerged build	timer	deployed, not merged, and the window is gone	reaper	no	0.10	spec.org:2769-2775
+G72	G92	production is returned to the prior build	deploy_event	--backed-out requires --to <sha>	human	no	0.35	change/abort.sh:17-21
+G72	G70	the deployment is driven again to converge the estate	deploy_event	none	driver	no	0.45	gates/health.sh:70-72
+G72	G91	the change is closed failed with the estate mixed	human	none	human	no	0.10	change/abort.sh:12-17
+G73	G92	production is returned to the prior build	deploy_event	guard 5 has no bypass	human	no	0.50	spec.org:913-916
+G73	G70	the deployment is driven again	deploy_event	none	driver	no	0.30	gates/health.sh:67-69
+G73	G91	the change is closed failed	human	none	human	no	0.12	change/abort.sh:12-17
+G74	G70	the estate is reached and probed again	deploy_event	none	driver	no	0.50	gates/health.sh:57-63
+G74	G92	a rollback is performed on a reading nobody took	deploy_event	the estate was never observed	human	no	0.25	change/abort.sh:17-21
+G74	G91	the change is closed failed on a reading nobody took	human	none	human	no	0.12	change/abort.sh:12-17
+G74	G44	[H] PROPOSED: abstain instead - exit 4, blocks, and says the estate was not observed	gate_verdict	code=000 is indeterminate, not a failed sample	gate	yes	0.00	[H]
+G75	G81	guard 6 refuses: a label with no record behind it	gate_verdict	no observation record stands behind production:healthy	gate	yes	0.80	gates/production-first.sh:109-113
+G75	G70	health.sh is run again and records what it sampled	gate_verdict	none	gate	no	0.20	gates/health.sh:94-96
+G80	G06	the change is requested and goes round the loop	label_add	NOT YET is the expected state, not a finding	human	yes	0.55	gates/production-first.sh:114-116
+G80	G83	the diff was read and touches nothing deployable	gate_verdict	deploys(c) provably empty; the message names the oracle	gate	yes	0.20	gates/production-first.sh:65-75
+G80	G84	groups.sh could not answer, the error was swallowed, and empty was read as exempt	gate_verdict	indeterminate is not exempt	gate	yes	0.25	gates/production-first.sh:39,65-68
+G81	G70	the estate is re-observed on this head	deploy_event	refuse, do not re-stamp	driver	no	0.55	gates/production-first.sh:103-108
+G81	G20	the author pushes and everything is re-measured	forge_event	none	human	no	0.20	spec.org:744-746
+G81	G91	the change is closed failed	human	none	human	no	0.12	change/abort.sh:12-17
+G82	G70	the other build settles and this one is deployed again	deploy_event	none	driver	no	0.50	spec.org:205-222
+G82	G91	the change is closed failed	human	none	human	no	0.50	change/abort.sh:12-17
+G83	G85	merge on the gates alone	gate_verdict	exempt, with positive evidence that it deploys nothing	gate	yes	1.00	gates/production-first.sh:69-75
+G84	G85	merge on an exemption nobody earned	gate_verdict	the absence of evidence that it deploys something	gate	yes	1.00	gates/production-first.sh:39,65-68
+G85	G90	settle.sh sets change:complete, then merges	label_add	production observed serving this build, now, from a host that can see it	workflow	no	0.92	change/settle.sh:100-107
+G85	G93	the merge is refused and the change is withdrawn	forge_event	a failed merge must stop settlement	workflow	no	0.08	change/settle.sh:108-116
+G86	G85	the estate is re-observed and the merge proceeds without a window	deploy_event	refusing at settlement would leave production ahead of trunk	driver	no	0.50	change/settle.sh:72-80
+G86	G92	production is returned and the change is closed backed-out	deploy_event	the word asserts an estate action	human	no	0.30	change/abort.sh:17-21
+G86	G91	the change is closed failed with production still serving it	human	name it; the next change branches from a trunk without it	human	no	0.15	spec.org:2760-2768
+G08	G01	the author marks it ready	forge_event	the pipeline believes the author	human	yes	0.85	gates/preflight.sh:205-217
+G08	G93	the draft is closed	forge_event	none	human	no	0.10	change/abort.sh:22-25
+E01	E02	a person declares a freeze on the estate holder	label_add	blocks everyone including its declarer	human	yes	0.30	change/label-owners.tsv:53
+E01	E03	a person declares an emergency on the estate holder	label_add	grants NO exemption to whatever PR carries it	human	yes	0.20	change/label-owners.tsv:54
+E01	E04	nothing holds the berth	label_remove	the label query is the authority, not the concurrency group	workflow	yes	0.50	spec.org:1006-1010
+E02	E01	the freeze is lifted	label_remove	none	human	yes	1.00	change/label-owners.tsv:53
+E03	E01	the emergency settles	label_remove	none	human	yes	1.00	change/label-owners.tsv:54
+E04	E05	a PR claims the berth	label_add	|{x : holds_berth(x)}| <= 1	workflow	yes	0.60	change/queue.sh:46-53
+E04	E01	the estate is idle	timer	none	workflow	yes	0.40	spec.org:1006-1010
+E05	E04	settle.sh or reap.sh clears deploy:staging	label_remove	a berth held by a dead window blocks everyone with no declared cause	reaper	yes	1.00	change/label-owners.tsv:41

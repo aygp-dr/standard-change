@@ -68,7 +68,7 @@ export function render(path) {
 
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
-export const BACKGROUND = '#e8f0ff';
+export const BACKGROUND = '#d6efff';
 
 // `port` is the port this process is ACTUALLY answering on: the caller takes it
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
@@ -80,6 +80,8 @@ export const BACKGROUND = '#e8f0ff';
 // (shared/oneui.js), so anything derived from a request must be escaped with
 // esc() by whoever puts it here. Routes absent from the table render nothing.
 export const PANELS = {
+  '/account': '<p><b>✨ Your account · orders, addresses and payment, all in one place.</b></p>',
+  '/cart': '<h2>Your cart</h2><p>Your cart is empty. Nothing has been added yet.</p>',
 };
 
 export function panel(path) {

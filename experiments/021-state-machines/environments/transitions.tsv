@@ -1,0 +1,114 @@
+from	to	trigger	trigger_kind	guard	actor	reversible	weight	evidence
+S00_open	S01_requested	change:requested added	label_add	none -- this is the human's whole part	human	yes	0.59	change/label-owners.tsv:31
+S00_open	S10_dev_served	deploy.sh dev-<n> <sha>	deploy_event	ports.sh must yield a block <= 9; block 10 is the team tier	driver	yes	0.20	targets/node/deploy.sh:40
+S00_open	S12_team_checked_out	IDP checkout of a 9100-tier environment	human	the environment must be activated	human	yes	0.05	environments.tsv:29
+S00_open	S13_team_declared_unactivated	deploy to a declared name whose activated=no	deploy_event	a declared name is not a usage error	driver	yes	0.04	targets/node/deploy.sh:64
+S00_open	S05_emergency_declared	itil:emergency added	label_add	a person must own declaring an emergency	human	yes	0.06	change/label-owners.tsv:60
+S00_open	S60_failed	PR closed or abandoned before any estate contact	human	none	human	no	0.06	change/abort.sh:123
+S01_requested	S20_scheduled	schedule.sh block <pr> staging <minutes>	human	a window must be placeable after the latest open end	scheduler	yes	0.63	spec.org:861
+S01_requested	S02_release_armed	release added	label_add	none	human	yes	0.10	change/label-owners.tsv:36
+S01_requested	S50_blocked_queue	guard 1 -- another open PR holds deploy:staging	gate_verdict	the label query is the authority, not the concurrency group	gate	yes	0.15	change/queue.sh:47
+S01_requested	S51_blocked_freeze	preflight exit 3 or 2 -- the estate is shut	gate_verdict	guard 3	gate	yes	0.10	gates/preflight.sh:291
+S01_requested	S60_failed	abort.sh failed	human	none	human	no	0.02	change/abort.sh:123
+S02_release_armed	S20_scheduled	the scheduler consumes the trigger	timer	the change must be eligible	scheduler	yes	0.76	change/label-owners.tsv:36
+S02_release_armed	S02_release_armed	the trigger is left on and re-fires	timer	the label is still present	scheduler	yes	0.20	change/label-owners.tsv:36
+S02_release_armed	S60_failed	abort.sh failed	human	none	human	no	0.04	change/abort.sh:123
+S05_emergency_declared	S24_cleared	deploy:production added on the emergency path	label_add	guard 4 -- itil:emergency AND an approving review; guard 2 re-checked on the head SHA	workflow	yes	0.70	spec.org:1228
+S05_emergency_declared	S60_failed	no approving review, or gate-selftest red on the head SHA	gate_verdict	guard 2 and guard 5 have no emergency bypass	gate	yes	0.15	scenarios.org:113
+S05_emergency_declared	S20_scheduled	the classification is withdrawn	label_remove	a class must be re-confirmed at activation, not trusted from when it was written	human	yes	0.15	scenarios.org:257
+S10_dev_served	S00_open	ports.sh free, or the worktree is removed	human	none	driver	yes	0.45	change/ports.sh:26
+S10_dev_served	S11_dev_stale_row	the block's processes die; the ports.tsv row stays	deploy_event	none -- nothing reconciles the registry against the socket table	driver	yes	0.25	targets/node/deploy.sh:147
+S10_dev_served	S01_requested	change:requested added	label_add	none	human	yes	0.30	change/label-owners.tsv:31
+S11_dev_stale_row	S10_dev_served	redeploy -- deploying IS the allocation, so the row is rewritten	deploy_event	block < 10	driver	yes	0.55	targets/node/deploy.sh:151
+S11_dev_stale_row	S00_open	the registry is reconciled by hand	human	one worktree holds at most one block	human	yes	0.45	change/ports.sh:33
+S12_team_checked_out	S00_open	checked back in, or the lease expires	timer	none	scheduler	yes	0.70	README.org:507
+S12_team_checked_out	S01_requested	the change is requested; nothing the team environment saw travels with it	human	NO PROMOTION EDGE EXISTS -- guard 4 reads staging:* and production:* and nothing else	human	yes	0.30	environments.tsv:14
+S13_team_declared_unactivated	S00_open	deploy refused, exit 6 -- a reservation, not a target	deploy_event	activated=no; activating it is a decision, not a deploy	driver	yes	1.00	targets/node/deploy.sh:64
+S20_scheduled	S21_berthed	activation -- preflight 0, then queue.sh validates guards 0 and 1	deploy_event	G0 up-to-date-with-main by divergence class, G1 berth free, no lock, no freeze	workflow	yes	0.48	change/queue.sh:46
+S20_scheduled	S50_blocked_queue	guard 1 refuses; deploy:staging removed, blocked:queue set	gate_verdict	another open PR holds the berth	gate	yes	0.12	change/queue.sh:49
+S20_scheduled	S51_blocked_freeze	preflight exit 3	gate_verdict	a FREEZE event covers the window; an itil:emergency passes it	gate	yes	0.07	gates/preflight.sh:291
+S20_scheduled	S52_blocked_lock	preflight exit 2	gate_verdict	the lock names another PR and the run is under 60 minutes old	gate	yes	0.06	gates/preflight.sh:6
+S20_scheduled	S80_unreachable	preflight exit 4 -- the schedule could not be read	gate_verdict	INDETERMINATE. Exit 4 BLOCKS; an unreadable schedule is an unknown, not a yes	gate	yes	0.08	gates/preflight.sh:52
+S20_scheduled	S62_expired	the window's end passes unattempted	timer	end < now and the window is still open	reaper	no	0.10	change/reap.sh:41
+S20_scheduled	E90_freeze	a person declares a freeze	label_add	ESTATE-GLOBAL -- on issue #1, never on a PR	human	yes	0.04	change/label-owners.tsv:54
+S20_scheduled	E91_emergency	a person declares an estate emergency	label_add	ESTATE-GLOBAL -- separate from itil:emergency by construction	human	yes	0.03	change/label-owners.tsv:56
+S20_scheduled	E93_actuator_exposed	the control-plane origin is published beyond the LAN	human	ESTATE-GLOBAL; no authenticating proxy in front of the write endpoints	human	yes	0.02	spec.org:571
+S20_scheduled	S60_failed	abort.sh failed	human	none	human	no	0.01	change/abort.sh:123
+S21_berthed	S22_staging_serving	deploy.sh staging <sha>; :9200 answers x-build-sha = head	deploy_event	the SHA must be a real commit in this repository	driver	yes	0.58	targets/node/deploy.sh:81
+S21_berthed	S72_attested_unserved	the deploy reports success and the environment dies with the shell that started it	deploy_event	none -- the deploy HAD deployed and was right to say so	driver	yes	0.08	targets/node/deploy.sh:109
+S21_berthed	S70_orphan_berth	the window ends while deploy:staging is still held	timer	settle.sh is unreachable for a change nobody drove	scheduler	no	0.12	change/reap.sh:46
+S21_berthed	S80_unreachable	:9200 does not answer -- no verdict in either direction	deploy_event	INDETERMINATE. observe.sh refuses rather than accepting nothing	gate	yes	0.10	change/observe.sh:24
+S21_berthed	S53_blocked_diverged	main moved under the berth by an artifact or hotfix merge	forge_event	guard 4b, classified rather than collapsed	workflow	yes	0.10	spec.org:1112
+S21_berthed	S60_failed	abort.sh failed -- the berth is released	human	abort must clear deploy:staging AND deploy:production	human	no	0.02	change/abort.sh:97
+S22_staging_serving	S23_staging_observed	the instruments record staging:e2e, staging:smoke and staging:uat	gate_verdict	the build served at the named URL must equal the PR head	gate	yes	0.59	change/observe.sh:30
+S22_staging_serving	S21_berthed	a push -- observations withdrawn and staging must be redeployed	forge_event	the manifest may have shrunk; the environment must follow	labeller	yes	0.20	scenarios.org:200
+S22_staging_serving	S53_blocked_diverged	main moved	forge_event	guard 4b -- artifact or hotfix	workflow	yes	0.10	spec.org:1112
+S22_staging_serving	S80_unreachable	the instrument cannot reach :9200 mid-run	gate_verdict	INDETERMINATE -- I could not check is not it passed	gate	yes	0.08	gates/preflight.sh:124
+S22_staging_serving	S60_failed	abort.sh failed	human	none	human	no	0.03	change/abort.sh:123
+S23_staging_observed	S24_cleared	promote adds deploy:production	label_add	guard 2 on the head SHA, gate-selftest included -- a suite whose self-test never ran has no verdict	workflow	yes	0.70	spec.org:1191
+S23_staging_observed	S22_staging_serving	a push -- the labeller withdraws the observations	forge_event	a verdict must name the build it is about	labeller	yes	0.15	research/findings/label-state-machine.org:62
+S23_staging_observed	S53_blocked_diverged	main moved	forge_event	guard 4b at reliance, not at request	workflow	yes	0.12	spec.org:1012
+S23_staging_observed	S60_failed	abort.sh failed	human	none	human	no	0.03	change/abort.sh:123
+S24_cleared	S30_idle_loaded	deploy.sh production-<idle colour> <sha>	deploy_event	never deploy into the colour the front is serving	driver	yes	0.67	targets/node/deploy.sh:42
+S24_cleared	S53_blocked_diverged	guard 4b re-checked at the moment it is relied on	forge_event	mergeStateStatus must not be BEHIND	workflow	yes	0.15	spec.org:1012
+S24_cleared	S80_unreachable	production could not be reached -- guard 6 abstains	gate_verdict	INDETERMINATE is not exempt; exit 4 blocks	gate	yes	0.10	spec.org:212
+S24_cleared	S51_blocked_freeze	a freeze lands before the deploy	gate_verdict	guard 3; an itil:emergency passes it and the PIR records that	gate	yes	0.05	gates/preflight.sh:291
+S24_cleared	S60_failed	abort.sh failed	human	deploy:production must be cleared or the change stays armed to re-enter production	human	no	0.03	change/abort.sh:97
+S30_idle_loaded	S31_live	switch.sh <colour> -- live is written and the front re-asked	deploy_event	the target colour must answer, else exit 5; the front must confirm, else exit 6	driver	yes	0.66	targets/node/switch.sh:43
+S30_idle_loaded	S71_idle_retained	the change stops here and the build stays on the idle replica	human	nothing clears an idle colour	human	no	0.18	targets/node/switch.sh:45
+S30_idle_loaded	S80_unreachable	the idle colour is not answering, so the cutover is refused	deploy_event	a cutover to a dead replica is an outage performed deliberately	driver	yes	0.12	targets/node/switch.sh:44
+S30_idle_loaded	S60_failed	abort before the cutover -- production never served it	human	closure code failed, not backed-out	human	no	0.04	change/abort.sh:123
+S31_live	S32_prod_observed	health.sh N samples, every one on this build, one distinct build	gate_verdict	guard 5, no bypass. Convergence, not liveness	gate	yes	0.60	spec.org:1256
+S31_live	S72_attested_unserved	a verdict is recorded for a build the front is not serving	gate_verdict	the front self-reported instead of being asked	gate	yes	0.08	targets/node/switch.sh:54
+S31_live	S61_backed_out	health fails -- cut back to the previous colour	deploy_event	guard 5 exit 7; backed-out must name what it returned to	driver	no	0.17	spec.org:1330
+S31_live	S73_deployed_not_merged	production serves a build trunk does not contain	forge_event	none -- it is a nameable state, not a prevented one	workflow	yes	0.15	spec.org:2779
+S32_prod_observed	S40_merged	release.sh merges and frees the queue, announcing once on the queue issue	forge_event	guard 4b AT THE MERGE -- activation is not the last point of reliance	workflow	no	0.62	spec.org:1337
+S32_prod_observed	S73_deployed_not_merged	merge refused, exit 8 -- main moved during the window	gate_verdict	guard 4b, artifact or hotfix; the berth is held	workflow	yes	0.23	spec.org:1349
+S32_prod_observed	S61_backed_out	a later observation reverses the verdict	deploy_event	a recorded failure outranks its own pass in guard 4	driver	no	0.15	change/label-owners.tsv:88
+S40_merged	S41_complete	settle.sh adds change:complete	label_add	the merge must actually have happened -- D13 settled a merge that did not	workflow	no	0.85	change/settle.sh:105
+S40_merged	S44_backfill_owed	change:backfill-owed added -- it landed without the normal evidence	label_add	a person adds the debt; the merge is when the debt STARTS	human	yes	0.15	change/label-owners.tsv:124
+S41_complete	S42_cleaned	settle clears every transient label, change:complete included	label_remove	the PIR is posted first -- a label is working state, not the record	workflow	no	1.00	change/settle.sh:244
+S44_backfill_owed	S42_cleaned	a person writes the record and clears the debt	label_remove	automation must not clear a debt it did not pay	human	no	1.00	change/label-owners.tsv:124
+S50_blocked_queue	S01_requested	the holder merges; the queue is announced once and the waiter re-requests	forge_event	guard 0 will refuse a branch that is behind, so rebase first	workflow	yes	0.84	spec.org:1360
+S50_blocked_queue	S51_blocked_freeze	a freeze is declared while this change waits	label_add	ESTATE-GLOBAL	human	yes	0.10	change/label-owners.tsv:54
+S50_blocked_queue	S60_failed	abandoned in the queue	human	none	human	no	0.06	change/abort.sh:123
+S51_blocked_freeze	S20_scheduled	the freeze is lifted; preflight clears blocked:freeze	label_remove	preflight owns the label it set	gate	yes	0.81	change/label-owners.tsv:52
+S51_blocked_freeze	S05_emergency_declared	a person declares this change the remedy	label_add	itil:emergency passes the freeze and grants no estate exemption	human	yes	0.15	gates/preflight.sh:286
+S51_blocked_freeze	S60_failed	abandoned under the freeze	human	none	human	no	0.04	change/abort.sh:123
+S52_blocked_lock	S20_scheduled	the lock is released, or cleared as stale at 60 minutes	timer	a stale clearance must appear in the PIR of the stale run	gate	yes	0.94	spec.org:855
+S52_blocked_lock	S60_failed	abandoned while locked out	human	none	human	no	0.06	change/abort.sh:123
+S53_blocked_diverged	S01_requested	rebase onto main and re-request; a human may clear blocked:diverged	label_remove	the re-run is a REAL re-run -- the old pass described a tree that no longer exists	human	yes	0.94	scenarios.org:160
+S53_blocked_diverged	S60_failed	abandoned rather than rebased	human	none	human	no	0.06	change/abort.sh:123
+S62_expired	S01_requested	a person asks for a new window	human	the reaper deliberately does not rebook; asking is a person's act	human	yes	0.88	change/reap.sh:66
+S62_expired	S60_failed	never re-requested	human	none	human	no	0.12	change/abort.sh:123
+S70_orphan_berth	S62_expired	reap closes the window expired and releases the berth	timer	the berth was held by a lapsed window	reaper	no	0.55	change/reap.sh:76
+S70_orphan_berth	S21_berthed	somebody drives it after all -- the berth was never actually released	human	nothing on the deploy path re-asks the calendar, so no guard notices	driver	yes	0.25	scenarios.org:219
+S70_orphan_berth	S74_deployed_unmerged_windowless	production had already served it when the window lapsed	deploy_event	three facts at once and no word for them	workflow	no	0.20	spec.org:2793
+S71_idle_retained	S60_failed	the change closes; the replica keeps the build and no closure code mentions it	human	abort clears labels and deployment statuses, never a replica	human	no	0.45	change/abort.sh:78
+S71_idle_retained	S30_idle_loaded	the next deploy to that colour overwrites it -- the only thing that ever clears it	deploy_event	none	driver	no	0.30	targets/node/deploy.sh:85
+S71_idle_retained	S31_live	a later cutover selects that colour and ships a build nobody authorized	deploy_event	switch.sh checks only that the colour ANSWERS, never whose build it is	driver	no	0.25	targets/node/switch.sh:43
+S72_attested_unserved	S61_backed_out	discovered after production served it	deploy_event	backed-out asserts an estate action and needs --to <sha>	driver	no	0.30	change/abort.sh:122
+S72_attested_unserved	S60_failed	discovered before production served it	human	closure code failed	human	no	0.30	change/abort.sh:123
+S72_attested_unserved	S31_live	a redeploy converges and the verdict becomes true after the fact	deploy_event	one sample cannot distinguish converged from lucky	gate	yes	0.25	spec.org:1267
+S72_attested_unserved	S80_unreachable	the disagreement is traced to reachability, not to the build	gate_verdict	INDETERMINATE -- defect class 1, unreachable is not falsified	gate	yes	0.15	spec.org:2590
+S73_deployed_not_merged	S40_merged	rebased, re-verified and merged	forge_event	guard 4b at the merge	workflow	no	0.45	spec.org:1337
+S73_deployed_not_merged	S61_backed_out	the next change branches from a trunk without it and reverts it	deploy_event	the boundary-conditions table's own prescribed handling	driver	no	0.30	spec.org:2781
+S73_deployed_not_merged	S74_deployed_unmerged_windowless	the window lapses as well	timer	the one that has no name yet	reaper	no	0.25	spec.org:2793
+S74_deployed_unmerged_windowless	S61_backed_out	returned to the prior colour and closed backed-out	deploy_event	--to <sha> required; the word asserts an estate action	driver	no	0.40	change/abort.sh:122
+S74_deployed_unmerged_windowless	S73_deployed_not_merged	a new window is booked; the estate is unchanged	human	booking is a person's act	human	yes	0.35	change/reap.sh:20
+S74_deployed_unmerged_windowless	S60_failed	closed failed while production is still serving it -- the closure code lies	human	[H] no guard compares the closure code against what the front is serving	human	no	0.25	change/abort.sh:123
+S80_unreachable	S20_scheduled	a re-probe reaches; the third value collapses to a verdict	gate_verdict	a measurement, never a retry that gives up and calls it a pass	gate	yes	0.40	gates/preflight.sh:124
+S80_unreachable	S21_berthed	a re-probe reaches from the berth	gate_verdict	same	gate	yes	0.20	gates/preflight.sh:124
+S80_unreachable	S81_bound_loopback	the cause is found -- bound to 127.0.0.1, or outside pf's pass range	deploy_event	the refusal is immediate and reads exactly like nothing listening	driver	yes	0.25	spec.org:545
+S80_unreachable	S60_failed	the abstention stands and the change closes	human	indeterminate blocks and never becomes a pass	human	no	0.05	spec.org:212
+S81_bound_loopback	S20_scheduled	BIND=0.0.0.0 and a base inside 9000-9999; the environment becomes measurable	deploy_event	PORT_BASE selects the base pf already passes; no firewall change	driver	yes	0.85	change/ports.sh:9
+S81_bound_loopback	S60_failed	left loopback-only; no instrument off-host can ever judge it	human	none	human	no	0.15	spec.org:549
+E90_freeze	S51_blocked_freeze	every open change is refused; this one carries blocked:freeze	gate_verdict	the freeze stops everyone, the declarer included	gate	yes	0.45	gates/preflight.sh:291
+E90_freeze	E92_freeze_unattributed	the write records neither actor nor reason	forge_event	ESTATE-GLOBAL -- posted under the repo's own token, so every freeze looks identical	workflow	no	0.35	spec.org:619
+E90_freeze	S20_scheduled	the freeze is lifted	label_remove	a person; the only writer of this label	human	yes	0.20	change/label-owners.tsv:54
+E91_emergency	S51_blocked_freeze	standard and normal changes stop; the carrier gets no exemption	gate_verdict	separate from itil:emergency so the write that closes the estate cannot exempt its own carrier	gate	yes	0.55	gates/preflight.sh:297
+E91_emergency	S20_scheduled	the emergency settles and the label comes off	label_remove	a person	human	yes	0.45	change/label-owners.tsv:56
+E92_freeze_unattributed	E90_freeze	a declarer is established out of band	human	[H] the record still cannot say it; nothing re-attributes a past write	human	yes	0.35	spec.org:637
+E92_freeze_unattributed	S20_scheduled	lifted -- and the PIR cannot answer why we stopped shipping	label_remove	an authorised halt and a hostile one produce byte-identical records	human	yes	0.65	spec.org:641
+E93_actuator_exposed	E90_freeze	an unauthenticated POST from outside the LAN halts the estate	forge_event	there is no authentication in front of the write endpoints	human	no	0.30	spec.org:578
+E93_actuator_exposed	S20_scheduled	the tunnel is closed, or an authenticating proxy is put in front	human	publish the view, never the actuator	human	yes	0.70	spec.org:606

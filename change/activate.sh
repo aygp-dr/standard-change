@@ -24,13 +24,27 @@ set -eu
 PR="${1:?usage: deploy-run <pr>}"
 R=aygp-dr/standard-change
 FRONT_PROD=http://127.0.0.1:9200
-FRONT_STG=http://127.0.0.1:9201
+# THE FRONT IS WHAT environments.tsv SAYS IT IS, not a constant here.
+#
+# This was hardcoded to :9201 and :9201 is not the staging front -- it is one
+# app replica. Every route except core's 404s behind it, so the authorizing
+# e2e run refused a healthy estate with eight "upstream unreachable" lines
+# and #62's window was spent proving that the address was wrong. The
+# declaration says staging is base_port 9200, and e2e passes 27 checks there.
+#
+# A second copy of a fact that is already declared somewhere is not a
+# convenience; it is a fact that can disagree with itself, and this one did.
+# Read the declaration. Fail loudly if it is not there, because a front we
+# cannot name is not one we should deploy to.
+_stg_port=$(awk -F'\t' '$1=="staging"{print $4}' environments.tsv)
+[ -n "${_stg_port:-}" ] || { echo "no 'staging' row in environments.tsv" >&2; exit 2; }
+FRONT_STG="http://127.0.0.1:${_stg_port}"
 # Every relative path below (./change/, ./gates/, ./targets/) is written from
 # the REPO ROOT, and this used to cd into change/ instead -- so guard 3's call
 # to ./change/schedule.sh failed with "not found" and the failure was reported
 # as "no open staging window covers now" for a window that was open. A script
 # that could not run its check said the check had failed: unreachable reported
-# as falsified, docs/label-ownership.org rule 2, one level up.
+# as falsified, research/findings/label-ownership.org rule 2, one level up.
 cd "$(dirname "$0")/.."
 
 # AND THIS SCRIPT IS STALE. It drives targets/bastille/ and calls 9200 the
@@ -102,7 +116,7 @@ indent() { # indent <command...>
 # The disconnect that costs is documented there.
 #
 # Left in place because activate.sh is not on any working path today
-# (docs/changing-the-pipeline.org measured ZERO invocations of it), and ripping
+# (research/findings/changing-the-pipeline.org measured ZERO invocations of it), and ripping
 # it out is a bigger change than noting it.
 DEPLOY_ID=''
 deploy_open() {  # deploy_open <environment> <description>
@@ -169,10 +183,27 @@ LOCALS=$(gh api "repos/$R/commits/$HEADSHA/status" \
 LOK=$(printf '%s' "$LOCALS"  | jq '[.[]|select(.state=="success")]|length' 2>/dev/null || echo 0)
 LBAD=$(printf '%s' "$LOCALS" | jq '[.[]|select(.state!="success")]|length' 2>/dev/null || echo 0)
 LSELF=$(printf '%s' "$LOCALS" | jq '[.[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
-BAD=$(gh api "repos/$R/commits/$HEADSHA/check-runs" \
-        --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
-SELF=$(gh api "repos/$R/commits/$HEADSHA/check-runs" \
-        --jq '[.check_runs[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length')
+# ONE VERDICT PER GATE, AND IT IS THE LATEST ONE. The check-runs endpoint
+# returns EVERY run ever recorded against this SHA, not the current set. A
+# re-run leaves the old attempt in the list, so without this collapse a gate
+# that failed at 23:22 and passed at 01:58 is counted as both -- and the
+# failing half wins, because the query asks "how many are not success".
+#
+# That is spec.org defect class 2, superseded is not current: the same shape
+# as guard 2 counting a superseded check run as a verdict (scenario D15).
+# preflight.sh was fixed for this; THIS COPY WAS NOT, and the two oracles
+# then disagreed about one subject -- preflight said #61 was green on
+# bfe2a21 and activate refused it as "4 gate(s) not green", naming four runs
+# that had already been replaced. A guard that reads a stale attempt is not
+# stricter than one that does not; it is wrong in the direction that looks
+# safe, which is why it survived.
+_runs() { gh api "repos/$R/commits/$HEADSHA/check-runs" \
+            --jq '[.check_runs|group_by(.name)|map(max_by(.started_at))|.[]]'; }
+_CUR=$(_runs)
+BAD=$(printf '%s' "$_CUR" \
+        | jq '[.[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
+SELF=$(printf '%s' "$_CUR" \
+        | jq '[.[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length')
 if [ "$LBAD" -eq 0 ] && [ "$LOK" -ge 3 ] && [ "$LSELF" -ge 1 ]; then
   ok "gates green on $SHA — $LOK local/ contexts, gate-selftest among them"
   ok "measured on a host, not by CI, and the contexts say so"
@@ -224,7 +255,13 @@ if ! EVENT=$(./change/schedule.sh current "$PR" staging); then
 MSG
   exit 7
 fi
-./change/schedule.sh check "$EVENT" | sed 's/^/   /' || die "the window is inside a freeze"
+# `cmd | sed ... || die` CANNOT DIE. This is #!/bin/sh with no pipefail, so
+# the pipeline's status is sed's, which is 0 whatever the guard said -- the
+# `||` binds to the pipeline, not to schedule.sh. Guard 3's freeze check was
+# therefore inert: it printed a refusal and returned success. Found by the L7
+# review on 2026-09-14, in a file whose own comment at the top of indent()
+# describes exactly this failure.
+indent ./change/schedule.sh check "$EVENT" || die "the window is inside a freeze"
 ok "window $EVENT"
 # The window closes with what happened, on every exit path. A window left open
 # by a crashed run looks like a deployment still in progress and blocks the
@@ -239,9 +276,25 @@ ok "berth claimed"
 
 step "deploy to staging"
 deploy_open staging "standard change #$PR -> staging"
-./targets/bastille/deploy.sh staging "$SHA" | sed 's/^/   /'
+# NOT `| sed`. That pipe discarded the deploy's exit code and the `ok` below
+# it fired unconditionally, so a deploy that placed nothing reported success
+# -- and the next guard is the only thing that would have noticed. It is the
+# D16 shape (guard4.sh | tail -1, which put #54 into production unauthorized)
+# living in the script D16 was written about, three lines from the indent()
+# helper that exists precisely to keep the status. #62 rode this: it printed
+# `ok sc-staging <- 346e236` while staging stayed on 57ec8e9.
+# THE NODE TARGET, NOT BASTILLE. targets/bastille installs app.py, a Python
+# stand-in that is not any of the apps -- its own header says so: "the
+# deployed thing was never the tested thing". The authorizing e2e run three
+# lines below tests the node estate on the declared staging front, so
+# deploying the stand-in meant the gate verified an estate the deploy never
+# touched. staging sat on 57ec8e9 through #62's whole window while the step
+# reported ok. targets/node deploys apps/*/src/server.js -- the code the
+# gates actually ran against.
+indent ./targets/node/deploy.sh staging "$SHA" \
+  || die "the deploy to staging failed -- nothing was placed"
 sleep 2
-ok "sc-staging <- $SHA"
+ok "staging <- $SHA"
 
 step "the authorizing run — e2e against staging"
 ROUTER_URL="$FRONT_STG" indent ./gates/e2e.sh || die "staging e2e failed"
@@ -291,7 +344,11 @@ CUR=$(./targets/bastille/front/switch.sh status | grep -o 'production = [a-z]*' 
 IDLE=$([ "$CUR" = blue ] && echo green || echo blue)
 echo "   live=$CUR  idle=$IDLE"
 deploy_open production "standard change #$PR -> production ($IDLE)"
-./targets/bastille/deploy.sh production "$SHA" | sed 's/^/   /'
+# The PRODUCTION deploy. Same defect as the staging one fixed earlier and
+# missed here: the pipe discarded the exit code and the `ok` below fired
+# unconditionally, so a production deploy that placed nothing reported success.
+indent ./targets/bastille/deploy.sh production "$SHA" \
+  || die "the production deploy failed -- nothing was placed"
 sleep 2
 ok "both production replicas <- $SHA"
 
@@ -301,7 +358,11 @@ ROUTER_URL="http://$IDLE_IP" indent ./gates/e2e.sh || die "idle colour failed e2
 ok "$IDLE verified with no traffic on it"
 
 step "atomic cutover"
-./targets/bastille/front/switch.sh "$IDLE" | sed 's/^/   /'
+# THE CUTOVER. The single highest-consequence line in this file, and its exit
+# code was going to sed. A failed switch reported "production -> green" and the
+# run continued to settle and merge.
+indent ./targets/bastille/front/switch.sh "$IDLE" \
+  || die "the cutover failed -- production was NOT switched"
 ok "production -> $IDLE"
 
 step "guard 5 — convergence through the front"

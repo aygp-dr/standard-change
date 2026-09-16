@@ -1,0 +1,539 @@
+#+TITLE: The adoption profile — the questions a team must answer before any of these controls mean anything
+#+SUBTITLE: Derived from what the guards need, not from what this estate happens to have
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+PROPERTY: header-args :mkdirp t
+#+OPTIONS: toc:3 num:t
+
+* Status
+
+*Additive. Nothing here amends =spec.org=, and =spec.org= governs.* This
+directory exists because the controls in this repository are currently
+entangled with one estate — four node apps on one FreeBSD host, ports
+9000–9299, GitHub labels — and almost none of that entanglement is load-bearing.
+The guards are predicates over a change, a trunk, a suite and an estate
+(=spec.org= §The guards as predicates). This file is the set of questions whose
+answers decide which of those predicates a given team can actually *state*, and
+which they can only *decorate*.
+
+Epistemic labels are =spec.org='s: [E] established on a named cell, [P]
+provisional, [H] hypothesis, [I] inferred. Nothing in this directory has been
+run against a second estate, so *every claim about how these controls behave
+elsewhere is [H]*. What is [E] is the derivation: each question below traces to
+a guard, a capability or a defect class that this repo has already paid for.
+
+* The rule for what counts as a question
+
+*A question whose answer changes nothing is not a question.* Every entry below
+flips at least one emit/refuse decision in [[./generate.sh]]. If you can answer
+it either way and get the same pipeline, it has been deleted.
+
+Three things follow from that rule and are worth stating before the list:
+
+- *There is no "how big is your team" question.* Team size changes the cost of
+  the berth, not whether the berth is stateable. Question 11 asks the thing that
+  actually matters — whether the path to production is shared — and a team of
+  forty with a path per service answers /no/.
+- *There is no "which cloud" question.* Question 8 asks whether production can
+  be observed and by what mechanism. A platform is admissible if it can answer
+  that, and the answer is what the generator uses.
+- *There is no "do you want this control" question.* Wanting guard 6 is not a
+  capability. The generator refuses controls the answers cannot sustain even if
+  you say you want them, because a guard that cannot fail produces no verdict
+  (=spec.org= §The defect taxonomy, class 7) and shipping one is worse than
+  shipping nothing.
+
+* How to use it
+
+1. Answer every question in a TSV like [[./profile.example.tsv]].
+2. Run =./adopt/generate.sh <profile.tsv>= with no output directory. It prints
+   the plan — what it will emit, what it will emit in a degraded form, and what
+   it refuses — and writes nothing.
+3. Read the refusals. *They are the most valuable output.* Each names a control
+   you do not get and why, in the vocabulary of the thing you cannot do.
+4. Run =./adopt/generate.sh <profile.tsv> <outdir>= to write the starting
+   pipeline.
+5. Write the adapter. Every emitted guard is *red* until you do, because every
+   platform read is stubbed to return =unknown= and =unknown= blocks. That is
+   the intended first state: a pipeline whose guards are green before anyone has
+   connected them to a platform has guards that cannot fail.
+
+* Section A — the precondition
+
+** Q1. Can every gate be shown to reject a failing input?
+
+: gates.selftest    yes | no
+
+*Depends on it:* everything. This is not a control, it is the licence to
+believe any other control's verdict.
+
+*If no:* the generator emits *nothing at all*. Not a reduced pipeline — nothing.
+=spec.org= §Verification contract: a gate that fails to reject its
+=fixtures/<gate>/fail/= input produces no verdict that run, and its PASS is
+void. A generator that emitted guards for a team with no negative fixtures would
+be manufacturing exactly the artifact this repository exists to refuse.
+
+*What "yes" costs:* for each gate, one input that must fail and a test that
+asserts it does. Three tests in this repo passed while asserting nothing, and all
+three were found by mutation rather than by reading (=spec.org= class 7).
+
+* Section B — what a change is, and what it ships
+
+** Q2. What is a change, and who owns its state?
+
+: change.unit         pull-request | branch | ticket | none
+: change.state.owner  automation | human | none
+
+*Depends on it:* capability C1 (=spec.org= §Conformance) — mutable, queryable
+state on a change, owned by automation. Through C1: the manifest, the berth
+holder, every observation label, the queue.
+
+*If =change.state.owner= is =human=:* the manifest becomes assertable, and a
+manifest that can be asserted is not a manifest, it is a wish, and the build
+ships whatever someone typed (=spec.org= §Entities, scenario L10). The generator
+still emits the evidence record, because a record is append-only and names its
+own instrument, but it refuses the derived manifest.
+
+*If =change.unit= is =none=:* there is nowhere on the change to write anything.
+The generator switches every record to a git-ref store under =refs/adopt/=,
+compare-and-swap guarded. This works, and it is the version that survives with
+no forge at all. What you lose is not correctness — it is that nobody sees the
+refusal unless they run the command.
+
+** Q3. What is a deploy unit, and can the set a change touches be *derived*?
+
+: deploy.unit            repo | directory-group | package
+: deploy.unit.derivable  yes | no
+
+*Depends on it:* the manifest, and through it =deploys(c)= — the three-valued
+function at the centre of guard 6 (=spec.org= §Guard 6).
+
+*If =derivable= is =no=:* guard 6 is refused. This is the single most important
+refusal in the generator and it is worth stating in full. =deploys(c)= is *never
+a set that may be empty*:
+
+| =deploys(c)=      | meaning                                                    | guard 6                  |
+|-------------------+------------------------------------------------------------+--------------------------|
+| a non-empty set   | this change deploys these units                            | compare against the trunk |
+| *provably* empty  | the diff was read and touches nothing deployable           | exempt, and name the oracle |
+| indeterminate     | the diff could not be read, or the labels were unavailable | *abstain* — exit 4, blocks |
+
+A pipeline that cannot derive the deploy set cannot tell row two from row three.
+Both look like "no units". This repo made exactly that mistake — =groups.sh
+"$pr" 2>/dev/null || true= produced the empty set when the forge could not
+answer, and the guard exempted the change. *484 runs, never once triggered by a
+label* [E, =spec.org= §Guard 6]. The independent =000= rebuild invented the same
+guard and broke it the same way.
+
+*If =deploy.unit= is =repo=:* derivation is trivially available — every change
+deploys the one unit — so =derivable= should be =yes= and row two never occurs.
+That is a simpler world and the generator says so rather than pretending the
+machinery is earning its keep.
+
+** Q4. Do you deploy the branch head, or the trunk after merge?
+
+: deploy.source    branch-head | trunk-after-merge
+
+*Depends on it:* guards 0, 4b and 6. This is the question most teams answer
+=trunk-after-merge= without ever being asked, and it removes three controls.
+
+*If =trunk-after-merge=:*
+
+- *Guard 0 is unstateable.* =B(c) = T= has no content when the thing deployed
+  /is/ T. =spec.org= §Guard 4b records this as case A4: "deploy main — guard 0 is
+  unstateable, so the class only governs guard 4b."
+- *Guard 6 is unstateable.* Production-first says do not merge something new onto
+  a trunk that production is not yet serving. If the merge is what /produces/ the
+  deployable, the ordering it enforces is inverted by construction. The generator
+  refuses it rather than emitting a check that is green by definition.
+- *Guard 4b survives in a different form.* The subject is no longer "your base
+  versus the trunk" but "the trunk you built from versus the trunk now". The
+  generator emits it in =artifact= mode and says so.
+
+In this repo *the merge is settlement, not authorization* (=gates/production-first.sh=),
+and trunk trailing production for the length of a window is the intended state.
+That is a real and uncommon choice. If you do not make it, say so here and take
+the three refusals honestly.
+
+* Section C — what your platform can tell you
+
+The four questions in this section are =spec.org= §Conformance's capabilities
+C2–C6, asked in the order of how much you lose without them. The spec's own
+advice: *if a platform gives you only one thing, take C2; if it gives you two,
+take C2 and C5.*
+
+** Q5. Can your platform report a verdict bound to a *content hash*?
+
+: forge.verdicts.per_commit    yes | no | none
+
+(=none= means there is no platform to ask.)
+
+*Depends on it:* capability C2. Guard 2, and every observation record.
+
+*If no:* guard 2 is emitted in =local-rerun= mode — the suite is re-run at the
+moment of reliance and its verdict is recorded against the SHA that was
+measured, in a git ref. *You never read a stored verdict.* This is slower and it
+is not weaker: re-derivation at the moment of reliance is what =spec.org= class 5
+recommends anyway, and it is the version of guard 2 that works with no forge.
+
+*The failure mode if you answer yes and are wrong* is silent, which is why the
+question is asked in this form rather than "do you have CI". Bind a verdict to a
+branch or a change id instead of a hash and everything still appears to work,
+right up until the head moves and a stale pass authorizes a deploy
+(=spec.org= §Conformance, and scenario D4).
+
+** Q6. Can a verdict be *revoked* after issue, and is there an event when the trunk moves?
+
+: forge.verdicts.revocable     yes | no | none
+: forge.trunk_moved_event      yes | no | none
+
+*Depends on it:* capabilities C5 and C4. Both are guard 4b's, and =spec.org=
+calls them the expensive ones and marks both *rare*.
+
+*If =revocable= is no:* guard 4b is emitted in =rederive= mode and *forbidden
+from reading a persisted pass at all*. A verdict you cannot revoke is a verdict
+that outlives its own truth. Re-deriving costs a platform call per reliance
+point and removes the failure entirely.
+
+*If =trunk_moved_event= is no:* survivable, and this is the good news in the
+section. =spec.org= class 5: "correct-by-construction beats notified-on-change,
+which is why the absence of an event bus is survivable here at all." You lose
+fast feedback, not soundness — provided you answered the previous paragraph by
+re-deriving.
+
+*If both are no and you also answered =trunk-after-merge= to Q4:* guard 4b is
+refused outright. There is no subject left for it to re-derive.
+
+** Q7. Is there an approver the platform can *prove* is not the author?
+
+: forge.approver_distinct    enforced | conventional | none
+
+*Depends on it:* guard 4's approval rung, and the whole normal-change class.
+
+*=enforced=* means the platform *refuses the call* when the two identities
+collapse — not that your process says they should not. In this repo that
+separation exists today by accident: the proxy reviewer runs as the author's own
+token and GitHub refuses to let an author approve their own pull request, so
+"the refusal is currently the only thing keeping author and reviewer apart, and
+it is doing it by accident" [E, =research/findings/reviewer-identity.org=].
+
+*If =conventional=:* the approval rung is emitted and *labelled decorative*.
+The generated script prints, on every run, that nothing enforces the separation.
+A reviewer that can merge what it approves has undone the separation one call
+later.
+
+*If =none=:* the approval rung is refused, and with it the emergency path's
+second pair of eyes. The generator says plainly that your emergency changes have
+one human in the loop and it is the person who wants to ship.
+
+** Q8. Is there a production the pipeline can *observe*, and how does the served build identify itself?
+
+: production.observable    yes | no
+: production.build_id      header | manifest | api | none
+: production.replicas      <integer>
+: production.rollback      switch | redeploy | none
+
+*Depends on it:* guard 5, guard 6, the post-implementation review, and
+settlement. *This is the question that decides whether this repository has
+anything to offer you.*
+
+=spec.org= §Guard 6 states the consequence without hedging: *"guard 6 cannot be
+tested without a real estate. A pipeline that can only test it against an
+in-process double has not tested it."* And: "An implementation without the
+port-block model can state guard 6 and cannot verify it, and must say so."
+
+*If =observable= is =no=, or =build_id= is =none=:* guards 5 and 6 are refused.
+Not degraded — refused. A health check that cannot read the identity of the build
+being served is a liveness check wearing guard 5's name: it goes green whenever
+something answers, so it can never fail for the reason guard 5 exists. Emitting
+it would be defect class 7 with a deploy pipeline attached.
+
+*=build_id= mechanism matters and is not a detail.* A response header is emitted
+by the serving layer, per response. A manifest file is *content*, and content is
+cacheable — this repo's =github= target serves =cache-control: max-age=600=, so
+"deployed" and "served" can be ten minutes apart [E, observed =age: 284= on a
+live response]. The generator emits cache-busting in =manifest= mode and a
+comment saying why.
+
+*=replicas= = 1:* =UNCONVERGED= is unstateable — you cannot observe a mixed
+fleet of one. The generator sets the sample count to 1 and removes the
+convergence branch rather than leaving a branch that cannot be reached.
+
+*=replicas= > 1:* guard 5 takes N samples, one request each, cache-busted, and
+*every one* must report the expected build. One sample cannot distinguish
+"converged" from "I happened to reach a new replica": a fleet 10% migrated passes
+a single sample 10% of the time, which is not a bug you find by re-running.
+
+*=rollback= = =none=:* guard 5's failure path has nowhere to go. =spec.org=
+records this as the open axiom A5 — "deployment is undoable" is an axiom none of
+the six guards encodes, and an expand/contract migration or a published library
+version falsifies it. The generator emits guard 5 with the rollback step replaced
+by a refusal that names the SHA a human must restore, which is honest and is not
+automation.
+
+** Q9. Can whatever runs the gates *reach* the environments?
+
+: forge.reaches_estate    yes | no
+
+*Depends on it:* how evidence gets from where it was measured to where it is
+relied on. Nothing else in the pipeline, and everything about its shape.
+
+*If no* — which is this repo's answer — every gate that matters runs on a host
+and reports by observation record. That makes records a proxy for check runs,
+which makes record ownership a *correctness* concern rather than tidiness
+[E, =research/findings/testing-problems.org= §5]. The generator emits the record carrier, the
+one-writer-per-fact declaration, and the audit that enforces it.
+
+*If yes:* the generator emits gate results as platform check runs and skips the
+carrier. Simpler, and you should prefer it if you can have it.
+
+*=research/findings/testing-problems.org= states the rebuild advice:* "decide early whether CI
+can reach the estate. Everything about how evidence is carried follows from that
+answer, and retrofitting it is what produced the label taxonomy."
+
+* Section D — the shape of the path to production
+
+** Q10. What environments are on the path, and which one *authorizes*?
+
+: path.environments    ordered comma list, production last
+: path.authorizing     <name from the list> | none
+
+*Depends on it:* guard 4 — =staged(H(c)) ∨ (emergency(c) ∧ approved(c))=.
+
+*The authorizing environment is the one whose observation lets production
+happen.* It is not necessarily the one closest to production, and it is never
+the in-runner test. This repo's rule: *do not let the first (in-runner) e2e run
+authorize production — the staging-slot run is the authorizing one*
+[E, =CLAUDE.md= §Invariants].
+
+*If =authorizing= is =none=, or equals production:* guard 4's normal rung is
+refused. There is no =staged(H(c))= to read, so the predicate collapses to
+=emergency(c) ∧ approved(c)= — which is to say, to guard 2 plus a human. The
+generator says exactly that rather than emitting a guard 4 that reads a label
+nobody writes.
+
+** Q11. Is the path to production *shared*?
+
+: path.shared    yes | no
+: path.lease     native | derived | none
+
+*Depends on it:* guard 1 (the berth), the queue, and capability C3 — an
+exclusive lease with owner and deadline, readable by others. =spec.org= marks C3
+*uncommon*.
+
+*If =shared= is =no=:* the berth is refused, and this is a *good* refusal.
+=spec.org= §The balance gives the test: "name what it protects, name who pays,
+and if the answer is 'the queue pays and production gains nothing', it is
+ceremony." With a path per team there is no contention to serialize. The spec is
+blunter still in §What this model gets wrong, on purpose: a path to production
+per team means "no shared berth, so no queue, so no guard 0, no guard 1, no
+guard 4b, no preemption rules, no rebase loop. Scenario D4 becomes unstateable
+rather than defended against."
+
+*If =shared= is =yes= and =lease= is =none=:* refused, with the reason. A
+singleton enforced by convention is not a singleton, it is a convention, and the
+first concurrent claim silently replaces the first claimant. Answer =derived= and
+the generator emits a compare-and-swap lease over a git ref, with an owner, a
+deadline, and a reaper — which works with no platform support at all.
+
+*Know the ceiling before you choose =shared=.* =gates/simulate-gates.py --soak=
+computes it for a singleton berth: 100 changes is 2.2 days of serialized
+wall-clock and a 26-hour mean wait, at which point *the emergency share is 100%*
+— every change has a rational reason to declare itself an emergency, so a
+high-volume run through a singleton berth does not test the pipeline, it tests
+the bypass.
+
+** Q12. Do environments share an address namespace?
+
+: address.namespace.shared    yes | no
+
+*Depends on it:* the port-tier model, and nothing else.
+
+*If no* — each environment has its own host, IP, jail, container or DNS name —
+*the entire port-tier model is refused.* This is the most estate-specific
+control in the repository and it does not survive contact with a normal
+deployment target. =CLAUDE.md= already states the general rule: "Inside a jail,
+nginx is =:80= and apps are =8001-8005= — identical in every environment, because
+each jail has its own IP. *Ports are only scarce where a namespace is shared.*"
+
+*If yes:* the generator emits the tier model with your numbers, and one
+invariant that is not about ports at all — *the address tells you what an
+environment is*. A reader must be able to answer "may this environment promote?"
+from the address alone, without consulting a policy file. Everything else about
+9000/9100/9200 is arbitrary.
+
+* Section E — who may say the estate is closed
+
+** Q13. Who may declare a *freeze*, and where is it recorded?
+
+: freeze.holder      estate-record | trunk-file | change | none
+: freeze.declarer    <role or identity> | none
+
+*Depends on it:* guard 3.
+
+*=holder= = =change= is refused outright*, and this is the sharpest lesson in
+the repository. A freeze is a property of the *world*, not of any change. Record
+it on a change and the write that closes the estate to everyone is the write that
+exempts its own carrier — *the one change that must not proceed becomes the only
+one that may* [E, PR #48, confirmed by TLC as =NoSplitEmergency=]. This repo moved
+the flag to a non-deployable holder for exactly this reason: an issue cannot be
+deployed, so there is no exemption it could be handed.
+
+*=holder= = =trunk-file=* works and is the version that needs no platform: a
+file on the trunk, with a declared writer. The generator emits it with a
+path-owner rule attached, because a freeze anyone can lift is not a freeze.
+
+*If =declarer= is =none=:* emitted as advisory only, and the generated script
+prints that it is advisory on every run.
+
+*One honest limitation, unfixed here [E]:* nothing in this repo re-reads the
+freeze between the staging deploy and the cutover, so a change that entered a
+legally open estate keeps going into a closed one. The generator emits the
+re-read at both points and flags it as untested [H].
+
+** Q14. Who may declare an *emergency*, and can the pipeline tell that identity apart?
+
+: emergency.declarer    person | derived | none
+
+*Depends on it:* the only bypass in the model.
+
+*=derived= is refused.* A pipeline that can infer an emergency from a diff can
+grant itself the bypass, and a bypass the system can grant itself is not a
+bypass — it is the default path with extra steps. =README.org= §4: "The labeller
+derives =itil:standard= from the diff. *It cannot derive an emergency*, and must
+not: deciding that something is an emergency is a declaration about the world,
+not a property of a diff."
+
+*=none= is accepted and is safe.* No emergency path at all is a coherent answer.
+The generator says so rather than treating it as a gap.
+
+*Two further rules the generator encodes and you should know before answering:*
+
+- *An emergency is exempt from the freeze and the queue. It is not exempt from
+  having a window*, because the window is what tells everyone else the path is
+  occupied.
+- *Guard 2 and guard 5 have no bypass at all.* An emergency may skip the staging
+  /environment/. It may not ship code whose lint and unit gates are red, and it
+  may not leave an unhealthy production deploy standing. Guard 2 is therefore
+  evaluated *twice* in this repo, because a single evaluation sat on a path the
+  emergency never reached and so gave guard 2 precisely the bypass the spec
+  denies it [E, the omission was real and shipped].
+
+* Section F — coordination
+
+** Q15. Is there a change schedule, and is its store compare-and-swap?
+
+: schedule.store    cas | calendar | none
+
+*Depends on it:* change windows, and the forfeit record.
+
+*=calendar= is degraded, loudly.* A calendar is last-write-wins. Two agents
+booking the same slot both get an event and neither is told, and the thing being
+double-booked is the path to production. The generator emits windows in advisory
+mode and prints, on every booking, that the store cannot prevent a clash.
+
+*=none= is a reasonable answer and costs less than you expect.* Six of seven
+guards do not read the calendar at all [E, =docs/adr/0003=], so scheduling is the
+least load-bearing thing in this repository. What you lose is the *forfeit
+record* — and that is a real loss, because the forfeit is this repo's dominant
+cost: of roughly thirty windows booked, about half expired unattempted, nobody
+having been watching when they opened [E, =README.org= §2]. ITIL 4 is the only
+body of practice with an object a forfeited window could be an instance of;
+DORA has none [E, secondary — =research/history/release-standards.org=].
+
+*If you answer =cas=:* four closure codes, and they are a closed set —
+=passed=, =failed= (attempted, did not complete), =cancelled= (decided against),
+=expired= (lapsed unattempted). Collapsing =expired= into =failed= loses the only
+signal that says your slots are too short.
+
+** Q16. Does every fact have exactly one declared writer?
+
+: facts.ownership_declared    yes | no
+
+*Depends on it:* every control that writes state, which is all of them.
+
+*What goes wrong without it is not a race, it is two correct systems
+disagreeing.* An agent reads the repo, sees a fact it thinks should be set, and
+writes automation that sets it — while a different automation, equally
+reasonably, withdraws it. Neither is wrong about the world. The fact has no
+owner. On PR #9 =production:healthy= flipped five times in twenty minutes
+between a person and =github-actions= [E, =change/label-owners.tsv=].
+
+*If no:* the generator emits a starter declaration with one row per fact it is
+about to create, and refuses to emit any control that writes a fact whose owner
+it cannot name. Two verbs, always, and separately: *clearing is not asserting*,
+so "may add" and "may remove" are different permissions.
+
+* The answer sheet
+
+[[./profile.example.tsv]] is a filled-in profile for a team that is *not us* —
+different platform, two environments, no blue/green, no shared address space, no
+shared path to production. It is deliberately a team that loses several of these
+controls, because a conformance instrument that only demonstrates success has not
+been shown to reject anything.
+
+* What the generator does with the answers
+
+Read this as the contract. Each row is a decision [[./generate.sh]] makes and the
+keys it makes it from.
+
+| control                 | emitted when                                                  | refused when                                        |
+|-------------------------+---------------------------------------------------------------+-----------------------------------------------------|
+| everything              | =gates.selftest=yes=                                          | =gates.selftest=no= — nothing is emitted            |
+| derived manifest        | =deploy.unit.derivable=yes=                                   | otherwise                                           |
+| evidence record         | always                                                        | never                                               |
+| guard 0                 | =deploy.source=branch-head=                                   | =trunk-after-merge= — unstateable                   |
+| guard 1 (berth)         | =path.shared=yes= and =path.lease != none=                    | not shared (ceremony), or shared with no lease      |
+| guard 2                 | with the precondition                                         | never                                               |
+| guard 3 (freeze)        | =freeze.holder ∈ {estate-record, trunk-file}=                 | holder is a change, or none                         |
+| guard 4                 | =path.authorizing= names a non-production environment         | otherwise                                           |
+| guard 4 approval rung   | =forge.approver_distinct=enforced=                            | =none=                                              |
+| guard 4b                | =deploy.source=branch-head=, or =artifact= mode after merge   | trunk-after-merge with no revocation and no event   |
+| guard 5                 | =production.observable=yes= and =build_id != none=            | otherwise                                           |
+| guard 6                 | guard 5 emitted, and branch-head, and a derivable deploy set  | any of those missing                                |
+| emergency path          | =emergency.declarer=person=                                   | =derived= (self-granted), =none= (no path)          |
+| change windows          | =schedule.store=cas=                                          | =none=                                              |
+| port tiers              | =address.namespace.shared=yes=                                | otherwise                                           |
+| fact ownership + audit  | always, as a declaration you must complete                    | never                                               |
+
+* Refutation conditions
+
+In the repo's house style, what would falsify the claims above:
+
+1. *A team answers all sixteen questions, runs the generator, and the emitted
+   pipeline is missing a control their answers do support.* Would refute the
+   claim that this question set is sufficient. The list is derived from six
+   guards and six capabilities and has never been tested against a second
+   estate [H].
+2. *A team answers all sixteen and the generator emits a control they cannot
+   sustain.* Would refute §The rule for what counts as a question and would be
+   defect class 7 shipped by the thing built to prevent it. =generate.sh
+   --selftest= tests this direction and both of its answers.
+3. *Guard 6 turns out to be verifiable without an observable production.* Would
+   refute Q8 and =spec.org= §Guard 6. The specific thing to produce is a test
+   that fails when the guard is removed, for all three rows of =deploys(c)=,
+   against something that is not an in-process double.
+4. *A question is answered differently by two teams and produces the same
+   pipeline.* Would refute that question's place in the list, and it should be
+   deleted rather than defended.
+5. *The port-tier model turns out to be load-bearing on a platform with no
+   shared address namespace.* Would refute Q12's refusal.
+6. *A calendar-backed schedule is shown not to double-book under concurrent
+   booking.* Would refute Q15's degradation, and would mean the CAS store in
+   =change/schedule.sh= is more machinery than the problem needs.
+
+* What this directory does not do
+
+It does not migrate anything, it does not read your platform, and it does not
+run. It emits a starting point whose every platform call is stubbed to return
+=unknown=, and =unknown= blocks. The first thing you will do with the output is
+watch every guard refuse, which is the correct first state and the only one from
+which a green result later means something.
+
+It also does not decide whether you should be running this shape at all.
+=spec.org= §What this model gets wrong, on purpose is the thing to read before
+adopting any of it: the serialized path to production is *machinery for
+surviving a missing contract, not a pattern to copy*. If you can give each team
+its own path to production and enforce contracts at the boundary, do that
+instead, and most of this directory becomes unnecessary — which is the outcome
+it would rather have.

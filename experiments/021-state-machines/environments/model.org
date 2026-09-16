@@ -1,0 +1,601 @@
+#+TITLE: The pull request as a state machine — the environments and estate lens
+#+SUBTITLE: what an address IS, who may reach it, and the states the estate can hold that nothing has a name for
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+OPTIONS: toc:2 num:nil
+#+PROPERTY: header-args :mkdirp t
+
+* What this is
+
+One of five models of the same machine. The primitive is the *pull request*:
+every state below is a state OF A PR, except the four rows marked
+*ESTATE-GLOBAL*, which are states of the world that a PR merely runs into.
+
+This lens is *environments and the estate*. It asks what each address in the
+port map is, what it asserts about a build, who is allowed to reach it, and
+what happens to the estate when a change stops being driven. Four other
+engineers hold the deployment-lifecycle, gating, protection/override and
+end-to-end lenses; where their subject matter appears here it appears only as
+far as an environment can see it.
+
+The machine is in three files that merge mechanically:
+
+| file               | rows | what it is |
+|--------------------+------+------------|
+| =states.tsv=       |   38 | the states, with =kind= and =terminal= |
+| =transitions.tsv=  |  113 | the edges, with =weight= and =evidence= |
+| =labels.tsv=       |   43 | the label vocabulary, as *semantics* rather than strings |
+
+=transitions.tsv= is normative. The Mermaid below is its readable projection
+and deliberately omits the repetitive abandon edge that almost every
+non-terminal state carries.
+
+* Framing: three questions an address answers, and one it does not
+
+=spec.org= §The port map makes the port number carry the tier, so that
+/"which kind of environment is this?"/ is answerable from the URL alone
+(=README.org:521=):
+
+| range     | tier      | promotes | what it means |
+|-----------+-----------+----------+---------------|
+| 9000–9099 | dev       | no       | worktree blocks, =9000 + 10n=, n ≤ 9. Disposable by definition |
+| 9100–9199 | team      | *no*     | real, leased, and a dead end by construction |
+| 9200      | protected | yes      | *staging* — the singleton path to production |
+| 9210/9220 | protected | yes      | production *blue* and *green* replicas |
+| 9230      | protected | yes      | the production *front* — reads the live colour per request; never deployed to |
+
+Three facts are encoded in the number: *what tier*, *whether it may promote*,
+and *whether its ports are scarce* — jail-internal =:80= and =8001–8005= are
+identical in every environment because each jail has its own IP
+(=spec.org:533=). =change/ports.sh:50= enforces the dev/team boundary by
+refusing block 10 before writing the row.
+
+*The fourth question has no column anywhere: who may reach it, and whether
+reaching it can change anything.* =spec.org:564= §Exposure states the gap
+directly — /"An environment registry that names tier and port but not audience
+cannot express any of this — it will report an estate as =protected= while the
+whole internet can freeze it"/ (=spec.org:648=). This model carries that axis
+as two states and one estate-global state:
+
+- =S81_bound_loopback= — the environment IS protected-tier and is reachable by
+  nobody: bound to =127.0.0.1=, or in a block outside the range =pf= passes.
+  The refusal is immediate and reads exactly like nothing listening
+  (=spec.org:545=). Tier says one thing, audience says another, and the
+  registry records only the first.
+- =S80_unreachable= — the instrument could not reach the address. See
+  §Indeterminate is a third value.
+- =E93_actuator_exposed= — the control plane is reachable beyond the LAN. This
+  changes *no* environment's tier, port or guard; it changes the set of people
+  who may press =POST /api/estate/freeze/on=, which halts every deployment and
+  carries no authentication (=spec.org:571=). It is an estate state because it
+  is a fact about who may move *every* PR.
+
+The rule the model encodes: *tier is a property of the address; audience is a
+property of the deployment, and the two can disagree silently.*
+
+* The berth is the only singleton, and it is a lease, not an environment
+
+=spec.org= §Nomenclature: a *berth* is /the singleton lock on the path/, not
+/a lock on an environment/. Four positions, and only the last two can be
+invalidated by =main= moving (=spec.org:1095=):
+
+| # | position   | model state            | what it holds |
+|---+------------+------------------------+---------------|
+| 1 | scheduled  | =S20_scheduled=        | a calendar event. Nothing blocks on it |
+| 2 | berthed    | =S21_berthed=          | =deploy:staging= — the scarce thing |
+| 3 | verified   | =S23_staging_observed= | + the observation stack on this head |
+| 4 | cleared    | =S24_cleared=          | + =deploy:production= |
+
+The lock is the *label*, not the workflow concurrency group: a PR that
+deployed and is sitting in production verification still holds staging with no
+run in flight (=spec.org:1006=). That is exactly why the berth can outlive
+everything that would have released it, which is the first unnamed state below.
+
+Capacity, stated as the model sees it: *dev is unbounded-but-ten, team is many,
+staging is one.* Guard 1 (=change/queue.sh:47=) is a =gh pr list --label
+deploy:staging= query, so its subject is the label set, not the estate. An
+environment is never consulted to decide whether the berth is free.
+
+* Which environments may promote, and why the team tier cannot
+
+=environments.tsv:14= is unusually explicit, and it is a statement about
+*label namespaces*, not about capability:
+
+#+begin_quote
+promotes=no is not a policy toggle. A team environment cannot promote because
+nothing downstream of it reads its verdict -- guard 4 names staging:* and
+production:* observations and nothing else. Setting it to yes would not grant
+the power, it would only make the file lie.
+#+end_quote
+
+So the environments lens produces a finding that belongs to it alone:
+*there is no =team:= observation namespace.* The 9100 tier cannot promote
+because no instrument can write a label about it that anything reads. A
+dashboard that shows a team environment green is showing a measurement with no
+consumer. In the model, =S12_team_checked_out= has *no edge forward* — only
+back to =S00_open= (checked in or the lease expires) and to =S01_requested=,
+which starts the real path from scratch. That is a dead end *in the estate*,
+and it is deliberate; it is not a dead end in the chain.
+
+A second environment state belongs to this tier and to nothing else:
+=S13_team_declared_unactivated=. =environments.tsv= is the map of what is
+*named*; =ports.tsv= is the CMDB of what is *running*. A declared, inactive
+environment still owns its ports so nothing else is allocated onto them, and
+=targets/node/deploy.sh:64= refuses to deploy there with a message that says
+which of the two things is true — a reservation, not a typo. *An address can
+be occupied by a name.*
+
+* Blue/green occupancy, and the colour that nothing clears
+
+The production address is =:9230=, and it is not a replica. =front.js= reads
+=targets/node/live= on *every request* rather than caching it, because the
+earlier bastille switch reported its own config file and said blue while green
+was serving (=targets/node/front.js:8-12=).
+
+Occupancy has three values per colour, and only two of them have names:
+
+| colour holds | front routes to it | model state | named by the repo |
+|--------------+--------------------+-------------+-------------------|
+| this build   | yes                | =S31_live=  | yes — "production" |
+| this build   | *no*               | =S30_idle_loaded= | *no* |
+| a build nobody shipped | no       | =S71_idle_retained= | *no* |
+
+=S30_idle_loaded= is the ordinary, correct, transient case: the build is
+installed and answering on the idle replica, reachable from the LAN at
+=:9210= or =:9220=, and production is not serving it. =front.js:26-49= makes
+it deliberately previewable at the production address via =?__preview=<colour>=
+so acceptance can happen before the cutover rather than after.
+
+=S71_idle_retained= is the same occupancy after the change stops. *Nothing
+clears an idle colour, ever.* Enumerated:
+
+- =change/abort.sh:78-104= clears labels and posts =failure= to the forge's
+  deployment statuses. It never touches a replica.
+- =change/settle.sh:244= clears transient labels. It never touches a replica.
+- =change/reap.sh= closes windows and releases berths. It never touches a
+  replica.
+- =targets/node/switch.sh:45= writes the =live= file. It moves the pointer; it
+  does not unload anything.
+- =targets/node/deploy.sh:85-88= kills the block's ports — but only as the
+  first step of deploying *something else into that colour*.
+
+So the only thing that ever clears an idle colour is the next deployment to it,
+and the three edges out of =S71_idle_retained= are exactly that, plus the
+change closing around it, plus the hazard: =switch.sh:43= refuses to cut over
+to a colour that is *not answering*, and checks nothing else. *A retained build
+that answers is a valid cutover target.* A later operator cutting "back" to the
+idle colour ships a build that was never authorized, and the model gives that
+edge a weight rather than pretending it cannot happen.
+
+Stated as the finding: *a closure code describes the change record, and there
+is no closure code that describes the estate.* =change:failed= asserts
+production never served the build; it asserts nothing about what is loaded and
+listening on :9210.
+
+* What an environment ASSERTS versus what it merely SERVES
+
+Serving is a fact about a socket. Asserting is a fact about a *record*, and the
+two come apart in both directions.
+
+| address | serves | asserts | how the assertion is made |
+|---------+--------+---------+---------------------------|
+| dev 9000+10n | a build | *nothing* | no observation namespace exists for it |
+| team 9100+   | a build | *nothing* | guard 4 reads =staging:*= and =production:*= only |
+| staging 9200 | a build | that this build was measured | =staging:e2e=, =staging:smoke=, =staging:uat= |
+| blue/green   | a build | *nothing on its own* | it is a replica; the front decides which is production |
+| front 9230   | whatever the live colour serves | that production converged | =production:healthy= over N samples |
+
+Two consequences the model has to be able to hold:
+
+1. *An environment can serve without asserting.* That is =S30_idle_loaded= and
+   the whole team tier.
+2. *A record can assert without the environment serving.* That is
+   =S72_attested_unserved=, and it has three separate mechanisms in this repo:
+   - the health check made two requests per route, so during a rolling deploy
+     the status code and the build header could come from different replicas
+     and the pair passed while the estate was mixed (=spec.org:1256=, since
+     fixed by one request carrying both facts);
+   - the switch reported the colour by reading its own config file while nginx
+     served the other one (=targets/node/switch.sh:54-56=);
+   - the deploy reported success, correctly — it *had* deployed — and the
+     environment then died with the shell that started it, leaving the worktree
+     fully checked out and looking deployed with all six ports refusing
+     (=targets/node/deploy.sh:109-118=).
+
+All three produce the same shape: a verdict naming a build the environment is
+not running. A model that cannot represent it reads as tidy and is wrong.
+
+* The states with no name
+
+Four, and the repo reached three of them.
+
+** =S70_orphan_berth= — a berth held with no open window, serving nowhere
+
+=deploy:staging= is on the PR, the window is gone, and =:9200= serves something
+else or nothing. =change/reap.sh:46-49= names the mechanism without naming the
+state:
+
+#+begin_quote
+THE BERTH IS THE PART THAT HURTS. A window can lapse having already claimed
+staging, and deploy:staging is cleared by settle.sh -- which that change will
+never reach. Left alone it blocks every subsequent change with guard 1 while
+its own window is gone, which is a deadlock with no declared cause.
+#+end_quote
+
+Three facts, and every one of them is readable somewhere different: the label
+is on the PR, the window's end is on the calendar, and what :9200 is serving is
+in an HTTP header. Nothing joins them. =change/queue.sh= reports =claimed= and
+exit 0 for a PR that holds no claim at all (=scenarios.org:241=), so the one
+tool that looks like it would answer does not.
+
+** =S71_idle_retained= — an idle colour holding a build nobody shipped
+
+Above. ESTATE-GLOBAL residue that is nonetheless attributable to one PR, which
+is why it carries =kind=estate= but sits on the PR's walk.
+
+** =S72_attested_unserved= — reported healthy for a build it is not serving
+
+Above.
+
+** =S74_deployed_unmerged_windowless= — the spec's own unnamed state
+
+=spec.org:2793=: /"Deployed, not merged, and the window is gone. Three facts at
+once, and nothing in the vocabulary says it. Reached twice here — once by a
+script that reported the opposite."/ Its outgoing edges are the interesting
+part: =change/abort.sh= offers =failed= and =backed-out=, and *neither is
+true* — =failed= asserts production never served it, =backed-out= asserts an
+estate action that has not been performed. The model gives the =failed= edge a
+weight and marks it =[H]= in =transitions.tsv=, because no guard in this repo
+compares a closure code against what the front is actually serving.
+
+A fifth, smaller one, included because the dev tier deserves the same
+treatment: =S11_dev_stale_row= — =ports.tsv= holds a block that nothing is
+listening on. =targets/node/deploy.sh:147-151= describes it and fixes it only
+for blocks that go through the deployer: /"ports.sh allocates by editing a file
+and never asks what is bound, so a block whose process died stayed held forever
+and a block started outside the registry was invisible."/
+
+* Indeterminate is a third value
+
+The model has *two* states for it, and no edge from either of them to a pass
+that is not a fresh measurement.
+
+- =S80_unreachable= — the instrument could not reach the address. Reached from
+  =S20_scheduled= (=gates/preflight.sh:52=, /"exit 4 blocks. An unreadable
+  schedule is an unknown, not a yes"/), from =S21_berthed= and
+  =S22_staging_serving= (=change/observe.sh:24= refuses to accept a URL that is
+  not serving a build), and from =S24_cleared= (guard 6 must *abstain*, exit 4,
+  when =deploys(c)= is indeterminate — =spec.org:212=; an empty deploy set
+  treated as exempt is how the guard never fired in 484 runs).
+- =S81_bound_loopback= — the environment is up, correct, and unreachable by
+  construction. This is the case where the third value has a *cause*, and the
+  cause is the exposure axis rather than the build.
+
+The edges out of =S80_unreachable= go back to the state that was being measured
+(a re-probe that *reaches*), sideways to =S81_bound_loopback= (the cause is
+found), or to =S60_failed= (the abstention stands and the change closes).
+There is no edge =S80 → S32_prod_observed=. Indeterminate never becomes a pass
+without a successful measurement, and it is never a synonym for a failure edge
+either: =S72_attested_unserved → S80_unreachable= exists precisely so a
+disagreement traced to reachability stops being counted as a bad build.
+
+* Labels as semantics
+
+The prefix is a *namespace*, and each namespace answers a different question
+about a different subject. =spec.org:2316= puts it as /the name shape tells you
+the kind/; =change/label-owners.tsv= makes ownership machine-readable so a
+second writer is an audit failure rather than an argument.
+
+| prefix | subject | semantics | who writes |
+|--------+---------+-----------+------------|
+| =app:= | the *diff* | observation — an instrument (the labeller) measured the changed files. Derived every push; a hand edit does not survive | labeller |
+| =itil:= | the *change* | classification — what KIND of change this is. Exactly one, once classified | labeller derives standard/normal; only a person declares emergency |
+| =change:= | the *change record* | state — how far it has got. Overloaded: also holds the retired class labels, recorded rather than renamed because renaming would rewrite history | scheduler, =settle.sh=, =abort.sh=; =change:requested= is the human's ask |
+| =deploy:= | the *pipeline* | state — an ACTION IN FLIGHT, never a request. =deploy:staging= is additionally the berth claim guard 1 reads | workflow |
+| =staging:= | the *staging environment* | observation — an instrument measured THIS environment and the record names a build | the gate that ran; =staging:uat= is the one exception, where the instrument is a person |
+| =production:= | the *production address* | observation — same, at =:9230= | the gate that ran |
+| =blocked:= | the *refusal* | state — names the guard that refused, set and cleared by that guard | the refuser |
+| =release= / =release:start= | intent / action | the bare word is a person's INTENT and re-fires while it is on; the colon form is the pipeline saying a release has begun, which a person cannot truthfully assert | human / the pipeline |
+| =labeler:= | the *labeller* | intent — =labeler:skip= transfers ownership of the derived labels and turns the manifest from derived into asserted, on purpose | human |
+| (bare) =freeze=, =emergency= | *the world* | estate — on issue #1, never on a PR | human |
+| (bare) =control-plane= | the *diff* | classification — this change alters how every future change is verified | labeller |
+
+*One classification I expect to disagree with a sibling model on, flagged
+rather than reconciled:* =labels.tsv= here calls =app:*= an *observation* — an
+instrument (the labeller) measured a thing (the diff) and the record is
+recomputed on every push, so a human edit does not survive. The argument for
+calling it *classification* instead is that it names what the change IS rather
+than what anything measured. Neither category in the shared vocabulary fits a
+*manifest* cleanly, and the mismatch is worth surfacing at the merge rather
+than papering over: =spec.org= §Domain model calls the manifest /derived, never
+asserted/, and the five-way split has no cell for "derived".
+
+Two distinctions this lens cares about most:
+
+*The environment-scoped namespaces are the only ones that authorize.* =staging:=
+and =production:= exist because guard 4 needs an observation that names both an
+environment and a build. There is no =dev:= and no =team:=, and that absence —
+not a policy flag — is what makes those tiers unable to promote.
+
+*=freeze= and =emergency= are properties of the world and live on something
+that cannot be deployed.* =spec.org:2819=: collapsing the estate namespace into
+the change namespace produces /"one label asserting both 'an emergency is in
+flight' and 'this change is exempt', so the write that closed the estate
+exempted its own carrier"/. =itil:emergency= says /this change is the remedy/;
+=emergency= says /something is wrong out there/. Same word, opposite direction.
+
+* Assumptions
+
+1. *One estate, one berth, one production front.* The model is Option B — the
+   monorepo with a single berth (=spec.org:1137=). Per-group staging slots are
+   explicitly superseded (=spec.org:702=) and are not modelled.
+2. *The node target is the estate of record.* =targets/node/= is what runs
+   here; =targets/bastille/= exists and its jails are not reachable from a
+   GitHub runner (=envs:33-35=). Where the two disagree the node target wins,
+   because it deploys the apps that are actually under test
+   (=targets/node/deploy.sh:1-12=).
+3. *The team tier is declared and unprovisioned.* Three names, three ports, no
+   jails behind them (=docs/adr/0002-environment-tiers.org= §What we are not
+   building yet). =S12_team_checked_out= therefore describes the leased
+   environment the IDP would hand out, not one observed serving. *[H]*
+4. *Observation labels are keyed to the head SHA.* A push withdraws them. The
+   model collapses the individual =staging:e2e= / =staging:smoke= /
+   =staging:uat= writes into one =S23_staging_observed= state; the gating lens
+   owns their internal order.
+5. *Weights are estimates, not measurements.* See §Running the chain.
+
+* Deliberate exclusions
+
+Owned by the other four lenses, and deliberately thin here:
+
+- *Gate internals.* =lint=, =test=, =e2e=, =gate-selftest=, the fixture
+  negative tests, and guard 2's double evaluation appear only as the guard text
+  on an edge. The gating lens owns them.
+- *Divergence classification.* =inert / pipeline / artifact / hotfix= collapses
+  into one =S53_blocked_diverged= state. The protection/override lens owns the
+  four-way split and its two thresholds.
+- *Approval, review identity and the single-identity problem.* One guard
+  clause on =S05_emergency_declared → S24_cleared=.
+- *Merge queue, auto-merge, =AUTO_MERGE=0=.* =S40_merged= is reached by one
+  edge; who pressed the button is the deployment-lifecycle lens's question.
+- *The PIR's content.* =S41_complete → S42_cleaned= carries the ordering
+  constraint (the record is posted before the labels are cleared) and nothing
+  about what the record says.
+- *Jail-internal topology.* =:80= and =8001–8005= are identical in every jail
+  and consume none of the 9000-range namespace (=spec.org:533=), so they
+  produce no states.
+- *Soak.* Proof by use across N later deployments is about a sequence of
+  changes, not a state of one PR.
+
+* The machine
+
+Every non-terminal state also carries an abandon edge to =S60_failed= that the
+diagram omits; =transitions.tsv= has them all.
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction TB
+
+    [*] --> S00_open
+
+    S00_open --> S01_requested
+    S00_open --> S10_dev_served
+    S00_open --> S12_team_checked_out
+    S00_open --> S13_team_declared_unactivated
+    S00_open --> S05_emergency_declared
+
+    S10_dev_served --> S11_dev_stale_row
+    S11_dev_stale_row --> S10_dev_served
+    S10_dev_served --> S01_requested
+    S11_dev_stale_row --> S00_open
+    S12_team_checked_out --> S00_open
+    S12_team_checked_out --> S01_requested
+    S13_team_declared_unactivated --> S00_open
+
+    S01_requested --> S02_release_armed
+    S02_release_armed --> S20_scheduled
+    S01_requested --> S20_scheduled
+    S01_requested --> S50_blocked_queue
+    S01_requested --> S51_blocked_freeze
+
+    S20_scheduled --> S21_berthed
+    S20_scheduled --> S50_blocked_queue
+    S20_scheduled --> S51_blocked_freeze
+    S20_scheduled --> S52_blocked_lock
+    S20_scheduled --> S62_expired
+    S20_scheduled --> S80_unreachable
+    S20_scheduled --> E90_freeze
+    S20_scheduled --> E91_emergency
+    S20_scheduled --> E93_actuator_exposed
+
+    S50_blocked_queue --> S01_requested
+    S50_blocked_queue --> S51_blocked_freeze
+    S51_blocked_freeze --> S20_scheduled
+    S51_blocked_freeze --> S05_emergency_declared
+    S52_blocked_lock --> S20_scheduled
+    S53_blocked_diverged --> S01_requested
+    S62_expired --> S01_requested
+
+    S21_berthed --> S22_staging_serving
+    S21_berthed --> S70_orphan_berth
+    S21_berthed --> S72_attested_unserved
+    S21_berthed --> S80_unreachable
+    S21_berthed --> S53_blocked_diverged
+
+    S22_staging_serving --> S23_staging_observed
+    S22_staging_serving --> S21_berthed
+    S22_staging_serving --> S53_blocked_diverged
+    S22_staging_serving --> S80_unreachable
+
+    S23_staging_observed --> S24_cleared
+    S23_staging_observed --> S22_staging_serving
+    S23_staging_observed --> S53_blocked_diverged
+
+    S05_emergency_declared --> S24_cleared
+    S05_emergency_declared --> S20_scheduled
+
+    S24_cleared --> S30_idle_loaded
+    S24_cleared --> S53_blocked_diverged
+    S24_cleared --> S51_blocked_freeze
+    S24_cleared --> S80_unreachable
+
+    S30_idle_loaded --> S31_live
+    S30_idle_loaded --> S71_idle_retained
+    S30_idle_loaded --> S80_unreachable
+    S71_idle_retained --> S30_idle_loaded
+    S71_idle_retained --> S31_live
+
+    S31_live --> S32_prod_observed
+    S31_live --> S72_attested_unserved
+    S31_live --> S73_deployed_not_merged
+    S31_live --> S61_backed_out
+
+    S32_prod_observed --> S40_merged
+    S32_prod_observed --> S73_deployed_not_merged
+    S32_prod_observed --> S61_backed_out
+
+    S40_merged --> S41_complete
+    S40_merged --> S44_backfill_owed
+    S41_complete --> S42_cleaned
+    S44_backfill_owed --> S42_cleaned
+
+    S70_orphan_berth --> S62_expired
+    S70_orphan_berth --> S21_berthed
+    S70_orphan_berth --> S74_deployed_unmerged_windowless
+
+    S72_attested_unserved --> S31_live
+    S72_attested_unserved --> S80_unreachable
+    S72_attested_unserved --> S61_backed_out
+
+    S73_deployed_not_merged --> S40_merged
+    S73_deployed_not_merged --> S74_deployed_unmerged_windowless
+    S73_deployed_not_merged --> S61_backed_out
+
+    S74_deployed_unmerged_windowless --> S73_deployed_not_merged
+    S74_deployed_unmerged_windowless --> S61_backed_out
+
+    S80_unreachable --> S20_scheduled
+    S80_unreachable --> S21_berthed
+    S80_unreachable --> S81_bound_loopback
+    S81_bound_loopback --> S20_scheduled
+
+    E90_freeze --> S51_blocked_freeze
+    E90_freeze --> E92_freeze_unattributed
+    E90_freeze --> S20_scheduled
+    E91_emergency --> S51_blocked_freeze
+    E91_emergency --> S20_scheduled
+    E92_freeze_unattributed --> E90_freeze
+    E92_freeze_unattributed --> S20_scheduled
+    E93_actuator_exposed --> E90_freeze
+    E93_actuator_exposed --> S20_scheduled
+
+    S42_cleaned --> [*]
+    S60_failed --> [*]
+    S61_backed_out --> [*]
+
+    note right of S70_orphan_berth
+        UNNAMED. Berth held, window gone,
+        build serving nowhere. reap.sh:46
+    end note
+    note right of S71_idle_retained
+        UNNAMED. Cleared by nothing, ever.
+        Only the next deploy to that colour.
+    end note
+    note right of S80_unreachable
+        INDETERMINATE - a third value.
+        No edge from here to a pass.
+    end note
+
+    classDef estate fill:#fde68a,stroke:#a16207,color:#000
+    classDef unnamed fill:#fecaca,stroke:#b91c1c,color:#000
+    classDef protectedTier fill:#bbf7d0,stroke:#15803d,color:#000
+    classDef deadEnd fill:#e5e7eb,stroke:#6b7280,color:#000
+
+    class E90_freeze,E91_emergency,E92_freeze_unattributed,E93_actuator_exposed estate
+    class S70_orphan_berth,S71_idle_retained,S72_attested_unserved,S74_deployed_unmerged_windowless,S11_dev_stale_row unnamed
+    class S21_berthed,S22_staging_serving,S23_staging_observed,S24_cleared,S30_idle_loaded,S31_live,S32_prod_observed protectedTier
+    class S12_team_checked_out,S13_team_declared_unactivated,S10_dev_served deadEnd
+#+end_src
+
+* Running the chain
+
+The contract is that a weighted random walk from =S00_open= reaches a terminal
+state. It does: no dead ends, no unreachable states, three terminals
+(=S42_cleaned=, =S60_failed=, =S61_backed_out=).
+
+Checked with 20,000 walks, =random.seed(7)=, sampling each outgoing edge in
+proportion to its =weight=:
+
+| measure | value |
+|---------+-------|
+| states / transitions | 38 / 113 |
+| non-terminal states with no outgoing edge | 0 |
+| states unreachable from =S00_open= | 0 |
+| walks reaching a terminal | 20000 / 20000 |
+| mean walk length | 16.6 steps |
+| longest walk | 118 steps |
+| =S42_cleaned= / =S61_backed_out= / =S60_failed= | 18% / 20% / 62% |
+
+*The weights are [H].* They are an engineer's estimate of relative likelihood,
+not a measurement, and the one thing worth reading off the distribution is
+structural rather than numeric: *most of the walk is spent in the
+request–block–re-request loop, not on the deploy path.* =S20_scheduled= is
+entered about 2.3 times per walk. That is consistent with what this repo
+already measured about itself — =research/history/release-strategies.org= reports 10–20
+validation runs per shipped change, and =docs/adr/0002= refuses to put DORA on
+the dashboard precisely because a forfeited window and a revalidation are
+invisible to it. If the weights are ever replaced with measurements, that loop
+is the thing to measure first.
+
+Two deliberate shapes in the chain, both stated so a merge does not "fix" them:
+
+- =S02_release_armed= has a *self-loop*. The bare =release= label is a trigger
+  that stays on and re-fires (=change/label-owners.tsv:36=). A model without
+  the self-loop cannot express why leaving it on is a hazard.
+- =S12_team_checked_out= has no forward edge. Team environments cannot promote
+  and the model must not invent a path for them.
+
+** Reproduction
+
+: cd /home/jwalsh/ghq/github.com/aygp-dr/slipway/experiments/021-state-machines/environments
+: python3 - <<'EOF'
+: import csv, random, collections
+: S = list(csv.DictReader(open("states.tsv"), delimiter="\t"))
+: T = list(csv.DictReader(open("transitions.tsv"), delimiter="\t"))
+: term = {r["id"] for r in S if r["terminal"] == "yes"}
+: out = collections.defaultdict(list)
+: for e in T: out[e["from"]].append((e["to"], float(e["weight"])))
+: random.seed(7); ends = collections.Counter(); n = 0
+: for _ in range(20000):
+:     c = "S00_open"
+:     while c not in term:
+:         d, w = zip(*out[c]); c = random.choices(d, weights=w)[0]; n += 1
+:     ends[c] += 1
+: print(ends, n / 20000)
+: EOF
+
+* [H] register — claims not grounded in the repo
+
+| claim | why it is [H] |
+|-------+---------------|
+| The team tier behaves as =S12_team_checked_out= describes | declared and unprovisioned; no jail backs 9100–9130. =docs/adr/0002= §What we are not building yet |
+| =S74 → S60_failed= is reachable in practice | the edge asserts a closure code can be written while production still serves the build. No guard compares the two, so nothing would stop it — but it has not been observed |
+| =E92_freeze_unattributed → E90_freeze= | "a declarer is established out of band" has no mechanism in-tree; nothing re-attributes a past write |
+| All edge weights | estimates, not measurements. See §Running the chain |
+| =S71_idle_retained → S31_live= weight | the mechanism is grounded (=switch.sh:43= checks only that the colour answers) but the frequency is a guess |
+| The estate states sit on the PR's walk | they are ESTATE-GLOBAL and a PR does not "enter" them. They are on the walk because a PR's progress is suspended by them, and because the contract requires every state be reachable. A merge that separates estate into its own region should do so deliberately |
+
+* Where this model disagrees with a tidier one
+
+Three places, recorded because the tidy version is the tempting one:
+
+1. *A berth is not an environment lock.* Modelling =deploy:staging= as
+   "staging is busy" makes =S70_orphan_berth= unrepresentable, because the
+   environment is free and the berth is not.
+2. *An environment does not have a health.* It has a *build it is serving* and,
+   separately, a *record about a build*. Collapsing them makes
+   =S72_attested_unserved= unrepresentable, and that state is the one three
+   separate defects in this repo produced.
+3. *Unreachable is not a failure edge.* Merging =S80_unreachable= into a
+   refusal state is how guard 6 came to exempt its way past both of the cases
+   it exists for, in two independent implementations (=spec.org:187-224=).

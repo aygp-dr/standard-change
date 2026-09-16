@@ -7,7 +7,9 @@
 
 * Status
 
-- Version: 0.4 (establishing; deviations go to the review ledger, issue #1)
+- Version: 0.5 (establishing; deviations recorded in §Version. NOTE: issue #1
+  was the review ledger and is now the ESTATE STATE holder -- freeze and
+  emergency live there. Deviations go in the commit and in §Version)
 - Working repo name: =standard-change= (ITIL 4: a pre-authorized, low-risk change verified by fixed gates). Alternatives considered: =change-schedule=, =change-window=, =slipway=, =gatehouse=.
 - This file is the single canonical document. =CLAUDE.md= and =README.org= are derived and restate only what an agent or reader needs to act.
 
@@ -140,7 +142,7 @@ the thing itself.
 | *berth*               | an exclusive, deadline-bearing lease on the path to production              | the =deploy:staging= label + lock  |
 | *path to production*  | the ordered environments a change traverses: staging → production           | environments                       |
 | *divergence*          | the classified relation between a change's base and the trunk tip           | computed by =divergence.sh=        |
-| *authorization*       | normal (earned by gates) or emergency (granted by a person)                 | =change:emergency=                 |
+| *authorization*       | normal (earned by gates) or emergency (granted by a person)                 | =itil:emergency=                 |
 | *deployment record*   | platform-attested statement that artifact X reached environment Y           | the Deployments API                |
 
 Two of these are load-bearing and routinely got wrong:
@@ -176,10 +178,70 @@ class of a merge.
 | *4*   | =staged(H(c)) ∨ (emergency(c) ∧ approved(c))=                          | at deploy                 |
 | *4b*  | =∀m ∈ merges(B(c), T) : class(m) ∈ {inert, pipeline}=                  | *at reliance*, not request |
 | *5*   | =served_build(production) = H(c)=                                      | after deploy              |
+| *6*   | =deploys(c) = ∅ ∨ served_build(production) = T=                         | at merge                  |
 
 Guard 2 appears twice on purpose (§Emergency — the only bypass). Guard 4b's
 "at reliance" is the whole content of the rule: *a guard whose subject can
 change after it is checked must be re-checked at the moment it is relied on.*
+
+*** Guard 6 (production-first), and why it is stated here rather than assumed
+
+Added 2026-09-14 after it was found missing. Guard 6 — "do not merge something
+new onto a trunk that production is not yet serving" — was implemented in this
+repo and independently in the =000= rebuild, and *is wrong in both*, by the same
+mechanism. It appeared in no predicate here, so both implementations invented it
+and both invented it the same broken way.
+
+The failure is in =deploys(c)=, not in the comparison. Both derived the deploy
+set and then treated an *empty* set as *exempt*:
+
+- here: =groups.sh "$pr" 2>/dev/null || true= — a forge that could not answer
+  produced the empty set, and the guard exempted the change. 484 runs, never
+  once triggered by a label.
+- in =000=: =prodfirst: exempt -- this change deploys nothing (derived from the
+  diff, not from a label)= returned exit 0 for both of the cases the guard exists
+  for, including the one where production could not be reached at all.
+
+*The rule, and it is the whole point of stating the guard:* =deploys(c)= is
+three-valued, never a set that may be empty.
+
+| =deploys(c)= | meaning | guard 6 |
+|--------------+---------+---------|
+| a non-empty set | this change deploys these groups | compare; refuse unless production serves =T= |
+| *provably* empty | the diff was read and touches nothing deployable | exempt, and say which oracle proved it |
+| indeterminate | the diff or the labels could not be read | *abstain* — exit 4, blocks |
+
+/Exempt/ requires positive evidence that the change deploys nothing. The absence
+of evidence that it deploys something is *indeterminate*, and indeterminate is
+not exempt. This is defect class 1 (unreachable is not falsified) and class 8
+(cannot say is not no) applied to the one guard that had no predicate to defend.
+
+A conforming implementation must have a test that fails when the guard is
+removed, for all three rows — =000='s selftest had exactly the right two cases
+and the guard exempted its way past both, which is why the case list matters as
+much as the predicate.
+
+**** What =000= could and could not tell us, stated separately
+
+=000= has no port sweep, no router and no running apps — the 9000-series block
+model is not in it. So only one of the two failures is evidence about the guard:
+
+- *Evidence.* =prodfirst ABSTAINS when production cannot be reached= returned
+  /exempt/ (0) instead of /abstain/ (4). The exempt short-circuit is evaluated
+  BEFORE reachability, so the guard answers "nothing to check" without ever
+  having tried to look. That is an ordering defect in the code path and it does
+  not need an estate to be true. Our =groups.sh ... || true= is the same
+  ordering, reached a different way.
+- *Not evidence.* =prodfirst refuses: production is running another build=
+  cannot be exercised without a production to observe. =000= faked it in
+  process, so what failed there is a fixture's guess, not a measurement. It is
+  recorded as UNDERIVABLE rather than counted against the rebuild.
+
+This is itself a conformance requirement, and it belongs with the guard: *guard
+6 cannot be tested without a real estate.* A pipeline that can only test it
+against an in-process double has not tested it — the same distinction §Targets
+draws between the deployed thing and the tested thing. An implementation without
+the port-block model can state guard 6 and cannot verify it, and must say so.
 
 ** Conformance — what a platform must provide
 
@@ -499,6 +561,96 @@ The blocks are otherwise identical.
 Observed: blocks 1 and 2 serving on =:9010= and =:9020=, each reporting its own
 build sha, =gates/e2e.sh= green against both over the LAN address.
 
+** Exposure — what may cross the LAN boundary
+
+Every port tier above says what an environment *is*. None of them says who may
+*reach* it, and the two are not the same question. A public tunnel does not
+change an environment's tier, its port, or its guards; it changes the set of
+people who can operate the controls, and nothing in the tier model notices.
+
+*** The control plane is not a web page
+
+The dashboard reads like a status board and is not one. It carries
+unauthenticated write endpoints:
+
+| endpoint | effect |
+|----------+--------|
+| =POST /api/estate/freeze/{on,off}= | declares or lifts an estate freeze — halts EVERY deployment |
+| =POST /api/estate/emergency/{on,off}= | declares or lifts an estate emergency |
+| =POST /api/schedule/<pr>/clear= | cancels a booked window |
+
+There is no authentication in front of them. On a LAN that is a deliberate
+trade: the boundary IS the authentication, and `freeze` is designed to be
+reachable in a hurry by whoever is in the room. Publish the same origin and the
+trade silently inverts — the control that stops all deployment becomes an
+unauthenticated POST from anywhere.
+
+*The rule:* an origin that can change estate state must not be tunnelled without
+an authenticating proxy in front of it. A read-only view may be; the same
+process serving both is not a read-only view.
+
+*** A tunnel is not obscurity
+
+Three assumptions that do not hold, each of which has to be stated because each
+sounds true:
+
+- /Nobody knows the hostname./ Every hostname fronted by a CA-issued certificate
+  appears in Certificate Transparency logs within minutes, and CT is crawled
+  continuously. A tunnel hostname is public the moment it is created.
+- /It is only reachable over the tunnel./ That is the point — the tunnel is
+  reachable from the whole internet, which is strictly more exposure than the
+  LAN, not less.
+- /The catch-all 404 protects the rest./ It scopes the tunnel to declared
+  hostnames. It says nothing about who may use a declared one.
+
+*** The precedent already on this host
+
+The existing =cloudflared= ingress on hydra gets this right and says so in its
+own comments: the PTY WebSocket on 7681 is *never* tunnelled — "PTY access
+requires LAN connection only" — and the demo hostname serves the static client
+page *only*, with the socket it talks to deliberately left off the tunnel. The
+rule there is the rule here: publish the view, never the actuator.
+
+The telemetry beacon is the counter-example that shows the line. It is
+tunnelled, and it is safe to tunnel, because it accepts events and controls
+nothing. Exposure is decided by what an endpoint can *do*, not by what tier it
+sits in.
+
+*** The freeze has no declarer, and that is the actual defect
+
+Exposure is the occasion for this finding, not its cause. The estate toggle
+writes:
+
+: `freeze` turned **on** from the IDP dashboard at <timestamp>.
+
+No actor and no reason, posted under the repo's own token — so every freeze is
+attributed to the same identity whoever pressed the button. That is already
+true on a LAN.
+
+It matters because a freeze is legitimately powerful: anyone with change
+authority may halt the estate, and the control is deliberately easy to reach in
+a hurry. The power is not the problem. The problem is that a =freeze= is a
+property of the WORLD (see §Nomenclature) and a world-property with no recorded
+declarer leaves the post-implementation review unable to answer /why did we stop
+shipping/. An authorised halt and a hostile one produce byte-identical records.
+
+Tunnelling the origin does not create this defect; it removes the only thing
+compensating for it, which is that the set of people who could press the button
+was the set of people in the building.
+
+*The rule:* a control that changes estate state records WHO invoked it and WHY,
+as part of the same write that changes the state. If the identity cannot be
+established, the control refuses — an unattributable freeze is not a safer
+freeze, it is an unauditable one.
+
+*** What a rebuild must record
+
+An environment registry that names tier and port but not *audience* cannot
+express any of this — it will report an estate as =protected= while the whole
+internet can freeze it. The registry needs a third axis: who may reach it, and
+whether reaching it can change anything.
+
+
 ** Registry
 
 =ports.tsv= is the CMDB for worktrees. =make port-alloc= appends a row for the current worktree path and writes =.env.ports= in the worktree. =make port-free= removes the row.
@@ -556,9 +708,9 @@ PR that holds it. Slots may return later as an optimization; they are not in
 | Label                  | Set by      | Removed by        | Meaning                                                      |
 |------------------------+-------------+-------------------+--------------------------------------------------------------|
 | =app:<group>=          | labeller    | labeller          | The diff touches =apps/<group>/=. *Owned* by the labeller     |
-| =change:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
-| =change:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
-| =change:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
+| =itil:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
+| =itil:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
+| =itil:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
 | =change:requested=     | *human*     | release / close   | *Start my change request.* The only label a person adds to set a change going |
 | =change:scheduled=     | scheduler   | activation        | A window is booked on the change schedule                    |
 | =deploy:staging=       | workflow    | the action ends   | *Action in flight:* deploying to staging right now           |
@@ -611,7 +763,7 @@ app:checkout:
 app:mock:
   - changed-files:
       - any-glob-to-any-file: apps/mock/**
-change:normal:
+itil:normal:
   - changed-files:
       - any-glob-to-any-file:
           - router/**
@@ -638,7 +790,7 @@ jobs:
         if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         with:
           sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
-      # change:standard is the COMPLEMENT of change:normal, which actions/labeler
+      # itil:standard is the COMPLEMENT of itil:normal, which actions/labeler
       # cannot express -- it matches globs, it cannot say "matched no other rule".
       # The offline oracle modelled this as derived and the config never
       # implemented it, so PRs got app:* and no change:* at all. Third time the
@@ -660,11 +812,11 @@ jobs:
           is_normal=$(echo "$files" | grep -cE '^(router|gates|change|targets)/|^\.github/' || true)
           echo "changed=$(echo "$files" | wc -l) apps=$has_app normal=$is_normal"
           if [ "$is_normal" -gt 0 ]; then
-            gh pr edit "$N" --repo "$R" --add-label change:normal || true
-            gh pr edit "$N" --repo "$R" --remove-label change:standard || true
+            gh pr edit "$N" --repo "$R" --add-label itil:normal || true
+            gh pr edit "$N" --repo "$R" --remove-label itil:standard || true
           elif [ "$has_app" -gt 0 ]; then
-            gh pr edit "$N" --repo "$R" --add-label change:standard || true
-            gh pr edit "$N" --repo "$R" --remove-label change:normal || true
+            gh pr edit "$N" --repo "$R" --add-label itil:standard || true
+            gh pr edit "$N" --repo "$R" --remove-label itil:normal || true
           fi
 
       - name: drop stale staging verdicts on a new push
@@ -735,7 +887,7 @@ stateDiagram-v2
     Staging --> Gated: e2e fails -> staging:failed, lock released
     Staging --> Promoted: authorizing e2e passes -> staging:passed@SHA
     Promoted --> Production: promote.yml adds deploy:production
-    Gated --> Production: change:emergency + approval (bypasses staging)
+    Gated --> Production: itil:emergency + approval (bypasses staging)
     Production --> Unhealthy: health check fails -> rollback + PIR
     Unhealthy --> Gated: labels released
     Production --> Healthy: health check passes -> production:healthy
@@ -746,7 +898,7 @@ stateDiagram-v2
 ** The guards
 
 Each is a hard precondition. None is skippable except where stated, and the
-only thing that can state it is =change:emergency=.
+only thing that can state it is =itil:emergency=.
 
 | # | Guard                    | Checked by             | On failure                          | Emergency bypass |
 |---+--------------------------+------------------------+-------------------------------------+------------------|
@@ -800,7 +952,7 @@ pr="$2"
 repo="${GH_REPO:-$GITHUB_REPOSITORY}"
 
 emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
-  -q '[.labels[].name] | index("change:emergency") // empty')
+  -q '[.labels[].name] | index("itil:emergency") // empty')
 
 # Guard 0: up to date with main (standard and normal changes only).
 #
@@ -1075,11 +1227,11 @@ green is void rather than merely unverified (§Verification contract).
 
 ** Emergency — the only bypass
 
-=change:emergency= is a human label and the sole authorization to reach
+=itil:emergency= is a human label and the sole authorization to reach
 production without =staging:passed=. It does not bypass guard 2 or guard 5.
 
 #+begin_example
-change:emergency + deploy:production
+itil:emergency + deploy:production
   → require: one approving review from a change authority
   → require: gates green on head SHA        (guard 2, no bypass)
   → preflight: lock only; a FREEZE event does not block an emergency
@@ -1095,7 +1247,7 @@ known, accepted regression risk, and naming it is the difference between an
 emergency change and an accident.
 
 Note the asymmetry with §Change enablement: an =EMERGENCY:= event on the change
-schedule /blocks everyone else/, while the =change:emergency= label /exempts one
+schedule /blocks everyone else/, while the =itil:emergency= label /exempts one
 PR/. Same word, opposite direction; the calendar governs the estate, the label
 governs a change.
 
@@ -1187,7 +1339,7 @@ pr="$1"; repo="${GH_REPO:-$GITHUB_REPOSITORY}"
 # second lands a tree predating it. Found in sim/ at berths=2. Activation is
 # not the last point of reliance; the merge is.
 emergency=$(gh pr view "$pr" --repo "$repo" --json labels \
-  -q '[.labels[].name] | index("change:emergency") // empty')
+  -q '[.labels[].name] | index("itil:emergency") // empty')
 if [ -z "$emergency" ]; then
   state=$(gh pr view "$pr" --repo "$repo" --json mergeStateStatus -q .mergeStateStatus)
   if [ "$state" = "BEHIND" ] || [ "$state" = "DIRTY" ]; then
@@ -1371,7 +1523,7 @@ jobs:
     if: github.event.label.name == 'deploy:production'
     runs-on: ubuntu-latest
     concurrency: {group: production, cancel-in-progress: false}
-    environment: production          # require reviewers here for change:normal
+    environment: production          # require reviewers here for itil:normal
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
       - uses: actions/checkout@v4
@@ -1395,11 +1547,11 @@ jobs:
         run: |
           labels=$(gh pr view "$PR" --json labels -q '[.labels[].name]')
           echo "$labels" | jq -e 'index("staging:passed")' >/dev/null && exit 0
-          echo "$labels" | jq -e 'index("change:emergency")' >/dev/null || {
-            echo "::error::no staging:passed on head SHA and not change:emergency"; exit 1; }
+          echo "$labels" | jq -e 'index("itil:emergency")' >/dev/null || {
+            echo "::error::no staging:passed on head SHA and not itil:emergency"; exit 1; }
           gh api "repos/${{ github.repository }}/pulls/$PR/reviews" \
             --jq '[.[]|select(.state=="APPROVED")]|length' | grep -qv '^0$' || {
-            echo "::error::change:emergency requires an approving review"; exit 1; }
+            echo "::error::itil:emergency requires an approving review"; exit 1; }
       - run: ./gates/preflight.sh production
       - run: ./change/lock.sh acquire "$PR" production
       - run: ./targets/${{ vars.DEPLOY_TARGET }}/deploy.sh production "$(./change/groups.sh "$PR")"
@@ -1459,7 +1611,7 @@ Each checklist is a =.github/PULL_REQUEST_TEMPLATE= section and a =pir.sh= field
 - [ ] =deployed:staging-<group>-<n>= present for every =app:*= group
 - [ ] Staging e2e run is on the head SHA (not a prior push)
 - [ ] No =blocked:*= label
-- [ ] For =change:normal=: one approving review from a listed change authority
+- [ ] For =itil:normal=: one approving review from a listed change authority
 - [ ] Rollback SHA recorded in PR body (=pir.sh= fills this from the production deployment record)
 
 ** Post-implementation review (generated)
@@ -1590,15 +1742,27 @@ versions recorded in §Host survey of record. Anything else is [H].
 |-----------------------------------+------+------+-----+----------------------------------------------------|
 | ubuntu-latest / CI                | [H]  | [H]  | [H] | GitHub stopped scheduling jobs 2026-09-13 (#34); every run reports failure with 0 steps |
 | FreeBSD 14.4 amd64 / hydra        | [E]  | [E]  | [E] | *router = node, not nginx. browser NOT exercised.* |
-| macOS-arm64 / mini                | [H]  | [H]  | [H] | Not surveyed                                       |
+| macOS-arm64 / mini                | [E]  | [E]  | [E] | *router = node. browser NOT exercised.* 2026-09-14, below |
 
 The claim in one line, revised 2026-09-13: *one cell is supported, and only on
 part of its tuple.* On hydra, =gmake lint=, =gmake test= and =gates/e2e.sh=
 against staging were each watched to pass — 27 e2e checks against build
 =2567015= at 22:25Z, Node v24.14.1, GNU Make 4.4.1, FreeBSD 14.4-RELEASE-p6.
 
+*Second cell, 2026-09-14, macOS.* =gmake lint=, =gmake test=, =gmake
+gate-selftest= and =ROUTER_URL=http://127.0.0.1:9000 gmake gate app=plp= were
+each watched to pass on the mini — 27 e2e checks and the smoke walk against
+build =fb4cde5=, Node v26.2.0, GNU Make 4.4.1, Darwin 24.1.0, Python 3.11.10
+with Hypothesis 6.111.0. Same partial tuple as hydra: node router, no browser.
+Two things the run needed that the Makefile does not say: =python3= must be a
+3.11 with Hypothesis on =PATH= (the default 3.14 has none, and =pbt= then
+reports "clean model reports a violation" for an =ImportError=), and
+=gates/e2e.sh= still defaults =ROUTER_URL= to =:10000=, the pre-correction
+block, so =gmake gate= exits 7 from curl unless the URL is given. Both are
+issues, not spec.
+
 *What that does NOT promote.* The tuple is (runtime, platform, router, browser),
-and this cell is observed on two of the four:
+and each cell is observed on two of the four:
 
 - *router* — the router under test was =router/server.js=, the node router the
   port-block model uses. nginx is installed but =gmake router= has not been
@@ -1678,7 +1842,7 @@ it targets the deprecated Node 20.
 
 ** A dependency bump is a normal change, and that is correct
 
-A Dependabot PR touches =.github/=, so the labeller gives it =change:normal=,
+A Dependabot PR touches =.github/=, so the labeller gives it =itil:normal=,
 which requires an approving review from a change authority (§Labels). *A bump
 to the control plane is exactly the change that should not be automatic* — the
 actions being updated are the ones that run the gates.
@@ -1689,6 +1853,17 @@ dependency bumps should not spend four windows doing one thing. That is
 §The balance applied to robots rather than people.
 
 ** main is not protected, and cannot be here
+
+*Amended 2026-09-14, in the direction of the observation.* The repo is now
+public, and =branches/main/protection= returns 200: =strict: true=, no
+required contexts, no reviewers; =rulesets= returns an empty list;
+=allow_auto_merge= is =false=. So the title below is no longer true — =main=
+*can* be protected here, and today it carries a rule that requires being up to
+date with nothing required to pass. The rest of this section describes the
+private-repo state it was written in and is kept as the record of why the
+workflow-level guards exist. =gmake audit= now reads the rules rather than
+reporting them =UNAVAILABLE= (5 ok, 3 findings, 3 absent, 0 unreadable).
+=research/history/pipeline-history.org= §Availability on this repo has the commands.
 
 GitHub's own settings page says so: /"Your main branch isn't protected."/ It is
 correct and there is no fix on this plan — =repos/{r}/rulesets= and
@@ -1762,7 +1937,7 @@ by the forge.
 | *5* production healthy | *no*               | nothing after the merge is its concern  |
 
 And it is the *release train relocated to the merge point* —
-=docs/release-strategies.org= reached that conclusion independently, and
+=research/history/release-strategies.org= reached that conclusion independently, and
 measured what batching buys: *0.58 validations per shipped change against
 13.63*, at the cost of latency. A merge queue is that amortisation, native.
 
@@ -1830,7 +2005,7 @@ second click.
 : ruleset: pull_request.required_approving_review_count = 1
 : repo:    allow_auto_merge = true
 
-with =change:normal= already requiring it (§Labels) and =change:standard=
+with =itil:normal= already requiring it (§Labels) and =itil:standard=
 relying on the gates as the change authority — which is the existing split, and
 the reason the split exists.
 
@@ -1900,7 +2075,7 @@ Three controls need their own reads, and the audit does them:
 - *freeze and emergency* — the change schedule, and the =EMERGENCY_CHANGE=
   repository variable as the fallback when the calendar is unreachable.
 - *environment protection* — =environments/production= must carry a required
-  reviewer for =change:normal=, =wait_timer= 0, and a =deployment_branch_policy=
+  reviewer for =itil:normal=, =wait_timer= 0, and a =deployment_branch_policy=
   restricting which branches may deploy.
 
 ** Availability on the development box [E, 2026-09-13]
@@ -1930,7 +2105,7 @@ What becomes available, and what it changes:
 | repo + *org-level* rulesets       | the guard table can be enforced once, across every repo, rather than configured per repo |
 | environment protection rules      | guard 4's approval becomes platform-attested instead of a =pulls/{n}/reviews= query in a job |
 | required reviewers as *teams*     | "a named change authority" stops being one person; §The balance's =prevent_self_review= deadlock dissolves |
-| CODEOWNERS enforcement            | =change:normal='s path-based authority becomes native rather than a labeller convention |
+| CODEOWNERS enforcement            | =itil:normal='s path-based authority becomes native rather than a labeller convention |
 | *custom deployment protection rules* | see below — this is the significant one |
 
 *Custom deployment protection rules are the native home for guard 4b.* An app
@@ -2004,7 +2179,7 @@ substitute repeated sampling and record that we have done so.*
 
 * C6, and the one platform that can meet it
 
-=docs/release-standards.org= found capability C6 — a *platform-attested*
+=research/history/release-standards.org= found capability C6 — a *platform-attested*
 deployment record — unmet on GitHub and unstandardised generally. Cloudflare
 Workers *versions* appear to meet it [E from docs, [H] until run]:
 
@@ -2061,7 +2236,7 @@ canary or gradual rollout, which is the normal case for services.
 Not a concession — a design rule. An automation without a declared escape hatch
 does not get obeyed, it gets *circumvented*, and a circumvention leaves no
 record. §The balance already measured one instance of this: queue friction does
-not slow delivery, it routes traffic onto =change:emergency=, the one path with
+not slow delivery, it routes traffic onto =itil:emergency=, the one path with
 fewer checks. The general form:
 
 #+begin_quote
@@ -2073,10 +2248,10 @@ The catalogue, so no future exception has to be argued from first principles:
 | automation                    | bypass                | what it costs                        | where it shows |
 |-------------------------------+-----------------------+--------------------------------------+----------------|
 | labeller owns =app:*=         | =labeler:skip=        | manifest becomes asserted, not derived | label on the PR |
-| staging must pass             | =change:emergency=    | no staging evidence for this change  | label + approval + PIR |
-| the berth queue               | =change:emergency=    | jumps the queue                      | label + PIR    |
+| staging must pass             | =itil:emergency=    | no staging evidence for this change  | label + approval + PIR |
+| the berth queue               | =itil:emergency=    | jumps the queue                      | label + PIR    |
 | the freeze window             | =EMERGENCY_CHANGE=    | the calendar stops governing         | repo variable  |
-| guard 0 up-to-date            | =change:emergency=    | may ship behind trunk                | PIR records the divergence |
+| guard 0 up-to-date            | =itil:emergency=    | may ship behind trunk                | PIR records the divergence |
 | *guard 2 gates green*         | *none*                | —                                    | —              |
 | *guard 5 production healthy*  | *none*                | —                                    | —              |
 
@@ -2096,7 +2271,7 @@ deployed is what is serving; bypass it and "deployed" becomes a claim rather
 than an observation (§What completes a deployment).
 
 Those are not stricter rules than the others. They are the rules that keep the
-*other* bypasses honest: =change:emergency= is a legible, auditable act
+*other* bypasses honest: =itil:emergency= is a legible, auditable act
 precisely because the records it appears in are otherwise true.
 
 ** What makes a bypass acceptable
@@ -2106,7 +2281,7 @@ Three properties, and all three are required:
 1. *Visible on the artifact* — a label on the PR, not a flag in a job.
 2. *Carried into the record* — the PIR names it and who authorized it.
 3. *Narrow* — it suspends one automation, not the guards around it.
-   =labeler:skip= stops the labeller and touches no gate; =change:emergency=
+   =labeler:skip= stops the labeller and touches no gate; =itil:emergency=
    skips the staging environment and still faces guards 2 and 5.
 
 A "force" flag fails all three, which is why =docs/idp-api.org= refuses to
@@ -2129,8 +2304,8 @@ has one sharp consequence.
 
 | kind          | examples                                      | emitted by      | forgeable? |
 |---------------+-----------------------------------------------+-----------------+------------|
-| *derived*     | =app:*=, =change:standard=, =change:normal=   | the labeller, from the diff | no — resynced on every push |
-| *request*     | =change:requested=, =change:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
+| *derived*     | =app:*=, =itil:standard=, =itil:normal=   | the labeller, from the diff | no — resynced on every push |
+| *request*     | =change:requested=, =itil:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
 | *action*      | =deploy:staging=, =deploy:production=         | the workflow    | no — it marks work in flight |
 | *observation* | =staging:passed=, =production:healthy=, =change:scheduled=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
 
@@ -2266,7 +2441,7 @@ suggests the inversion:
 main-ahead-of-production, which a deploy fixes. Production can never be
 serving something trunk does not contain.
 
-What it costs is exactly what =docs/release-strategies.org= found: "on main"
+What it costs is exactly what =research/history/release-strategies.org= found: "on main"
 becomes *intent* rather than *evidence*, because the merge now happens before
 the production evidence exists. You trade a divergence that needs a rollback
 for one that needs a deploy, and you pay for it by weakening what a merge
@@ -2316,7 +2491,7 @@ devices. They are worth having, and they are the ones to tune.
 This is not the usual safety-versus-speed trade, and reading it that way gets
 the sign wrong.
 
-=change:emergency= is the *one* label that bypasses staging. So queue friction
+=itil:emergency= is the *one* label that bypasses staging. So queue friction
 does not convert into slower-but-equally-safe delivery — it converts into
 traffic on the path with fewer checks. =gates/simulate-gates.py= models it: at
 a mean berth wait of two hours roughly a sixth of changes route to emergency;
@@ -2339,7 +2514,7 @@ a remark:
   §Change enablement, preflight exit 4, and the =EMERGENCY_CHANGE= fallback that
   exists precisely because a /record/ was allowed to become a /control/.
 - *Watch the emergency rate as the health metric.* A rising share of
-  =change:emergency= is not an incident trend; it is the queue reporting that it
+  =itil:emergency= is not an incident trend; it is the queue reporting that it
   has become too expensive to use honestly. The PIR already records every
   bypass, so the number is free.
 
@@ -2377,7 +2552,7 @@ holds.
 and §The balance says what that queue wait does: the emergency share goes to
 100%. So a high-volume soak run against a singleton berth *does not test the
 pipeline — it tests the bypass*, because by the time the queue is that deep
-every change has a rational reason to carry =change:emergency=.
+every change has a rational reason to carry =itil:emergency=.
 
 Read that carefully, because it is not a defect the soak /finds/. It is the
 singleton berth meeting its design limit, exactly where §What this model gets
@@ -2400,6 +2575,491 @@ Consequences for anyone planning a soak:
   guards/; the exhaustive model already settles the latter more completely than
   any number of PRs could.
 
+* The defect taxonomy
+
+Written for a rebuild, and deliberately general. None of it is specific to this
+monorepo, these four apps, or GitHub — every entry was found here, but each one
+is a property of *deployment pipelines that judge things*, and any pipeline that
+does not defend against them will reproduce them.
+
+Seventeen scenarios in =scenarios.org= are the evidence. This section is the
+pattern behind them.
+
+** The eight classes
+
+*** 1. Unreachable is not falsified
+
+/I could not check/ silently becomes /no/. Fired at least six times here.
+
+A check run that never started reports =failure= identically to one that ran and
+failed. A health probe that could not connect counts as unhealthy. A scheduler
+call that errored is read as "no window". A reviews endpoint that is down is
+read as "the head moved".
+
+*The rule:* every read has *three* answers — yes, no, and *I could not
+determine*. The third must refuse differently from the second, and an
+implementation that cannot express it is unusable.
+
+*** 2. Superseded is not current
+
+The same mistake on a different axis. A verdict that was true is used after it
+has been replaced.
+
+Every check run stays attached to its commit forever, so the failures from
+before an outage sit beside the successes after it. A guard that counts history
+refuses on evidence that no longer applies.
+
+*The rule:* take the *latest* observation per name, at the moment of reliance.
+A check run has three independent facts the API flattens into one field: *did it
+run*, *when*, and *what did it conclude*. Read =conclusion= alone and you get
+both this class and the one above, silently.
+
+*** 3. Observation is not intent
+
+A claim written from what somebody meant rather than what was measured.
+
+A marker script that takes =--samples 99999 --observed-by my-own-fingers= and
+renders them as an observation. A deployment record posted before the health
+check. A label asserting a measurement nobody took.
+
+*The rule:* an instrument records its own result. Where a value genuinely comes
+from the caller, the record must *say so by name*. "Someone said it was fine" is
+not evidence; "=gates/smoke.sh= observed pass on =a013270=" is.
+
+*** 4. A verdict must name the build it is about
+
+"Staging passed" is not a fact. "Staging passed at =a013270=" is.
+
+Without it a change is authorized by evidence about a different artifact — the
+defect is invisible because every label is present and green.
+
+*The rule:* every observation, approval and deployment record carries the commit
+it was measured against, and every guard compares that to the head *at the
+moment it relies on it*.
+
+*** 5. A guard checked once is not a guard
+
+The subject moves between the check and the reliance.
+
+A window verified at booking and never re-read. A class set two hours ago and
+trusted now. A berth claimed before a freeze was declared.
+
+*The rule:* a guard whose subject can change must be re-derived at the moment it
+is relied on. Correct-by-construction beats notified-on-change, which is why the
+absence of an event bus is survivable here at all.
+
+*** 6. Formatting destroys verdicts
+
+=cmd | sed= makes =$?= sed's. =cmd | tail= makes it tail's.
+
+This shipped an UNHEALTHY estate as =passed=, and — eight hours after being
+fixed in one script — was rebuilt from scratch in the driver written to replace
+it. *Knowing the rule did not prevent writing the code*, because piping a
+command to trim its output is the obvious thing to type.
+
+*The rule:* any step whose verdict gates a later step must be *unpipeable*.
+Capture, test, then format. Formatting happens after the verdict is in hand,
+never in the expression that produces it.
+
+*** 7. A check that cannot fail produces no verdict
+
+The =gate-selftest= rule, generalised.
+
+Three tests here passed while asserting nothing: a =typeof === 'string'= check
+satisfied by a request-derived value, an escaping assertion satisfied by an
+unrelated =&amp;= elsewhere on the page, and an =esc()= call whose deletion failed
+zero tests. All three were found by *mutation*, never by reading.
+
+It applies to a single change as much as to a suite: a diff no assertion covers
+is a diff the pipeline cannot judge, and every gate will be green.
+
+*The rule:* mutate the thing the check is about and require the check to fail.
+A suite that has never rejected anything is one nobody has tested.
+
+**** The guard-level form: count lifetime refusals
+
+Measured 2026-09-14, and it is the reason this class is listed first among the
+meta-observations. TWO of this pipeline's guards have never refused anything:
+
+| guard | lifetime refusals | why |
+|-------+-------------------+-----|
+| 0 (up to date with main) | *0* | its body is inside =if state = "BEHIND"=, and the forge has never returned =BEHIND= — 0 of 14 open PRs, after 163 commits landed on main in one night |
+| 6 (production-first) | *0* | 484 workflow runs, never once triggered by a label |
+
+Both guards are correctly written. Reviewing the body of either finds nothing,
+because there is nothing wrong with it — what is wrong is that *the trigger
+condition is supplied by an oracle that does not emit that value in this
+configuration*. See =scenarios.org= D17.
+
+So the audit question for a guard is not "is the logic right". It is: *has this
+ever refused anything, and if not, can the oracle it reads ever emit the value
+it tests for?* A guard with zero lifetime refusals is a hypothesis, not a
+control.
+
+*** 8. Not yet is not no, and cannot say is not either
+
+The third value. Every question a pipeline asks an external system has at least
+three answers — *yes*, *no*, and *I cannot tell you yet* — and every defect in
+this class is the third being folded into one of the first two.
+
+Class 1 (/unreachable is not falsified/) is this one's sibling and is about a
+system that did not answer. This is about a system that DID answer, in its own
+documented vocabulary, to say it has no answer. That is harder, because the
+response looks like data: it parses, it is not an error, and a guard that reads
+it gets a value rather than an exception.
+
+**** What the forge actually returns, and what it does not mean
+
+Every row here was hit while driving changes on 2026-09-13/14. None is a bug in
+GitHub; each is a documented state we had no contract for.
+
+| asked | the answer | what it does NOT mean | what we did |
+|-------+------------+-----------------------+-------------|
+| =mergeStateStatus= | =UNKNOWN= | up to date with main | guard 0 printed =ok mergeStateStatus=UNKNOWN= and proceeded |
+| =mergeStateStatus= | =UNSTABLE= | not mergeable | mergeable, with a non-required check failing — correctly proceeded |
+| a check run | =status=in_progress=, =conclusion=null= | failed | counted as "not green"; it had not finished |
+| a check run | =conclusion=skipped= | failed | counted as "not green"; nothing ran, so nothing failed |
+| a check run | an older run for the same name | a current verdict | counted alongside the run that replaced it (class 2) |
+| a just-written label | absent on the next read | never written | guard 4 refused #57 one minute before reading it as authorized |
+| =schedule.sh current= | exit 1 | no window | also returned for a calendar it could not read |
+| a health probe | HTTP =000= | unhealthy | unreachable; the estate was never observed |
+
+**** Why =UNKNOWN= in particular is the dangerous one
+
+GitHub computes mergeability asynchronously. Ask immediately after a push, or
+after main moves, and =mergeStateStatus= is =UNKNOWN= — not because the branch
+is bad but because nobody has looked yet. It resolves in seconds.
+
+A guard that treats =UNKNOWN= as *pass* deploys a branch nobody has checked is
+up to date. A guard that treats it as *fail* refuses every change for the first
+few seconds after trunk moves, which on a busy queue is every change. Both are
+wrong, and the second is the one that looks careful.
+
+*The rule:* the third value is never a verdict. Poll until the answer is one of
+the two real ones, with a bound; if the bound expires, that is class 1 —
+=indeterminate=, said out loud, not resolved in either direction. A guard whose
+return type is a boolean cannot express this, which is why every verdict enum in
+this spec is three-valued.
+
+**** The read-after-write case is the same defect in time
+
+An observation is recorded, and the guard that requires it reads before the
+write is visible. /Not there/ and /not there YET/ are the same bytes. It is
+class 8 rather than a race condition because the fix is not a lock — it is that
+the reader must be able to say "I cannot tell yet" instead of "no".
+
+Worse, recording the observation can invalidate the authorization it was taken
+for: writing =staging:uat= retriggers the CI suite, so the four gate check runs
+go to =in_progress= and guard 4 — which requires them green — refuses. Driving
+#63 hit exactly this. The measurement and the thing measured are coupled through
+the forge, and nothing in the pipeline declared that edge.
+
+** Two meta-observations
+
+*** The taxonomy is recursive
+
+Each rule has been violated *by the code written to enforce it*. The approver
+manufactured its own verdict. The label auditor flagged the comment explaining
+the fix. The check-run guard read stale runs. The driver swallowed the refusal
+it existed to honour.
+
+A rebuild should expect this rather than be surprised by it, and should test its
+guards the way it tests its gates.
+
+*** The failures are silent, and that is the point
+
+Every class above *refuses things that should pass* or *passes things that
+should refuse*, and neither breaks loudly. Nothing crashes. The pipeline reports
+success. The only way any of them surfaced was a human watching a board, or
+running a mutation, or reading an error message instead of a summary.
+
+* Boundary conditions
+
+Stated as the states a pipeline can reach, not as things to avoid. A rebuild is
+graded on whether it can *name* each one, not on whether it prevents them.
+
+| state | meaning | correct handling |
+|-------+---------+------------------|
+| *deployed, not merged* | production serves a build trunk does not contain | name it; the next change branches from a trunk without it and reverts it |
+| *merged, not deployed* | trunk has it; the estate does not | ordinary, and fine — the next deployment carries it |
+| *authorized, unbooked* | every observation taken, no reservation | eligible; needs one command |
+| *booked, unverifiable* | a reservation on a change no gate can judge | refuse at booking, not at activation |
+| *expired* | a reservation lapsed unattempted | *not a failure.* Its own closure code; the change keeps everything else |
+| *refused* | a guard said no | a successful outcome. Never worked around |
+| *backed out* | production served it and was returned | asserts an estate action; must name what it returned to |
+| *undefined class* | zero or two classifications | every rule branching on the class takes an arm nobody chose |
+| *stale evidence* | observations about a build that is no longer the head | refuse; do not re-stamp |
+
+** The one that has no name yet
+
+*Deployed, not merged, and the window is gone.* Three facts at once, and nothing
+in the vocabulary says it. Reached twice here — once by a script that reported
+the opposite. A rebuild needs a word for it before it needs a fix.
+
+* The label grammar — intent drives, everything else annotates
+
+Added 2026-09-14, after five independent models of this pipeline disagreed
+about what several labels MEAN. They did not disagree about the code; they
+disagreed about the vocabulary, which is a sharper problem.
+
+** The rule
+
+*A label either DRIVES or it ANNOTATES, and only intent drives.*
+
+| shape | role | example | what it is |
+|-------+------+---------+------------|
+| =app:<group>= | *manifest* | =app:pdp= | WHAT moves. Derived from the diff; the blast radius |
+| =itil:<class>= | *classification* | =itil:standard= | WHICH RULES apply |
+| =release=, =release:start= | *intent, change scope* | | ship this change |
+| =deploy:<env>= | *intent, environment scope* | =deploy:staging= | START the deploy process into that environment |
+| =<env>:<action>= | *annotation* | =staging:e2e= | what HAPPENED inside that environment |
+| =blocked:<cause>= | *annotation* | =blocked:queue= | why a refusal happened |
+| =change:<state>= | *annotation* | =change:complete= | how far it got |
+| =freeze=, =emergency= | *estate* | | properties of the WORLD. No prefix, because there is no subject to name — they are not about a change |
+
+Read the colon twice. In =app:=, =itil:=, =change:=, =deploy:= and =blocked:=
+the part BEFORE the colon names the subject and the part after is its value. In
+=staging:e2e= and =production:healthy= the part before the colon is the
+ENVIRONMENT and the part after is the action taken in it. Two grammars, one
+punctuation mark, which is why the models disagreed.
+
+** Two decisions taken 2026-09-14, and why
+
+*** =change:emergency= is a category error and is gone
+
+It appeared 23 times in this document and was *declared nowhere* — no row in
+=change/label-owners.tsv=, which is the file that says who may write a label.
+Every declared member of =change:*= is a LIFECYCLE state: =requested=,
+=scheduled=, =complete=, =failed=, =backed-out=, =backfill-owed=. Each answers
+/how far did this get/.
+
+"Emergency" is not a point in a lifecycle. It is what KIND of change this is,
+which is the =itil:*= namespace by the grammar above. =change:emergency= is the
+pre-split name, and it survived here in prose after the implementation moved.
+
+All 23 are now =itil:emergency=. This was not cosmetic: =gates/preflight.sh=
+matches with =grep -cx=, an exact whole-line match, so a change labelled the way
+this document specified *would not have matched the code that reads it*. The
+governing document was specifying a label that no guard could see.
+
+*** =itil:emergency=, stated once
+
+A *classification*, asserted by change management, that this change may move
+things an ordinary change may not — and in the right designation may override
+ordering guards. Concretely it bypasses guard 0, guard 3's FREEZE (never the
+lock), guard 4 (with an approving review), and guard 4b. It does not bypass
+guard 2 or guard 5, and there is deliberately no designation that bypasses
+everything (§Emergency — the only bypass).
+
+It is a claim about the CHANGE. The bare =emergency= label on the holder issue
+is a claim about the WORLD, and stops everyone including its declarer. Same
+word, different subject, different scope.
+
+*** =change:start= is the human intent. =deploy:<env>= is not.
+
+Corrected 2026-09-14, replacing an earlier reading in this document that made
+=deploy:<env>= the human's signal. It is not, and the distinction is the whole
+entry point of the pipeline:
+
+| label | who | means |
+|-------+-----+-------|
+| =change:start= | *a person* | I am starting this change. It may be acting on an external change-request ticket, or on nothing at all |
+| =deploy:<env>= | *the pipeline* | begin the deploy process into that environment |
+| =<env>:<action>= | an instrument | what happened inside that environment |
+
+A person says /start/. The pipeline decides what that means and sets
+=deploy:staging= itself. A human writing =deploy:staging= by hand is reaching
+past the thing that is supposed to decide whether deploying is allowed — which
+is why =change/label-owners.tsv= gives =deploy:*= =human_add=no=.
+
+=change:start= is deliberately the ONLY thing a person has to say. Whether it
+corresponds to a ticket in some other system is outside this pipeline: the
+label carries the fact that a human started it, and the external reference, if
+there is one, belongs in the change record rather than in the label.
+
+This supersedes =change:requested= and =release= as two separate human signals.
+They said /I want this/ and /go now/, and the split earned nothing: nobody used
+the gap, and two human-owned labels for one fact is the defect this repository
+keeps finding.
+
+** Why =deploy:<env>= is intent and not state
+
+This is the correction. =change/label-owners.tsv= describes =deploy:staging= as
+"ACTION in flight, and the berth claim guard 1 reads" — one label doing two
+jobs. Saying /start deploying to staging/ and /this change holds the only berth/
+are different facts with different lifetimes, and conflating them is how the
+stranded berth happens: the intent is satisfied or abandoned while the lock
+stays, and nothing owns releasing it. #92 sat holding =deploy:staging= with no
+window and its build serving nowhere; the intent was long dead and the lock was
+not.
+
+Under this grammar the intent is the label and *the berth is a consequence of
+the intent, not the same object as it*. A rebuild should carry the lease
+separately, with an owner and a deadline, so that "who is deploying" and "who
+holds the path" can disagree out loud.
+
+** What the actions inside an environment are for
+
+=staging:e2e=, =staging:smoke=, =staging:uat=, =production:healthy= are
+ANNOTATIONS: they record that an instrument measured something. They never
+start anything. Their authority does not live in the label at all — it lives in
+the observation record the instrument wrote, which names the build. The label
+is a convenience that goes stale; the record is the evidence that does not.
+
+That is why guard 4 reads records rather than labels, and why staging can be
+gone entirely and 74 of 100 changes still ship (scenarios.org D18).
+
+** The labels are print statements, and that is the whole problem
+
+Said by the reviewer on 2026-09-14 and it explains more of this repository's
+behaviour than any other sentence in it:
+
+#+begin_quote
+What we are doing is effectively adding labels as a print statement at every
+point in the process.
+#+end_quote
+
+That is exactly what =staging:e2e=, =staging:smoke=, =staging:uat=,
+=deploy:staging=, =blocked:queue= and =change:complete= are. They are a trace of
+execution, written at each step so a reader can see where control reached.
+
+*A print statement is a fine thing. These are print statements with side
+effects, and that is not.*
+
+*** What a label costs that a =printf= does not
+
+| =printf= | a label |
+|----------+---------|
+| writes to a stream nobody dispatches on | *triggers workflows* — six in this repo fire on label events |
+| costs nothing to leave behind | persists, so =settle.sh= must erase the trace it just wrote |
+| cannot be read as authorization | is read by guards, so a stale print authorizes |
+| says nothing about what it observed | names no build, so it cannot say WHICH run printed it |
+| is ordered by definition | arrives whenever the forge gets to it |
+
+The second column is every defect class in this document, arrived at from a
+different direction.
+
+*** The loop it creates
+
+Recording an observation re-runs the thing being observed. =change/uat.sh=
+writes three labels; each was, until 2026-09-14, a trigger for the full gate
+suite; guard 4 requires green gates; so *the act of recording the measurement
+withdrew the authorization the measurement was taken for* until CI caught up.
+Measured at 33 seconds of a 2m26s cycle, and it is the mechanism behind the
+read-after-write race in defect class 8.
+
+=gate.yml= no longer fires on =labeled=. Five workflows still do.
+
+*** The repair is not fewer prints
+
+It is that *the print goes somewhere that does not dispatch*. The observation
+RECORD already exists (=change/evidence.sh=), already names its build, already
+survives the labels being cleared, and is already what guard 4 reads. It is the
+log. The label should be an INDEX into it — something a person scanning thirty
+pull requests can see — and nothing should ever key a workflow off one.
+
+Stated as a rule for a rebuild: *a label may be read by a human and by a query.
+It may not be the trigger for an action, and it may not be the evidence for a
+verdict.* Both of those belong to the record. Everything this repository has
+learned about stale verdicts, superseded runs and unauthorized promotion is
+downstream of having wired behaviour to a print statement.
+
+** Measured: where the vocabulary's weight actually sits
+
+From =experiments/021-state-machines/merge.py=, over five independent models —
+share of all label-driven transition mass:
+
+| role | share | what it is |
+|------+-------+------------|
+| *the core three* (=app:=, =itil:=, =release=) | *22.8%* | everything a person CHOOSES |
+| estate (=freeze=, =emergency=) | *36.6%* | two labels, about the world |
+| gatekeeping (=blocked:=, =deploy:=, =change:requested/scheduled=) | 30.3% | who may move, and when |
+| audit (=<env>:<action>=, =change:complete/failed/backed-out=) | 9.0% | the trail a PIR is written from |
+| override (=labeler:skip=, =hold:staging=, =itil:emergency=, =review:proxy=) | 5.6% | getting past a refusal, on the record |
+
+*Two thirds of this machine's movement is gatekeeping and estate.* A person
+chooses three things; the pipeline spends most of its state changes on blocking
+and on world-state. Two estate labels move it more than every deliberate choice
+combined.
+
+That is not obviously wrong — a control system should spend its time
+controlling — but it is worth a rebuild knowing before it starts, because it
+says where the complexity will actually be. It will not be in the part anyone
+demonstrates.
+
+* Nomenclature
+
+The terms a rebuild must keep, and what each one is *not*.
+
+| term | is | is NOT |
+|------+----+--------|
+| *change* | a proposed alteration, with a record | a commit, a branch, or a PR |
+| *classification* | what KIND of change (standard/normal/emergency) | how far it has got |
+| *lifecycle* | how far it has got (requested/scheduled/complete/failed/backed-out) | what kind it is |
+| *window* | an entitlement to the path to production | permission to deploy, or a promise it will happen |
+| *berth* | the singleton lock on the path | a lock on an environment |
+| *observation* | a measurement, by an instrument, naming a build | a label |
+| *record* | what survives the labels being cleared | the working state |
+| *freeze* | a property of the WORLD, blocking everyone including its declarer | a property of a change |
+| *emergency (estate)* | something is wrong out there; everything stops | a classification |
+| *itil:emergency* | THIS change is the remedy; it passes the freeze | the estate being shut |
+| *change closure* | complete / backed-out / *abandoned* / superseded | a boolean, and never =expired= or =cancelled= |
+| *window result* | passed / failed / cancelled / forfeited / *expired* | a property of the CHANGE |
+| *soak* | proof by use across N *later* deployments | a longer test run |
+| *control-plane* | changes how every FUTURE change is verified | a big change |
+
+*** Two closure enums, not one — corrected 2026-09-15
+
+This table carried a single =closure code= row reading /passed / failed /
+cancelled / expired / backed-out/, mixing two subjects. =experiments/016-dora/
+schema.sql= had already split them and said why: *"Note what is absent:
+'expired' and 'cancelled'. Neither can be true of a change — they are true of a
+reservation."* The nomenclature had not caught up with the schema built to fix
+it.
+
+They close differently because they are different things:
+
+- A *change* completes, is backed out, is *abandoned*, or is superseded.
+- A *window* passes, fails, is cancelled, is forfeited, or *expires*.
+
+=abandoned= is the one this repository was missing entirely. On 2026-09-15 #70
+reached a state none of the three existing change closures fits: it never
+reached production (not =complete=), nothing about it was wrong (not =failed=
+— its driver hit a path belonging to another host), and it was never deployed
+(not =backed-out=). Its window lapsed and =change/reap.sh= closed that window
+=expired=, which is correct and says nothing about the change.
+
+So the change sat tombstoned with =change:end= and no closure code at all —
+unresolvable from the labels, because nothing on it says whether it needs
+resubmitting or merging. *A change nobody is driving any more is =abandoned=,
+and the absence of that word is why the state had no name.*
+
+** The distinction that carries the most weight
+
+*Classification and lifecycle are different namespaces about different subjects,
+and the estate is a third.* Collapsing any two of them produces the defect that
+took the longest to find here: one label asserting both "an emergency is in
+flight" and "this change is exempt", so the write that closed the estate
+exempted its own carrier.
+
+Three subjects, three namespaces, and the estate's belongs on something that
+cannot be deployed.
+
+* Version
+
+Bumped to *0.5* on 2026-09-14. The three sections above — the defect taxonomy,
+the boundary conditions and the nomenclature — are new, and they are what a
+rebuild is graded against.
+
+0.4 described a pipeline. 0.5 describes *what goes wrong in pipelines that judge
+things*, which is the part that generalises. A reader outside this repo can use
+the taxonomy and the nomenclature without adopting a single line of the
+implementation.
+
+*The deviation, recorded rather than tidied:* the version sat at 0.4 through
+roughly 180 commits on 2026-09-13, including sixteen scenarios, four ADR
+sections and the whole grind. It should have moved earlier.
+
 * Refutation conditions
 
 Concretely, what observation falsifies this repo's central claim — /that the
@@ -2413,12 +3073,12 @@ gate sequence prevents an unauthorized or unsafe production deployment/:
    matching =pass/= input. Either direction voids the gate.
 4. =deploy-production.yml= deploys a group that has no
    =deployed:staging-<group>-<n>= label on the head SHA.
-5. A =change:normal= PR reaches production with no approving review.
+5. A =itil:normal= PR reaches production with no approving review.
 6. The rendered nginx config and =router/routes.json= disagree while
    =gates/lint.sh= exits 0.
 7. A stale lock older than 60 minutes is cleared without the clearance
    appearing in a PIR.
-8. The share of changes carrying =change:emergency= rises without a matching
+8. The share of changes carrying =itil:emergency= rises without a matching
    rise in incidents — the queue has become too expensive to use honestly, and
    the bypass is absorbing normal traffic (§The balance).
 
@@ -2452,6 +3112,25 @@ observed.
 | playwright| 1.63.0 installs, but *cannot run on FreeBSD* — see Known blockers |
 
 Repo state at survey: zero tracked files, no commits, no GitHub remote.
+
+Second host, run 2026-09-14 on the mini (macOS). Each line observed.
+
+| Tool      | Version / path                                   |
+|-----------+--------------------------------------------------|
+| OS        | Darwin 24.1.0 arm64 (mini)                       |
+| node      | v26.2.0                                          |
+| gmake     | GNU Make 4.4.1                                   |
+| jq        | 1.7.1                                            |
+| gh        | 2.100.0, authenticated as =jwalsh= and =aygp-dr= |
+| python3   | 3.14.6 default — *no Hypothesis*; 3.11.10 at =/opt/homebrew/opt/python@3.11/bin= has 6.111.0 |
+| emacs     | GNU Emacs 32.0.50 (tangle, docs gate, forge all [E]) |
+| java      | OpenJDK 21.0.4; =tla/check.sh= all seven runs [E] |
+| shellcheck| 0.10.0                                           |
+| docker    | =/usr/local/bin/docker= present; not exercised    |
+| podman    | =/opt/homebrew/bin/podman= present; not exercised |
+| container | Apple =container= *not installed*                |
+| nginx     | not exercised; router = =router/server.js=       |
+| forge     | magit 20260719.948 + forge via MELPA; =gmake forge= lists 25 PRs [E] after the revoked =^forge= token was replaced |
 Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
 
 ** What was not verified, and why
@@ -2471,7 +3150,7 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
 * Open items (tracked as issues, not here)
 
 - Slot count per group (initial: 2 per group; trigger to raise: two consecutive =blocked:lock= on staging for the same group).
-- Whether =change:normal= also requires a CAB-style label from a second reviewer (trigger: first incident caused by a router change).
+- Whether =itil:normal= also requires a CAB-style label from a second reviewer (trigger: first incident caused by a router change).
 - Calendar as the freeze source vs repo variable only (trigger: first preflight exit 4 in a real run).
 - *(closed)* Directory name vs repo name. =slipway= and =standard-change= are
   the same project under two names, and both checkouts point at the same

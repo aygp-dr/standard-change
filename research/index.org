@@ -1,0 +1,104 @@
+#+TITLE: standard-change: the history and the research
+#+SUBTITLE: Everything that was read, tried and found, assembled for a rebuild; none of the internals
+#+DATE: 2026-09-15
+#+OPTIONS: toc:2 num:t ^:nil H:4 broken-links:mark
+#+LATEX_CLASS: research
+#+LATEX_CLASS_OPTIONS: [11pt,oneside,titlepage]
+#+LATEX_COMPILER: xelatex
+# Preamble from the LaTeX review of 2026-09-15 (verified build in the reviewer's copy).
+# 11pt at 15.5cm (~93 characters per line) rather than the reviewed 12pt at 14.5cm, to keep the page count near 280. Fonts by file name so the same preamble builds on
+# any TeX Live (Menlo exists only on macOS); STIX Two Text has none of the
+# arrows or set symbols, STIX Two Math has all but the cross; mono scaled to
+# the text's x-height. Prose measure 14.5cm (~80 characters at 12pt); tables
+# may overhang it by 2cm each side (export-common.el). verbatim is redefined
+# as fvextra's Verbatim so it wraps; \sloppy replaced by \emergencystretch.
+#+LATEX_HEADER: \usepackage{fontspec}
+#+LATEX_HEADER: \setmainfont{STIXTwoText}[Extension=.otf,UprightFont=*-Regular,BoldFont=*-Bold,ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]
+#+LATEX_HEADER: \setmonofont{SourceCodePro}[Extension=.otf,UprightFont=*-Regular,BoldFont=*-Bold,ItalicFont=*-RegularIt,BoldItalicFont=*-BoldIt,Scale=MatchLowercase]
+#+LATEX_HEADER: \newfontfamily\symbolfont{STIXTwoMath}[Extension=.otf,UprightFont=*-Regular]
+#+LATEX_HEADER: \usepackage[letterpaper,textwidth=15.5cm,textheight=23cm,hcentering,vcentering]{geometry}
+#+LATEX_HEADER: \usepackage{microtype}\linespread{1.04}\raggedbottom\setlength{\emergencystretch}{1.5em}
+#+LATEX_HEADER: \usepackage{ltablex}\keepXColumns\usepackage{booktabs}\setlength{\tabcolsep}{4pt}
+#+LATEX_HEADER: \usepackage[export]{adjustbox}
+#+LATEX_HEADER: \usepackage{xurl}\usepackage[htt]{hyphenat}
+#+LATEX_HEADER: \usepackage{xcolor}\definecolor{linkblue}{rgb}{0.12,0.22,0.5}\hypersetup{colorlinks=true,linkcolor=linkblue,urlcolor=linkblue,bookmarksdepth=3}
+#+LATEX_HEADER: \usepackage{fvextra}\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\small,breaksymbolleft={}}
+#+LATEX_HEADER: \XeTeXinterchartokenstate=1\newXeTeXintercharclass\slashclass\XeTeXcharclass`\/=\slashclass\XeTeXinterchartoks\slashclass 0={\allowbreak}
+#+LATEX_HEADER: \usepackage{amssymb}\usepackage{newunicodechar}\newunicodechar{⊕}{{\symbolfont ⊕}}\newunicodechar{∅}{{\symbolfont ∅}}\newunicodechar{→}{{\symbolfont →}}\newunicodechar{←}{{\symbolfont ←}}\newunicodechar{↔}{{\symbolfont ↔}}\newunicodechar{⇒}{{\symbolfont ⇒}}
+#+LATEX_HEADER: \newunicodechar{≈}{{\symbolfont ≈}}\newunicodechar{≤}{{\symbolfont ≤}}\newunicodechar{≥}{{\symbolfont ≥}}\newunicodechar{≠}{{\symbolfont ≠}}\newunicodechar{⊆}{{\symbolfont ⊆}}\newunicodechar{∈}{{\symbolfont ∈}}\newunicodechar{∉}{{\symbolfont ∉}}\newunicodechar{∧}{{\symbolfont ∧}}\newunicodechar{∨}{{\symbolfont ∨}}\newunicodechar{✓}{{\symbolfont ✓}}\newunicodechar{✗}{{\symbolfont ☓}}
+
+This document is the research directory of the repository, assembled by
+=#+INCLUDE= from =history/=, =substrates/=, =findings/= here and =experiments/= so it can be
+rebuilt as HTML or PDF (=gmake research=). It is in the order a rebuilder needs: how to adopt it, what was found,
+the experiments, where it can run, then the history of the ideas as an
+appendix, with the tables the paper cites last. It leaves out the internals: the spec, the scripts,
+the gates, the shell review. A repository with a risk designation, something
+deployable and a pipeline that governs deployment can take the tracking layer
+described in Part I without touching the labels it already has.
+
+* Part I: How to read this, and how to adopt it
+#+INCLUDE: "adoption.org" :minlevel 3
+#+INCLUDE: "findings/release-grammar.org" :minlevel 3
+#+INCLUDE: "history/five-properties.org" :minlevel 3
+#+INCLUDE: "findings/labels-are-the-only-channel.org" :minlevel 3
+#+INCLUDE: "findings/the-method.org" :minlevel 3
+#+INCLUDE: "findings/evidence-census.org" :minlevel 3
+#+INCLUDE: "substrates/conformance-ladder.org" :minlevel 3
+#+INCLUDE: "../spec.org::*Nomenclature" :only-contents t :minlevel 3
+#+INCLUDE: "../docs/exit-codes.org" :minlevel 3
+
+* Part II: What was found
+#+INCLUDE: "findings/label-ownership.org" :minlevel 3
+#+INCLUDE: "findings/concurrent-change.org" :minlevel 3
+#+INCLUDE: "findings/label-state-machine.org" :minlevel 3
+#+INCLUDE: "findings/changing-the-pipeline.org" :minlevel 3
+#+INCLUDE: "findings/changing-the-rules.org" :minlevel 3
+#+INCLUDE: "findings/cross-cutting-coupling.org" :minlevel 3
+#+INCLUDE: "findings/testing-problems.org" :minlevel 3
+#+INCLUDE: "findings/time-spent.org" :minlevel 3
+#+INCLUDE: "findings/reviewer-identity.org" :minlevel 3
+#+INCLUDE: "../experiments/021-state-machines/REVIEW.org" :minlevel 3
+#+INCLUDE: "../experiments/021-state-machines/PARING.org" :minlevel 3
+
+* Part III: The experiments, in order
+#+INCLUDE: "../experiments/001-d4-staging-regression/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/003-scheduled-slots/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/004-rolling-deploy/README.org" :minlevel 3
+#+INCLUDE: "../experiments/014-observation-records/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/016-dora/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/017-token-metrics/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/020-browser-uat/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/022-five-agent-grind/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/024-five-owners/notes.org" :minlevel 3
+
+* Part IV: Substrates, hosting and what a platform can enforce
+#+INCLUDE: "history/substrate-mapping.org" :minlevel 3
+#+INCLUDE: "substrates/substrate-emulation.org" :minlevel 3
+#+INCLUDE: "substrates/hosting-survey.org" :minlevel 3
+#+INCLUDE: "substrates/deployment-targets.org" :minlevel 3
+#+INCLUDE: "substrates/github-environments.org" :minlevel 3
+#+INCLUDE: "substrates/ci-and-the-estate.org" :minlevel 3
+#+INCLUDE: "substrates/ci-portability.org" :minlevel 3
+#+INCLUDE: "../experiments/013-freebsd-browser/notes.org" :minlevel 3
+#+INCLUDE: "../experiments/002-gitea-actions/README.org" :minlevel 3
+
+* Part V: History of the ideas
+#+INCLUDE: "history/pipeline-history.org" :minlevel 3
+#+INCLUDE: "history/release-strategies.org" :minlevel 3
+#+INCLUDE: "history/reference-survey.org" :minlevel 3
+#+INCLUDE: "history/release-standards.org" :minlevel 3
+#+INCLUDE: "history/promotion-models.org" :minlevel 3
+#+INCLUDE: "history/affected-by-construction.org" :minlevel 3
+#+INCLUDE: "history/label-standards-survey.org" :minlevel 3
+#+INCLUDE: "history/deployment-signalling-survey.org" :minlevel 3
+#+INCLUDE: "history/classification-frameworks.org" :minlevel 3
+#+INCLUDE: "history/changeflow-state-machine.org" :minlevel 3
+#+INCLUDE: "history/precedence-and-locks.org" :minlevel 3
+#+INCLUDE: "history/deploy-ledger-comparison.org" :minlevel 3
+#+INCLUDE: "history/storefront-deployments.org" :minlevel 3
+
+* Appendix: the tables the paper cites
+#+INCLUDE: "appendix/label-table.org" :minlevel 3
+#+INCLUDE: "appendix/scenario-index.org" :minlevel 3
+#+INCLUDE: "appendix/issue-index.org" :minlevel 3

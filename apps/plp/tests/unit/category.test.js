@@ -143,14 +143,28 @@ test('a category slug cannot inject markup', () => {
 
 // ---- everything that is not a category page ---------------------------------
 
-test('/search is untouched by the catalogue', () => {
+// This test used to assert that /search was UNTOUCHED by the catalogue -- true
+// while /search ignored q and rendered chrome, and false as of #35, because
+// searching categories is now part of answering a search. The assertion is
+// amended in the direction of the observation rather than worked around: what
+// survives is that /search is not a CATEGORY page, and that a bad catalogue
+// cannot make it 404. What changes is that a search it cannot run is a 503.
+// The search states themselves live in search.test.js.
+test('/search is not a category page, whatever the catalogue says', () => {
   for (const c of [loadCatalogue(MISSING), loadCatalogue(fixture('malformed.json'))]) {
     const d = render('/search?q=ping', c);
-    assert.equal(d.found, true, 'a bad catalogue took /search down with it');
-    assert.equal(d.results, undefined, '/search is not a category page');
-    assert.equal(d.catalogue, undefined);
-    assert.equal(status(d), 200);
+    assert.equal(d.category, undefined, '/search is not a category page');
+    assert.notEqual(status(d), 404,
+      'an unreadable catalogue must never turn a search into "not found"');
+    assert.equal(status(d), 503, 'a search that could not be run is unavailable');
   }
+});
+
+test('the bare search page still answers when the catalogue is gone', () => {
+  const d = render('/search', loadCatalogue(MISSING));
+  assert.equal(d.found, true, 'nothing was asked, so nothing failed');
+  assert.equal(status(d), 200);
+  assert.equal(d.reason, 'empty-query');
 });
 
 test('categoryOf tells a category page from anything else', () => {

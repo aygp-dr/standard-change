@@ -1,0 +1,96 @@
+#+TITLE: 017 -- Token metrics for the release night
+#+DATE: 2026-09-14
+
+* Hypothesis
+
+DORA says what the pipeline did. It cannot say what driving it cost, and on a
+pipeline driven by a model the cost of driving is most of the cost. wharfinger
+#6 carries the guardrail this experiment implements: *record cost per unit*.
+
+The falsifiable claim: the release night's token spend can be attributed to the
+units it shipped, from records already kept, without instrumenting anything.
+
+*Result: refuted in an interesting way.* The spend can be counted. It cannot be
+attributed, and the number already published was wrong by 1.91x.
+
+* Success criterion
+
+A per-unit cost figure that names its counting rule, and an explicit list of
+what the captured data cannot support.
+
+* Run
+
+: sh experiments/017-token-metrics/capture.sh    # read-only snapshot
+: python3 experiments/017-token-metrics/derive.py
+
+* Findings
+
+** F1 -- the published total was the sum of its own revisions
+
+=research/findings/time-spent.org= shipped *2,245,451,282* tokens. The true figure is
+*1,182,809,707*. A transcript writes one usage record per streaming update, not
+one per API call: 4,291 rows carry 2,171 distinct message ids, 1.98 rows per
+call. Summing rows counts most calls twice.
+
+This is not a new defect class. It is =spec.org= class 2 -- /superseded is not
+current/ -- in a new place: the same shape as guard 2 counting a superseded
+check run as a verdict. A revision of a measurement is not a second
+measurement. The structural fix is in =schema.sql=: PRIMARY KEY (ledger_id,
+api_message_id), so the second snapshot is an upsert and the double count is
+unrepresentable.
+
+Corrected in =research/findings/time-spent.org= rather than left to stand.
+
+** F2 -- cost per unit, and it is not where the volume is
+
+| total tokens        |  1,182,809,707 |
+| units merged        |             22 |
+| *per unit*          | *53,764,077*   |
+| production cutovers |         17     |
+| per cutover         |     69,577,041 |
+
+Cache reads are 99.5% of the tokens and 89.2% of the money. Output is 0.16% of
+the tokens and 7.4% of the money. Anyone optimising this by volume would attack
+the 99.5% and be attacking the part that is already cheap -- 322 reads per
+write is the cheap shape, not a leak. The lever is turns, not tokens.
+
+** F3 -- the two ledgers do not share a denominator
+
+A subagent's calls never enter the coordinator's transcript. The dispatch
+record does carry a total at completion (DORA: 188,885 tokens, 73 tool uses),
+but as one opaque integer with no cache/input/output split -- and those differ
+in price by 50x. So delegated work can be counted and cannot be priced.
+
+Worse, the ratio is meaningless: against the coordinator's total, delegation is
+0.016%; against the coordinator's non-cache-read spend, 3.3%. Nothing in either
+record says which unit the 188,885 is in. *A token count must name its counting
+rule or it cannot be added to another one* -- class 6, /a verdict must name its
+build/, one level up from builds.
+
+The honest statement of the night's spend is a bound, not a number.
+
+** F4 -- a running agent reports nothing
+
+The delegated total arrives only at completion. Three agents were running while
+this was derived, contributing an unknowable amount. "Not there" and "not there
+*yet*" read identically in the ledger -- the same read-after-write race that
+made guard 4 refuse #57 one minute before it read authorized. Candidate eighth
+defect class, still unwritten in =spec.org=.
+
+** F5 -- attribution needs a category for "no unit"
+
+=ledger_change.share= is constrained to sum to *<= 1*, never = 1. Most of this
+night went into the instruments -- the guards, the dashboard, the scripts --
+and not into any change. A schema that forces every call onto a change would
+report that overhead as zero by construction, which is the assert-nothing
+failure in accounting form.
+
+* What this does NOT show
+
+- No per-change attribution was performed. =change_token_cost= is a view with
+  nothing to select; =ledger_change= has no rows. Attributing 22 units by hand
+  across 2,171 calls would be a reconstruction, not a record.
+- Dollar figures use list rates as an INPUT, marked =[H]=, not verified against
+  an invoice. =rate_card= keeps prices out of the observation table for exactly
+  this reason.
+- The DDL is =[H]=: no PostgreSQL on hydra, same caveat as 016.

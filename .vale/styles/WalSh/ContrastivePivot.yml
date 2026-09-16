@@ -1,0 +1,6 @@
+extends: existence
+message: "Contrastive pivot '%s'. State the claim directly; drop the 'not X, but Y' setup."
+level: warning
+ignorecase: true
+raw:
+  - '\bnot (just|only|merely|simply) \w+( \w+){0,3}, but\b|\bit(''|’)?s not that\b|\bit is not that\b|\brather than merely\b|\bit(''|’)s not \w+( \w+){0,3}; it(''|’)s\b|, not \w+( \w+){0,2}[.;:]'

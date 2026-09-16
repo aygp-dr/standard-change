@@ -93,17 +93,29 @@ fi
 
 # 4. Clear the working state. Observations are about a build that is not going
 #    to production, and release:start claims a release is IN FLIGHT.
+#
+# deploy:production WAS MISSING FROM THIS LIST. Found on #92, a change aborted
+# `failed` that kept advertising a production deploy afterwards -- and
+# deploy-production.yml fires on that label, so an abandoned change stayed
+# armed to re-enter production on the next label event. deploy:staging was
+# cleared and its sibling was not, which is the whole defect: the list is
+# written by hand and nothing checks it against the labels this pipeline can
+# set. change:complete is here for the same reason -- a change that failed did
+# not complete, and abort must not leave the success label standing.
 for l in staging:e2e staging:e2e-failed staging:smoke staging:smoke-failed \
          staging:uat staging:in-progress production:e2e production:e2e-failed \
          production:smoke production:smoke-failed production:healthy \
-         release release:start deploy:staging change:scheduled; do
+         staging:deployed staging:healthy production:deployed staging:hold \
+         release release:start release:start change:requested \
+         deploy:staging deploy:production blocked:queue blocked:lock \
+         change:complete change:scheduled; do
   gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
 done
 # LITERAL LABEL NAMES. Interpolating the closure code into the label works at
 # runtime and is invisible to gates/label-audit.py, which reads the SOURCE: it
 # saw a write of the bare prefix and correctly called it undeclared. A label an
 # auditor cannot see is a label with no owner, which is the condition
-# docs/label-ownership.org exists to prevent. So the branch is written out.
+# research/findings/label-ownership.org exists to prevent. So the branch is written out.
 #
 # This comment deliberately does NOT spell the prefix out. The first version
 # did, while explaining the problem, and the audit flagged the COMMENT -- the
@@ -113,6 +125,13 @@ case "$CODE" in
   backed-out) gh pr edit "$PR" --repo "$R" --add-label change:backed-out >/dev/null 2>&1 || true ;;
   *)          gh pr edit "$PR" --repo "$R" --add-label change:failed     >/dev/null 2>&1 || true ;;
 esac
+# THE TOMBSTONE, last (the owner, 2026-09-14: "the release, even if it fails
+# on staging, should end and clean up"). A failed release ends the way a
+# settled one does: the lock released, the window closed, every marker gone,
+# change:end written after the closure code so a reader can tell this
+# clearing from a refusal at the lock or the reaper.
+./change/lock.sh release >/dev/null 2>&1 || true
+gh pr edit "$PR" --repo "$R" --add-label change:end >/dev/null 2>&1 || true
 
 echo "  ok   berth released; deployment annotations cleared"
 echo "  labels after:  $(gh pr view "$PR" --repo "$R" --json labels -q '[.labels[].name]|join(", ")')"

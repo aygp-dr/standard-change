@@ -44,6 +44,11 @@ echo "settling #$pr @ $short"
 # 1. It must actually be in production, observed now -- not "was healthy once".
 served=$(curl -sI --max-time 5 "$FRONT/" | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}')
 colour=$(curl -sI --max-time 5 "$FRONT/" | tr -d '\r' | awk 'tolower($1)=="x-colour:"{print $2}')
+# A target with no blue/green (the node target: one block, redeployed in
+# place) sends no X-Colour, and the PIR printed "-> ****" for it (#104's owner:
+# "an empty value where a build or colour presumably belongs"). Say what is
+# there instead of nothing.
+[ -n "$colour" ] || colour="single (no blue/green on this target)"
 if [ "$served" = "$short" ]; then ok "production is serving $short ($colour), asked just now"
 else bad "production serves '${served:-nothing}', not $short -- this change is not live"; fi
 
@@ -60,12 +65,38 @@ else bad "production serves '${served:-nothing}', not $short -- this change is n
 #    record of one somebody else made. Require the label only where the
 #    measurement is NOT repeatable -- staging:uat above all, because a person
 #    used the site and no script can re-run that.
-for o in staging:e2e staging:smoke staging:uat; do
-  case " $labels " in
-    *" $o "*) ok "$o" ;;
-    *)        bad "$o missing -- cannot complete a change whose evidence is gone" ;;
-  esac
+# THE RECORD, NOT THE LABEL, for the instruments. On 2026-09-14 a sweep by a
+# second operator -- reading a different estate than the one these
+# observations were taken on -- withdrew every label from #92 after it had
+# reached production healthy and guard 4 had authorized it; settle then refused
+# for "evidence gone" while the evidence comments were still on the PR, each
+# naming the build and the URL. guard 4 reads those records; settle read the
+# labels. Same subject, two sources, and the weaker one vetoed. e2e and smoke
+# are now checked the way guard 4 checks them: the latest record must be a
+# pass on THIS head. The label stays required for staging:uat alone, because a
+# person's withdrawal of an acceptance must stand and no record can overrule it.
+for inst in e2e smoke; do
+  o="staging:$inst"
+  if ev=$(./change/evidence.sh latest "$pr" staging "$inst" 2>/dev/null); then
+    verdict=${ev%% *}; rest=${ev#* }; evsha=${rest%% *}
+    if [ "$verdict" = pass ] && [ "$evsha" = "$short" ]; then
+      case " $labels " in
+        *" $o "*) ok "$o" ;;
+        *)        ok "$o (label withdrawn; the record on $short stands)" ;;
+      esac
+    elif [ "$evsha" != "$short" ]; then
+      bad "$o observed $evsha, head is $short -- that measurement is about a different build"
+    else
+      bad "$o -- last observation is a FAILURE on $evsha"
+    fi
+  else
+    bad "$o -- no observation recorded; nothing measured this build"
+  fi
 done
+case " $labels " in
+  *" staging:uat "*) ok "staging:uat" ;;
+  *)                 bad "staging:uat missing -- a person's acceptance is not on the change (or was withdrawn); re-accept on staging" ;;
+esac
 
 [ "$rc" = 0 ] || { echo; echo "  NOT settled"; exit 1; }
 
@@ -82,7 +113,15 @@ DEVIATION=''
 if win=$(./change/schedule.sh current "$pr" staging 2>/dev/null); then
   ok "deployed inside window $win"
 else
-  last=$(./change/schedule.sh list 2>/dev/null | grep -c "#$pr " || echo 0)
+  # NOT `|| echo 0`. grep -c PRINTS 0 and EXITS 1 when it matches nothing, so
+  # the fallback appended a second 0 and $last became "0\n0" -- which is then
+  # interpolated into the PIR sentence below, breaking the compliance record
+  # across two lines mid-clause: "0\n0 window(s) were booked". It fires in the
+  # commonest case, a change with no windows booked at all. Same construct as
+  # the two sites fixed in gates/smoke.sh; here the damage lands in the AUDIT
+  # RECORD rather than in a verdict, which for an ITIL pipeline is the worse
+  # of the two places for it.
+  last=$(./change/schedule.sh list 2>/dev/null | grep -c "#$pr ") || last=0
   DEVIATION="**Deployed outside any change window.** \`schedule.sh current\` finds no open window covering this settlement, and none was open at cutover. $last window(s) were booked for this change and all are closed. Guard 3 exists in \`change/activate.sh\` and was never reached, because the deployment was hand-driven step by step rather than run through activation — the guard was present and bypassed by not being invoked. No production window was ever booked at all: \`CHANGE_ENV\` defaults to staging."
   printf '  DEVIATION  deployed outside any window -- recorded in the PIR\n'
 fi
@@ -105,13 +144,50 @@ esac
 gh pr edit "$pr" --repo "$R" --add-label change:complete >/dev/null 2>&1 || true
 ok "change:complete -- validation done, merging"
 
-if [ "$state" = "MERGED" ]; then ok "already merged"
-else gh pr merge "$pr" --repo "$R" --squash --delete-branch >/dev/null && ok "merged, branch deleted"; fi
+# A FAILED MERGE MUST STOP SETTLEMENT. This was `gh pr merge ... && ok`, so a
+# refusal printed nothing and execution continued: the PIR was posted, the
+# window redlined `passed`, the validation labels cleared, and the summary said
+# "settled: #N merged -- the forge is the record now" for a pull request that
+# was still OPEN and CONFLICTING.
+#
+# Observed on #40 at 00:44Z. gh said "not mergeable: the merge commit cannot be
+# cleanly created" -- its row in core's PANELS collided with #44's, which had
+# landed ten minutes earlier -- and production had ALREADY been cut over to a
+# build whose change is not on main. The state with no name, reached by a
+# script that reported the opposite.
+#
+# Same shape as the `gate | sed` defect fixed earlier today: a step failed, its
+# status was not checked, and the summary asserted success. Settlement is the
+# one place that must not do this, because everything after it destroys the
+# working state that would show what happened.
+if [ "$state" = "MERGED" ]; then
+  ok "already merged"
+else
+  if gh pr merge "$pr" --repo "$R" --squash --delete-branch >/dev/null 2>&1; then
+    ok "merged, branch deleted"
+  else
+    echo >&2
+    echo "REFUSED: the merge failed. Settlement STOPS here." >&2
+    gh pr view "$pr" --repo "$R" --json mergeable,mergeStateStatus \
+      -q '"  mergeable=\(.mergeable) state=\(.mergeStateStatus)"' >&2 2>/dev/null || true
+    echo "  Nothing below this line has run: no PIR, no window redline, no label" >&2
+    echo "  clearing. The change is deployed and NOT merged -- production is" >&2
+    echo "  serving something main does not contain, and the next change will" >&2
+    echo "  branch from a main without it and revert it on promotion." >&2
+    echo "  Recover: resolve the conflict, or roll the front back to a colour" >&2
+    echo "  whose build IS on main, then re-settle." >&2
+    exit 8
+  fi
+fi
 
 # 4. THE RECORD. Written before anything is cleared. This comment is what
 #    survives the labels, so it must carry what the labels carried.
 prev=$(curl -sI --max-time 5 "http://127.0.0.1:$([ "$colour" = blue ] && echo 9220 || echo 9210)/" \
         | tr -d '\r' | awk 'tolower($1)=="x-build-sha:"{print $2}')
+case "$colour" in
+  blue|green) rollback="\`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" ;;
+  *)          rollback="no idle colour on this target; redeploy the previous head (\`${prev:-unknown}\`) in place" ;;
+esac
 gh pr comment "$pr" --repo "$R" --body "## Post-implementation review
 
 **\`change:complete\`** — the terminal state. Everything below is recorded here because the labels are about to be cleared, and a label is working state, not the record.
@@ -131,7 +207,7 @@ ${DEVIATION:+## Deviation
 
 $DEVIATION
 
-}Rollback: \`./targets/node/switch.sh $([ "$colour" = blue ] && echo green || echo blue)\`" >/dev/null
+}Rollback: $rollback" >/dev/null
 ok "PIR posted -- the evidence now survives the labels"
 
 # THE DEPLOYMENT RECORD, written here rather than at deploy time.
@@ -208,7 +284,8 @@ fi
 #
 #    NOT cleared: app:* and itil:* describe what the change WAS.
 #    describe what the change was, and remain true after it shipped.
-for l in change:requested change:scheduled change:complete release release:start \
+for l in release:start change:requested change:scheduled change:complete release release:start \
+         staging:deployed staging:healthy production:deployed \
         deploy:staging deploy:production \
          staging:e2e staging:smoke staging:uat staging:passed staging:failed \
          staging:in-progress staging:e2e-failed staging:smoke-failed \
@@ -217,8 +294,20 @@ for l in change:requested change:scheduled change:complete release release:start
          deployed:production blocked:queue blocked:lock blocked:diverged release; do
   gh pr edit "$pr" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
 done
-ok "berth released; validation labels cleared, change:complete included"
+# THE TOMBSTONE, last. change:end says the clearing above was settlement --
+# a refusal at the lock, the reaper and an eviction also leave a change with
+# no labels, and a reader should be able to tell those apart. It drives
+# nothing; change:complete drove the merge and the PIR before it was cleared.
+gh pr edit "$pr" --repo "$R" --add-label change:end >/dev/null 2>&1 || true
+ok "berth released; validation labels cleared, change:complete included; change:end written"
 
 echo
 echo "  settled: #$pr merged -- the forge is the record now"
+
+# The deployment marker FOLLOWS the release-complete notice, deliberately: it
+# is telemetry about a release that has already happened, not a step the
+# release depends on. marker.sh asks the front what it is serving rather than
+# being handed a build, and exits 0 even when it cannot send, so a dashboard
+# being down can never fail a deployment that succeeded.
+./change/marker.sh "$pr" || true
 echo "  labels:  $(gh pr view "$pr" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')"

@@ -1,0 +1,39 @@
+9	7cd3281	2026-09-13T14:30:40Z	2026-09-13T14:30:40Z	feat(checkout): pink background
+9	8370c74	2026-09-13T15:07:40Z	2026-09-13T15:07:40Z	Merge branch 'main' into feat/checkout-pink
+11	c5d8ae6	2026-09-13T15:43:19Z	2026-09-13T15:43:19Z	feat(plp): a category we cannot show gets a no-results page, not a blank one
+11	e524b04	2026-09-13T15:56:09Z	2026-09-13T15:56:09Z	Merge main into feat/plp-no-results; app:* is transitive from shared
+11	b310b59	2026-09-13T15:57:38Z	2026-09-13T15:57:38Z	labeller: app:* is the declaration; drop the separate shared label
+11	9d85a33	2026-09-13T16:03:46Z	2026-09-13T16:03:46Z	Merge branch 'main' into feat/plp-no-results
+11	7352eba	2026-09-13T16:04:01Z	2026-09-13T16:04:01Z	Merge remote-tracking branch 'origin/main' into feat/plp-no-results
+11	9f30934	2026-09-13T16:08:36Z	2026-09-13T16:08:36Z	feat(gates): preflight says out loud what a person would check
+11	baed821	2026-09-13T16:08:45Z	2026-09-13T16:08:45Z	Merge remote-tracking branch 'origin/feat/plp-no-results' into feat/plp-no-results
+19	af969cc	2026-09-13T16:38:59Z	2026-09-13T16:38:59Z	fix(shared): the estate nav links the instance an app declares, not one it invented
+19	e7b0e7d	2026-09-13T16:39:26Z	2026-09-13T16:39:26Z	feat(pdp): the product page is about the product (#17)
+31	766a522	2026-09-13T17:23:06Z	2026-09-13T17:23:06Z	feat(pdp): an error page should not look like a page that worked
+20	ba8acae	2026-09-13T16:43:50Z	2026-09-13T16:43:50Z	feat(shared): the page says which environment it is, derived from the port (#15)
+20	ad5f5f7	2026-09-13T17:36:25Z	2026-09-13T17:36:25Z	Merge remote-tracking branch 'origin/main' into feat/env-footer
+36	3b8e852	2026-09-13T18:12:26Z	2026-09-13T18:12:26Z	feat: a dedicated health route per app, not a business route
+36	73423f0	2026-09-13T18:45:41Z	2026-09-13T18:45:41Z	Merge remote-tracking branch 'origin/main' into feat/dedicated-health
+39	675adb2	2026-09-13T18:47:17Z	2026-09-13T18:47:17Z	noop(core): 01 — a change with no behaviour
+43	cab6c82	2026-09-13T19:11:04Z	2026-09-13T19:11:04Z	noop(plp): 05 — a change with no behaviour
+43	689d0a4	2026-09-13T19:13:46Z	2026-09-13T19:13:46Z	feat(checkout): a shipping address form
+43	3cb84cc	2026-09-13T19:17:44Z	2026-09-13T19:17:44Z	Merge remote-tracking branch 'origin/main' into noop/05
+43	9228d44	2026-09-13T19:17:44Z	2026-09-13T19:17:44Z	chore: drop the leftover noop comment from this branch's previous life
+43	055fd20	2026-09-13T19:18:16Z	2026-09-13T19:18:16Z	chore: restore app files this branch does not own
+28	c5babfe	2026-09-13T17:03:44Z	2026-09-13T21:16:26Z	feat(core): soften the core background
+6	2404a47	2026-09-13T13:41:03Z	2026-09-13T23:35:55Z	feat(checkout): simulated tax-line change
+6	b780e34	2026-09-13T20:56:31Z	2026-09-13T23:35:56Z	docs(checkout): plan the three-step copy stack before writing any of it
+6	818f833	2026-09-13T20:57:08Z	2026-09-13T23:35:56Z	feat(checkout): tell the shopper what the order comes to
+6	993f863	2026-09-13T20:57:37Z	2026-09-13T23:35:57Z	feat(checkout): say what happens next on the payment step itself
+6	8fb503d	2026-09-13T20:59:03Z	2026-09-13T23:35:57Z	feat(checkout): a way back from payment that keeps the typed address
+38	a60d229	2026-09-13T18:41:15Z	2026-09-13T23:35:59Z	feat(plp): a search box, and /search?q= that searches
+38	37dc1c0	2026-09-13T19:45:45Z	2026-09-13T23:35:59Z	feat(plp): /search lists products, with the renderer /c/ already had
+33	81f3cb4	2026-09-13T17:50:39Z	2026-09-13T23:36:01Z	feat(shared): a .b badge class in the default stylesheet
+44	e526722	2026-09-13T19:37:33Z	2026-09-13T23:36:07Z	feat(core): name what the account page holds
+42	ea89229	2026-09-13T19:11:01Z	2026-09-13T23:36:03Z	noop(core): 04 — a change with no behaviour
+42	5114ab1	2026-09-13T19:17:42Z	2026-09-13T23:36:03Z	chore: drop the leftover noop comment from this branch's previous life
+42	dfb6f7b	2026-09-13T19:18:14Z	2026-09-13T23:36:04Z	chore: restore app files this branch does not own
+42	d720341	2026-09-13T19:20:24Z	2026-09-13T23:36:04Z	feat(pdp): offer a GET add-to-cart link on a found product page
+40	43646f9	2026-09-13T19:37:31Z	2026-09-13T23:36:06Z	feat(core): tell an empty cart that it is empty
+53	9583730	2026-09-13T23:20:13Z	2026-09-13T23:20:13Z	fix(core): add the h2 rule the served stylesheet was missing
+54	df22f7a	2026-09-13T23:20:22Z	2026-09-13T23:20:22Z	fix(core): add the where-am-I rules the served stylesheet was missing

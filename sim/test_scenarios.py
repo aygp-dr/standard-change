@@ -14,7 +14,8 @@ import sys
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from pipeline_sim import (Change, Divergence, Kind, SLOTS_PER_DAY, State, World)
+from pipeline_sim import (Change, Deploys, Divergence, Kind, SLOTS_PER_DAY,
+                          State, World)
 
 kinds = st.sampled_from([Kind.STANDARD, Kind.NORMAL])
 touches = st.sampled_from(list(Divergence)[:3])
@@ -95,3 +96,110 @@ if __name__ == "__main__":
     else:
         import pytest
         sys.exit(pytest.main([__file__, "-q"]))
+
+
+# ---------------------------------------------------------------------------
+# Guard 6 -- production-first. Three cases, and the third is the one that both
+# real implementations got wrong: they collapsed "deploys nothing" together
+# with "could not tell", and exempted both.
+#
+# Each test below must FAIL if guard 6 is removed from World._finish. That is
+# the standard spec.org sets: absence of the bug is not an answer.
+# ---------------------------------------------------------------------------
+
+def _ready(w, c):
+    """Walk a change to the point where the merge is the next thing to happen."""
+    w.submit(c); w.run_gates(c); w.reserve(c)
+    for _ in range(SLOTS_PER_DAY):
+        if c.state is State.COMPLETED or c.state is State.ASSESSING:
+            break
+        w.tick()
+    return c
+
+
+def test_guard6_refuses_when_production_is_behind():
+    """SOME + production serving an older trunk -> refuse."""
+    w = World()
+    w.trunk, w.in_prod = 3, 2          # trunk moved, production did not follow
+    c = _ready(w, Change(Kind.STANDARD, Divergence.INERT, deploys=Deploys.SOME))
+    assert c.state is not State.COMPLETED, \
+        "guard 6 let a change merge onto a trunk production is not serving"
+
+
+def test_guard6_abstains_when_the_deploy_set_is_unknown():
+    """INDETERMINATE -> abstain and BLOCK. Never exempt.
+
+    This is the case the repo's `groups.sh ... || true` turned into 'deploys
+    nothing', and the case 000 answered with exit 0 'exempt'.
+    """
+    w = World()
+    w.trunk, w.in_prod = 3, 2
+    c = _ready(w, Change(Kind.STANDARD, Divergence.INERT,
+                         deploys=Deploys.INDETERMINATE))
+    assert c.state is not State.COMPLETED, \
+        "indeterminate was treated as exempt -- the defect both implementations had"
+
+
+def test_guard6_abstains_when_production_cannot_be_observed():
+    """SOME + unreachable production -> abstain, not proceed.
+
+    Class 1: unreachable is not falsified. 000 returned exempt here.
+    """
+    w = World()
+    w.trunk, w.in_prod = 3, 3          # would otherwise pass
+    w.prod_reachable = False
+    c = _ready(w, Change(Kind.STANDARD, Divergence.INERT, deploys=Deploys.SOME))
+    assert c.state is not State.COMPLETED, \
+        "guard 6 proceeded without observing production"
+
+
+def test_guard6_exempts_only_on_positive_evidence():
+    """PROVABLY_NONE -> exempt, even with production behind.
+
+    The permit direction. Without it the three tests above would pass on a
+    guard that simply refuses everything, which is not a guard.
+    """
+    w = World()
+    w.trunk, w.in_prod = 3, 2
+    c = _ready(w, Change(Kind.STANDARD, Divergence.INERT,
+                         deploys=Deploys.PROVABLY_NONE))
+    assert c.state is State.COMPLETED, \
+        "a change proven to deploy nothing was blocked by guard 6"
+
+
+# ---------------------------------------------------------------------------
+# The lock has an owner (D21). Each of these must FAIL if the owner check is
+# removed from World.release_berth -- absence of the bug is not an answer.
+# ---------------------------------------------------------------------------
+
+def test_berth_is_exclusive():
+    w = World()
+    assert w.claim_berth(None, "A") is True
+    assert w.claim_berth(None, "B") is False, "two operators held one berth"
+
+
+def test_a_foreign_release_is_refused_when_the_lock_is_owned():
+    w = World()
+    w.claim_berth(None, "A")
+    assert w.release_berth("B", owned=True) is False, \
+        "B released a lock A was holding"
+    assert w.berth_owner == "A", "A lost its berth to somebody else's release"
+
+
+def test_a_foreign_release_succeeds_when_it_is_not_and_is_counted():
+    """The observed behaviour, kept so the fix has something to be better than.
+
+    This is what happened on 2026-09-14: aygp-dr removed a deploy:staging that
+    jwalsh held, and its own log called it 'releasing the estate'.
+    """
+    w = World()
+    w.claim_berth(None, "A")
+    assert w.release_berth("B", owned=False) is True
+    assert w.swept == 1, "the sweep was not recorded, so nobody could know"
+
+
+def test_the_owner_may_always_release_its_own():
+    w = World()
+    w.claim_berth(None, "A")
+    assert w.release_berth("A", owned=True) is True
+    assert w.berth_owner is None

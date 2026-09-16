@@ -32,7 +32,7 @@ D=$(gh api "repos/$R/deployments" --jq 'length' 2>/dev/null || echo 0)
 if [ "$D" = "0" ]; then
   echo "  none. Nothing has deployed THROUGH the forge -- deploy-staging.yml and"
   echo "  deploy-production.yml have never run, because a GitHub-hosted runner"
-  echo "  cannot reach 10.0.0.0/24. See docs/deployment-targets.org."
+  echo "  cannot reach 10.0.0.0/24. See research/substrates/deployment-targets.org."
 else
   gh api "repos/$R/deployments" --jq '.[]|"  \(.environment) \(.sha[0:7]) by \(.creator.login) \(.created_at)"' | head -8
 fi

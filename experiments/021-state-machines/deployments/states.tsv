@@ -1,0 +1,46 @@
+id	name	kind	terminal	description
+dep01	open	lifecycle	no	PR open. The labeller has derived app:* and itil:*; nothing is claimed, nothing is deployed, the build serves nowhere. INITIAL.
+dep02	requested	intent	no	change:requested is present. A person has asked for a change; that is the whole of their part. No reservation and no berth.
+dep03	release_asked	intent	no	the bare `release` label is present and the scheduler has not consumed it yet: a person asking for the whole path now rather than for a slot.
+dep04	scheduled	lifecycle	no	a window is reserved and change:scheduled is set. Berth position 1: a record, nothing blocks on it, and the build is still serving nowhere.
+dep05	activating	lifecycle	no	the window has come due and the guards are being re-derived. Deliberately BEFORE the berth is claimed, so a refusal here leaves nothing held.
+dep06	queued	lifecycle	no	blocked:queue. Another open PR holds deploy:staging; this change carries no claim and is waiting for the singleton.
+dep07	lock_blocked	lifecycle	no	blocked:lock. The deployment lock names another PR and is younger than the 60-minute staleness bound.
+dep08	freeze_blocked	lifecycle	no	blocked:freeze. Preflight refused: the estate is closed to ordinary change, or an emergency is in flight.
+dep09	abstained	lifecycle	no	a guard returned INDETERMINATE and blocked on it: calendar unreachable, production unreachable, deploy set underivable, or a soak that took no probes. Not a refusal and never a pass.
+dep10	berthed	lifecycle	no	deploy:staging plus staging:in-progress. Berth position 2: this change holds the path to production and the staging deploy is in flight.
+dep11	staged	observation	no	staging is observed serving this head SHA. The deploy took; the authorizing run has not been taken yet.
+dep12	verified	observation	no	the authorizing run passed against the staging slot on this head: staging:e2e and staging:smoke, each backed by a record naming the SHA. Berth position 3.
+dep13	soaking	lifecycle	no	the build is held on staging and probed throughout the hold, for build identity as well as HTTP 200.
+dep14	accepted	observation	no	staging:uat. A person used the deployed build and accepted it, and the record names the SHA they looked at. The one human-taken observation.
+dep15	cleared	lifecycle	no	deploy:production is on. Berth position 4: authorized to enter production, nothing placed there yet.
+dep16	idle_deployed	lifecycle	no	the build is installed on the idle colour. It exists in the production tier and carries no traffic.
+dep17	idle_verified	observation	no	the idle colour passed e2e with no traffic on it. The last point at which refusing is free.
+dep18	live	lifecycle	no	the front was cut over. Production serves this build; convergence has not been established.
+dep19	converged	observation	no	guard 5 saw one build across N samples through the front. production:healthy. Sampled, not attested.
+dep20	unconverged	observation	no	production is reachable and is serving more than one build, or is not serving this one. A real negative, distinct from unreachable.
+dep21	validated	lifecycle	no	change:complete is set: every guard passed and production was observed serving this build. Validation is done and the merge has not landed.
+dep22	complete	lifecycle	yes	merged, PIR posted, deployment records written from the observation, window redlined passed, berth released. TERMINAL.
+dep23	deployed_not_merged	composite	no	production serves a build trunk does not contain. The window may still be open. The next change branches from a main without it and reverts it on promotion.
+dep24	stranded	composite	no	deployed, not merged, AND the window is gone. Three facts at once and no label says any of them together. The state spec.org names as having no name.
+dep25	orphaned_berth	composite	no	deploy:staging is held with no open window, and the build is serving nowhere or is serving where nobody is driving it. Guard 1 blocks everyone with no declared cause.
+dep26	expired	lifecycle	no	the reservation lapsed unattempted and was closed `expired`. Not failed, not cancelled: nothing was attempted, so nothing failed.
+dep27	authorized_unbooked	composite	no	every observation taken, approval intact, and NO lifecycle label at all. The honest post-reap state: eligible, unbooked, owed nothing, and waiting on a person to ask.
+dep28	preempted	lifecycle	no	an artifact or hotfix merge landed underneath this change. The berth is KEPT and extended, the staging pass is withdrawn, revalidate is required. Being invalidated is not going stale.
+dep29	stale_self	lifecycle	no	self-inflicted staleness: the head moved, or the lease simply ran out. Observations withdrawn, berth released, rejoin the queue.
+dep30	staging_refused	observation	no	the staging deploy or the authorizing run failed on this build; staging:e2e-failed or staging:smoke-failed is recorded. The berth is NOT released by this alone.
+dep31	forfeit_on_entry	composite	no	booked, green, approved, and the acceptance suite refused on entry to staging because the flow changed and the acceptance did not. The window is spent discovering it.
+dep32	emergency_direct	lifecycle	no	itil:emergency: entering production without a staging pass. Bypasses the staging ENVIRONMENT and the queue; bypasses neither guard 2 nor guard 5.
+dep33	rollback_owed	composite	no	production is serving this build and should not be, and the previous colour is still intact. Nobody has cut back yet. The estate is wrong and recoverable.
+dep34	backed_out	lifecycle	yes	change:backed-out. Production DID serve this change and was returned to a named prior state. TERMINAL, and the word asserts an estate action.
+dep35	failed	lifecycle	yes	change:failed. The change did not complete: production never served it, or never had it made live. Nothing to undo. TERMINAL.
+dep36	abandoned	lifecycle	yes	the PR was closed without ever holding the path to production. No closure code is owed because no change record was ever driven. TERMINAL.
+dep37	backfill_owed	composite	no	change:backfill-owed. An emergency reached main without the normal evidence and the record is unpaid: the window never booked, the observations never taken, and why. Blocks nothing.
+est01	estate_open	estate	no	ESTATE-GLOBAL. Ordinary change is permitted. The default disposition of the world.
+est02	estate_frozen	estate	no	ESTATE-GLOBAL. `freeze` on issue #1: ordinary change is suspended for everyone including its declarer. A property of the world, never of a change.
+est03	estate_emergency	estate	no	ESTATE-GLOBAL. `emergency` on issue #1: something is wrong out there and everything stops. Grants NO exemption to whatever PR carries it.
+est04	berth_free	estate	no	ESTATE-GLOBAL. No open PR holds deploy:staging. The path to production is available to exactly one claimant.
+est05	berth_occupied	estate	no	ESTATE-GLOBAL. Exactly one open PR holds deploy:staging and somebody is driving it.
+est06	berth_orphaned	estate	no	ESTATE-GLOBAL. deploy:staging is held by a change whose window is gone and whom nobody is driving. Guard 1 refuses everyone and names no cause.
+est07	lock_free	estate	no	ESTATE-GLOBAL. The deployment lock in the estate issue body is empty.
+est08	lock_held	estate	no	ESTATE-GLOBAL. The lock names a PR, a target, a run id and a start time. A record with a tiebreak, not the mutex.

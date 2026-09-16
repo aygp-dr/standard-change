@@ -54,4 +54,21 @@ if [ "$bad" -gt 0 ]; then
   echo "  Not promoting, not merging. This change goes to the back of the queue." >&2
   exit 1
 fi
+# ZERO PROBES IS NOT A PASS. `bad -gt 0` is the only failure above, so a run
+# that probed NOTHING fell straight through to the success line -- and did,
+# printing "soak passed: 0/0 probes" and exiting 0 after the arguments were
+# given in the wrong order and SECS parsed as a URL ("bad number", then a
+# loop that never ran). The whole point of this script is that the point
+# measurements upstream are not enough; a soak with no observations is a
+# weaker measurement than the ones it was added to reinforce, reported as a
+# stronger one.
+#
+# spec.org: a check that cannot fail produces no verdict. This one could fail
+# and simply never looked, which is the same defect with better manners.
+if [ "$n" -lt 1 ]; then
+  echo "  SOAK FAILED: no probes were taken, so nothing was observed." >&2
+  echo "  A soak that measured nothing is not a soak. Check the arguments:" >&2
+  echo "    soak.sh <pr> <seconds> [url]" >&2
+  exit 3
+fi
 echo "  soak passed: $n/$n probes served $SHORT over ${SECS}s"

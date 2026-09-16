@@ -1,0 +1,91 @@
+
+T0  COUNTING METHOD -- the metric about the metric
+--------------------------------------------------
+  transcript rows            4,291
+  distinct API calls         2,171
+  rows per call              1.98
+  naive sum of rows          2,259,572,855
+  deduped (max within id)    1,182,809,707
+  OVERSTATEMENT              1.91x  (1,076,763,148 tokens that were never spent)
+  Every number below uses the deduped count.
+
+T1  COST PER UNIT -- wharfinger #6's standing guardrail
+-------------------------------------------------------
+  total tokens               1,182,809,707
+  units merged               22
+  PER UNIT                   53,764,077 tokens
+  deployments                42
+  PER DEPLOYMENT             28,162,135 tokens
+  at list rates              $1,980.01 total, $90.00 per unit  [H: rates unverified]
+
+T2  WHAT THE SPEND WAS MADE OF
+------------------------------
+  cache_read                 1,177,212,205   99.5%   $ 1,765.82
+  cache_write                    3,650,898    0.3%   $    68.45
+  input                              4,342    0.0%   $     0.07
+  output                         1,942,262    0.2%   $   145.67
+  (of output: thinking)            429,755   22.1% of output
+
+  Read the table by cost, not by volume: cache_read is 99.5% of the tokens and
+  89.2% of the money, while output is 0.16% of the tokens and 7.4% of the money.
+
+T3  CACHE EFFICIENCY -- the economic analogue of lead time
+----------------------------------------------------------
+  context presented          1,180,867,445
+  served from cache          1,177,212,205  (99.69%)
+  written to cache           3,650,898  (0.31%)
+  reuse ratio                322.4 reads per write
+  A long single session is the cheap shape: the estate's state was
+  re-presented on every one of the 2,171 calls and paid for once.
+
+T4  DRIVING RATE
+----------------
+  wall clock                 27.5h  (2026-09-12T23:27:01.056Z -> 2026-09-14T02:54:13.171Z)
+  calls                      2,171   (79/h)
+  tokens                     43,084,324/h
+  output                     70,747/h
+  units                      0.80/h
+
+T5  DELEGATED SPEND -- PARTIALLY DERIVABLE
+------------------------------------------
+  sidechain calls in THIS ledger    0
+  A subagent's calls are not in the coordinator's transcript, so
+  the figures above are the COORDINATOR'S cost and nothing else.
+  But the dispatch record is not empty: each completed agent reports
+  a total at completion. What it reports, and what it does not:
+    DORA metrics for today's releases           188,885 tok, 73 tool uses
+  delegated, completed (1)       188,885
+  delegated, still running (3)    UNDERIVABLE -- no total until it stops
+  coordinator                        1,182,809,707
+  ratio, as printed                  0.016%
+
+  DO NOT READ THAT RATIO. It is two different units divided by each
+  other. The coordinator figure is 99.5% cache reads; 188,885 tokens
+  for 73 tool uses over 16 minutes cannot be -- a cached agent that
+  busy would show tens of millions. The reported total is almost
+  certainly billable-ish tokens with cache reads excluded or counted
+  once. Set against the coordinator's non-cache-read spend
+  (5,597,502), delegation is 3.3% -- a three-order-of-magnitude
+  swing that depends entirely on which unit you picked, and NOTHING
+  in the record says which one it is. That is the finding: the two
+  ledgers do not share a denominator, so the sum of them is not a
+  quantity. This is defect class 3 -- observation is not intent --
+  and class 6: a verdict must name its build. A token count must
+  name its counting rule or it cannot be added to another one.
+
+  Two things that total CANNOT do, and both matter:
+   1. It has no breakdown. One integer, no cache/input/output split,
+      and those differ in price by 50x. It can be counted and cannot
+      be PRICED. A cost-per-unit built on it is a volume metric
+      wearing a dollar sign.
+   2. It arrives only at completion. Three agents are running now and
+      report nothing, so at any instant the live total is unknowable
+      -- which is the read-after-write race from the guard work, in
+      the ledger: 'not there' and 'not there YET' read identically.
+
+  So the honest statement of the night's spend is a BOUND, not a
+  number: at least 1,182,998,592 tokens, coordinator priced
+  and delegation not. Defect class 1 -- unreachable is not falsified.
+  FIX: schema.sql makes ledger_id NOT NULL and gives subagent ledgers
+  a mandatory parent, so delegated spend is a row that is missing
+  rather than a number that is quietly small.

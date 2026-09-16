@@ -1,0 +1,124 @@
+#+TITLE: Overlap: what happens when changes collide
+#+DATE: 2026-09-13
+
+* Why this note exists
+
+Four changes were put in flight at once on 2026-09-13 to see what the pipeline
+does under concurrency rather than to reason about it. The overlaps below are
+observed, not hypothetical, and each one is a different *kind* of collision.
+The kinds matter more than the instances: they need different mechanisms, and
+the pipeline currently has a mechanism for exactly one of them.
+
+* The four kinds
+
+** 1. Textual overlap -- two branches edit the same lines
+
+*Observed*: #11 and #12 both wrote escaping into =shared/oneui.js=. #12 merged
+first; #11 hit a conflict in exactly those lines and a person resolved it to
+main's =esc()= plus #11's =extra= slot, at 1.1.0 rather than 1.0.1.
+
+*In flight now*: #15 (environment footer) and #17 (pdp product details) both
+touch =shared/oneui.js=.
+
+*Mechanism*: git. This is the only kind the tooling already handles, it is
+loud, and it is the least dangerous -- a conflict stops you.
+
+*Cost*: a rebase and a judgement call about versioning. Real but bounded.
+
+** 2. Semantic overlap -- no conflict, and the result is still wrong
+
+Two changes that touch *different files* and disagree about a fact.
+
+*Observed*: =plp= lists =SKU123= under =shoes= in =apps/plp/categories.json=.
+=pdp= is being taught, in #17, to reject SKUs it does not know. Neither file
+conflicts with the other. If the two disagree, the estate links from a category
+page to a 404 and *every gate stays green*: plp's tests pass, pdp's tests pass,
+route ownership passes, and no single app's suite can see it.
+
+*Mechanism*: none, currently. =gates/e2e.sh= asserts cross-app *journeys* but
+not cross-app *agreement about data*.
+
+*This is the dangerous kind*, because it is silent. #18 (the new/updated badge)
+is the same shape and was filed partly to keep the question open: a badge
+rendered by plp and not by pdp is two apps disagreeing with no conflict
+anywhere.
+
+** 3. Resource overlap -- two changes want the same environment
+
+*Observed*: dev blocks. Four agents were given blocks 0, 1, 2 and 5 by hand.
+Nothing enforced that; if two had chosen the same block, the second would have
+silently replaced the first's estate, and the gate output would have described
+somebody else's build.
+
+*Mechanism*: partial. =deploy.sh= now writes the =ports.tsv= row itself, so
+deploying *is* allocating and the registry stops drifting. But it records the
+allocation, it does not *refuse* a collision. Guard 1 does this properly for
+staging and nothing does it for dev blocks or for the review slot
+(=docs/adr/0001-automatic-promotion.org=, "The review slot is a berth").
+
+** 4. Verdict overlap -- an observation outlives the build it describes
+
+*Observed*: #11's head moved while a staging run was in flight.
+=staging:e2e= and =staging:smoke= stayed on the PR, recorded against
+=9d85a33=, while the head became =baed821=. They then described a build nobody
+had measured.
+
+*Mechanism*: the labeller is supposed to withdraw them on =synchronize= and did
+not fire. Issue #16, and the repo owner's reframing there is the better fix:
+these are *markers at points in time* and should not persist at all, rather
+than being durable state that needs reliable cleanup.
+
+* What the four kinds share
+
+Kinds 2 and 4 are the same defect wearing different clothes: *a fact recorded
+in one place that something elsewhere assumes is still true.* A SKU list that
+pdp assumes matches plp's. A label that guard 4 assumes describes the current
+head.
+
+Kind 1 is loud and kind 3 is cheap to fix. The two that matter are the quiet
+ones, and neither is caught by any gate in this repository today.
+
+* A worked decision: where the environment indicator gets its fact
+
+Issue #15 asks the page to say which environment it is. The implementation
+choice is a small instance of the whole problem, so it is recorded here.
+
+| option | single source? | fakeable by a deployer? | new moving parts |
+|--------+----------------+-------------------------+------------------|
+| env var passed at deploy | yes | *yes* | a deploy argument |
+| header set by the router | yes | one hop removed | the request path |
+| each app derives it | no -- four implementations | no | none |
+| *pure function in OneUI* | *yes* | *no* | *none* |
+
+Chosen: a pure function in =shared/oneui.js= mapping a listening port to a
+tier. =block = floor((port - 9000) / 10)=, and the tier follows.
+
+The reason is the one guard 5 got wrong. *The listening port is a fact the
+process owns about itself.* A deployer can hand an app a wrong =DEPLOY_ENV=
+exactly as =targets/bastille/deploy.sh= handed guard 5 a =deadbee= that was
+never built; it cannot hand the process a port it is not actually bound to.
+
+The router-header option is worse for a subtler reason: it is *true*, but it is
+true because the router says so, and the app has no way to disagree. Deriving
+it locally means a misrouted app reports the environment it is *actually in*
+rather than the one the router believes it routed to -- which is exactly the
+case you want a footer for.
+
+It also avoids versioning the deploy tooling, which is the practical argument:
+a mapper is a pure function with unit tests, and a deploy argument is a change
+to every caller of =deploy.sh= plus a migration.
+
+* Practical rules, until there are mechanisms
+
+1. *Two PRs touching =shared/= should not be in flight together* unless someone
+   is prepared to resolve the merge and re-verify both. The blast radius is
+   every app, so the second one rebases onto a changed shared surface and its
+   staging pass is void.
+2. *A change that adds a cross-app fact must add the assertion that the two
+   sides agree*, in the same PR. #17 was briefed this way: whatever data source
+   pdp picks, something must assert plp and pdp agree about which SKUs exist.
+3. *One change per dev block, and say which block in the PR.* Deploying over
+   somebody's block is invisible to both parties.
+4. *An observation is about a build.* If the head moved, the observation is
+   void whether or not anything withdrew the label. Re-run rather than trusting
+   what is on the PR.

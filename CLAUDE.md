@@ -6,9 +6,9 @@ Derived from `spec.org`. **`spec.org` governs; when they disagree, `spec.org` wi
 
 A label-driven, gate-checked deployment pipeline demonstrated on a mock ecommerce monorepo. The four apps (`core`, `plp`, `pdp`, `checkout`) are fixtures — the product is the gate sequence, the labels that drive it, the change-schedule integration, and the checklists. A **unit** is one pull request carrying at least one `app:*` label. It is *done* when all three gates are green on the head SHA, a staging slot has deployed and re-run e2e against it, and — for production — the PIR comment is posted.
 
-## Status: nothing is built yet
+## Status: built, and running
 
-The repo currently contains `spec.org`, this file, and `.meta/`. Every command below is specified by the spec, **not yet runnable** — the scripts it names do not exist. Treat this section as removed once the first gate runs.
+46 scripts under `change/` and `gates/`, a live estate on hydra (staging 9200, blue 9210, green 9220, front 9230), 55+ merged changes. This section previously read *"nothing is built yet … the scripts it names do not exist"* and carried its own removal condition — *"treat this section as removed once the first gate runs"*. The first gate ran; the condition fired; nobody removed it, and it kept telling every agent that loads this file that the repo was empty. Corrected 2026-09-15 by counting the files.
 
 ## Quickstart
 
@@ -19,6 +19,7 @@ Verified present on hydra (see `spec.org` §Host survey of record): node 24.14.1
 gmake port-alloc          # first command in a new worktree; writes .env.ports
 gmake dev                 # render router, start apps present in this worktree
 gmake gate app=plp        # lint + test + e2e for one group
+gmake uat url=http://127.0.0.1:9000   # the browser journey as accepted; refuses a changed flow
 gmake gate-selftest       # negative-test the gates; must pass before gate results count
 gmake simulate app=pdp    # touch a group so the labeller attaches app:pdp
 gmake port-free           # last command in a worktree
@@ -26,21 +27,15 @@ gmake port-free           # last command in a worktree
 
 On ubuntu-latest (CI) the same targets run as `make`.
 
-**Two blockers on hydra today** (`spec.org` §Known blockers):
-- `nginx` is not installed, so `gmake router` / `gmake dev` cannot run here.
+**Blockers on hydra** (`spec.org` §Known blockers):
+- ~~`nginx` is not installed~~ — **cleared**. nginx 1.30.4 is present and the protected tier is up (9200/9210/9220/9230). Recorded as a blocker long after it stopped being one.
 - Playwright ships no FreeBSD browser build. Intended route is `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` plus an explicit `executablePath` pointing at `/usr/local/bin/chrome` — **[H], not yet attempted.**
 
-## Tangling
+## Tangling — spec.org tangles nothing, and a gate enforces that
 
-`spec.org` is literate and carries `:tangle` targets: `apps/plp/routes.json`, `ports.tsv`, `router/nginx.conf.tmpl`, `.github/labeler.yml`, `.github/workflows/deploy-staging.yml`, `Makefile`. Tangle with `C-c C-v t` in Emacs, or batch:
+`spec.org` is **intent, not source**. It carries zero `:tangle` targets (measured: `grep -c 'begin_src.*:tangle' spec.org` → 0), and `gates/docs-lint.py --tangle` fails the build if any reappear.
 
-```sh
-emacs --batch -l org --eval '(org-babel-tangle-file "spec.org")'
-```
-
-Verified [E] on 2026-09-12 with GNU Emacs 30.2: all 6 blocks tangle and nested directories are created (file-level `:mkdirp t`).
-
-**Do not re-tangle casually.** `ports.tsv` is a `:tangle` target *and* mutable state that `port-alloc`/`port-free` write to — re-tangling clobbers live worktree allocations. See `spec.org` §Open items.
+This section previously instructed the reader to run `org-babel-tangle-file` and named six blocks — `apps/plp/routes.json`, `ports.tsv`, `router/nginx.conf.tmpl`, `.github/labeler.yml`, `.github/workflows/deploy-staging.yml`, `Makefile`. Following it would have done nothing at best; the warning it carried (`ports.tsv` is both a tangle target and live mutable state that `port-alloc`/`port-free` write) described a hazard that no longer exists in that form. **A document telling agents to perform an act that a gate refuses is worse than one that is merely out of date** — it puts the instruction and the control in direct contradiction, and this file is loaded into every agent's context before either is read. Corrected 2026-09-15.
 
 ## Conventions
 

@@ -1,0 +1,7 @@
+{
+  "name": "standard-change-uat",
+  "private": true,
+  "description": "the browser journey, as-is: home, plp, pdp, add to cart, checkout",
+  "devDependencies": { "@playwright/test": "1.63.0" },
+  "scripts": { "test": "playwright test" }
+}

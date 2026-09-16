@@ -1,0 +1,39 @@
+id	name	kind	terminal	description
+S00_open	Open, unbound	lifecycle	no	The PR exists and no environment holds its build. Initial state. Nothing in the estate refers to it.
+S01_requested	Requested	intent	no	change:requested. A person has asked for the change to begin. No claim on any tier.
+S02_release_armed	Release armed	intent	no	The bare `release` label is on. A standing human trigger the scheduler consumes; left on it re-fires.
+S05_emergency_declared	Emergency declared (itil:emergency)	classification	no	A person declared THIS change the remedy. It may reach production without the berth. Distinct from the estate `emergency` label, which is on issue #1 and exempts nobody.
+S10_dev_served	Served on a dev block	lifecycle	no	A build of this PR answers on 9000+10n, n<=9. Disposable tier; promotes=no. The only record is a ports.tsv row.
+S11_dev_stale_row	Dev block held, nothing listening	composite	no	UNNAMED. ports.tsv claims the block, no process answers. The registry allocates by editing a file and never asks the socket table.
+S12_team_checked_out	Held in a team environment	lifecycle	no	9100-9199. Real, leased, reachable -- and CANNOT promote, because no team: observation namespace exists for guard 4 to read.
+S13_team_declared_unactivated	Declared, not activated	estate	no	ESTATE property of a named environment. The row exists and owns its ports so nothing else takes them; nothing is expected to answer. deploy.sh refuses with exit 6.
+S20_scheduled	Scheduled, unberthed	lifecycle	no	change:scheduled. A window is booked. Berth position 1: a record, and nothing blocks on it.
+S21_berthed	Berthed	lifecycle	no	deploy:staging held. The singleton path to production (:9200) is this change's. Berth position 2.
+S22_staging_serving	Staging serving this head	lifecycle	no	The staging front at :9200 answers with x-build-sha equal to the PR head. The environment and the change agree.
+S23_staging_observed	Staging verified	observation	no	staging:e2e, staging:smoke and staging:uat recorded against this head on :9200. Berth position 3 -- verified is not safe.
+S24_cleared	Cleared for production	lifecycle	no	deploy:production held. Berth position 4. Everything about it was established against a main that may since have moved.
+S30_idle_loaded	Idle colour loaded	lifecycle	no	UNNAMED. The build is installed and answering on the idle replica (:9210 or :9220). The front at :9230 does not route to it. Reachable from the LAN, serving nobody.
+S31_live	Live	lifecycle	no	targets/node/live names this colour, so :9230 proxies this build. The only moment that changes what strangers see.
+S32_prod_observed	Production converged	observation	no	production:healthy. N samples at the production address, every one on this build, exactly one distinct build seen. Convergence, not liveness.
+S40_merged	Merged	lifecycle	no	The change is on trunk. The forge's MERGED is now the record.
+S41_complete	Complete	lifecycle	no	change:complete. Terminal for VALIDATION: nothing remains to observe. The labels are about to be cleared.
+S42_cleaned	Settled and cleaned	lifecycle	yes	Transient labels cleared. What survives is the PIR comment, the deployment record and the PR timeline. TERMINAL.
+S44_backfill_owed	Landed, record owed	estate	no	change:backfill-owed. The change reached main without the normal evidence and owes the window, the observations and the reason. Blocks nothing; only a person may clear it.
+S50_blocked_queue	Blocked on the berth	lifecycle	no	blocked:queue. Another open PR holds deploy:staging. Guard 1 -- the label is the lock, not the concurrency group.
+S51_blocked_freeze	Blocked by the estate	lifecycle	no	blocked:freeze. A freeze or an estate emergency covers the window. The PR-side shadow of an estate fact it does not own.
+S52_blocked_lock	Blocked by the lock	lifecycle	no	blocked:lock. The deployment lock names another run, less than 60 minutes old.
+S53_blocked_diverged	Blocked, diverged	lifecycle	no	blocked:diverged. main moved under this change by an artifact or hotfix merge; its staging pass describes a tree that no longer composes.
+S60_failed	Closed, failed	lifecycle	yes	change:failed. ITIL closure code. Production never served this build, or never had it made live. Nothing to undo. TERMINAL.
+S61_backed_out	Closed, backed out	lifecycle	yes	change:backed-out. Production DID serve it and the estate was returned to a prior state. Asserts an estate action and must name what it returned to. TERMINAL.
+S62_expired	Window expired, unscheduled	lifecycle	no	The reservation lapsed unattempted. Its own closure code -- not failed, not cancelled. The change keeps everything else and is left with NO lifecycle label, which is the honest state.
+S70_orphan_berth	Berth held, window gone, serving nowhere	composite	no	UNNAMED. deploy:staging is on the PR, no window is open, and :9200 serves something else or nothing. Guard 1 blocks every other change with no declared cause. Found live on #92.
+S71_idle_retained	Idle colour retains an unshipped build	estate	no	UNNAMED, ESTATE-GLOBAL residue attributable to a PR. A build reachable at :9210/:9220 that production never served. Cleared by NOTHING -- only the next deploy to that colour overwrites it.
+S72_attested_unserved	Attested healthy for a build it is not serving	composite	no	UNNAMED. A verdict names a build the environment is not running: a two-request check across a mixed fleet, a switch that read its own config file, or a deploy that reported success and then died with its parent shell.
+S73_deployed_not_merged	Deployed, not merged	composite	no	Production serves a build trunk does not contain. Named in the boundary conditions; the correct handling is that the next change branches from a trunk without it and reverts it.
+S74_deployed_unmerged_windowless	Deployed, not merged, and the window is gone	composite	no	UNNAMED -- the spec's own `one that has no name yet`. Three facts at once and no vocabulary for them. Reached twice here, once by a script that reported the opposite.
+S80_unreachable	Environment unreachable -- INDETERMINATE	composite	no	The instrument could not reach the address. A THIRD VALUE: not a pass and not a failure. It blocks, it never exempts, and no edge leaves it for a pass without a successful measurement.
+S81_bound_loopback	Up, correct, and unreachable by construction	composite	no	The process is healthy but bound to 127.0.0.1, or in a block outside pf's pass range. The tier says protected; the audience says nobody. From the instrument's host it is indistinguishable from nothing listening.
+E90_freeze	Estate frozen	estate	no	ESTATE-GLOBAL. `freeze` on issue #1. Ordinary change is suspended for everyone including the declarer. A property of the world, never of a change.
+E91_emergency	Estate emergency in flight	estate	no	ESTATE-GLOBAL. `emergency` on issue #1. Standard and normal changes stop; it grants NO exemption to whatever PR carries it.
+E92_freeze_unattributed	Frozen, with no declarer	estate	no	UNNAMED, ESTATE-GLOBAL. The estate is stopped and the record names neither actor nor reason. An authorised halt and a hostile one leave byte-identical records.
+E93_actuator_exposed	Control plane beyond the boundary	estate	no	ESTATE-GLOBAL. The unauthenticated freeze/emergency/schedule-clear POSTs are reachable from outside the LAN. Changes who may move every PR; changes no environment's tier, port or guard.

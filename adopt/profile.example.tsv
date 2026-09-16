@@ -1,0 +1,114 @@
+# THE ADOPTION PROFILE. A filled-in answer sheet for a team that is NOT us.
+#
+# WHY TSV AND NOT YAML.
+#
+#   1. It is what this repo already uses for every machine-readable declaration
+#      -- environments.tsv, ports.tsv, change/label-owners.tsv -- and each of
+#      those carries its reasoning in `#` comments beside the rows. A profile is
+#      the same kind of object: a small, flat, human-audited declaration whose
+#      comments are half the point.
+#   2. adopt/generate.sh is POSIX sh and reads this with `while read key value`.
+#      A YAML profile would need a parser, which means python3 or a vendored
+#      library, which means the generator acquires a dependency that the thing
+#      it generates does not have. The generator must run wherever the pipeline
+#      it emits will run.
+#   3. The key space is deliberately FLAT. Nesting invites a structure where a
+#      missing branch and an empty branch look alike, which is the shape of
+#      spec.org defect class 8 -- `cannot say` is not `no`. Here a missing key
+#      is a missing ANSWER, and generate.sh refuses the whole profile rather
+#      than defaulting it. There is no default that is safe for all sixteen
+#      questions and pretending otherwise is how a guard gets emitted that
+#      nobody chose.
+#
+# Two columns, tab-separated: key<TAB>value. Blank lines and `#` lines ignored.
+# Every key in adopt/PROFILE.org must be present. Unknown keys are an error.
+#
+# ---------------------------------------------------------------------------
+# THE TEAM. Hypothetical, and deliberately unlike this estate.
+#
+# "Wrenbury" is three engineers shipping one Django application to two VMs
+# behind a load balancer at a European host. Self-hosted GitLab, one runner on
+# the same private network as the VMs. Two environments. No blue/green -- a
+# deploy replaces the running process on each VM in turn. They merge to `main`
+# and deploy `main`, which is what almost everyone does and which costs them
+# three of the controls below.
+#
+# They answer NO to five things, and the refusals generate.sh produces for them
+# are the reason this file exists. A conformance instrument that only
+# demonstrates success has not been shown to reject anything.
+# ---------------------------------------------------------------------------
+
+profile.name	wrenbury
+profile.date	2026-09-14
+
+# --- Section A: the precondition -------------------------------------------
+# They wrote a failing fixture for each of their four gates before wiring any
+# of this up, because generate.sh emits nothing without it. Two of the four
+# fixtures did not fail on the first attempt.
+gates.selftest	yes
+
+# --- Section B: what a change is, and what it ships ------------------------
+change.unit	pull-request
+change.state.owner	automation
+deploy.unit	repo
+deploy.unit.derivable	yes
+
+# THE ANSWER THAT COSTS THEM THE MOST, and they did not know it was a question.
+# They merge and then deploy `main`. So there is no branch head to compare
+# against the trunk: guard 0 has no content, and guard 6 -- do not merge onto a
+# trunk production is not serving -- is inverted by construction, because the
+# merge is what produces the thing to deploy.
+deploy.source	trunk-after-merge
+
+# --- Section C: what the platform can tell you -----------------------------
+# Pipelines are per-commit and the runner can reach the VMs over WireGuard, so
+# the gates report as real check verdicts rather than as carried records. That
+# is the simpler half of the model and they should keep it.
+forge.verdicts.per_commit	yes
+forge.verdicts.revocable	no
+forge.trunk_moved_event	no
+forge.approver_distinct	enforced
+forge.reaches_estate	yes
+
+# --- Section D: the shape of the path to production ------------------------
+path.environments	staging,production
+path.authorizing	staging
+
+# One team, one application, one path. Nothing contends for it, so a berth
+# would be the queue paying for a safety production does not gain -- which is
+# spec.org's own test for ceremony. Refused, and correctly.
+path.shared	no
+path.lease	none
+
+# gunicorn is fronted by their own middleware, which sets X-Build-Sha from the
+# release file. Two VMs means a mixed fleet is observable, so UNCONVERGED is a
+# state guard 5 can actually report.
+production.observable	yes
+production.build_id	header
+production.replicas	2
+
+# No idle colour to switch to. Rolling back means deploying the previous tag,
+# which takes as long as deploying anything else -- so guard 5's failure path
+# is a refusal naming a SHA for a person to restore, not an automatic action.
+production.rollback	redeploy
+
+# Two VMs, two hostnames, each with its own :443. Ports are not scarce, so the
+# 9000/9100/9200 tier model buys them nothing at all.
+address.namespace.shared	no
+
+# --- Section E: who may say the estate is closed ---------------------------
+# A tracked file on `main` with a CODEOWNERS rule on its path. Not on a change
+# -- a freeze recorded on a change exempts its own carrier.
+freeze.holder	trunk-file
+freeze.declarer	on-call-engineer
+emergency.declarer	person
+
+# --- Section F: coordination ------------------------------------------------
+# No change schedule. Deploys happen when someone is at a desk. They lose the
+# forfeit record and nothing else, because the guards do not read a calendar.
+schedule.store	none
+
+# Not yet declared. generate.sh emits a starter declaration with one row per
+# fact it creates, and refuses to emit any control writing a fact it cannot
+# name an owner for.
+facts.ownership_declared	no

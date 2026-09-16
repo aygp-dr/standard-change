@@ -5,7 +5,7 @@
 # and never existed until now. Exit codes are the ones the spec assigned:
 #   0 proceed   2 lock held   3 freeze   4 calendar unreachable   5 queue busy
 # 4 BLOCKS. "I could not read the calendar" is not "the calendar is clear" --
-# the same rule as docs/label-ownership.org: unreachable is not falsified.
+# the same rule as research/findings/label-ownership.org: unreachable is not falsified.
 #
 # It is deliberately VERBOSE. ADR 0001 Option 0 says a person still confirms the
 # things a machine cannot judge, and a person cannot confirm a list they have
@@ -71,10 +71,20 @@ lbad=$(printf '%s' "$locals" | jq '[.[]|select(.state!="success")]|length' 2>/de
 lself=$(printf '%s' "$locals" | jq '[.[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
 
 bad=$(gh api "repos/$R/commits/$head/check-runs" \
-       --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length' 2>/dev/null || echo 99)
+       --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion!="success"))|length' 2>/dev/null || echo 99)
 self=$(gh api "repos/$R/commits/$head/check-runs" \
-       --jq '[.check_runs[]|select(.name=="gate-selftest")|select(.conclusion=="success")]|length' 2>/dev/null || echo 0)
+       --jq '[.check_runs[]|select(.name=="gate-selftest")]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion=="success"))|length' 2>/dev/null || echo 0)
 
+# AND SUPERSEDED IS NOT CURRENT. Every query below takes the LATEST check run
+# per name -- group_by(.name)|map(max_by(.started_at)) -- rather than counting
+# all of them.
+#
+# GitHub keeps every run attached to the SHA. When Actions came back on
+# 2026-09-14 the billing-era runs from 23:20 (one failure, three skipped) were
+# still there beside three fresh successes, and guard 2 reported '4 not passing,
+# self-test 3' on a commit whose gates were entirely green. A re-run supersedes;
+# a guard that counts history refuses on evidence that has been replaced.
+#
 # DID NOT RUN IS NOT RED. A check run reports conclusion=failure both when a
 # gate genuinely failed and when the job was never started -- and on
 # 2026-09-13 every workflow on this repo reported failure for over an hour
@@ -82,7 +92,7 @@ self=$(gh api "repos/$R/commits/$head/check-runs" \
 # exactly like a real gate-selftest failure, and cost half an hour of chasing a
 # CI/local divergence that did not exist.
 #
-# The distinction is the same rule as docs/label-ownership.org rule 2 --
+# The distinction is the same rule as research/findings/label-ownership.org rule 2 --
 # UNREACHABLE IS NOT FALSIFIED -- applied to the forge rather than the estate.
 # merge-on-healthy.yml was fixed so "I could not reach production" stops being
 # recorded as "production is unhealthy"; this is that collapse one level up.
@@ -95,11 +105,9 @@ self=$(gh api "repos/$R/commits/$head/check-runs" \
 # 2026-09-13 (issue #34) -- the annotations say "the job was not started", but
 # nothing in `gh run view` does and the log is BlobNotFound.
 notrun=$(gh api "repos/$R/commits/$head/check-runs" \
-  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))
-        |select(.conclusion=="skipped" or .conclusion==null)]|length' 2>/dev/null || echo 0)
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion=="skipped" or .conclusion==null))|length' 2>/dev/null || echo 0)
 failed=$(gh api "repos/$R/commits/$head/check-runs" \
-  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))
-        |select(.conclusion=="failure")]|length' 2>/dev/null || echo 0)
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion=="failure"))|length' 2>/dev/null || echo 0)
 
 if [ "$bad" = 99 ]; then
   no "I could not reach the forge to read the check runs." 4

@@ -93,7 +93,7 @@ review=$(gh pr view "$pr" --repo "$repo" --json reviewDecision -q '.reviewDecisi
 # fails, and a proxy record for a different SHA still fails.
 # NAME THE APPROVER; DO NOT ASSERT PERSONHOOD FROM A STATE THAT CANNOT SHOW IT.
 # This printed "APPROVED by a person" for any APPROVED review. Once a reviewer
-# identity exists (docs/reviewer-identity.org) that became false the first time
+# identity exists (research/findings/reviewer-identity.org) that became false the first time
 # it was true: #42 was approved by a TOKEN authenticating as jwalsh, and the
 # line claimed a person. reviewDecision cannot tell a human from a second
 # credential, so it must not be read as if it could. Print who, and whether the
@@ -139,7 +139,7 @@ lself=$(gh api "repos/$repo/commits/$head/status" \
   --jq '[.statuses[]|select(.context=="local/gate-selftest" and .state=="success")]|length' 2>/dev/null || echo 0)
 
 bad=$(gh api "repos/$repo/commits/$head/check-runs" \
-  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))|select(.conclusion!="success")]|length')
+  --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion!="success"))|length')
 if [ "$lbad" -eq 0 ] && [ "$lok" -ge 3 ] && [ "$lself" -ge 1 ]; then
   printf '  ok    %-16s %s\n' "gates" "$lok local/ contexts green on $short (host run, not CI)"
 elif [ "$bad" -eq 0 ]; then printf '  ok    %-16s %s\n' "check runs" "green on $short"

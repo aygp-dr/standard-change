@@ -1,0 +1,195 @@
+#+TITLE: 024 — five owners, one task each: what the PR could not tell them
+#+DATE: 2026-09-15
+
+* Setup
+
+Five agents, one pull request each (#52 core, #55 core, #60 plp, #61 pdp,
+#70 checkout). Each was told: *get your change to production*. Each was a
+DEVELOPER who owns one change, forbidden from editing any pipeline script,
+workflow, gate or spec — if something is broken, record it. Forbidden from
+clearing another change's label, because that is D21 and it is what we are
+studying. 25-minute bound; a stall is a result.
+
+They were told to use =change/driver.sh=. *That instruction was wrong, and it
+is finding F1.*
+
+* Result
+
+| PR | landed? | how |
+|----+---------+-----|
+| #52 | *yes* | by ABANDONING the driver and hand-running the eight-step node sequence |
+| #55 | no | two driver runs, both aborted at the same step |
+| #60 | no | ready and approved; ten minutes of silence with the berth free |
+| #61 | no | blocked by a false guard-2 refusal (F6) |
+| #70 | no | blocked on a calendar slot 43 minutes out, on an idle estate |
+
+*One of five landed, and only by leaving the documented path.*
+
+* Findings
+
+** F1 — the entry point belongs to a different machine, and nothing says so
+
+=change/driver.sh= hardcodes =STG=http://127.0.0.1:9010=,
+=PROD=:9020=, =worktrees/staging=, =worktrees/production= and
+=/tmp/claude-501/= — uid 501, the mini. On hydra none of those paths exist.
+There is no environment override; =STG= and =PROD= are constants.
+
+All five agents hit it. Four had to read the script to find out.
+
+*The near-miss is worse than the failure.* =:9010= and =:9020= ARE listening
+on hydra — as =dev-1= and =dev-2=, =tier=dev=, =promotes=no=. At the time of
+the run =:9010= was serving =b72589f=, *which was #60's own pre-rebase head*.
+Had =worktrees/staging= existed, the driver would have deployed a protected
+change onto a dev block, and the health poll would have MATCHED — reporting
+staging deployed while having deployed nothing. A live false-pass, one SHA
+away.
+
+** F2 — the abort names a symptom and never the cause
+
+Every failed run posted the same comment:
+
+: Change closed: failed
+: Reason: driver: deploy staging -- staging did not come up serving <sha>
+
+This is false as a diagnosis. Staging was healthy on =:9200= throughout; #52
+passed 5/5 health, 27 e2e checks and a 15-url smoke crawl on it minutes later.
+The cause — =fatal: cannot change to 'worktrees/staging': No such file or
+directory= — reached the terminal and *never the pull request*.
+
+Acting on the comment alone, an owner investigates a working estate.
+
+** F3 — the refusal that mattered most was never posted at all
+
+=driver.sh= exit 5, "lock held by #N", goes to stdout only. No comment, no
+label, no queue entry. =README.org= promises the opposite: /"leaves one
+comment naming the holder"/ — that is =queue.sh=, and =driver.sh= bypasses it.
+
+An owner who says =change:start= and walks away sees a change that silently
+does nothing, forever, with no queue position and no bound. All five agents
+hand-rolled a polling loop. Three lost races they could not see.
+
+** F4 — a promise kept by nothing
+
+=change/scheduler.sh:36= posts: /"This ticket is retried every 20s and takes
+the berth when it is free; nothing is asked of you."/ On #61 the scheduler
+that posted it died of SIGPIPE a minute later. The comment stands; nothing is
+retrying; the PR cannot say so.
+
+That is the worst stall in the run, because the system actively reassures you
+while nothing happens. Silence and success look identical; so now do silence
+and a dead daemon.
+
+(#60 reported this text "exists nowhere in the checkout". It does —
+=scheduler.sh:36=, with =${INTERVAL}s= interpolated, so a grep for the
+rendered string misses it. The claim as stated is wrong; the finding is not.)
+
+** F5 — guard 1 admitted two holders
+
+: 02:51:42Z  #52  +deploy:staging  by=aygp-dr
+: 02:51:42Z  #55  +deploy:staging  by=aygp-dr
+: 02:51:53Z  #55  -deploy:staging  by=github-actions[bot]
+
+Two changes held the berth in the same second. There are TWO locks — the
+repo-wide label and =change/lock.sh='s record — acquired non-atomically, so
+both drivers passed the check in the gap. =deploy-staging.yml= arbitrated
+eleven seconds later by stripping one label, while its driver went on
+believing it held the berth.
+
+This upgrades D20. It is not that guard 1 has never refused; it is that guard
+1 *admitted a violation of the property it exists to enforce.*
+
+Three readings of one lock disagreed across the run: =lock.sh status= said
+=pr: 52= while a PR comment said the berth was held by #55, five seconds
+apart.
+
+** F6 — a guard that refuses because it cannot see past page one
+
+=change/activate.sh:200= fetches =repos/$R/commits/$SHA/check-runs= with no
+=per_page= and no pagination. Measured on #61's head =6a954d3=:
+
+| request | total_count | returned | gate-selftest found |
+|---------+-------------+----------+---------------------|
+| default | 35 | 30 | *0* |
+| =?per_page=100= | 35 | 35 | 1 |
+
+Once a SHA carries more than thirty check runs, =gate-selftest='s success
+falls onto page two and guard 2 refuses: /"gate-selftest did not pass and no
+local/ self-test either; gate results are void."/
+
+The refusal is false, and it sits under a comment in the same file warning
+that /"a guard that reads a stale attempt is wrong in the direction that looks
+safe"/. Same shape, different cause.
+
+*The escape hatch it offers cannot be taken.* =local/gate-selftest= is READ by
+=activate.sh=, =guard4.sh= and =gates/preflight.sh=, and WRITTEN by nothing in
+the repository. No command produces it.
+
+** F7 — the abort consumes the human intent
+
+=abort.sh= strips =change:start=. So every infrastructure failure — a missing
+worktree on the wrong host — costs a HUMAN ACT to restate an intent that never
+changed. #55 paid it twice, #60 once.
+
+=change:start= exists to be the one thing a person must say. A machine fault
+should not spend it.
+
+** F8 — =change:end= does not distinguish landed from failed
+
+#70 carries it after a clean landing. #55 carries it after two aborts. The
+tombstone records that cleanup RAN, not what happened. That is my defect: I
+declared the label on 2026-09-14 with =persistent=yes= and no outcome.
+
+** F9 — smaller, each verified
+
+- =schedule.sh= refuses with /"Book 8m or more"/ while =QUANTUM= defaults to
+  30; the advice cannot be followed. Three bookings asked for 20m/20m/10m and
+  got 30m *silently*.
+- =--at= silently relocated a booking: 02:52 for 15m became 03:00–03:30.
+- Next-available returned 2026-09-19 for a calendar empty from 03:30 today: it
+  appends after the furthest-out booking, and dead windows from 22 hours
+  earlier still read =open= because nothing reaps them.
+- =settle.sh= printed =ok berth released= while =lock.sh status= still read
+  =pr: 52= eight seconds later. It releases the LABEL and leaves the RECORD.
+- =gates/uat.sh= exits 2 with no diagnosis — two =installing (once)= lines and
+  nothing else. It is the FreeBSD/Playwright blocker, unstated. =driver.sh=
+  calls it unconditionally, so *even with the worktrees present the driver
+  could not have completed on hydra*.
+- =driver.sh= would have self-approved: it hardcodes =gh auth token --user
+  aygp-dr=, and #52's author IS =aygp-dr=, so guard 4 would have refused a
+  void approval.
+- =queue.sh= with no arguments prints a raw =sh= error and exits 0.
+- A mis-booking has no cancel verb exposed to the booker; #61 was left holding
+  two open windows.
+- Nothing merged between 00:11:57Z and 02:56Z — 2h44m — while drivers churned
+  every ~90s. The estate looked busy and landed nothing.
+
+* What the pipeline already does right, and it is the template
+
+The single best message in the run was written by a PERSON: the
+=CHANGES_REQUESTED= review on #60 from 2026-09-14. It named the rule, quoted
+both versions of the line, explained WHY (#38 renamed =d.results= to
+=d.items=), stated /"What would clear this: rebase onto main and re-express
+the ternary against d.items.length"/, and separated what it had checked from
+what it had not. #60's owner acted on it *without opening a single script*.
+
+Two machine refusals reach that standard:
+
+- =production-first.sh=: /"This check re-runs on every label change, so it
+  turns green by itself the moment gates/health.sh records production:healthy.
+  Nothing to re-push."/ — says what to do AND what not to bother doing.
+- =activate.sh= guard 3: =FAIL= + reason + /"The berth was NOT claimed;
+  nothing is blocked behind this."/ + a =Recovery:= line.
+- =review.sh --approve= printed its reasoning, named both identities, and
+  re-read the forge to confirm.
+
+The pipeline knows how to write a refusal. The abort path and the lock path
+were not given the same care.
+
+* The one change, named independently by all five
+
+*Every refusal must post a comment, name the command that failed and its
+stderr rather than an inferred symptom, and end with the next action in the
+imperative.*
+
+Two of the five put the lock refusal first and the abort second; three the
+reverse. Nobody nominated anything else.

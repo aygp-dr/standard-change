@@ -1,0 +1,1539 @@
+#+TITLE: L7 review of every shell script in the control plane
+#+DATE: 2026-09-15
+#+OPTIONS: toc:2 num:nil
+
+* What this is
+
+An inventory, not a repair. Every finding below is left in place on purpose:
+the point of the exercise was to establish what is wrong, and a list of
+defects half of which have been quietly fixed is a list nobody can audit.
+
+=gates/shellcheck.sh= reports *0 findings* over 42 scripts. That is the floor.
+This review is about what a static checker of shell syntax structurally cannot
+see: a pipeline that discards the verdict it was carrying, a guard that reports
+green because it could see nothing, a success message that measured nothing, and
+a =|| true= on the one write that was the whole point of the step.
+
+** How to read an entry
+
+Every finding carries a =file:line=, what it does, what it should do, and a
+*failure direction*:
+
+| direction | meaning |
+|-----------+---------|
+| *OPEN*    | proceeds when it should refuse. The unsafe direction. |
+| *CLOSED*  | refuses when it should proceed, or refuses for the wrong stated reason. Safe, still a defect — an operator sent to the wrong fix loses the same hour. |
+| *NEUTRAL* | reporting only; no verdict moves. |
+
+Evidence is marked =[E]= where it was reproduced on hydra in this session and
+=[H]= where it is read off the source and not executed. Every =[E]= below was
+run on FreeBSD 14.4-RELEASE-p6, =/bin/sh=, in this session.
+
+** Scope
+
+46 tracked shell scripts. =change/= (24), =gates/= (10), =targets/= (4),
+=router/= (1), the extensionless entry points, and the six scripts outside every
+lint glob (see [[#coverage]]). The =gates/=, =targets/= and =router/= half was swept
+in parallel; findings from both halves are merged and ranked together.
+
+* The reproductions
+
+Six mechanisms account for most of the list. Each was reproduced on this host
+before being used to accuse a line of code.
+
+** Exit status destroyed by a pipe
+
+#+begin_example
+$ cat t1.sh
+#!/bin/sh
+set -eu
+die() { echo "DIE FIRED"; exit 1; }
+false | sed 's/^/  /' || die "should have fired"
+echo "REACHED: the die did not fire; pipeline status was $?"
+
+$ /bin/sh t1.sh
+REACHED: the die did not fire; pipeline status was 0
+exit=0
+#+end_example
+
+=[E]= Under =#!/bin/sh= there is no =pipefail=. The =||= binds to the
+*pipeline*, whose status is =sed='s. The =die= is unreachable code that looks
+like a guard.
+
+The same shape with =cut=, which is how every short SHA in this repo is made:
+
+#+begin_example
+$ sh -c 'set -eu; head=$(false | cut -c1-7); echo "head=[$head] survived"'
+head=[] survived
+#+end_example
+
+=[E]= =set -e= does not fire, and the variable the rest of the script is *about*
+is the empty string.
+
+** grep -c prints 0 and exits 1, so =|| echo 0= appends a second zero
+
+#+begin_example
+$ sh -c 'last=$(printf "a\nb\n" | grep -c "zzz" || echo 0); printf "last=[%s]\n" "$last"'
+last=[0
+0]
+#+end_example
+
+=[E]= The variable is a two-line string. Interpolated into a message it is
+cosmetic; fed to =$(( ))= it is fatal (=variable conversion error=), which is
+finding [[#f39]].
+
+** curl already prints 000, so =|| echo 000= makes 000000
+
+#+begin_example
+$ sh -c 'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:1/ 2>/dev/null || echo 000); printf "code=[%s]\n" "$code"'
+code=[000000]
+#+end_example
+
+=[E]= =change/marker.sh:70-73= documents this as found and fixed. The unfixed
+copy is still in =change/soak.sh:34=.
+
+** An empty expected value makes a health probe agree with silence
+
+#+begin_example
+$ sh -c 'got=$(curl -sI --max-time 2 http://127.0.0.1:1/ | tr -d "\r" | awk "..."); want="";
+         if [ "$got" = "$want" ]; then echo "RETURN 0 -- deploy reported success with nothing deployed"; fi'
+RETURN 0 -- deploy reported success with nothing deployed
+#+end_example
+
+=[E]= Unreachable front yields =""=; an unset SHA is also =""=; the convergence
+test is =[ "$got" = "$2" ]=. This is finding [[#f1]], the worst one here.
+
+** =cd X && a; b= runs =b= in the ORIGINAL directory when the cd fails
+
+#+begin_example
+$ sh -c '( cd /nonexistent-dir 2>/dev/null && echo "A ran"; echo "B ran in $PWD" )'
+B ran in /home/jwalsh/ghq/github.com/aygp-dr/slipway
+#+end_example
+
+=[E]= The =&&= binds the =cd= to the command after it and nothing else. The
+=;= starts a new list that runs regardless. This is finding [[#f5]].
+
+** A redirection truncates its target before the command runs
+
+#+begin_example
+$ cat routes.json
+PREVIOUS GOOD ROUTES.JSON CONTENT                 (34 bytes)
+$ sh -c "set -e; jq -s '.' in.json absent.json > routes.json"
+jq: error: Could not open file absent.json: No such file or directory
+$ cat routes.json
+[ { "good": 1 } ]                                 (26 bytes)
+#+end_example
+
+=[E]= The command *failed* and the derived artifact was replaced by a partial
+one that is still valid JSON. =set -e= exits afterwards, so nothing regenerates
+it. This is finding [[#f21]].
+
+** gh's default page size
+
+#+begin_example
+$ gh pr list --help | grep -- '-L, --limit'
+  -L, --limit int         Maximum number of items to fetch (default 30)
+#+end_example
+
+=[E]= Every =gh pr list= in this repo omits =--limit=. The GitHub check-runs and
+deployments endpoints default to 30 per page likewise =[H]= (documented, not
+measured here — no network reads were made).
+
+* Tier 1 — production-unsafe, failing OPEN
+:PROPERTIES:
+:CUSTOM_ID: tier1
+:END:
+
+** 1. A deploy that placed nothing returns success
+:PROPERTIES:
+:CUSTOM_ID: f1
+:END:
+
+=change/driver.sh:41-42=, reached from =change/driver.sh:53=.
+
+#+begin_src sh :eval no
+  got=$(curl -sI --max-time 2 "http://127.0.0.1:$port/" | tr -d '\r' | awk '...x-build-sha...')
+  [ "$got" = "$2" ] && return 0
+#+end_src
+
+*What it does.* =deploy()= polls the front for 60 seconds and returns 0 when the
+served SHA equals the wanted SHA. Both sides can be the empty string at once. An
+unreachable front produces =got=""=; and =$2= is =""= whenever =sha= is empty,
+which line 53 arranges:
+
+#+begin_src sh :eval no
+  sha=$(gh pr view "$PR" --repo "$R" --json headRefOid -q '.headRefOid' | cut -c1-7)
+#+end_src
+
+The pipeline's status is =cut='s, so a forge failure is invisible and =sha= is
+=""=. =git checkout --detach ""= then fails, but =deploy()= is called as
+=deploy staging "$sha" || fail ...=, which *suspends* =set -e= for the whole
+function, so execution continues to the poll — which passes on the first
+iteration. The caller then writes =staging:deployed=.
+
+*What it should do.* Refuse an empty SHA at line 53 (assign, then =cut=; assert
+=[ -n "$sha" ]=), and assert =[ -n "$got" ]= before comparing.
+
+*Direction.* OPEN. Nothing is deployed, the estate is unreachable, and the
+change is labelled deployed and proceeds to =gates/health.sh=.
+
+*Evidence.* =[E]= reproduced above.
+
+** 2. Guard 4 reports green when it can see nothing
+:PROPERTIES:
+:CUSTOM_ID: f2
+:END:
+
+=change/guard4.sh:141=
+
+#+begin_src sh :eval no
+  bad=$(gh api "repos/$repo/commits/$head/check-runs" \
+    --jq '[.check_runs[]|select(.name|test("^(gate-selftest|lint|test|e2e)$"))]|group_by(.name)|map(max_by(.started_at))|map(select(.conclusion!="success"))|length')
+  ...
+  elif [ "$bad" -eq 0 ]; then printf '  ok    %-16s %s\n' "check runs" "green on $short"
+#+end_src
+
+*What it does.* Fetches one page, filters to four names, counts the ones that are
+not =success=, and calls zero "green". Zero is also what an empty page yields,
+what a truncated page yields, and what a page containing none of the four names
+yields. The guard cannot distinguish /all four passed/ from /I saw none of them/.
+
+*What it should do.* Assert *presence*: all four names must appear exactly once
+after the =max_by= collapse, and a missing name must return 4 (=I could not
+check=, which blocks — =docs/exit-codes.org=).
+
+*Direction.* OPEN.
+
+*Evidence.* =[E]= for the page size; =[H]= that this SHA has ever exceeded it —
+no network read was made. The sibling at =change/activate.sh:200= has the same
+unpaginated read and fails *CLOSED*, because it additionally requires
+=SELF -ge 1= — a positive assertion, which is exactly the repair this line needs.
+
+** 3. Three identical API calls, and only the dangerous one defaults to zero
+:PROPERTIES:
+:CUSTOM_ID: f3
+:END:
+
+=change/guard4.sh:134-139=
+
+#+begin_src sh :eval no
+  lok=$(gh api ".../status"  --jq '[...select(.state=="success")]|length' 2>/dev/null || echo 0)
+  lbad=$(gh api ".../status" --jq '[...select(.state!="success")]|length' 2>/dev/null || echo 0)
+  lself=$(gh api ".../status" --jq '[...gate-selftest...]|length'          2>/dev/null || echo 0)
+  if [ "$lbad" -eq 0 ] && [ "$lok" -ge 3 ] && [ "$lself" -ge 1 ]; then ... ok
+#+end_src
+
+*What it does.* Three round trips for one fact. =lok= and =lself= defaulting to 0
+on error fails closed — the test needs them high. =lbad= defaulting to 0 fails
+*open* — the test needs it low. So a transient error on the *second* call alone,
+with the first and third succeeding, produces =lbad=0, lok>=3, lself>=1= and
+prints =ok gates=. The same three defaults, one of which is the wrong way round.
+
+*What it should do.* One call, one parse, and no default at all: a read that
+failed must return 4.
+
+*Direction.* OPEN. Same construct at =change/activate.sh:181-185=, where the
+=LOK -ge 3= requirement saves it.
+
+** 4. "I could not ask" is rounded up to "approved"
+:PROPERTIES:
+:CUSTOM_ID: f4
+:END:
+
+=change/guard4.sh:112-123=
+
+#+begin_src sh :eval no
+  if reviews=$(gh api "repos/$repo/pulls/$pr/reviews" --jq '.' 2>/dev/null); then
+    ...
+  else
+    printf '  ok    %-16s %s\n' "review" "APPROVED (head unconfirmed: reviews unreadable)"
+  fi
+#+end_src
+
+*What it does.* When the reviews endpoint cannot be read — rate limit, auth,
+404, offline fixture — the guard prints =ok= and the approval stands unpinned to
+any build. The comment above it argues this correctly separates /could not ask/
+from /the head moved/, and it does; but it then resolves the third value into
+*yes*.
+
+=spec.org= defect class 1 states the rule this violates: "the third must refuse
+*differently* from the second". Refusing differently is not the same as
+accepting.
+
+*What it should do.* Exit 4. An approval whose build cannot be confirmed has not
+been established.
+
+*Direction.* OPEN, and deliberately so, which is why it is worth listing: the
+comment records the decision, so this is a policy to revisit rather than a
+mistake to fix.
+
+** 5. A failed =cd= deploys the wrong tree
+:PROPERTIES:
+:CUSTOM_ID: f5
+:END:
+
+=change/driver.sh:37=
+
+#+begin_src sh :eval no
+  ( cd "worktrees/$1" && gmake -s stop >/dev/null 2>&1; nohup gmake dev >"/tmp/claude-501/driver-$1.log" 2>&1 & )
+#+end_src
+
+*What it does.* The =&&= binds =cd= to =gmake stop= only. The =;= begins a new
+list, so when the worktree is absent or unreadable, =gmake dev= runs *in the
+repository root* — starting this checkout's apps on this checkout's port block
+under the name of a deployment.
+
+*What it should do.* =( cd "worktrees/$1" || exit 1; ... )=, or =&&= throughout.
+
+*Direction.* OPEN.
+
+*Evidence.* =[E]= reproduced above: =B ran in /home/.../slipway=.
+
+*Compounding, same line.* =/tmp/claude-501/= does not exist on hydra
+(=[E]=: =ls: /tmp/claude-501: No such file or directory=; this host is uid
+1001). The redirect therefore fails inside a backgrounded subshell, where the
+failure is unobservable; the poll then stalls 60 seconds and reports "staging
+did not come up serving $sha", which names the wrong cause. It is also a
+hardcoded foreign UID and a =CLAUDE.md= violation (no =/tmp= for artifacts).
+
+** 6. The branch-update wait exits early when the forge cannot be read
+:PROPERTIES:
+:CUSTOM_ID: f6
+:END:
+
+=change/driver.sh:99=
+
+#+begin_src sh :eval no
+  until [ "$(gh pr view "$PR" --repo "$R" --json headRefOid -q .headRefOid | cut -c1-7)" != "$before" ]; do
+#+end_src
+
+*What it does.* Waits for the head to move after =gh pr update-branch=. A failed
+=gh= yields =""=, which is =!= =$before=, so the loop exits immediately having
+established nothing. Line 104 then re-reads =sha= the same way and can also get
+=""=, which feeds [[#f1]] directly.
+
+*What it should do.* Read into a variable with the status checked, and treat an
+unreadable head as 4.
+
+*Direction.* OPEN.
+
+** 7. A failed issue read destroys the estate issue body
+:PROPERTIES:
+:CUSTOM_ID: f7
+:END:
+
+=change/lock.sh:31=
+
+#+begin_src sh :eval no
+  write() {
+    _new=$(body | awk -v o="$OPEN" -v c="$CLOSE" 'index($0,o){skip=1} !skip{print} index($0,c){skip=0}')
+    printf '%s\n%s\n%s\n%s\n' "$_new" "$OPEN" "$1" "$CLOSE" | gh issue edit "$ISSUE" --repo "$R" --body-file -
+  }
+#+end_src
+
+*What it does.* =body()= is =gh issue view ... -q .body=. In a pipeline its
+status is =awk='s, which is 0 on empty input. So a transient read failure makes
+=_new= empty, and the =printf= then *replaces the entire issue body* with four
+lines of lock block. The lock lives in the estate issue, which
+=gates/preflight.sh= reads for the estate.
+
+*What it should do.* Capture =body()= into a variable with its status checked,
+refuse to write when the read failed, and require the two markers to have been
+present in what was read.
+
+*Direction.* OPEN and destructive: the loss is silent and the next reader sees a
+well-formed lock in a document that no longer contains anything else.
+
+** 8. A lock that cannot be read is reported free
+:PROPERTIES:
+:CUSTOM_ID: f8
+:END:
+
+=change/lock.sh:29=, consumed at =:41= and =:45=
+
+#+begin_src sh :eval no
+  lock()  { body | awk -v o="$OPEN" -v c="$CLOSE" 'index($0,o){f=1;next} index($0,c){f=0} f'; }
+  ...
+  l=$(lock); held=$(echo "$l" | awk '$1=="pr:"{print $2}')
+  if [ -n "$held" ] && [ "$held" != "$pr" ]; then ... exit 2; fi
+#+end_src
+
+*What it does.* Same pipeline, same swallowed status. An unreadable issue yields
+an empty lock, =held= is empty, the refusal is skipped, and =acquire= takes a
+berth somebody else is holding. =status= prints =lock: free= for the same reason.
+
+*Direction.* OPEN.
+
+** 9. An unparseable timestamp makes every lock stale
+:PROPERTIES:
+:CUSTOM_ID: f9
+:END:
+
+=change/lock.sh:35=, consumed at =:48=
+
+#+begin_src sh :eval no
+  age_min() {
+    _t=$(date -u -j -f %Y-%m-%dT%H:%M:%SZ "$1" +%s 2>/dev/null || date -u -d "$1" +%s 2>/dev/null || echo 0)
+    echo $(( ($(date -u +%s) - _t) / 60 ))
+  }
+  ...
+  if [ "$(age_min "$since")" -lt "$STALE_MIN" ]; then ... refuse
+#+end_src
+
+*What it does.* =|| echo 0= turns an unparseable or *empty* =started_at= into
+epoch zero, so the computed age is roughly 29 million minutes — always greater
+than =STALE_MIN=60=, always "stale", always cleared. A lock body missing or
+mangling its timestamp is therefore stolen from a live holder. And =since= is
+empty exactly when the lock body is partially written, which is the state [[#f7]]
+produces.
+
+*What it should do.* An unparseable timestamp is not an age. Return non-zero and
+refuse; a lock whose age cannot be established is not a lock that can be broken.
+
+*Direction.* OPEN.
+
+** 10. The lock has no compare-and-swap, in a repo that wrote one
+:PROPERTIES:
+:CUSTOM_ID: f10
+:END:
+
+=change/lock.sh:45= (read) and =change/lock.sh:55= (write)
+
+*What it does.* =acquire= reads the lock, decides, and writes — three network
+round trips apart, with nothing carried between them. Two concurrent acquires
+both observe a free lock, both write, last write wins, and both print
+=lock: acquired by #N= and exit 0. =status= then names one of them. The header
+at =lock.sh:15-21= states this plainly and argues it is acceptable because the
+berth is the =deploy:staging= label; but [[#f18]] shows that reader is also unsound.
+
+=change/state.sh:39-60= implements exactly the CAS this needs, against a git
+ref, for exactly this reason ("two agents racing for the path to production both
+succeed and one hold silently vanishes"). Two lock implementations in one repo,
+one of them correct, and the workflows call the other one.
+
+*What it should do.* Use =change/state.sh=, or port its =git update-ref <new>
+<expected>= guard.
+
+*Direction.* OPEN.
+
+** 11. A failed status read sends the production deploy to the live colour
+:PROPERTIES:
+:CUSTOM_ID: f11
+:END:
+
+=change/activate.sh:343-344=
+
+#+begin_src sh :eval no
+  CUR=$(./targets/bastille/front/switch.sh status | grep -o 'production = [a-z]*' | awk '{print $3}')
+  IDLE=$([ "$CUR" = blue ] && echo green || echo blue)
+#+end_src
+
+*What it does.* The pipeline's status is =awk='s. Any failure of =switch.sh
+status= — and =switch.sh status= is itself unsound, see [[#f25]] — yields
+=CUR=""=, and =""= is not =blue=, so =IDLE= is =blue= unconditionally. If blue
+is live, the "deploy to the IDLE colour" step overwrites the colour currently
+serving traffic, and the cutover then switches to the colour it just destroyed.
+
+*What it should do.* Capture, test for one of exactly =blue= or =green=, and
+refuse otherwise. A colour that cannot be named is not a colour that can be
+deployed over.
+
+*Direction.* OPEN. =activate.sh= is currently refused at line 59 on this host,
+so this is latent — but it is latent in the file the port correction was
+supposed to have made safe.
+
+** 12. A git error lets a diverged branch merge
+:PROPERTIES:
+:CUSTOM_ID: f12
+:END:
+
+=change/release.sh:17=, against =change/divergence.sh:31=
+
+#+begin_src sh :eval no
+  class=$(./change/divergence.sh "$base" origin/main || true)
+  case "$class" in
+    artifact|hotfix) ... exit 8 ;;
+  esac
+#+end_src
+
+*What it does.* =divergence.sh= uses exit *1/2/3* as classifications
+(inert/pipeline/artifact/hotfix), so every caller must write =|| something=.
+Here =|| true= is correct for a classification — but not for an error. If
+=git diff --name-only "$base".."$head"= fails (an unfetched base, a GC'd
+object), =divergence.sh= dies at line 31 before printing anything, =class= is
+=""=, the =case= matches nothing, and =release.sh= proceeds to =gh pr merge= a
+branch it has just been told is =BEHIND= or =DIRTY=.
+
+#+begin_example
+$ sh -c 'class=$(./change/divergence.sh deadbeefdeadbeef origin/main 2>/dev/null || true);
+         case "$class" in artifact|hotfix) echo YES ;; *) echo "NO -- falls through to MERGE" ;; esac'
+class=[]  -> NO -- falls through to MERGE
+#+end_example
+
+*What it should do.* Separate "classified as X" from "could not classify".
+Guard 4b must refuse on the latter, not merge.
+
+*Direction.* OPEN.
+
+*Evidence.* =[E]= reproduced above.
+
+** 13. Every abort fails to record its own outcome
+:PROPERTIES:
+:CUSTOM_ID: f13
+:END:
+
+=change/abort.sh:125-126=
+
+#+begin_src sh :eval no
+  case "$CODE" in
+    backed-out) gh pr edit "$PR" --repo "$R" --add-label change:backed-out >/dev/null 2>&1 || true ;;
+    *)          gh pr edit "$PR" --repo "$R" --add-label change:failed     >/dev/null 2>&1 || true ;;
+  esac
+#+end_src
+
+*What it does.* Writes the ITIL closure code and swallows the result. Neither
+label existed on the forge until today, so *every* abort silently failed to
+record its outcome, and =abort.sh= printed its closing summary regardless
+(=:139=: "the change is CLOSED $CODE").
+
+*What it should do.* This is the record. Its failure is the step failing.
+Re-read the labels and exit non-zero if the code is not there.
+
+*Direction.* OPEN.
+
+*Contrast, three lines away.* =abort.sh:81-83= gets this right —
+=gh api ... && echo "  ok   deployment $id -> failure"= prints only on success.
+The correct pattern and the incorrect one are in the same file.
+
+** 14. The label-clearing loop reinstates the defect its own comment describes
+:PROPERTIES:
+:CUSTOM_ID: f14
+:END:
+
+=change/abort.sh:112=
+
+#+begin_src sh :eval no
+  for l in ... deploy:staging deploy:production blocked:queue blocked:lock \
+           change:complete change:scheduled; do
+    gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
+  done
+#+end_src
+
+*What it does.* The comment at =:97-104= records that =deploy:production= was
+missing from this list, that =deploy-production.yml= fires on that label, and
+that "an abandoned change stayed armed to re-enter production on the next label
+event". The label was added to the list. The =|| true= means a failed removal
+produces the identical state, and nothing says so.
+
+*What it should do.* Count the removals, re-read the labels, and fail if any of
+the arming labels survive.
+
+*Direction.* OPEN.
+
+** 15. "ok berth released" when the lock was never released
+:PROPERTIES:
+:CUSTOM_ID: f15
+:END:
+
+=change/settle.sh:294=, and the absence of any =lock.sh= call in the file.
+
+#+begin_example
+$ grep -n 'lock.sh' change/settle.sh
+  (no output)
+$ grep -n 'berth released' change/settle.sh
+294:ok "berth released; validation labels cleared, change:complete included; change:end written"
+#+end_example
+
+*What it does.* =settle.sh= removes the =deploy:staging= label (line 281, inside
+the =|| true= loop at 287) and announces "berth released". It never calls
+=./change/lock.sh release=. So =change/lock.sh status= still names the PR after
+settlement says the berth is free — the 6-of-8 reproduction. =change/driver.sh:162=
+releases the lock *after* calling settle, so the driver path is covered and the
+hand-driven path is not; and driver's call is itself =|| true=.
+
+*What it should do.* Release the lock here, check the result, and derive the
+message from a re-read rather than from having reached this line.
+
+*Direction.* OPEN.
+
+*Same shape.* =change/abort.sh:133,136= — =./change/lock.sh release >/dev/null
+2>&1 || true= followed unconditionally by =echo "  ok   berth released"=. The
+=2>&1= additionally hides =lock.sh:70='s "not released" message, which is the
+one line that would have said what happened.
+
+** 16. =lock.sh acquire= announces a claim it has not confirmed
+:PROPERTIES:
+:CUSTOM_ID: f16
+:END:
+
+=change/lock.sh:60=
+
+#+begin_src sh :eval no
+  write "pr: $pr
+  target: $target
+  ..."
+  gh pr edit "$pr" --repo "$R" --remove-label blocked:lock >/dev/null 2>&1 || true
+  echo "  lock: acquired by #$pr for $target"
+#+end_src
+
+*What it does.* Prints the acquisition from having executed =write=, not from
+reading the lock back. With [[#f10]]'s last-write-wins this is how =acquire= returns
+=lock: acquired by #N= exit 0 while =status= names a different PR.
+
+*What it should do.* Re-read the lock and require it to name this PR and this
+run id. =change/review.sh:90-92= does exactly this for an approval and is the
+template.
+
+*Direction.* OPEN.
+
+** 17. Aborted deployments keep reading as successes in the forge
+:PROPERTIES:
+:CUSTOM_ID: f17
+:END:
+
+=change/abort.sh:79=
+
+#+begin_src sh :eval no
+  for id in $(gh api "repos/$R/deployments" --jq "[.[]|select(.sha==\"$HEAD\")|.id]|.[]" 2>/dev/null || true); do
+#+end_src
+
+*What it does.* Unpaginated. The endpoint returns the 30 most recent deployments
+for the whole repository, and the filter is applied *after*. On a repo with this
+deployment volume, a change's records fall off the first page within the hour,
+so the withdrawal loop runs zero times and the forge's deployment history keeps
+reporting success for a change that was aborted. The =|| true= then makes the
+zero-iteration case indistinguishable from the nothing-to-do case.
+
+*What it should do.* =--paginate=, or query =/deployments?sha=<sha>=, and assert
+that the number withdrawn matches the number found.
+
+*Direction.* OPEN.
+
+** 18. Nine berth and queue reads that see only the first 30 open PRs
+:PROPERTIES:
+:CUSTOM_ID: f18
+:END:
+
+=[E]= =gh pr list= defaults to =--limit 30=. None of these pass it:
+
+| file:line | what it decides | direction on truncation |
+|-----------+-----------------+-------------------------|
+| =change/activate.sh:272= | is the staging berth held | *OPEN* — holder invisible, berth claimed twice |
+| =change/queue.sh:47=     | guard 1, same question   | *OPEN* |
+| =change/driver.sh:79=    | same, before touching anything | *OPEN* |
+| =change/driver.sh:123=   | same, again              | *OPEN* |
+| =change/scheduler.sh:33= | who is holding it        | *NEUTRAL* (message only) |
+| =gates/preflight.sh:136= | guard 1                  | *OPEN* |
+| =gates/preflight.sh:234= | is a freeze declared     | *OPEN* — "the estate is open" |
+| =gates/preflight.sh:274= | is an emergency in flight | *OPEN* |
+| =change/scheduler.sh:24= | which changes said start | *CLOSED* and silent — never seen |
+| =change/watch.sh:29=     | which change asked for release | *CLOSED* and silent |
+
+The berth is a *singleton*. Every OPEN row above is a second change on the path
+to production, which is the one thing the whole label scheme exists to prevent.
+
+*What they should do.* =--limit 1000=, and — better — assert the answer:
+=gh pr list --label deploy:staging --json number | jq 'length <= 1'=.
+
+** 19. A holder with no deadline is treated as expired
+:PROPERTIES:
+:CUSTOM_ID: f19
+:END:
+
+=change/state.sh:90-92=
+
+#+begin_src sh :eval no
+  _later=$(printf '%s\n%s\n' "$until" "$(now)" | sort | tail -1)
+  if [ -n "$holder" ] && [ "$holder" != "$pr" ] && [ "$_later" = "$until" ] \
+     && [ "$until" != "$(now)" ]; then
+    echo "held by PR #$holder until $until" >&2; exit 5
+  fi
+#+end_src
+
+*What it does.* When =until= is empty, =sort= puts the blank line first and
+=tail -1= returns =now=, so =_later != until= and the refusal is skipped — the
+path to production is taken from a holder who exists but whose deadline could
+not be read. The SC3012 fix that replaced =\>= with =sort= is correct and did
+not add the missing-field case.
+
+Second, smaller: =now= is called twice (lines 90 and 92) and a second can elapse
+between them.
+
+*What it should do.* A holder with no parseable =until= is held, not expired.
+
+*Direction.* OPEN.
+
+** 20. =gmake dev= reports the estate up without probing a port
+:PROPERTIES:
+:CUSTOM_ID: f20
+:END:
+
+=change/ports.sh:86-93=
+
+#+begin_src sh :eval no
+  BUILD_SHA="$SHA" BLOCK="$BLOCK" PORT="$p" node "$d/src/server.js" > "$WT/.run/$a.log" 2>&1 &
+  echo $! > "$WT/.run/$a.pid"
+  ...
+  echo "block $BLOCK up: router :$BASE_PORT (sha $SHA)"
+#+end_src
+
+*What it does.* Backgrounds four apps and a router, records the PIDs, and
+declares the block up. A node process that exits immediately — port already
+bound, syntax error, missing module — leaves a =.pid= file naming a dead process
+and the same success line. This is the implementation of =gmake dev=, the first
+command in the quickstart.
+
+=stop= (=:96=) is the same shape in reverse: =kill "$(cat "$f")" 2>/dev/null ||
+true= then =echo "stopped"=, with no confirmation that anything died and a
+recycled PID as a live hazard.
+
+*What it should do.* After the spawn, poll each port for a 200 carrying the
+expected =x-build-sha= before printing, exactly as
+=targets/node/switch.sh:47-49= does for the cutover.
+
+*Direction.* OPEN / not-a-measurement.
+
+** 21. A failed generator silently truncates the source of every derived artifact
+:PROPERTIES:
+:CUSTOM_ID: f21
+:END:
+
+=router/generate.sh:8=
+
+#+begin_src sh :eval no
+  jq -s '.' apps/*/routes.json external/*/routes.json > router/routes.json
+#+end_src
+
+*What it does.* The redirect truncates before =jq= runs. A missing or malformed
+input leaves a *partial and valid* =routes.json=; an unmatched glob leaves =[]=.
+=CLAUDE.md= names this file the source of the router config, the labeller config
+and the journey list, and =gates/health.sh:38= and =gates/e2e.sh:46= iterate it
+— =jq -r '.[].app'= on =[]= exits 0 printing nothing, so both loops run zero
+times in silence.
+
+=targets/node/deploy.sh:134= is the delivery mechanism:
+=( cd "$wt" && sh router/generate.sh >/dev/null 2>&1 || true )= discards stdout,
+stderr and the exit code together.
+
+*What it should do.* =jq -s '.' ... > "$t" && mv "$t" router/routes.json=, plus
+an assertion that the result is a non-empty array of the expected length.
+
+*Direction.* OPEN and destructive.
+
+*Evidence.* =[E]= reproduced above.
+
+*And it is not linted.* =router/generate.sh= is outside every glob in
+=gates/shellcheck.sh:33-34=. See [[#coverage]].
+
+** 22. The convergence gate passes having enumerated zero apps
+:PROPERTIES:
+:CUSTOM_ID: f22
+:END:
+
+=gates/health.sh:38=
+
+#+begin_src sh :eval no
+  for app in $(jq -r '.[].app' router/routes.json); do
+#+end_src
+
+*What it does.* =health.sh= never =cd=s to the repo root — unlike every other
+gate — yet reads =router/routes.json= by relative path. A failed command
+substitution in a =for= list does not trip =set -e=; the loop simply runs zero
+times, =rc= stays 0, and lines 94-101 record =verdict=pass= and add
+=production:healthy=. That label is, by this file's own header, "the ONLY
+evidence the forge will ever have that production converged".
+
+#+begin_example
+$ sh /home/.../gates/health.sh "http://127.0.0.1:1" deadbee 2
+jq: error: Could not open file router/routes.json: No such file or directory
+exit=0        <-- 0 = healthy, with ZERO apps checked
+#+end_example
+
+*What it should do.* Resolve the path from =$0=, and assert
+=apps_checked -gt 0= and equal to the declared app count before any verdict.
+
+*Direction.* OPEN. Combined with [[#f21]] this is a complete path from a failed
+=jq= to a =production:healthy= label.
+
+*Evidence.* =[E]=, reproduced by the parallel sweep; no PR was written (=--pr=
+not passed).
+
+** 23. Guard 2 in preflight is satisfied by gates that are ABSENT
+:PROPERTIES:
+:CUSTOM_ID: f23
+:END:
+
+=gates/preflight.sh:73-74=, consumed at =:127=
+
+Same shape as [[#f2]]: filter to four names, count non-successes, pass on zero. A
+SHA carrying only a green =gate-selftest= and no =lint=, =test= or =e2e= gives
+=bad=0=, =self=1=, and the guard prints "lint and the tests pass".
+
+*Direction.* OPEN.
+
+*Paired with* =gates/report.sh:98=:
+
+#+begin_src sh :eval no
+  [ -n "${ROUTER_URL:-}" ] && run e2e sh -c "ROUTER_URL=$ROUTER_URL ./gates/e2e.sh" || true
+#+end_src
+
+With =ROUTER_URL= unset the e2e gate is skipped, no status is posted, =rc= is
+untouched, and line 101 prints "all reported green". =preflight.sh:114= then
+accepts *any three* successful =local/= contexts — and =report.sh= posts exactly
+three when e2e is skipped. The two defects compose into a clean authorization
+with the e2e gate never having run. *OPEN.*
+
+** 24. Five unpaginated check-run reads in the guard that must see the LATEST run
+:PROPERTIES:
+:CUSTOM_ID: f24
+:END:
+
+=gates/preflight.sh:67,73,75,107,109=
+
+=max_by(.started_at)= computes the latest within the *visible page*, not the
+latest overall. This file's own comment (=:82-86=) records that a SHA had
+accumulated a mixture of stale and fresh runs. A page of stale successes passes
+a head whose real latest run failed (*OPEN*); a page of stale failures refuses a
+green head (*CLOSED*). Non-deterministically both.
+
+** 25. The bastille cutover is three unfailable steps and a success message
+:PROPERTIES:
+:CUSTOM_ID: f25
+:END:
+
+=targets/bastille/front/switch.sh:17-21=
+
+#+begin_src sh :eval no
+  pkill -f 'nginx.*front/nginx.conf' 2>/dev/null || true
+  sleep 1
+  mkdir -p tmp && nginx -c "$PWD/nginx.conf" -p "$PWD" >/dev/null 2>&1 &
+  sleep 1
+  echo "production -> $1 ($ip)"
+#+end_src
+
+=|| true= on the kill; =&= plus full output suppression on the nginx start, so
+its status is unobtainable; then an unconditional success line. Nothing asks the
+front what colour it now serves. The file's own header says "Ask the RUNNING
+router; do not read the config file and call it fact" — of the =status= branch
+only. The branch that changes production asks nothing. *OPEN.*
+
+=:31= compounds it: =status= probes =http://127.0.0.1:9200/version.json=, which
+is *staging*, and reports it as production's live colour. =:34-35= then maps
+replica ordinals 1 and 2 onto blue and green, but =targets/bastille/deploy.sh:13=
+defines those as two replicas of *one* estate written in the same loop with the
+same SHA. The colour reported is decided by which replica answered. *OPEN.*
+
+This is the =status= that feeds [[#f11]].
+
+** 26. The node cutover guard cannot see a broken replica
+:PROPERTIES:
+:CUSTOM_ID: f26
+:END:
+
+=targets/node/switch.sh:43-44= and =:47-48=
+
+=curl= without =-f=: a 502 is exit 0, so "is the idle colour answering" is
+satisfied by a colour whose four apps are all dead. Worse, the post-cutover
+confirmation reads =x-colour= — and =targets/node/front.js:69-70= sets
+=x-colour= on its *502 "live colour is down"* response. So =got = want= holds
+while production returns 502 to every visitor, and the script prints
+=production is now blue serving unknown=; the word "unknown" is the only signal.
+=_nsha= is read at =:28= and never asserted against anything. *OPEN.*
+
+=:45-48=: a failed confirmation exits 6 *without restoring* =live=, which
+=front.js= re-reads per request — so the cutover has happened and the operator
+is told it has not. *OPEN.*
+
+** 27. production-first reports "this change deploys nothing" when it cannot read labels
+:PROPERTIES:
+:CUSTOM_ID: f27
+:END:
+
+=gates/production-first.sh:39= with =:65-68=
+
+#+begin_src sh :eval no
+  groups=$(./change/groups.sh "$pr" 2>/dev/null || true)
+  ...
+  if [ -z "$groups" ]; then
+    echo "  ok    no app:* labels -- nothing deploys, so nothing to wait for"; exit 0
+  fi
+#+end_src
+
+=change/groups.sh:11= is a bare =gh pr view= under =set -eu=; it exits non-zero
+on auth failure, rate limit or network loss, and the =|| true= collapses that
+into the same empty string a genuinely label-free PR produces — and empty means
+*exit 0, merge allowed*. This is the guard whose purpose is stopping main from
+running ahead of production, and its unknown-state answer is yes. *OPEN.*
+
+** 28. The link check reports green when wget reached nothing
+:PROPERTIES:
+:CUSTOM_ID: f28
+:END:
+
+=gates/smoke.sh:121-137=
+
+#+begin_example
+$ wget --spider --recursive ... http://127.0.0.1:1/ 2>&1 > /dev/null | tee sp.txt >/dev/null || true
+$ cat sp.txt
+failed: Connection refused.
+Found no broken links.
+$ grep -cE '^ERROR [0-9]+|Found [0-9]+ broken link' sp.txt
+0   (rc=1)
+#+end_example
+
+=[E]= "Found no broken links." contains =no=, not a digit, so neither pattern
+matches, =broken= is empty, and the gate passes. =|| true= on line 124 discards
+wget's exit code (4 = network failure, 8 = server error), the only other signal.
+Nothing asserts =urls -gt 0=. *OPEN.*
+
+** 29. The fallthrough and one-estate checks pass on emptiness
+:PROPERTIES:
+:CUSTOM_ID: f29
+:END:
+
+=gates/e2e.sh:82-87= — if =routes.json= declares no =fallthrough= (or was
+truncated by [[#f21]]), =fbapp=""=; if the router answers its own 404 without
+=x-routed-to=, =who=""=; ="" = ""= passes and prints =404 from  (correct)= —
+the exact state the comment says must be caught. *OPEN.*
+
+=gates/e2e.sh:156-161= — =buildsha()= emits *nothing* when curl fails, so
+=sort -u | grep -c .= counts distinct *non-empty* SHAs. Four apps of which three
+are down and one serves =abc1234= gives 1, and the gate says "all apps on one
+build". Convergence and silence are indistinguishable. *OPEN.*
+
+** 30. uat.sh records the wrong environment and swallows the record
+:PROPERTIES:
+:CUSTOM_ID: f30
+:END:
+
+=gates/uat.sh:43= — =ENV_="${ENV_:-staging}"= is hardcoded. =e2e.sh:171-182= and
+=smoke.sh:152-162= both carry a comment saying this exact line was a defect
+("Hardcoding 'staging' made a run against the PRODUCTION front record
+staging:e2e") and both were fixed to derive it from the port. =uat.sh= has the
+unfixed version. *OPEN.*
+
+=gates/uat.sh:46-51= — four consecutive swallowed writes, including
+=evidence.sh record ... || true=. Every sibling gate treats that as fatal
+(=e2e.sh:195=, =smoke.sh:170=, =health.sh:95=) with a comment saying "a
+measurement nobody could record is not a measurement". The dangerous direction
+is the failure path: when the verdict is =fail= and the record write fails, the
+*previous* run's =pass= record remains the latest (=evidence.sh:88-91=, "LAST
+WINS") and guard 4 reads a stale authorization. With =:51='s swallowed label
+withdrawal, the two together are a complete authorization for a build that was
+just refused. *OPEN.*
+
+** 31. A file the checker cannot parse is reported clean
+:PROPERTIES:
+:CUSTOM_ID: f31
+:END:
+
+=gates/shellcheck.sh:50=
+
+#+begin_src sh :eval no
+  out=$(shellcheck -s sh -S warning -e SC2178,SC2128 -f gcc "$f" 2>/dev/null || true)
+  if [ -n "$out" ]; then ... rc=1; fi
+#+end_src
+
+The verdict rests entirely on stdout being non-empty, with stderr discarded and
+the exit code discarded. shellcheck writes parse and invocation errors to
+*stderr* with empty stdout, so exit 2 with nothing on stdout is
+indistinguishable from exit 0 with nothing on stdout. =[E]=:
+
+#+begin_example
+$ out=$(./fake-sc.sh 2>/dev/null || true); echo "len=${#out} -> treated as CLEAN"
+len=0 -> treated as CLEAN
+#+end_example
+
+This is the one construct in the repo that can manufacture the zero-findings
+result the gate's header calls non-negotiable. *OPEN.*
+
+* Tier 2 — the verdict survives, the record does not
+
+** 32. Two =| sed= on a window close, one of them after the trap is gone
+
+=change/activate.sh:331= and =change/activate.sh:376=
+
+#+begin_src sh :eval no
+  RESULT=passed
+  trap - EXIT
+  ./change/schedule.sh close "$EVENT" passed | sed 's/^/   /'
+#+end_src
+
+The brief names lines 258, 341 and 351; those line numbers now hold the
+*comments* describing the repair, and =indent()= (=:86-90=) correctly preserves
+the status for all eight gate invocations. The two survivors are the window
+closes. At =:376= the EXIT trap — the only other thing that would have closed
+the window — was removed one line earlier, so a failed close leaves the window
+open forever, which =schedule.sh:230= then treats as a clash blocking the next
+booking on staging. *OPEN* (a berth leak). =:331= is the same on the hold path.
+
+*Note on =indent()=.* It is correct *only* because all eight call sites use
+=|| die=, which suspends =set -e= inside the function. =[E]=:
+
+#+begin_example
+with ||  : OUT:[] rc=1   -- helper ran, printed output, returned status
+without ||: exit=1 and NOTHING was printed
+#+end_example
+
+A future =indent ./gates/x.sh= without =|| die= exits at the assignment and the
+gate's output is never printed — the diagnostics are lost at exactly the moment
+they are wanted.
+
+** 33. =gh pr view ... | cut= — the SHA the run is about
+
+=[E]= =head=$(false | cut -c1-7)= survives =set -e= with =head=""=. Live
+instances where =gh= is on the left of the pipe:
+
+| file:line | consequence |
+|-----------+-------------|
+| =change/activate.sh:155= | =SHA=""=; every later health check and deploy names the empty build |
+| =change/driver.sh:53=    | feeds [[#f1]] directly |
+| =change/driver.sh:99,104= | feeds [[#f6]] and [[#f1]] |
+| =change/schedule.sh:210= | the window is booked with =sha:""= |
+| =change/observe.sh:25=   | =head=""= → refuses with "you accepted a different build" |
+| =gates/production-first.sh:80= | refuses with the #16 "different build" text for an unreadable forge |
+
+The last two are *CLOSED* and still defects: the operator is sent to rebase a
+branch that is fine.
+
+*Fix, uniformly.* Assign, check, then format. =change/settle.sh:39-40= already
+does it correctly (=head=$(gh ...)= then =short=$(echo "$head" | cut ...)=) —
+the =echo | cut= form is safe because the left side cannot fail.
+
+** 34. The build and the colour are read in two different requests
+
+=change/settle.sh:45-46=
+
+#+begin_src sh :eval no
+  served=$(curl -sI --max-time 5 "$FRONT/" | tr -d '\r' | awk '...x-build-sha...')
+  colour=$(curl -sI --max-time 5 "$FRONT/" | tr -d '\r' | awk '...x-colour...')
+#+end_src
+
+Two probes, so a cutover between them pairs a build observed on one colour with
+a colour label observed on the other, and the PIR records the pair as one
+observation. =gates/health.sh='s own header (=:6-9=) states this rule — "one for
+the status code, one for the header — so during a rolling deploy the first could
+hit an old replica and the second a new one". Four more pairs in
+=targets/node/switch.sh:12-13,26-27,47,49=. *OPEN* (a verdict about a build that
+was never in that state).
+
+*Fix.* One request: =curl -w '%{http_code} %header{x-build-sha} %header{x-colour}'=.
+
+** 35. =grep -c ... || echo 0=, cosmetic here and fatal there
+:PROPERTIES:
+:CUSTOM_ID: f39
+:END:
+
+=change/settle.sh:116= — =last=$(./change/schedule.sh list | grep -c "#$pr " || echo 0)=
+yields the two-line string =0\n0= =[E]=, which the PIR then renders as
+"0\n0 window(s) were booked for this change". *NEUTRAL.*
+
+=gates/smoke.sh:91= — the same construct feeding =pass=$((pass + 1))= at =:108=:
+
+#+begin_example
+$ pass=$(grep -c '^  [^F]' j.txt || echo 0); pass=$((pass + 1))
+arithmetic expression: variable conversion error: "pass + 1"
+exit=2
+#+end_example
+
+=[E]= Reachable whenever every journey step fails but the apps still set
+=x-app=. =set -eu= then kills =smoke.sh= at line 108, so the =--pr= block at
+147-177 *never runs*: no =staging:smoke-failed= evidence, no label withdrawal,
+and the previous run's =staging:smoke= label and pass record stand unchallenged.
+*OPEN.*
+
+*Fix.* Drop the =|| echo 0= — =grep -c= already prints 0 — or use =|| true=.
+
+** 36. The 000000 that marker.sh fixed and soak.sh did not
+
+=change/soak.sh:34= — =code=$(curl ... || echo 000)= yields =000000= =[E]=.
+=change/marker.sh:70-73= documents this defect, names the =000000= string, and
+explains the repair. The unfixed copy is four files away. *CLOSED* (=000000= is
+never 200, so the probe counts as bad) — but the operator is shown a status code
+that does not exist, in the branch that handles being unable to reach anything.
+
+* Tier 3 — checks that cannot fail, and announcements that are not measurements
+
+** 37. A guard clause that can never fire
+
+=change/evidence.sh:56= then =:61=
+
+#+begin_src sh :eval no
+  sha="${5:-unknown}"
+  ...
+  [ -n "$sha" ] || sha=unknown
+#+end_src
+
+=[E]= =${5:-unknown}= substitutes for unset *or null*, so =sha= is never empty
+and line 61 is unreachable. Harmless, and listed because it is the exact shape
+=spec.org= class 7 is about: a check nobody has watched reject anything.
+
+** 38. =queue.sh= prints "claimed" without claiming
+
+=change/queue.sh:69-70= — the last two lines remove =blocked:queue= and print
+=claimed=. Nothing in =queue.sh= adds =deploy:staging=; the berth is claimed by
+the workflow. The script announces an act it does not perform. *NEUTRAL*, but it
+is the line an operator reads to decide whether the berth is theirs.
+
+** 39. Guard 0 has never refused anything, and its fallthrough accepts UNKNOWN
+
+=change/queue.sh:25= and =change/activate.sh:219-223=
+
+Both guard bodies are inside =if state = "BEHIND"= / =case BEHIND|DIRTY)=.
+=spec.org= §The defect taxonomy records the measurement: *0 lifetime refusals*
+across 14 open PRs after 163 commits landed on main in one night, because the
+forge returns =UNKNOWN= rather than =BEHIND=. The =*)= arm then prints
+=ok mergeStateStatus=UNKNOWN= and proceeds. *OPEN*, and already documented — it
+is here because the code is unchanged.
+
+** 40. The divergence classifier's exit codes collide with the exit-code contract
+
+=change/divergence.sh:27,59-64= uses exit 1/2/3 as *classifications*, while
+=docs/exit-codes.org= assigns 1 to "refused". Both callers had to write
+=|| something= and both got it differently wrong:
+
+- =change/release.sh:17= =|| true= → [[#f12]], merges on a git error. *OPEN.*
+- =change/queue.sh:27= =|| echo artifact= → the =echo= *also* runs on a normal
+  classification, because exit 2 is a classification:
+
+#+begin_example
+$ class=$(./change/divergence.sh HEAD~5 HEAD 2>/dev/null || echo artifact)
+class=[artifact
+artifact]
+#+end_example
+
+=[E]= That two-line string is interpolated into the PR comment at =:34=
+("main moved by a `artifact\nartifact` change"). *CLOSED*, garbled record.
+
+*Fix.* Print the class on stdout and exit 0 for every successful
+classification; reserve non-zero for "could not classify".
+
+** 41. A reaper that cannot see the berth reports a clean sweep
+
+=change/reap.sh:50-51= — =held=$(gh pr view ... || echo '')=. A transient forge
+error yields =held=""=, so the =deploy:staging= release at =:76= is skipped —
+and the comment at =:46= calls that "the part that hurts", a deadlock with no
+declared cause. *OPEN.*
+
+=change/reap.sh:33= — the sweep is =schedule.sh list --open | while read=; a
+failed =list= runs the loop zero times. =:91-92= then prints a count of *all*
+expired windows ever recorded, right after the sweep, as though it were this
+run's result. *NEUTRAL*, and it is the only output.
+
+** 42. Guard 4's authorization is forgeable by a PR comment
+
+=change/evidence.sh:96-106= reads observation markers out of PR comment bodies
+and =:103-104= extracts the verdict with a greedy =sed=. The header states
+plainly that "nothing stops a person typing the marker by hand". That is true
+and acknowledged — but an acknowledgement in a comment is not a control, and
+=change/guard4.sh= authorizes production from it. =[H]= not exercised. Listed
+because the repo's own rule is that an instrument records its own result, and
+here the medium cannot tell an instrument from a person.
+
+** 43. A booking is made for a merged change when the forge is unreachable
+
+=change/schedule.sh:204= — =state=$(gh pr view ... || echo '')=; =''= is neither
+=MERGED= nor =CLOSED=, so the refusal at =:205= is skipped and a window is booked
+for a change that has landed — re-adding =change:scheduled= to a PR =settle.sh=
+just cleared, which is the runaway the comment at =:197-203= describes. *OPEN.*
+
+** 44. observe.sh announces an acceptance whose record failed
+
+=change/observe.sh:42-49= — the =evidence.sh record= failure only warns; the
+label is then added and =:49= prints "a person accepted $sha on $url". The
+record is what guard 4 authorizes on; the label is not. *CLOSED* (guard 4 will
+refuse) with a success message that says otherwise.
+
+** 45. A suite that ran zero cases reports success
+
+=gates/observation-test.sh:93-94= — =n= is incremented only inside the loop, so
+an emptied or mis-split =$CASES= prints =0/0 cases, 0 failure(s)= and exits 0.
+In the file whose entire argument is that a suite which cannot detect the defect
+has established nothing. *OPEN.*
+
+=:56-57= — =verdict()= renders 127 (script missing), 2 (usage) and a genuine
+refusal all as =refused=, and eight of the ten cases *expect* =refused=. A guard
+that is deleted outright scores 8/10; =script_for= returns the empty string for
+an unmatched name, so ="" 42= is a command-not-found that also reads as
+=refused=. *OPEN.*
+
+** 46. Miscellaneous, ranked below action
+
+- =gates/preflight.sh:20-21,333= — =no()= overwrites =rc=, so a blocking 4 is
+  replaced by a later 2. The proceed decision is unaffected; the *code* callers
+  branch on is the last refusal, not the most severe. *NEUTRAL.*
+- =gates/preflight.sh:185-186= — =_std= and =_nrm= assigned and never referenced
+  (confirmed by grep). *NEUTRAL.*
+- =gates/preflight.sh:204-206= — the comment says the draft check runs "before
+  the calendar"; the calendar block is lines 32-54 and the draft read is line
+  206. The comment states an invariant, so the block should move. *NEUTRAL.*
+- =gates/shellcheck.sh:37= — =: '#!/bin/sh'*= is subsumed by ='#!'*sh= and
+  ='#!'*"/sh "*=; a dead case alternative. *NEUTRAL.*
+- =gates/e2e.sh:119-123= — =plp= hardcoded in the gate whose thesis is that
+  =routes.json= is the source. *CLOSED.*
+- =gates/smoke.sh:43= / =e2e.sh:31= / =uat.sh:29= / =health.sh= — four gates,
+  four different default estates: =:9200= (*protected staging*), =:10000= (no
+  tier), =:9000= (dev block 0), and none (correct). =smoke.sh= defaulting to the
+  promotion path is *OPEN*: =./gates/smoke.sh --pr 42= with no URL measures
+  staging and records =staging:smoke= for it.
+- =gates/smoke.sh:88= — =.smoke.journey= is a fixed name in the repo root, under
+  a parallel-worktree model that makes concurrent runs normal. *OPEN.*
+- =change/driver.sh:27= — =STG=:9010=, =PROD=:9020=. Both are *dev tier*
+  (9000-9099, blocks 1 and 2). The driver runs "production" on a dev-tier port,
+  against =CLAUDE.md='s "never hardcode a port; read =.env.ports=".
+- =change/review.sh:87= — =GH_TOKEN=... $CALL -f body=...=, an unquoted command
+  in a variable. Not reported by the gate because SC2086 is =info= and the gate
+  runs =-S warning=. "0 findings" means *0 warnings and above*.
+- =change/queue.sh:5= and =change/release.sh:4= — =repo="${GH_REPO:-$GITHUB_REPOSITORY}"=
+  with no literal fallback, unlike the other nine scripts. Under =set -u= with
+  neither set, the failure is a shell diagnostic rather than a usage line.
+  *CLOSED.*
+- =targets/bastille/deploy.sh:30= — the process kill ends in =; true=, so it
+  cannot fail. If the old =app.py= and =nginx= survive, the new ones at =:35=
+  fail to bind =800n= and *the old build keeps serving* while the deploy reports
+  success. Nothing re-checks. =:35-36= compounds it: the =&= is *inside* the
+  =sh -c=, so =jexec= returns 0 the instant the shell forks and python may die
+  on the next line. =:39= then starts the router with =|| true= and =:40= prints
+  the replica deployed. Four unfailable steps and a success message. *OPEN.* <<f-kill>>
+- =targets/bastille/deploy.sh:10,27= — accepts an arbitrary string as the build
+  and stamps it into =version.json=. =targets/node/deploy.sh:78-83= fixed exactly
+  this ("bastille accepted =deadbee= and stamped it into version.json, which is
+  how guard 5 came to pass on a commit never built") and the fix was never
+  carried over. The =${2:-$(git rev-parse --short HEAD)}= default silently
+  substitutes the *deployer's own working tree*. *OPEN.*
+- =targets/*/rollback.sh= does not exist; =deploy-production.yml:45= runs it
+  under =if: failure()=. There is no rollback. *OPEN.*
+- =.github/workflows/deploy-staging.yml:22= passes the *environment* where
+  =preflight.sh= expects the *PR number*, so =gh pr view staging= fails and
+  =set -eu= aborts before any guard is evaluated. Guard 3 has never produced a
+  verdict in CI. *CLOSED.*
+
+** 47. Checked and NOT a defect
+
+Recorded because each is the obvious review comment and each is wrong on this
+host:
+
+- =change/env.sh:23= — =grep -vE '^\s*(#|$)'=. =\s= is a GNU extension and the
+  expected finding is "BSD grep matches a literal s". =[E]= FreeBSD 14.4's grep
+  supports =\s= as whitespace: the indented-comment fixture is excluded
+  correctly and =printf 'sss#x' | grep -cE '^\s*#'= returns 0. Not a defect here;
+  still non-POSIX.
+- =index("...") // empty= in =queue.sh:7=, =release.sh:11=, =reap.sh:50=,
+  =activate.sh:326= — =index()= returns 0 for a first-position match, and the
+  obvious worry is that ="0"= reads as absent. It does not: =[ -n "0" ]= is true
+  and =[ -z "0" ]= is false, so all four are correct.
+- =change/soak.sh:68= — the =n -lt 1= guard looks unreachable and is not: a
+  non-numeric =SECS= makes the =while= condition fail, the loop runs zero times,
+  and the guard fires. It is the documented repair and it works.
+
+* The models to copy
+
+Three constructs in this repo are exactly right and are the templates for
+everything above.
+
+- *Verify by re-reading the forge.* =change/review.sh:89-92= posts an approval
+  and then asks GitHub whether it exists, refusing if not. This is the only
+  write in the repository that confirms itself, and it is what [[#f13]], [[#f15]] and
+  [[#f16]] need.
+- *Default to the most restrictive value.* =change/queue.sh:27='s =|| echo artifact=
+  is the right instinct (the error case takes the strictest class) and fails only
+  because of [[#f40]]'s exit codes. Compare =guard4.sh:136='s =|| echo 0=, which
+  defaults to the most *permissive*.
+- *Say which of the three answers it is.* =gates/preflight.sh:32-53= separates
+  "no window" from "cannot read the calendar" by asking =schedule.sh current=
+  and =schedule.sh list= and comparing, and both unreadable paths return 4 and
+  block. That is the three-valued read done correctly, in this repo, today.
+- *Report unreachable as unreachable.* =change/marker.sh:46-58= writes
+  =b=UNOBSERVED front-unreachable= rather than inventing a build, and =:62-67=
+  refuses to send a marker that would be truncated, because "a truncated build
+  is a different build".
+
+* The shebang question
+:PROPERTIES:
+:CUSTOM_ID: shebang
+:END:
+
+Asked directly: should the 42 =#!/bin/sh= scripts become =#!/usr/bin/env sh=
+for FreeBSD portability?
+
+*No.* The honest answer is the opposite of the request, and the evidence is on
+this host.
+
+** What is actually on the tree
+
+#+begin_example
+$ git ls-files '*.sh' '*.py' | while read -r f; do head -1 "$f"; done | sort | uniq -c | sort -rn
+  42 #!/bin/sh
+  25 #!/usr/bin/env python3
+   1 #!/usr/bin/env python3.11
+   1 #!/usr/bin/env bash
+#+end_example
+
+** Why =#!/bin/sh= should stay
+
+=/bin/sh= is the one interpreter path POSIX guarantees. It is not the same risk
+as =#!/bin/bash=, and conflating the two is what makes "use env everywhere"
+sound like a rule.
+
+#+begin_example
+$ ls -l /bin/sh
+-r-xr-xr-x  1 root wheel 169288 Jun 21 18:10 /bin/sh
+$ uname -a
+FreeBSD hydra 14.4-RELEASE-p6 FreeBSD 14.4-RELEASE-p6 GENERIC amd64
+#+end_example
+
+=[E]= A real binary at the guaranteed path — not even a symlink that could be
+swapped. There is no host in this project's matrix where =/bin/sh= is absent and
+=env sh= would find a shell that =/bin/sh= would not. So the change buys nothing,
+and costs two things:
+
+1. *=env= form loses the ability to pass a shell option in the shebang.*
+   =#!/usr/bin/env sh -e= does not work: most kernels hand the =env= form a
+   single argument, so ="sh -e"= is looked up as one program name and the exec
+   fails. A direct-path shebang can carry an option. Nothing here relies on that
+   today — every script says =set -eu= on its own line, which is better — but
+   giving up a capability for no gain is not portability.
+2. *=env= resolves through =PATH=.* Irrelevant in this repo, because nothing is
+   setuid and the =PATH= is the operator's own. It is stated because it is the
+   reason =env= is not *strictly* safer than a direct path, and a rule argued as
+   "env is always safer" is a rule that will be applied where it is not.
+
+** Where =env= IS load-bearing
+
+The other half of the rule is the one that matters, and this repo already
+follows it:
+
+#+begin_example
+$ ls -l /bin/bash
+ls: /bin/bash: No such file or directory
+$ command -v bash
+/usr/local/bin/bash
+#+end_example
+
+=[E]= =bash= is at =/usr/local/bin/bash= on FreeBSD and =/bin/bash= on Linux.
+A non-POSIX interpreter has *no* guaranteed path, so hardcoding one is the
+portability defect that actually bites.
+
+=.github/config/apply.sh= is the only =#!/usr/bin/env bash= in the tree and it
+is *correct*. It genuinely needs bash — =[E]= nine SC3xxx findings under
+=-s sh=: =set -o pipefail=, =BASH_SOURCE=, arrays, =local=, four process
+substitutions, =$'..'=. Converting it to =#!/bin/sh= would break it; hardcoding
+=#!/bin/bash= would break it on this host.
+
+** The one real hazard, and it is not the shell
+
+=targets/bastille/app.py:1= is =#!/usr/bin/env python3.11=.
+
+A version-pinned shebang works everywhere until it works nowhere. =python3= on
+hydra is 3.11.15 today, so the pin is invisible; the first =pkg upgrade= that
+moves =python3= to 3.12 turns it into an exec failure with no warning in
+between, and =env= is powerless to help because the *name* being asked for is
+the thing that will not exist.
+
+This is the only shebang in the repository that needed changing and it is
+changed in its own commit.
+
+*The shebang change does not reach the pin.* =app.py= is not executed through
+its shebang on the deploy path — it is passed to a named interpreter:
+
+#+begin_src sh :eval no
+  # targets/bastille/deploy.sh:30
+  sudo jexec "$j" sh -c 'pkill -f "python3.11 app.py" 2>/dev/null; pkill nginx 2>/dev/null; true'
+  # targets/bastille/deploy.sh:36
+  ROUTES='$routes' nohup python3.11 app.py >/var/log/$app.log 2>&1 &
+#+end_src
+
+Both are still pinned, and they are *coupled*: =:30='s =pkill -f= pattern is a
+literal match on =:36='s command line, so changing one without the other leaves
+a kill that silently stops matching — which makes finding [[f-kill]] worse rather
+than better. That change needs the bastille estate to test, the bastille estate
+is not present on this host (=change/activate.sh:59= refuses for exactly that
+reason), and an untested edit to a production deploy script's process-matching
+is not a change to make while the estate is in use. *Left alone, deliberately,
+and recorded here.* The trigger to revisit is the first host where =python3= is
+not 3.11.
+
+** The rule, made executable
+
+Two forms, no others:
+
+| form | for |
+|------+-----|
+| =#!/bin/sh= | a POSIX shell script. The guaranteed path. |
+| =#!/usr/bin/env <name>= | every other interpreter. The path is not guaranteed, so ask. Unpinned. |
+
+=gates/shebang.sh= enforces it and =gates/shebang.sh --selftest= proves it can
+refuse — six fixtures, one per refusal class, plus three that must be accepted.
+A lint rule nobody has watched reject something is a hypothesis.
+
+*And the first version of that selftest was itself the defect it was written to
+refute.* It asserted only that each =fail/= fixture was *refused*. Deleting the
+absolute-path rule outright left =#!/bin/bash= falling through to the catch-all
+and reported as "no shebang" — still a refusal, so the suite still passed:
+
+#+begin_example
+$ sed "s|^    '#!'\*)|    '#!NEVERMATCH'*)|" gates/shebang.sh > mutant
+$ ./mutant --selftest
+  shebang --selftest: 9/9 fixtures, 0 failure(s)      <-- MUTANT SURVIVED
+#+end_example
+
+=[E]= That is =spec.org= class 7 — a check satisfied by something other than the
+thing it is about — reproduced inside the check written to demonstrate the
+opposite, by the reviewer, in the same hour as writing up thirty instances of
+it. It was found by mutation and could not have been found by reading.
+
+The selftest now asserts the *reason*, not the refusal, and asserts its own case
+count. Re-run against the whole matrix:
+
+#+begin_example
+  unmutated baseline                         exit=0 (must be 0)
+  1. classify() always accepts               KILLED   (selftest exit 1)
+  2. version-pin rule removed                KILLED   (selftest exit 1)
+  3. env-sh rule removed                     KILLED   (selftest exit 1)
+  4. absolute-path rule removed              KILLED   (selftest exit 1)
+  5. env-with-option rule removed            KILLED   (selftest exit 1)
+  6. no-shebang catch-all always accepts     KILLED   (selftest exit 1)
+  7. POSIX /bin/sh wrongly refused           KILLED   (selftest exit 1)
+#+end_example
+
+=[E]= Seven of seven. That is the difference between a rule and a control.
+
+The hardening also surfaced a second defect in the suite: the case table was
+split on the default =IFS=, so each multi-word expected reason became five
+"missing fixture" cases and the suite reported =9/25 cases, 16 failure(s)=. It
+was caught only because the suite asserts its own case count against the table —
+the assertion this review criticises =gates/observation-test.sh:93= for lacking.
+Without it the suite would have been noisy rather than wrong, which is the
+version that survives review.
+
+=gate-selftest= now runs =gates/shebang.sh --selftest= first and refuses the
+whole suite if the policy cannot reject, on the repo's standing rule: a gate
+that fails to reject its fail fixture produces no verdict that run.
+
+* The lint coverage gap
+:PROPERTIES:
+:CUSTOM_ID: coverage
+:END:
+
+=gates/shellcheck.sh= reports "0 findings" over its glob set. That set is not
+every tracked shell script. Replaying the globs at =gates/shellcheck.sh:33-34=
+against =git ls-files '*.sh'=:
+
+#+begin_example
+tracked .sh NOT in the gate's glob set:
+  .github/config/apply.sh
+  adopt/generate.sh
+  experiments/012-guard-mutation/mutate.sh
+  experiments/017-token-metrics/capture.sh
+  gates/fixtures/observations/guard4-before-16.sh
+  router/generate.sh
+  tla/check.sh
+#+end_example
+
+=[E]= All seven are currently clean under the same flags, so the gap has cost
+nothing yet:
+
+#+begin_example
+  .github/config/apply.sh                          bash  0 finding(s)
+  adopt/generate.sh                                sh    0 finding(s)
+  experiments/012-guard-mutation/mutate.sh         sh    0 finding(s)
+  experiments/017-token-metrics/capture.sh         sh    0 finding(s)
+  gates/fixtures/observations/guard4-before-16.sh  sh    0 finding(s)
+  router/generate.sh                               sh    0 finding(s)
+  tla/check.sh                                     sh    0 finding(s)
+#+end_example
+
+Two of the seven matter. =router/generate.sh= carries [[#f21]], the truncation
+defect that feeds every generated artifact — a real defect in a file the gate
+was never pointed at. =.github/config/apply.sh= is the only bash in the tree and
+needs =-s bash= rather than =-s sh=, which the gate has no way to express today.
+
+A third, smaller: =gates/shellcheck.sh:33= exits *2* when the tool is absent.
+=docs/exit-codes.org= assigns 2 to "usage, or a lock is held" and *4* to "I
+could not check". The one gate that can be absent uses the wrong code for
+absence. The new gates added alongside it use 4.
+
+=gates/shfmt.sh= deliberately copies the existing globs *including the gap*,
+rather than widening one gate and not the other: two checkers with different
+inventories of the control plane is the same two-oracles defect as
+=activate.sh= and =preflight.sh= disagreeing about guard 2. Widening is one
+change, and it is not this one.
+
+Not scanned by anything: =idp-api/*.py= (=[E]= one F-class finding there,
+=idp-api/mock/tui.py:74=).
+
+* What was deliberately not done
+
+- *Nothing in this document is fixed.* The brief was an inventory. Every
+  =file:line= above is unchanged.
+- *No estate was touched.* No deploy, no port in 9000-9299, no label, no merge,
+  no window, no PR edit. Every =[E]= is either a local reproduction in a
+  scratch directory or a read of the working tree. No =gh= call reached the
+  network.
+- *The evidence-forgery finding ([[#f42]]) is listed and not designed against.*
+  Closing it means changing where observations live, which is a spec change.
+- *=idp-api/= was left out of =lint-python=.* Widening the scope and adding the
+  gate in one change means the finding arrives as "the new linter is noisy"
+  rather than as a defect.
+- *=targets/bastille/deploy.sh:30,36= keeps its =python3.11= pin.* See
+  [[#shebang]]: the pin and the =pkill -f= pattern that matches it must move
+  together, and the estate to test that on is not here.
+
+* Methodology note: the tree moved while it was being measured
+
+Worth recording because it is the same class as everything above.
+
+=gmake -s gate-selftest= was run against this working tree and its TLA stage
+reported =labels positive: all fifteen rules on .... FAIL=. That result is *not
+attributable in either direction*, because the tree was not still while it was
+being measured:
+
+#+begin_example
+$ git status --porcelain          # files I never touched, showing as modified
+ M change/label-owners.tsv
+ M gates/label-model-coverage.py
+ M sim/label_sim.py
+ M spec.org
+ M tla/Labels.tla
+
+$ stat -f '%Sm %N' -t '%H:%M:%S' tla/Labels.tla Makefile
+02:42:02 tla/Labels.tla          <-- another agent, mid-run
+02:38:34 Makefile                <-- my last edit, before the run started
+#+end_example
+
+=[E]= Another agent edited =tla/Labels.tla=, =change/label-owners.tsv=,
+=sim/label_sim.py= and =gates/label-model-coverage.py= at 02:41-02:42, while the
+=Labels= model was being checked against them. A verdict measured on a subject
+that changed during the measurement is not a verdict about either version — the
+same law guard 4b is built on, arriving from the other side.
+
+So the constraint was re-established on a tree that could not move: =git archive
+HEAD= into a scratch directory, with only this change set copied in, and none of
+the concurrent edits present. That is the run the result below is from, and it is
+the only one quoted.
+
+The general point, which is not about this review: *this repository has no
+isolation between concurrent operators.* =CLAUDE.md= prescribes a worktree and a
+port block per parallel change, and five agents are working in the shared
+checkout. Every gate result taken here tonight is a measurement of a tree that
+may have been edited underneath it, and nothing in the gates can tell. That is a
+defect of the working arrangement rather than of any script, which is why it is
+recorded here rather than given a =file:line=.
+
+* Postscript: the review reproduced one of its own findings
+
+Writing =gates/lint-shell.sh= for this work, a comment was opened with the
+checker's own name as its first word. =gates/shellcheck.sh='s header warns about
+exactly this — a comment of that shape is parsed as a directive — and records
+that it had already happened twice, the second time in the note explaining it.
+
+#+begin_example
+  gates/lint-shell.sh:26:1: error: Couldn't parse this shellcheck directive. [SC1073]
+  gates/lint-shell.sh:26:19: error: Expected '=' after directive key. [SC1072]
+  shellcheck: 43 scripts, 2 finding(s)
+#+end_example
+
+Third time, having read the warning first. =spec.org= §The defect taxonomy makes
+the general claim — "knowing the rule did not prevent writing the code" — about
+=cmd | sed=. It holds for the comment, and it is the argument for every gate in
+this repository: the rule is not the control. The gate is.
