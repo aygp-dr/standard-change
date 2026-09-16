@@ -113,7 +113,15 @@ DEVIATION=''
 if win=$(./change/schedule.sh current "$pr" staging 2>/dev/null); then
   ok "deployed inside window $win"
 else
-  last=$(./change/schedule.sh list 2>/dev/null | grep -c "#$pr " || echo 0)
+  # NOT `|| echo 0`. grep -c PRINTS 0 and EXITS 1 when it matches nothing, so
+  # the fallback appended a second 0 and $last became "0\n0" -- which is then
+  # interpolated into the PIR sentence below, breaking the compliance record
+  # across two lines mid-clause: "0\n0 window(s) were booked". It fires in the
+  # commonest case, a change with no windows booked at all. Same construct as
+  # the two sites fixed in gates/smoke.sh; here the damage lands in the AUDIT
+  # RECORD rather than in a verdict, which for an ITIL pipeline is the worse
+  # of the two places for it.
+  last=$(./change/schedule.sh list 2>/dev/null | grep -c "#$pr ") || last=0
   DEVIATION="**Deployed outside any change window.** \`schedule.sh current\` finds no open window covering this settlement, and none was open at cutover. $last window(s) were booked for this change and all are closed. Guard 3 exists in \`change/activate.sh\` and was never reached, because the deployment was hand-driven step by step rather than run through activation — the guard was present and bypassed by not being invoked. No production window was ever booked at all: \`CHANGE_ENV\` defaults to staging."
   printf '  DEVIATION  deployed outside any window -- recorded in the PIR\n'
 fi
@@ -276,7 +284,7 @@ fi
 #
 #    NOT cleared: app:* and itil:* describe what the change WAS.
 #    describe what the change was, and remain true after it shipped.
-for l in change:start change:requested change:scheduled change:complete release release:start \
+for l in release:start change:requested change:scheduled change:complete release release:start \
          staging:deployed staging:healthy production:deployed \
         deploy:staging deploy:production \
          staging:e2e staging:smoke staging:uat staging:passed staging:failed \

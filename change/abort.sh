@@ -106,7 +106,7 @@ for l in staging:e2e staging:e2e-failed staging:smoke staging:smoke-failed \
          staging:uat staging:in-progress production:e2e production:e2e-failed \
          production:smoke production:smoke-failed production:healthy \
          staging:deployed staging:healthy production:deployed staging:hold \
-         release release:start change:start change:requested \
+         release release:start release:start change:requested \
          deploy:staging deploy:production blocked:queue blocked:lock \
          change:complete change:scheduled; do
   gh pr edit "$PR" --repo "$R" --remove-label "$l" >/dev/null 2>&1 || true
@@ -115,7 +115,7 @@ done
 # runtime and is invisible to gates/label-audit.py, which reads the SOURCE: it
 # saw a write of the bare prefix and correctly called it undeclared. A label an
 # auditor cannot see is a label with no owner, which is the condition
-# docs/label-ownership.org exists to prevent. So the branch is written out.
+# research/findings/label-ownership.org exists to prevent. So the branch is written out.
 #
 # This comment deliberately does NOT spell the prefix out. The first version
 # did, while explaining the problem, and the audit flagged the COMMENT -- the

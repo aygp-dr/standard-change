@@ -1,0 +1,122 @@
+#+TITLE: The five properties on three substrates: what each primitive becomes
+#+DATE: 2026-09-15
+
+*Research notes, as supplied by the owner on 2026-09-15. Neither spec nor an ADR.*
+=research/history/five-properties.org= states the five properties (P1 berth is a lease, P2
+calendar is a serialized store with non-overlap, P3 the runner writes its own
+verdict, P4 the scheduler consumes before acting, P5 the coordinator re-reads
+and has a tail) and their references. This document is the per-substrate
+mapping: the same four components (store, gate runner, environment registry,
+the two loops) and five entities (CHANGE, WINDOW, FREEZE, OBSERVATION,
+BERTH); what changes per substrate is where the CAS store lives, what the
+singleton berth is, how the two loops run, and what "environment" and "build
+identifier" mean.
+
+* Microservices (generic)
+
+- Store: one service (=idp=) owning CHANGE, WINDOW, FREEZE, OBSERVATION,
+  BERTH in Postgres. Non-overlap as an exclusion constraint on
+  =(environment, tstzrange(start,end))= where =result IS NULL=; berth as a
+  row with a unique constraint on =environment=. CAS is the transaction.
+- Gate runner: a service with =POST /run {suite, sha, env}= that resolves
+  =env= from the registry service, probes the target's =/build= endpoint,
+  checks selftest, executes, and writes the OBSERVATION row itself. The
+  caller never posts a verdict.
+- Environment registry: a service returning declared rows; =observe= probes
+  the target, never reads a manifest.
+- Scheduler loop: a worker polling the forge every 20 s, or subscribing to a
+  =release= webhook. Consume-before-act becomes an idempotency key: the
+  webhook delivery ID.
+- Coordinator loop: a saga per change. Each guard is a step; the =always=
+  tail is the compensation (release berth, close window). Persist saga state
+  so a crashed coordinator resumes at the guard it was on and re-reads inputs
+  there.
+- Unit: the PR head SHA, carried as an image digest once built; observations
+  key on the digest.
+- Cost: the unit of promotion is now a set of services per group, so
+  =groups= maps to service names and the berth moves from the host to the path.
+
+* Kubernetes
+
+- Store: CRDs. =Change=, =Window=, =Freeze=, =Observation=, =Berth= as
+  resources; etcd gives CAS via =resourceVersion=. Non-overlap is a
+  validating admission webhook on =Window= create, because the API server
+  enforces uniqueness only on names.
+- Berth: a =Lease= object in the =promotion= namespace with
+  =holderIdentity = change_id=. The same primitive controllers use for leader
+  election.
+- Environments: namespaces (=dev-N=, =staging=, =production-blue=,
+  =production-green=) plus a =front= Service whose selector is the live
+  colour. =environments.tsv= becomes a =ConfigMap= or a CRD read by the
+  registry.
+- Gate runner: a =Job= per =run=, templated per suite, with the target
+  namespace as a parameter. Selftest is an init container; a failed init
+  container means no verdict. The Job writes its =Observation= on completion;
+  the pod's identity is =observed_by=.
+- Soak: a Job that probes for N minutes; health is the same probe with
+  =samples=5= against every pod behind the front, which is the convergence
+  check.
+- Scheduler loop: a controller reconciling =Change= objects whose spec has
+  =release: true=; it sets =spec.release=false= in the same update (consume),
+  then creates a =Window= if none covers now.
+- Coordinator loop: a second controller reconciling =Change= through
+  =status.phase=. Each reconcile re-reads everything; that is guard 4b by
+  construction. Finalizers implement the =always= tail: a =Change= cannot be
+  deleted until the berth Lease and the open Window are released.
+- Build identifier: the image digest. Tags do not identify a build. =x-build-sha= becomes a label on
+  the pod and a header from the app; the probe reads the header.
+- What you gain: reconcile semantics already are the loop. What you lose:
+  the calendar as a git ref is gone, and Kargo does two thirds of this
+  already, minus the calendar and the berth.
+
+* Cloudflare Workers
+
+- Store: a Durable Object per environment path (=staging=, =production=)
+  holding WINDOW, FREEZE, BERTH. A DO is single-threaded, so CAS is free:
+  every booking is serialized. CHANGE and OBSERVATION go in D1 with the same
+  columns.
+- Berth: a field in the environment's DO. =claim= is a method; only one
+  request runs at a time.
+- Environments: Workers versions and deployments. A version is the build;
+  =wrangler versions upload= produces a version ID that is the SHA
+  equivalent. Staging is a deployment at 100% of one version; blue/green is
+  a gradual deployment with two versions and a percentage; =switch(front)= is
+  moving the split to 100%.
+- Gate runner: a Worker that fetches the target with =cf-version= set to pin
+  a version, reads the =x-build-sha= header, and runs the smoke journey.
+  Convergence is N fetches without pinning; every one must report the
+  promoted version. Playwright runs in Browser Rendering.
+- Soak: a Cron Trigger every minute for the soak length, writing probe rows
+  to D1; the coordinator reads the count.
+- Scheduler loop: a Cron Trigger Worker every minute polling the forge, or a
+  Worker receiving the GitHub webhook. =WATCH_INTERVAL= is 60 s minimum on
+  cron.
+- Coordinator loop: Workflows (durable execution). Each guard is a step;
+  steps retry, so unreachable must return an explicit =unknown= value rather
+  than throw, or the retry converts an unknown into a repeated probe. The
+  =always= tail is a final step that runs regardless. Workflow state persists
+  across the run, so a crash resumes at the step.
+- Reap: a Cron Trigger calling the DO's =reap= method.
+- What you gain: no hosts, versions are first-class and immutable, gradual
+  deployments give blue/green without a router. What you lose: no per-app
+  port blocks, so dev tiers become preview URLs per branch; and the
+  coordinator's retry semantics fight the three-valued rule unless you
+  encode =unknown= as a value.
+
+* Constant across all three
+
+The berth is a lease, the calendar is a serialized store with a non-overlap
+check, the runner writes its own verdict, the scheduler consumes its trigger
+before acting, and the coordinator re-reads at every step and has a tail
+that runs on every exit. The substrate changes the primitive that provides
+each of those (transaction, =resourceVersion=, Durable Object); the five
+properties do not change.
+
+* Verification
+
+Unverified [H] as supplied. Claims about specific platform primitives
+(Postgres exclusion constraints, Kubernetes =Lease= and finalizers,
+Cloudflare versions, gradual deployments, Workflows, Browser Rendering) are
+the owner's reading of vendor documentation and carry no drawers yet;
+=research/history/five-properties.org= §Standards and references holds the verified
+references for the properties themselves.

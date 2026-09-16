@@ -1,4 +1,4 @@
-#+TITLE: 023 — start only: a person says change:start and the process takes over
+#+TITLE: 023 -- start only: a person says change:start and the process takes over
 #+DATE: 2026-09-14
 
 * Hypothesis
@@ -43,7 +43,7 @@ person's own words) rather than asking a person to sweep.
 
 * Findings
 
-** F1 — refuse-and-rebase livelocks against a moving trunk (23:50–23:54Z)
+** F1 -- refuse-and-rebase livelocks against a moving trunk (23:50–23:54Z)
 
 All five PRs (#104–#108) were refused at guard 0 on their first start: they
 had branched from =main= seconds before the driver commit landed. Two
@@ -60,7 +60,7 @@ A person is asked only for a conflict. Guard 0 also now runs before the
 lock: the first version held the berth for fifteen seconds to discover a
 stale head (#104, #105).
 
-** F2 — the tickets were dirty because five releases never ended
+** F2 -- the tickets were dirty because five releases never ended
 
 Reported as #103. The other operator's loop re-runs the staging
 instruments on #97–#101 every ~8 minutes and never ends the release, so
@@ -69,14 +69,14 @@ each carries =staging:e2e staging:smoke staging:uat= and the retired
 the estate can be in. The driver's start-sweep makes a start on such a
 ticket pay the missing =change:end=; the loop should have paid it.
 
-** F3 — the reaper has no identity
+** F3 -- the reaper has no identity
 
 The clearing at end (=settle.sh=, =abort.sh=, =reap.sh=) runs as whichever
 =gh= account is active on the host: =jwalsh= here, =aygp-dr= on hydra,
 =github-actions[bot]= in a workflow. A machine's removal is indistinguishable
 on the forge from a person's, which is D21's finding from the other side.
 
-** F4 — the driver said a person accepted the build; nobody had
+** F4 -- the driver said a person accepted the build; nobody had
 
 The driver recorded the Playwright journey through =change/observe.sh=,
 whose comment says "a person used http://127.0.0.1:9010 on build X and
@@ -88,7 +88,7 @@ do, and the record says what ran: the journey a person once accepted,
 replayed by Playwright; no person looked at this build. label-owners.tsv
 names the second writer.
 
-** F5 — two of five conflicted, and that is the one thing left to a person
+** F5 -- two of five conflicted, and that is the one thing left to a person
 
 #107 (checkout) and #108 (pdp) were refused at 00:09Z: the forge could not
 merge =main= into them. Both were real: the other operator's #97 changed
@@ -98,7 +98,7 @@ literal are a conflict git cannot resolve. The ticket says "resolve it,
 push, and say start again", and the owner does. Nothing else in the run
 asked a person for anything after start.
 
-** F6 — operator error, recorded so it is not read as a finding
+** F6 -- operator error, recorded so it is not read as a finding
 
 At 00:01Z the scheduler was restarted to pick up the "heard change:start"
 comment while a driver for #105 was mid-run. The new scheduler saw
@@ -110,6 +110,34 @@ of #105 reported the duplicates as one of their eleven confusions; that one
 is mine. A scheduler must not be replaced while a driver it started is
 running, or the driver must take the intent before it does anything else
 (it does; the window was the 40 s labeller wait inside guard 0).
+
+* Timeline
+
+Two clocks: the owners' starts and the other operator's landings, which
+moved =main= under them. The livelock (F1) is the relationship between them.
+
+#+begin_src mermaid :eval never-export
+gantt
+    title Experiment 023, start only, 2026-09-14/15 UTC
+    dateFormat YYYY-MM-DD HH:mm:ss
+    axisFormat %H:%M
+    todayMarker off
+    section owners say start, once
+    PR 104 core, refused once      :2026-09-14 23:45:18, 2026-09-15 00:00:02
+    PR 105 plp, refused twice      :2026-09-14 23:45:27, 2026-09-15 00:02:35
+    PR 106 pdp, refused once       :2026-09-14 23:45:51, 2026-09-15 00:07:49
+    PR 107 checkout, conflict      :2026-09-14 23:46:03, 2026-09-15 00:19:23
+    PR 108 pdp, conflict           :2026-09-14 23:46:15, 2026-09-15 00:11:57
+    section trunk moves under them (other operator)
+    PR 101 lands                   :milestone, 2026-09-14 23:49:51, 1m
+    PR 99 lands                    :milestone, 2026-09-14 23:53:49, 1m
+    section the driver
+    refuse-and-rebase livelock, F1            :crit, 2026-09-14 23:50:00, 2026-09-14 23:56:00
+    forge update-branch replaces guard 0      :milestone, 2026-09-14 23:56:00, 1m
+    scheduler restarted mid-run, two drivers, F6 :crit, 2026-09-15 00:01:00, 2026-09-15 00:02:11
+    two conflicts handed to a person, F5      :milestone, 2026-09-15 00:09:00, 1m
+    berth on a current head, start to merge 68 to 85s :2026-09-15 00:10:49, 2026-09-15 00:11:57
+#+end_src
 
 * Landings
 
@@ -126,7 +154,7 @@ Once a change held the berth on a current head, start-to-merge was 68 to
 (the other operator's loop held it about half the time), and for the owner
 to be refused and to rebase.
 
-** F7 — the conflict is the one decision left to a person, and the ticket left them alone with it
+** F7 -- the conflict is the one decision left to a person, and the ticket left them alone with it
 
 #107's owner: "the instruction 'Resolve it' leaves the resolution entirely
 to me, with no guidance on whether their color or mine should win... nobody

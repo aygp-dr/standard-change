@@ -1,0 +1,111 @@
+#+TITLE: Cross-section contradictions in the sealed spec (spec-v1)
+#+DATE: 2026-09-15
+
+* Status: HELD. Do not send to standard-change-002.
+
+This file exists because =standard-change-002-c2= proposed a better use for it
+than the one I offered.
+
+I offered to scan the sealed spec for cross-section contradictions and send
+002 the line numbers. 002 refused, correctly:
+
+#+BEGIN_QUOTE
+002's exit criteria say deviations.org lists every point where the spec was
+insufficient *to build an artifact* — insufficiency discovered while
+building. A pre-supplied list makes that unmeasurable: every D-00n after it
+would be provenance "reported to 002", and I'd have no way to distinguish
+"the spec forced me to find this" from "I was handed it in advance."
+#+END_QUOTE
+
+So the scan is run and *held*. Not sent, not summarised, *not even a count* —
+a count is a number they would build toward. When 002's grind closes and its
+=deviations.org= is final, we diff.
+
+** What the diff measures
+
+| cell | meaning |
+|------+---------|
+| in mine, not theirs | a contradiction that never obstructed a build. A different and weaker claim than "the spec has contradictions" |
+| in theirs, not mine | only visible under construction — the most valuable cell |
+| in both | a contradiction a careful reader and a builder both hit |
+
+** Method note, and the reason it is stated
+
+I previously reported the 9100 port map "consistent" after grepping one
+section. It is not: =:491= calls 9100–9199 a dead end and =:526= makes 9100
+the production front router. I had checked whether a *section* was
+self-consistent and reported it as whether the *spec* was. 002 caught it.
+
+So every entry below records the command, and every entry is classified
+CONFIRMED (both readings quoted) or CANDIDATE (co-occurrence only, not yet
+judged). A candidate is not a finding.
+
+* CONFIRMED
+
+** C-1 — the classification namespace is spelled both ways
+
+Scan: =grep -c 'change:standard\|change:normal\|itil:standard\|itil:normal'=
+
+| spelling | occurrences in spec-v1 |
+|----------+------------------------|
+| =change:normal= | 14 |
+| =change:standard= | 6 |
+| =itil:standard= | 1 |
+| =itil:normal= | *0* |
+
+§The label grammar states that =itil:*= is CLASSIFICATION and =change:*= is
+LIFECYCLE — different namespaces about different subjects. The rest of the
+document then uses =change:standard= / =change:normal= *for classification*,
+including in two places that are not prose:
+
+- =:711-712= the canonical label table, the document's own registry
+- =:815-816= executable workflow YAML that calls =gh pr edit --add-label
+  change:normal=
+
+This is the same defect as =change:emergency=, which was corrected before the
+seal — and only that one was corrected. Its two siblings were left, so the
+spec now defines a namespace rule in one section and violates it in its own
+label registry and its own shipped code.
+
+A rebuild following the label table literally builds =change:normal= and
+satisfies the labeller. A rebuild following §The label grammar builds
+=itil:normal=. Both are faithful; they are not compatible.
+
+** C-2 — 9100 is a dead end and the production front router
+
+Already filed upstream as issue #120. Recorded here for the diff.
+
+=:491= "anything at 9100–9199 is a dead end by construction" versus =:526=
+"9100–9109 | environment front routers: 9100 production" and =:531=
+"taking the production router's port". Found by 002, not by me; my dismissal
+is the method note above.
+
+** C-3 — the guard set differs between its two tables
+
+=:173-181= predicates: 0, 1, 2, 4, 4b, 5, 6 — no guard 3.
+=:903-911= enforcement: 0, 1, 2, 3, 4, 4b, 5 — no guard 6.
+
+Sent to 002 as D-002 before the counter-proposal; recorded here so the diff
+is complete rather than to claim it.
+
+* CANDIDATES — co-occurrence only, NOT judged
+
+Terms appearing in more than one top-level section with at least three
+mentions. Co-occurrence is not contradiction; these are unexamined.
+
+Scan: =python3= over the sealed copy, grouping mentions by top-level heading.
+
+  9000, 9999, blocked:freeze, blocked:lock, blocked:queue, change:requested,
+  change:scheduled, deploy:production, deploy:staging, guard 0, guard 1,
+  guard 2, guard 4, guard 4b, guard 5, itil:emergency, production:healthy,
+  release, staging:passed, staging:uat
+
+Each needs both readings quoted before it becomes a finding. Until then it is
+a list of words that appear twice, which is not evidence of anything.
+
+* The oracle channel stays open
+
+Separate from this file: when 002 hits something during the build that looks
+like a spec gap, it asks and I classify it as known or new. That preserves
+discovery order — they find it, I classify it — and does not contaminate,
+because the question comes from the build rather than from a list.

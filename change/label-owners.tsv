@@ -25,13 +25,13 @@
 app:*	labeller	yes	no	no	derived from the diff: the app's own glob, OR any change to shared/ (which every app pins). Recomputed every push. To touch shared/ without redeploying all, use labeler:skip and set them by hand
 itil:standard	labeller	yes	no	no	derived; same
 itil:normal	labeller	yes	no	no	derived; same
-control-plane	labeller	yes	no	no	derived from gates/, change/, .github/ -- NARROWER than change:normal, which also globs router/ and targets/. Says WHY the change is handled differently: it alters how every future change is verified, so it cannot be verified by the pipeline and must not auto-merge. Soak trigger, docs/changing-the-pipeline.org
+control-plane	labeller	yes	no	no	derived from gates/, change/, .github/ -- NARROWER than itil:normal, which also globs router/ and targets/. Says WHY the change is handled differently: it alters how every future change is verified, so it cannot be verified by the pipeline and must not auto-merge. Soak trigger, research/findings/changing-the-pipeline.org
 labeler:skip	human	yes	yes	yes	the opt-out that transfers ownership of the derived labels
 change:requested	human	no	yes	no	the human's part of starting a change; the pipeline clears it
 change:scheduled	scheduler	no	no	no	set when a window is booked
 change:complete	change/settle.sh	yes	no	no	The pipeline's OUTCOME: production converged on this head, and it DRIVES the side effects -- the merge to main, the PIR, a ticket, a message. Written by settle.sh before the merge; cleared by the cleanup once the forge records MERGED, because two records of one fact can disagree and the forge's cannot
-change:end	change/settle.sh	yes	no	no	The TOMBSTONE. Written by the cleanup as the last act, after every other label is cleared, and it drives nothing. It says the clearing was settlement -- not a refusal at the lock, not the reaper, not an eviction, all of which also leave a change with no labels. Persistent: it is the one label a shipped change keeps. The person's words are change:start and staging:hold; complete and end are the pipeline's (2026-09-14)
-release:start	the pipeline	no	no	no	ACTION: the release has BEGUN for the booked change request. Written when preflight returns 0 and the first deploy starts; it names which change is in flight. Never written by hand -- adding it claims a deployment is running, which is not something a person can truthfully assert. Cleared by settle.sh or by abort (issue #37, unbuilt)
+change:end	change/settle.sh	yes	no	no	The TOMBSTONE. Written by the cleanup as the last act, after every other label is cleared, and it drives nothing. It says the clearing was settlement -- not a refusal at the lock, not the reaper, not an eviction, all of which also leave a change with no labels. Persistent: it is the one label a shipped change keeps. The person's words are release:start and staging:hold; complete and end are the pipeline's (2026-09-14)
+release:skip	human	yes	yes	yes	INTENT, a verb: skip the estate. The deployable estate is not touched by this change, so there is nothing to release and the only act left is the merge. Renamed from release:unaffected on 2026-09-15 (the person's words are verbs; the rest of the tense-pair grammar waits for rebuild 005, research/findings/release-grammar.org). Checked against the labeller: a change carrying app:* while claiming unaffected is refused (the two-classes defect in another namespace) until a person removes the label that is wrong. Never takes the berth, books no window, records no observation; the merge records "no deployment, by declaration, and the labeller agreed". Rule UnaffectedMerges in tla/Labels.tla and sim/label_sim.py (2026-09-15)
 release	human	no	yes	no	INTENT. A person adds it; the scheduler consumes it. A trigger that stays on re-fires
 hold:staging	REJECTED	no	no	no	REJECTED SEMANTICS 2026-09-13. Its job is covered by `freeze` (the estate stops, for everyone) and `itil:emergency` (precedence). A per-change hold looked necessary because it was the only human stop modelled; the real human stops turned out to be earlier -- a person owns `change:requested` and the approval, so a change nobody wants promoted simply is not requested or approved. Keeping a third mechanism meant three ways to stop a deploy with three different scopes and no rule for which applied
 deploy:staging	workflow	no	no	no	ACTION in flight, and the berth claim guard 1 reads. CLEARED by change/settle.sh on the success path and by change/reap.sh when a window lapses still holding it -- settle is unreachable for a change nobody drove, and a berth held by a dead window blocks everyone via guard 1 with no declared cause
@@ -67,16 +67,16 @@ production:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
 #
 # SPLIT 2026-09-13: classification moved to itil:* and change:* now holds only
 # the lifecycle. The two were mixed in one namespace, which is why the rule
-# "a PR has at most one change:*" could not be stated -- change:standard plus
+# "a PR has at most one change:*" could not be stated -- itil:standard plus
 # change:complete was a legitimate pair and occurred six times. itil:* names
 # the ITIL change type; change:* names where the change record has got to.
 #
 # The rows above say who may WRITE each label. They cannot say that two labels
 # are mutually exclusive, and that turned out to matter: #2 carried
-# change:standard AND change:emergency at once, which left its class undefined
+# itil:standard AND itil:emergency at once, which left its class undefined
 # while every rule in preflight branches on the class.
 #
-# Note the rule is NOT "at most one change:*". change:standard + change:complete
+# Note the rule is NOT "at most one change:*". itil:standard + change:complete
 # is a legitimate pair and occurs six times in this repo's history. The change:*
 # namespace holds TWO kinds of fact and the exclusion applies within each:
 #
@@ -84,7 +84,7 @@ production:smoke-failed	gates/smoke.sh --pr	no	no	no	observation
 #   lifecycle  where it is in the process        at most one ACTIVE state
 #
 # That overloading is a naming defect, recorded rather than renamed: renaming
-# change:standard now would rewrite the class of every settled change in the
+# itil:standard now would rewrite the class of every settled change in the
 # history, and the history is the record.
 #
 # group	kind	members	cardinality	who resolves a violation
@@ -94,13 +94,12 @@ exclusive	staging-verdict	staging:e2e staging:e2e-failed	<=1	the instrument that
 exclusive	staging-smoke	staging:smoke staging:smoke-failed	<=1	same
 exclusive	production-verdict	production:e2e production:e2e-failed	<=1	same
 exclusive	production-smoke	production:smoke production:smoke-failed	<=1	same
+exclusive	closure	change:complete change:failed change:backed-out change:abandoned change:superseded	<=1	a person. THE FIVE CLOSURES ARE MUTUALLY EXCLUSIVE and this was never declared -- the `lifecycle` group above covers only requested/scheduled/complete, so nothing said a change has exactly ONE terminal state. Found 2026-09-15 when peer 002 asked for the rule and there was none to give. Discriminator: did production ever SERVE this build? yes and still does -> complete; yes then returned -> backed-out (abort.sh refuses it without --to <sha>); no -> failed if something was wrong, superseded if another change landed the same intent first, abandoned if nobody is driving. When two fit, PREFER THE CLOSURE THAT NAMES A VERIFIABLE FACT OVER ONE THAT NAMES AN ABSENCE: superseded outranks abandoned (it names another PR), backed-out outranks failed (it names a SHA). NOTE THE LIMIT: pr-state-audit.py reads this, but audits OPEN PRs only, so this is enforced before settlement and not after
 change:failed	change/abort.sh	yes	no	no	TERMINAL. ITIL closure code: the change did not complete. Production never served it, or never had it made live. Nothing to undo
 change:backed-out	change/abort.sh	yes	no	no	TERMINAL. ITIL closure code: production DID serve this change and was returned to a prior state. abort.sh refuses this without --to <sha>, because the word asserts an estate action
 change:backfill-owed	change/abort.sh	yes	yes	yes	AN UNPAID CHANGE RECORD. An emergency lands first and is documented after -- ITIL documents an emergency change retrospectively, and blocking on the record would make the record the emergency. This label says a change reached main without the normal evidence and still owes: the window it never booked, the observations it never took, and why. It blocks NOTHING. A person adds it when declaring an emergency and a person clears it when the record is written; automation must not clear a debt it did not pay. PERSISTENT: it must survive settlement, because the merge is when the debt STARTS -- a label that vanished at settle would clear itself at the exact moment the change went in undocumented
-change:start	human	no	yes	yes	INTENT. The one thing a person must say. Supersedes change:requested + release, which were two human-owned labels for one fact. An external change-request reference, if any, belongs in the change record and not in the label
+release:start	human	no	yes	yes	INTENT, a verb. The one thing a person must say (was change:start until 2026-09-16; the machine-written release:start "the release has BEGUN" is retired, deploy:staging already says it). Consumed by the driver at the lock. A verb that stays on with no answer means no runner is listening
 berth:stale	reap	yes	no	yes	The staging lease outlived its holder -- berth held, window gone, build serving nowhere. Found live on #92, where the intent was long dead and the lock was not. Written by the reaper; a person may clear it after coordinating. Nothing else names this state, and it blocks everyone via guard 1
-staging:deployed	targets/*/deploy.sh	no	no	no	the staging install finished for this head. THE MISSING FRONT HALF: until this existed, nothing between deploy:staging (intent) and staging:e2e (a verdict) had a name, so a deploy that placed nothing looked identical to one that had not started
-staging:healthy	gates/health.sh --pr	no	no	no	staging serves this head. An OBSERVATION: the authority is the record it writes, which names the build; the label goes stale and the record does not
-production:deployed	targets/*/deploy.sh	no	no	no	the production install finished for this head -- on a colour, BEFORE the cutover. Distinct from the front serving it
-change:end	change/settle.sh	yes	no	no	the tombstone: cleanup ran and this change record is closed. The one change:* label that is deliberately NOT cleared, because it records that clearing happened
-staging:hold	human	yes	yes	yes	a person is holding this change at staging to test by hand. NOTE: hold:staging is a SECOND SPELLING of this idea, declared REJECTED in this file and still enforced in change/guard4.sh, change/activate.sh and gates/preflight.sh. Two spellings of one fact, one of them a tombstone that three scripts still obey -- see spec.org. Unresolved
+review:proxy	change/review.sh	yes	no	no	A recorded proxy approval. NEVER equals APPROVED: guard4.sh prints which it found so nobody reads one as the other, and it requires an observation record naming the reviewed SHA -- a label cannot say which build was read
+change:abandoned	change/abort.sh	yes	no	no	CLOSURE. Nobody is driving this any more. The state #70 reached and no existing code fit: never reached production (not complete), nothing wrong with it (not failed), never deployed (not backed-out). Its window lapsed and reap.sh closed THAT expired, which says nothing about the change
+change:superseded	change/abort.sh	yes	no	no	CLOSURE. Another change landed the same intent first. #40 closed this way after #52 landed a richer version of the same PANELS entry. Not a failure -- nothing about it was wrong, another change simply arrived first

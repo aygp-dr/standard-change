@@ -1,0 +1,7 @@
+extends: substitution
+message: "Thesis inflation. Prefer '%s' over '%s' for a casual claim, or drop the noun."
+level: warning
+ignorecase: true
+swap:
+  thesis: argument
+  theses: arguments

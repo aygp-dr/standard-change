@@ -450,7 +450,7 @@ Also excluded on purpose, within my own lens:
   completion condition. I modelled the *scripts*, because they are what runs
   the estate.
 - *=change/activate.sh= as a live path.* It refuses on this host
-  (=change/activate.sh:59=) and =docs/changing-the-pipeline.org= measured
+  (=change/activate.sh:59=) and =research/findings/changing-the-pipeline.org= measured
   zero invocations. I still used it as evidence, because it is the only
   place the *full* ordered sequence — window, berth, deploy, authorizing
   run, hold, idle colour, cutover, guard 5, settle — is written down in one

@@ -61,7 +61,7 @@ that would cross into it.
 Dev is *absent on purpose*. Six lines of estate state, against MonoWatch's 51
 cells, is the honest amount a one-berth monorepo has.
 
-*What we do not show, and why:* DORA metrics. =docs/release-standards.org=
+*What we do not show, and why:* DORA metrics. =research/history/release-standards.org=
 established that every DORA metric takes a deployment that reached production
 as its unit, so a forfeited window and a revalidation are invisible to it — and
 those are our dominant cost. A DORA row here would read =Deploy Freq: 0/day,

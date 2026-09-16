@@ -1,0 +1,161 @@
+#+TITLE: How this repository was built and checked: the method, as a procedure
+#+DATE: 2026-09-15
+
+The procedure, written so that the next repository can follow it without
+reading this one's history. Each step names the artifact it produced here
+and the failure that made the step necessary. The steps are in the order
+they happened; the order is the finding.
+
+* Step 0: a spec that governs, and a status line that says nothing is built
+
+=spec.org= is literate org-mode. It carries the tangle targets for the
+files that must agree with it (the router template, the labeller
+configuration, the deploy workflow, the Makefile), and it governs: when a
+companion file disagrees, the file is the bug. Its first version said, in a
+section of its own, that nothing was built. That line stayed until the first
+gate ran, and every command in the quickstart was marked as specified and
+unrunnable until it had been watched to run. Claims carry a cell marker:
+[H] for a hypothesis nobody has observed, [E] for an observation with the
+command and output beside it. The spec moved from 0.2 to 0.5 as observations
+refuted it; a run that refutes the spec amends the spec in the direction of
+the observation, never the other way. See =.meta/methodology.org= for the
+disciplines and =spec.org= §Version for what each bump meant.
+
+* Step 1: a mock stack that is a fixture, and a port scheme that names tiers
+
+The product is the pipeline; the four apps (=core=, =plp=, =pdp=,
+=checkout=) are fixtures that exist to be deployed. Each is a small node
+server behind an nginx router rendered from =apps/*/routes.json=, the one
+source the router config, the labeller config and the journey list are all
+generated from. Every app answers with an =X-Build-Sha= header, because
+"deployed" means "the front serves this build" and nothing else, and a check
+that cannot read the build it reached is a check that cannot fail.
+
+Environments are places with ports. Dev blocks are =9000 + 10n= per
+worktree, the team tier is 9100 and cannot promote, the protected tier is
+9200 for staging, 9210 and 9220 for the two production colours, 9230 for
+the front. The number tells a reader what an environment is, which removed
+the ambiguity the promotion survey documents (=history/promotion-models.org=:
+one word, seven kinds). Inside a jail every app has the same ports, because
+ports are only scarce where a namespace is shared. The jail estate ran on a
+FreeBSD host with bastille; the macOS host ran the same apps in worktree
+blocks as stand-ins (=substrates/substrate-emulation.org=). Two mock
+stacks, one port map, one health header.
+
+* Step 2: gates that can refuse, and a self-test that proves it
+
+Every gate (lint, test, e2e, smoke, health, the browser journey, docs,
+labels) has a =fixtures/<gate>/fail/= input it must reject, and
+=gmake gate-selftest= runs those first. A gate that fails to reject its
+failing fixture produces no verdict that run; its pass is void. No gate has
+a warning tier: zero findings or the gate failed. Exit codes are a contract
+(=docs/exit-codes.org=): 0 proceed, 2 lock, 3 freeze, 4 unreachable, and 4
+blocks, because "I could not look" is a third value and treating it as a
+pass is the defect class the spec later named. The gates write their own
+verdicts as records that name the build they measured
+(=experiments/014-observation-records=); a label with no build attached
+authorizes nothing.
+
+* Step 3: the ladder, from a picture to a live run
+
+The design was checked at seven layers, each cheaper than the next and each
+catching something the previous could not (=WALKTHROUGH.org= §The ladder).
+
+| rung | artifact | what it caught here |
+|------+----------+---------------------|
+| system overview | README §What this is | the objective is production; the queue is an instrument |
+| control-flow diagrams | six Mermaid diagrams in README, two in the spec | staging is a singleton, not per-group slots |
+| scenario catalogue | =scenarios.org=, L1 to L13 and D1 to D23 | D4: an emergency strands another change's staging pass |
+| TLA+ | =tla/StandardChange.tla= with =Guard4b= as a constant | D4 confirmed in 11 states; the fix proved at 830 |
+| exhaustive model and property tests | =sim/=, =gates/pbt-pipeline.py= | sampling does not find D4 in this space; enumeration does |
+| live run | the mock run against the jails | two shell defects no reading found |
+| controls audit | =gates/audit-controls.py= | none of it is enforced: rulesets return 403 on this plan |
+
+The diagrams are Mermaid in org with =:eval never-export=, never images,
+so a diagram is diffable and a renamed state shows in review. The rule for
+the models came out of rung four and became an ADR (=docs/adr/0005=):
+*labels are modelled before they are built.* A label with no row in the
+model has no invariant, and a label with no invariant cannot be shown wrong.
+
+* Step 4: models that can fail, and two transcriptions that must agree
+
+A model that can only pass proves nothing. Every rule in the label machine
+is a TLA+ constant; =tla/check.sh= flips each to FALSE and TLC must name the
+invariant that rule protects, or the check fails. Seventeen rules,
+seventeen negatives, one positive over the whole space; the counts, with
+their dates, are in =findings/evidence-census.org=, because a count quoted
+without its date was the most repeated error this paper had. The same machine is transcribed a second time in Python
+(=sim/label_sim.py=), from the scripts rather than from the declaration,
+and =sim/cross_check.py= requires the two to name the same invariant per
+rule and to count the same states where the simulator can exhaust. Two
+transcriptions that agree are hard to be wrong together; either alone can
+hide a defect as an unreachable state. The UNCHANGED frames of the TLA+
+module are generated (=tla/frames.py=) after twenty-seven variables by hand
+produced a duplicated name and a missing history variable. The simulator
+also carries a rule the pipeline does not: =Interfere=, any writer may add
+or remove any label at any time, which is the estate as it is actually run
+and the reason label-set invariants are reported rather than trusted.
+
+* Step 5: experiments with hypotheses, and numbers that never repeat
+
+Nothing speculative lands on the strength of an argument. It becomes
+=experiments/NNN-slug/= with a falsifiable hypothesis, a success criterion,
+the exact command, and a dated =notes.org= that records what was observed.
+Numbers are monotonic and never reused, so a gap in the sequence is a
+record of an experiment that was started and not kept. Negative results
+are the point: 013 found that Playwright refuses to start on FreeBSD, 017
+found that a token figure in the time-spent note was a 1.9 times double
+count, 022 found that a watcher of the PR list cannot tell who holds the
+berth, 023 found that a process which took over completely still spoke a
+language its owners could not read. Every experiment that refuted a spec
+claim amended the spec.
+
+* Step 6: numbered rebuilds, with progressively tighter framing
+
+The repository was rebuilt from its own spec by agents that had not seen
+its history, and the framing tightened each time.
+
+- *Rebuild 000* was handed the carried corpus and refuted its own
+  hypothesis: five of six known defects were "answered" by a builder that
+  had been given the post-mortem of those five. A grading rule that lets
+  the answer key into the exam grades nothing.
+- *Rebuild 001* fixed that with a held-out defect set
+  (=experiments/019-rebuild-001/HELD-OUT.org=): defects the builder is never
+  shown, graded after the fact. The file says on its first line who must
+  not read it.
+- *Rebuild 002* was graded against a sealed spec (spec-v1). Its
+  cross-section contradiction scan (=docs/cross-section-contradictions.org=)
+  is held and not sent to the builder, because a builder that reads the
+  reviewer's findings is rebuild 000 again. Spec 0.5's three new sections,
+  the defect taxonomy, the boundary conditions and the nomenclature, are
+  what a rebuild is graded against; 0.4 described a pipeline and 0.5
+  describes what goes wrong in pipelines that judge things.
+
+The adoption toolkit (=adopt/generate.sh=) is the same idea turned outward:
+it reads a profile of the adopting repository and refuses, by name, every
+control whose precondition the profile does not meet, because a guard that
+cannot fail in that repository is worse than no guard.
+
+* Step 7: two operators, one forge, and the language audit
+
+Once the pipeline ran, the checks moved from the code to the people. Two
+grinders on two hosts ran against one label lock without being told about
+each other (D21); five agents landed five changes by hand (022); five
+agents landed five changes by saying one word (023); five owners were
+asked what they could not read (024, and the audit table in 023). The
+findings from those runs are what changed the pipeline's messages, its
+identity model and its end-of-change rule, and they are the reason the
+research writeup exists: the adoption guide (=research/adoption.org=) lists
+every decision with its options and where each was watched, which is what a
+repository elsewhere needs to take the tracking layer without taking this
+history.
+
+* The mandate for mutating the state machine
+
+A change to the machine is six things or it is not a change: one rule
+constant, one named invariant, one negative check that must name it, the
+same row in the simulator, an owner row in =change/label-owners.tsv=, and a
+row in the rules table of =findings/label-state-machine.org=. Nothing lands
+as a label until all six exist. The blast radius of a mutation is then the
+one invariant that fails when its constant is flipped, and a reader can
+find it by grepping the constant's name.

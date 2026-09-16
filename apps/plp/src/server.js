@@ -361,7 +361,7 @@ export function render(path, catalogue = loadCatalogue(), products = loadProduct
 
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
-export const BACKGROUND = '#c8f5dc';
+export const BACKGROUND = '#bff0d4';
 
 // ---- the product list, which both routes render -----------------------------
 //

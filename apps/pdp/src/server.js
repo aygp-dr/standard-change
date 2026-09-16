@@ -169,7 +169,7 @@ export function render(path, catalogue = loadCatalogue()) {
 
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
-export const BACKGROUND = '#fff0a8';
+export const BACKGROUND = '#fff6c2';
 
 // An error page should not look like a page that worked. pdp renders the same
 // chrome whether it found the product or not, so a 404 and a 200 were
@@ -178,7 +178,7 @@ export const BACKGROUND = '#fff0a8';
 //
 // Keyed off `found`, the same field status() uses, so the colour cannot
 // disagree with the status code. If it renders red it returned 404 or 503.
-export const ERROR_BACKGROUND = '#ffe3e3';
+export const ERROR_BACKGROUND = '#ffd9d9';
 const background = (d) => (d.found ? BACKGROUND : ERROR_BACKGROUND);
 
 const SYMBOL = { USD: '$', GBP: '£', EUR: '€' };
@@ -211,7 +211,7 @@ const AVAILABILITY = {
 // "we do not have that" versus "we cannot tell you right now".
 export function panel(d) {
   if (d.sku === undefined) return '';   // not a product page
-  const sku = esc(d.sku || '(none)');
+  const sku = esc(d.sku || '(no SKU)');
   if (d.catalogue === 'unavailable')
     return `<h2>Product unavailable right now</h2>
 <p>We cannot show <code>${sku}</code> right now — the catalogue is unavailable.

@@ -24,7 +24,7 @@ export function render(path) {
 // An HTML view so the estate can be clicked through. JSON stays the contract
 // the gates assert on; HTML is only served when the client asks for it.
 // Issue #8 -- the checkout surface renders pink.
-export const BACKGROUND = '#ffa8cc';
+export const BACKGROUND = '#ffb8d4';
 
 // `port` is the port this process is ACTUALLY answering on: the caller takes it
 // off the accepted socket, not from PORT. shared/oneui.js derives the tier from
@@ -54,7 +54,7 @@ export function shippingForm(q) {
     `<p><label>${esc(label)}<br><input name="${esc(n)}" type="${esc(type)}" ` +
     `value="${esc(q.get(n) || '')}" style="width:100%;max-width:22rem;padding:4px"></label></p>`;
   const filled = SHIP.every(([n]) => (q.get(n) || '').trim() !== '');
-  return `<p>Your order comes to <b>${DUE}</b>, including delivery.</p>
+  return `<p>Your order comes to <b>${DUE}</b>, delivery included.</p>
 <h2>Shipping address</h2>
 <form method="get" action="/checkout">
 ${SHIP.map(field).join('\n')}

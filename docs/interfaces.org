@@ -457,5 +457,5 @@ able to tell "nobody watches this" from "something watched it and said no".
 * Status
 
 Specification only. The shell implementations named above exist and run; none
-of the service interfaces do. =docs/idp-api.org= and =docs/idp-service.org=
+of the service interfaces do. =docs/idp-api.org= and =research/history/changeflow-state-machine.org=
 describe an earlier local SQLite service that is not on the promotion path.

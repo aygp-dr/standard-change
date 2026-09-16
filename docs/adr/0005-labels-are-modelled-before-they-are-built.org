@@ -1,0 +1,68 @@
+#+TITLE: ADR 0005 — a label exists in a model before it exists in the pipeline
+#+DATE: 2026-09-15
+
+* Status
+
+Accepted 2026-09-15. Enforced by =gates/label-model-coverage.py=, in
+=gate-selftest=.
+
+* Context
+
+Every label defect this repository has produced came from a label that lived
+in the shell scripts and in nobody's model.
+
+- =change:emergency= appeared in =spec.org= twenty-three times and was declared
+  nowhere. =gates/preflight.sh= matches with =grep -cx=, an exact whole-line
+  match, so a change labelled the way the governing document specified *would
+  not have matched the code that read it*.
+- =change:failed= and =change:backed-out= were owned by =change/abort.sh= and
+  *did not exist on the forge*. The write is =|| true=, so every abort since
+  the script was written silently failed to record its outcome. Found because
+  a PR aborted twice and carried no closure code.
+- =staging:deployed=, =staging:healthy=, =production:deployed=, =change:end=
+  and =staging:hold= were live on the forge for hours before any declaration
+  named them — which is why a stranded change accumulated assertions nothing
+  would clear.
+- =hold:staging= is declared REJECTED and is still enforced in three scripts.
+
+The pattern is not carelessness. It is that *a shell script is the cheapest
+place to add a label and the most expensive place to discover it was wrong*.
+
+* Decision
+
+*A label is added to the simulator and the TLA+ model before it is added to
+any pipeline script, and removed from the pipeline before it is removed from
+the models.*
+
+=gates/label-model-coverage.py= checks that every live row in
+=change/label-owners.tsv= appears in at least one of =sim/label_sim.py=,
+=sim/pipeline_sim.py=, =tla/Labels.tla= or =tla/StandardChange.tla=. Labels
+whose declared owner is RETIRED or REJECTED are exempt: their whole job is to
+be absent from the running pipeline, and requiring a model for one would be
+asking the model to represent something the pipeline is forbidden to produce.
+
+TLA+ identifiers cannot contain a colon, so =staging:e2e= is accepted as
+=stagingE2e= or =StagingE2e=. Demanding the literal string would fail every
+TLA model by construction, and a check that cannot pass is as useless as one
+that cannot fail.
+
+* Consequences
+
+*Accepted cost:* two artifacts must change before the useful one does. For a
+one-line copy change that is nothing, because copy changes do not add labels.
+For a label it is exactly the friction intended.
+
+*Current debt, measured on adoption: eighteen of forty-one live labels are in
+no model.* They are named in the gate's output and are not grandfathered — the
+gate reports them today. Closing that list is work this ADR creates and does
+not pretend to have done.
+
+*What this does NOT do.* It checks that a label is NAMED in a model, not that
+the model's behaviour is right. A label mentioned in a comment satisfies it.
+That is deliberate: the cheap check catches the defect that actually happened
+— a label nobody modelled at all — and a stronger check that nobody can run
+is worth less than a weak one in =gate-selftest=.
+
+*Refutation condition.* If a label defect reaches production that WAS present
+in both models, this ADR is not buying what it claims and should be revisited
+rather than tightened.

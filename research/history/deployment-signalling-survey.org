@@ -1,0 +1,123 @@
+#+TITLE: Deployment signalling labels, surveyed in situ
+#+DATE: 2026-09-15
+
+* What this asks
+
+=research/history/label-standards-survey.org= counted label *strings* GitHub-wide. This
+asks a different question: *what does one team's complete signalling
+vocabulary look like, and how do the pieces relate?* A count tells you
+=deploy:staging= exists 169 times. It does not tell you what sits beside it.
+
+Method: pull the full label set of repositories the earlier survey identified,
+filter to deployment-adjacent names, read the descriptions. All =[E]=, measured
+2026-09-15.
+
+* Four shapes, not one vocabulary
+
+The strings vary; the *shapes* are few, and a team picks one.
+
+** 1. The per-environment triple -- =nyrkio/nyrkio=
+
+| label | description, verbatim |
+|-------+-----------------------|
+| =deploy:staging= | "Initiates deployment on staging" |
+| =deployed:staging= | "State of successful staging deployment" |
+| =deploy-failed:staging= | "State of failed staging deployment." |
+
+*Intent, success, failure -- three labels per environment*, and the intent/state
+split is carried by the PREFIX (=deploy:= vs =deployed:=), independently
+invented. Note the third: failure gets its own namespace (=deploy-failed:=)
+rather than a suffix on the state one. Three prefixes, one environment suffix.
+
+** 2. The release train -- =openstax/rex-web=
+
+=in-release-4=, =in-release-8=, =in-release-10= … =in-release-36=, plus
+=in-staging= and =in-production=.
+
+*No per-environment intent at all.* A change is "in release 28"; which
+environment that is, is a property of the release. The change has no such property. The
+environment labels exist but carry no intent -- they are where the release got
+to. This scales by adding a label per release forever, which is why there are
+dozens.
+
+** 3. The single-track queue -- =mysociety/alaveteli=, =mysociety/foi-for-councils=
+
+One label: =awaiting-deploy=. No environment, no success state, no failure
+state. Either it is waiting or it is out.
+
+*This is the honest minimum*, and it is worth noticing that a real project with
+a real deployment cadence chose it. The information a second label would add is
+recoverable from whether the issue is closed.
+
+** 4. The gate-per-stage -- =Coghatch-ai/lexflow=
+
+The most developed vocabulary found, and the one worth studying. 40 labels,
+*entirely prefixed*:
+
+| prefix | members | what it answers |
+|--------+---------+-----------------|
+| =area:= | app, api, shared, drizzle, infra | WHAT MOVES |
+| =sev:= | critical, high, medium, low | how bad |
+| =review:= | pass, changes | did a human read it |
+| =qa:= | pass, *blocked* | did the gate run |
+| =uat:= | pass, fail, *blocked* | did acceptance run |
+| =issuekit:= | in-progress, attempted, *blocked*, resolved | is anyone on it |
+
+*** =area:*= is =app:*= under another name
+
+Same job: derive what a change touches, from the paths. Two independent
+projects reached "prefix a namespace, one member per deployable surface."
+
+*** THREE NAMESPACES INDEPENDENTLY CARRY A THIRD VALUE
+
+This is the finding.
+
+- =uat:blocked= -- "Acceptance could not run -- precondition or environment"
+- =qa:blocked= -- "QA gate: blocked, needs fix before commit"
+- =issuekit:blocked= -- "Agent blocked -- needs input / next hypothesis"
+
+=uat:= is =pass / fail / blocked=. *Not pass/fail.* Somebody hit "could not
+run" often enough to name it, in three separate namespaces, consistently.
+
+That is the distinction =spec.org= defect class 8 argues for -- /not yet is not
+no, and cannot say is not either/ -- arrived at by a team with no connection to
+this work. It is the strongest external evidence the class is real rather than
+an artifact of how this pipeline happens to be built, and it was reached the
+same way: by being burned by a two-valued verdict.
+
+Note also what =uat:blocked='s description names as the cause: *"precondition
+or environment"*. The environment being wrong is a first-class reason a verdict
+cannot be produced -- which is exactly what =standard-change-004= is about.
+
+* What this means for the per-environment tags
+
+The premise was right: we cannot fully swap them out. But the survey says the
+per-environment part is the *least* standardised thing here.
+
+- Every project surveyed has a way to say *what a change contains* (=area:=,
+  =app:=, =in-release-N=).
+- Every project has a way to signal *intent to deploy* (=deploy:=,
+  =needs-deploy=, =ready-to-deploy=, =awaiting-deploy=).
+- *Only one of four* attaches the environment to the intent. Two omit
+  environments from the signalling entirely.
+
+So the two things a team reliably has are the two the earlier survey called
+INTENT and MANIFEST. The environment suffix is the optional part, and the
+projects that skip it are not less mature -- =alaveteli= is fifteen years old.
+
+* Also found, worth recording
+
+- =Coghatch-ai/lexflow= =fixed-pending-deploy=: "Fixed; auto-closes on deploy".
+  A label with a declared *lifecycle hook* -- it names the event that removes
+  it. Almost nothing else surveyed says who clears it.
+- =safe-fndn/safe-singleton-factory= =ready-to-deploy=: "Pre-deployment checks
+  have passed and is ready to…" -- intent DERIVED from gate results rather than
+  asserted by a person. The only instance of that direction found.
+
+* Refutation
+
+Four repositories is a sample, not a census, and they were chosen from a prior
+survey that selected for having deployment labels at all -- so "every project
+has an intent signal" is true of *this sample by construction*. The claim that
+survives is narrower: *where a deployment vocabulary exists, intent and
+manifest are always present and the environment suffix often is not.*

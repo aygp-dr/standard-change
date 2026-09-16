@@ -708,8 +708,8 @@ PR that holds it. Slots may return later as an optimization; they are not in
 | Label                  | Set by      | Removed by        | Meaning                                                      |
 |------------------------+-------------+-------------------+--------------------------------------------------------------|
 | =app:<group>=          | labeller    | labeller          | The diff touches =apps/<group>/=. *Owned* by the labeller     |
-| =change:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
-| =change:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
+| =itil:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
+| =itil:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
 | =itil:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
 | =change:requested=     | *human*     | release / close   | *Start my change request.* The only label a person adds to set a change going |
 | =change:scheduled=     | scheduler   | activation        | A window is booked on the change schedule                    |
@@ -763,7 +763,7 @@ app:checkout:
 app:mock:
   - changed-files:
       - any-glob-to-any-file: apps/mock/**
-change:normal:
+itil:normal:
   - changed-files:
       - any-glob-to-any-file:
           - router/**
@@ -790,7 +790,7 @@ jobs:
         if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         with:
           sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
-      # change:standard is the COMPLEMENT of change:normal, which actions/labeler
+      # itil:standard is the COMPLEMENT of itil:normal, which actions/labeler
       # cannot express -- it matches globs, it cannot say "matched no other rule".
       # The offline oracle modelled this as derived and the config never
       # implemented it, so PRs got app:* and no change:* at all. Third time the
@@ -812,11 +812,11 @@ jobs:
           is_normal=$(echo "$files" | grep -cE '^(router|gates|change|targets)/|^\.github/' || true)
           echo "changed=$(echo "$files" | wc -l) apps=$has_app normal=$is_normal"
           if [ "$is_normal" -gt 0 ]; then
-            gh pr edit "$N" --repo "$R" --add-label change:normal || true
-            gh pr edit "$N" --repo "$R" --remove-label change:standard || true
+            gh pr edit "$N" --repo "$R" --add-label itil:normal || true
+            gh pr edit "$N" --repo "$R" --remove-label itil:standard || true
           elif [ "$has_app" -gt 0 ]; then
-            gh pr edit "$N" --repo "$R" --add-label change:standard || true
-            gh pr edit "$N" --repo "$R" --remove-label change:normal || true
+            gh pr edit "$N" --repo "$R" --add-label itil:standard || true
+            gh pr edit "$N" --repo "$R" --remove-label itil:normal || true
           fi
 
       - name: drop stale staging verdicts on a new push
@@ -1523,7 +1523,7 @@ jobs:
     if: github.event.label.name == 'deploy:production'
     runs-on: ubuntu-latest
     concurrency: {group: production, cancel-in-progress: false}
-    environment: production          # require reviewers here for change:normal
+    environment: production          # require reviewers here for itil:normal
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
       - uses: actions/checkout@v4
@@ -1611,7 +1611,7 @@ Each checklist is a =.github/PULL_REQUEST_TEMPLATE= section and a =pir.sh= field
 - [ ] =deployed:staging-<group>-<n>= present for every =app:*= group
 - [ ] Staging e2e run is on the head SHA (not a prior push)
 - [ ] No =blocked:*= label
-- [ ] For =change:normal=: one approving review from a listed change authority
+- [ ] For =itil:normal=: one approving review from a listed change authority
 - [ ] Rollback SHA recorded in PR body (=pir.sh= fills this from the production deployment record)
 
 ** Post-implementation review (generated)
@@ -1842,7 +1842,7 @@ it targets the deprecated Node 20.
 
 ** A dependency bump is a normal change, and that is correct
 
-A Dependabot PR touches =.github/=, so the labeller gives it =change:normal=,
+A Dependabot PR touches =.github/=, so the labeller gives it =itil:normal=,
 which requires an approving review from a change authority (§Labels). *A bump
 to the control plane is exactly the change that should not be automatic* — the
 actions being updated are the ones that run the gates.
@@ -1863,7 +1863,7 @@ date with nothing required to pass. The rest of this section describes the
 private-repo state it was written in and is kept as the record of why the
 workflow-level guards exist. =gmake audit= now reads the rules rather than
 reporting them =UNAVAILABLE= (5 ok, 3 findings, 3 absent, 0 unreadable).
-=docs/pipeline-history.org= §Availability on this repo has the commands.
+=research/history/pipeline-history.org= §Availability on this repo has the commands.
 
 GitHub's own settings page says so: /"Your main branch isn't protected."/ It is
 correct and there is no fix on this plan — =repos/{r}/rulesets= and
@@ -1937,7 +1937,7 @@ by the forge.
 | *5* production healthy | *no*               | nothing after the merge is its concern  |
 
 And it is the *release train relocated to the merge point* —
-=docs/release-strategies.org= reached that conclusion independently, and
+=research/history/release-strategies.org= reached that conclusion independently, and
 measured what batching buys: *0.58 validations per shipped change against
 13.63*, at the cost of latency. A merge queue is that amortisation, native.
 
@@ -2005,7 +2005,7 @@ second click.
 : ruleset: pull_request.required_approving_review_count = 1
 : repo:    allow_auto_merge = true
 
-with =change:normal= already requiring it (§Labels) and =change:standard=
+with =itil:normal= already requiring it (§Labels) and =itil:standard=
 relying on the gates as the change authority — which is the existing split, and
 the reason the split exists.
 
@@ -2075,7 +2075,7 @@ Three controls need their own reads, and the audit does them:
 - *freeze and emergency* — the change schedule, and the =EMERGENCY_CHANGE=
   repository variable as the fallback when the calendar is unreachable.
 - *environment protection* — =environments/production= must carry a required
-  reviewer for =change:normal=, =wait_timer= 0, and a =deployment_branch_policy=
+  reviewer for =itil:normal=, =wait_timer= 0, and a =deployment_branch_policy=
   restricting which branches may deploy.
 
 ** Availability on the development box [E, 2026-09-13]
@@ -2105,7 +2105,7 @@ What becomes available, and what it changes:
 | repo + *org-level* rulesets       | the guard table can be enforced once, across every repo, rather than configured per repo |
 | environment protection rules      | guard 4's approval becomes platform-attested instead of a =pulls/{n}/reviews= query in a job |
 | required reviewers as *teams*     | "a named change authority" stops being one person; §The balance's =prevent_self_review= deadlock dissolves |
-| CODEOWNERS enforcement            | =change:normal='s path-based authority becomes native rather than a labeller convention |
+| CODEOWNERS enforcement            | =itil:normal='s path-based authority becomes native rather than a labeller convention |
 | *custom deployment protection rules* | see below — this is the significant one |
 
 *Custom deployment protection rules are the native home for guard 4b.* An app
@@ -2179,7 +2179,7 @@ substitute repeated sampling and record that we have done so.*
 
 * C6, and the one platform that can meet it
 
-=docs/release-standards.org= found capability C6 — a *platform-attested*
+=research/history/release-standards.org= found capability C6 — a *platform-attested*
 deployment record — unmet on GitHub and unstandardised generally. Cloudflare
 Workers *versions* appear to meet it [E from docs, [H] until run]:
 
@@ -2304,7 +2304,7 @@ has one sharp consequence.
 
 | kind          | examples                                      | emitted by      | forgeable? |
 |---------------+-----------------------------------------------+-----------------+------------|
-| *derived*     | =app:*=, =change:standard=, =change:normal=   | the labeller, from the diff | no — resynced on every push |
+| *derived*     | =app:*=, =itil:standard=, =itil:normal=   | the labeller, from the diff | no — resynced on every push |
 | *request*     | =change:requested=, =itil:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
 | *action*      | =deploy:staging=, =deploy:production=         | the workflow    | no — it marks work in flight |
 | *observation* | =staging:passed=, =production:healthy=, =change:scheduled=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
@@ -2441,7 +2441,7 @@ suggests the inversion:
 main-ahead-of-production, which a deploy fixes. Production can never be
 serving something trunk does not contain.
 
-What it costs is exactly what =docs/release-strategies.org= found: "on main"
+What it costs is exactly what =research/history/release-strategies.org= found: "on main"
 becomes *intent* rather than *evidence*, because the merge now happens before
 the production evidence exists. You trade a divergence that needs a rollback
 for one that needs a deploy, and you pay for it by weakening what a merge
@@ -3003,9 +3003,36 @@ The terms a rebuild must keep, and what each one is *not*.
 | *freeze* | a property of the WORLD, blocking everyone including its declarer | a property of a change |
 | *emergency (estate)* | something is wrong out there; everything stops | a classification |
 | *itil:emergency* | THIS change is the remedy; it passes the freeze | the estate being shut |
-| *closure code* | passed / failed / cancelled / expired / backed-out | a boolean |
+| *change closure* | complete / backed-out / *abandoned* / superseded | a boolean, and never =expired= or =cancelled= |
+| *window result* | passed / failed / cancelled / forfeited / *expired* | a property of the CHANGE |
 | *soak* | proof by use across N *later* deployments | a longer test run |
 | *control-plane* | changes how every FUTURE change is verified | a big change |
+
+*** Two closure enums, not one — corrected 2026-09-15
+
+This table carried a single =closure code= row reading /passed / failed /
+cancelled / expired / backed-out/, mixing two subjects. =experiments/016-dora/
+schema.sql= had already split them and said why: *"Note what is absent:
+'expired' and 'cancelled'. Neither can be true of a change — they are true of a
+reservation."* The nomenclature had not caught up with the schema built to fix
+it.
+
+They close differently because they are different things:
+
+- A *change* completes, is backed out, is *abandoned*, or is superseded.
+- A *window* passes, fails, is cancelled, is forfeited, or *expires*.
+
+=abandoned= is the one this repository was missing entirely. On 2026-09-15 #70
+reached a state none of the three existing change closures fits: it never
+reached production (not =complete=), nothing about it was wrong (not =failed=
+— its driver hit a path belonging to another host), and it was never deployed
+(not =backed-out=). Its window lapsed and =change/reap.sh= closed that window
+=expired=, which is correct and says nothing about the change.
+
+So the change sat tombstoned with =change:end= and no closure code at all —
+unresolvable from the labels, because nothing on it says whether it needs
+resubmitting or merging. *A change nobody is driving any more is =abandoned=,
+and the absence of that word is why the state had no name.*
 
 ** The distinction that carries the most weight
 
@@ -3046,7 +3073,7 @@ gate sequence prevents an unauthorized or unsafe production deployment/:
    matching =pass/= input. Either direction voids the gate.
 4. =deploy-production.yml= deploys a group that has no
    =deployed:staging-<group>-<n>= label on the head SHA.
-5. A =change:normal= PR reaches production with no approving review.
+5. A =itil:normal= PR reaches production with no approving review.
 6. The rendered nginx config and =router/routes.json= disagree while
    =gates/lint.sh= exits 0.
 7. A stale lock older than 60 minutes is cleared without the clearance
@@ -3123,7 +3150,7 @@ Neither =aygp-dr/slipway= nor =aygp-dr/standard-change= exists on GitHub.
 * Open items (tracked as issues, not here)
 
 - Slot count per group (initial: 2 per group; trigger to raise: two consecutive =blocked:lock= on staging for the same group).
-- Whether =change:normal= also requires a CAB-style label from a second reviewer (trigger: first incident caused by a router change).
+- Whether =itil:normal= also requires a CAB-style label from a second reviewer (trigger: first incident caused by a router change).
 - Calendar as the freeze source vs repo variable only (trigger: first preflight exit 4 in a real run).
 - *(closed)* Directory name vs repo name. =slipway= and =standard-change= are
   the same project under two names, and both checkouts point at the same

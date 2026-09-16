@@ -44,7 +44,7 @@ FRONT_STG="http://127.0.0.1:${_stg_port}"
 # to ./change/schedule.sh failed with "not found" and the failure was reported
 # as "no open staging window covers now" for a window that was open. A script
 # that could not run its check said the check had failed: unreachable reported
-# as falsified, docs/label-ownership.org rule 2, one level up.
+# as falsified, research/findings/label-ownership.org rule 2, one level up.
 cd "$(dirname "$0")/.."
 
 # AND THIS SCRIPT IS STALE. It drives targets/bastille/ and calls 9200 the
@@ -116,7 +116,7 @@ indent() { # indent <command...>
 # The disconnect that costs is documented there.
 #
 # Left in place because activate.sh is not on any working path today
-# (docs/changing-the-pipeline.org measured ZERO invocations of it), and ripping
+# (research/findings/changing-the-pipeline.org measured ZERO invocations of it), and ripping
 # it out is a bigger change than noting it.
 DEPLOY_ID=''
 deploy_open() {  # deploy_open <environment> <description>
