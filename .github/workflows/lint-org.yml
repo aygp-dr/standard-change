@@ -1,0 +1,27 @@
+name: lint-org
+# The org gate, per pull request: gates/docs-lint.py over every org file (org
+# inside org, mermaid semicolons, dead links) and vale at error level on the
+# WalSh style (em dashes, load-bearing, LLM filler) over the org files the PR
+# changes. Spelling and term case are reported by `gmake prose`, never gated.
+on:
+  pull_request:
+    paths: ['**.org', '.vale.ini', '.vale/**', 'gates/docs-lint.py', '.github/workflows/lint-org.yml']
+permissions: {contents: read}
+jobs:
+  lint-org:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: install vale
+        run: |
+          curl -sL https://github.com/errata-ai/vale/releases/download/v3.13.0/vale_3.13.0_Linux_64-bit.tar.gz | tar xz -C /usr/local/bin vale
+          vale --version
+      - name: the org files this pull request changes
+        id: files
+        run: |
+          files=$(git diff --name-only --diff-filter=AM "origin/${{ github.base_ref }}...HEAD" -- '*.org' | tr '\n' ' ')
+          echo "list=$files" >> "$GITHUB_OUTPUT"
+          echo "changed: ${files:-none}"
+      - name: lint-org
+        run: make lint-org FILES="${{ steps.files.outputs.list }}"
