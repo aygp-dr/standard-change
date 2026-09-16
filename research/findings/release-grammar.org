@@ -96,6 +96,12 @@ owner's "model only from the PR tag perspective".
   read by =Activate= and never written by a change's action.
 - The seventeen rules survive the rename with their constants; what changes
   is that the label strings in comments match the labels a reader sees.
+- The calendar is its own module. Thirteen rules are the core; WindowGuard,
+  ReapFreesBerth, ReapSparesInFlight and LifecycleExclusive, with the
+  booking axis they read, are the calendar module, coupled to the core
+  through one pair, =release:schedule= and =release:scheduled=. A model
+  without the module has no booking variable and a far smaller space; the
+  core case (=adoption.org=) never books.
 
 * What the current tree does with it
 
