@@ -177,3 +177,5 @@ Post "https://api.github.com/graphql": net/http: TLS handshake timeout
   uat REFUSED: the journey is not what was accepted
 00:53:03Z  driver #60  ABORT at uat: the as-is Playwright journey was refused on staging (a flow change without its acceptance diff?)
 00:55:42Z  scheduler  #60 ended: driver exit 1
+01:00:52Z  scheduler  watching aygp-dr/standard-change for release:start every 20s
+01:01:16Z  scheduler  release:start on #62
