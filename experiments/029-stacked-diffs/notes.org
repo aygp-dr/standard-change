@@ -47,6 +47,28 @@ This is the same defect shape as 024's F2 -- a refusal that names a symptom
 rather than the cause -- except here the instruction is not merely unhelpful,
 it is destructive.
 
+* Where this runs, and why not an isolated repo
+
+*Decided by the owner: here, in =aygp-dr/standard-change=, public.*
+
+An isolated =standard-change-005= was considered and rejected, and the reason
+is the experiment's validity rather than convenience. *The subject under test
+is these guards.* H1 and H2 are claims about =change/queue.sh:24-27= and
+=change/divergence.sh=; V1 is a claim about what guard 0 and guard 4 each fail
+to see. Rebuilding =apps/=, =shared/= and the pipeline checks in a fresh
+repository would produce a reimplementation, and an experiment run against a
+reimplementation measures the copy.
+
+The one part that *could* have been isolated cheaply is the forge's own
+behaviour -- whether =mergeStateStatus= is computed against the immediate base,
+and whether GitHub retargets a base when its base branch merges. Those need no
+pipeline at all, only branches. They are observed here instead, because they
+have to be observed here anyway to decide the hypotheses that depend on them.
+
+The cost accepted: ten open pull requests in a public repository, in a list
+that is itself evidence for other experiments. They are labelled and traceable
+to this experiment, and the ledger below records their disposition.
+
 * Hypotheses
 
 ** H1 -- guard 0 reads its facts against the base and its verdict against main
@@ -279,6 +301,102 @@ literally: =Rebase onto `main`=.
 change is discarded from its history.* This is recorded as a scenario rather
 than a hypothesis because the answer is not in doubt -- what is being measured
 is whether the system says anything at all before it happens.
+
+** V6 -- walking the chain in ascending order, =a= then =b= then =c=
+
+The owner's reading is that this is similar to V2. *It is similar in one
+respect and the opposite in another, and the two must not be collapsed.*
+
+*Where it differs, and this is the safe direction.* Each tree in an ascending
+walk is a *superset* of the one before it:
+
+| act | what the estate serves |
+|---+---|
+| deploy =a= | main + a |
+| deploy =b= | main + a + b |
+| deploy =c= | main + a + b + c |
+
+Nothing is ever removed. V2's leaf-first order makes the second deployment a
+silent rollback; ascending order is *monotonic*, and monotonic is the property
+that makes an ordering safe. So V6 will not reproduce V2's defect, and if it
+appears to, something else is wrong.
+
+*Where it is identical, and this is the shared defect.* Every guard still
+answers about one edge. Deploying =c= serves =a='s and =b='s content, and the
+observation record names =c=. Guard 5 confirms convergence on =c='s sha,
+correctly. Nothing anywhere states that the estate is now serving three
+changes, and *nothing can*: the record has one field for the build and the
+build is one sha.
+
+So both directions share the defect that *the record names one change while
+the tree contains k*. They differ only in whether the arithmetic of that is
+forgiving. That is the finding to state plainly, because it means fixing the
+ordering does not fix the recording.
+
+*** The consequence the ascending walk exposes and the descending one hides
+
+Ascending has a failure the reverse direction cannot produce.
+
+=a=, =b= and =c= are deployed in turn. Each claims the berth, books a window,
+takes an observation and is authorized on its own head. Now consider what was
+authorized:
+
+- =c='s approval attests to =c='s head, and guard 4 is satisfied by it.
+- =c='s *tree* contains =a= and =b=.
+- =a= and =b= were each authorized separately -- so far so good.
+
+But run the same walk and deploy only =c=. Guard 0 passes (=c= vs =b= is
+=CLEAN=), guard 4 passes (=c='s head is approved), and *=a= and =b= reach the
+estate having never held a window, never been observed, and never been
+authorized*. The ascending walk makes this look safe precisely because in the
+full walk each one *was* authorized -- so the property that saved it was the
+operator's discipline, not a control.
+
+*The question V6 decides:* is there any difference, to the machinery, between
+deploying =a=, =b=, =c= in order and deploying =c= alone? *Prediction: none
+that the machinery can observe.* The estate ends in the same state and the only
+difference is how many windows were consumed.
+
+*** And what =release= is for, if the walk already shipped everything
+
+*I had this wrong and checked before running it.* My first draft claimed the
+five non-leaf changes would ship "under no class at all". They do not:
+=.github/workflows/labeller.yml:46-48= adds =itil:standard= to any change that
+touches =apps/=, so *every level of the stack is classified independently*.
+Verified against PR #62, which carries =app:pdp itil:standard=.
+
+The corrected finding is sharper than the wrong one.
+
+*Five changes, five standard changes, one logical change.* ITIL's unit is the
+change; here the unit is the diff level. A chain that a reviewer understands as
+one release is five pre-authorised standard changes to the machinery, each
+independently entitled to a window and a berth. Nothing relates them, and
+=exclusive class <=1= is satisfied five times over -- correctly, per change,
+while the stack as a whole has five classes and no single one.
+
+*And the release change may get no class at all.* Read the branch:
+
+: if   [ "$is_normal" -gt 0 ]; then  itil:normal
+: elif [ "$has_app"  -gt 0 ]; then  itil:standard
+
+=checkout-stack-release= carries no diff of its own -- it is the marker that
+proposes the chain. So =has_app= is 0, =is_normal= is 0, *neither branch fires,
+and the change that exists to be classified is the one change the labeller
+cannot classify.*
+
+The owner's instruction was that the final change is tagged =itil:standard=.
+Doing that by hand collides with =change/label-owners.tsv:26=, which records
+=itil:standard= as owned by the labeller with =person: no=. So the experiment
+cannot even be set up as specified without either violating the ownership
+declaration or giving the release change a token diff to make the labeller fire.
+
+*That is the finding, and it is a design question the owner has to rule on:*
+in a stacked workflow the change that should carry the classification is
+precisely the one with nothing in it to classify. A derived class and a
+stack-shaped release are incompatible as currently written.
+
+*Refuted if* the release change acquires a class without a hand-written label
+and without a token diff.
 
 * Findings ledger
 
