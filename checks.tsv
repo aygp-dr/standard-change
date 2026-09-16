@@ -8,6 +8,10 @@
 #          check". docs/exit-codes.org: 4 is not 1, and neither is 0.
 #   N/A    the check ran, and this repo has no such     exit 0, vacuously
 #          subject (no .tf files, so no terraform lint)
+#   UNARMED tool present, subject present, and the       exit 4 -- the oracle
+#          RULESET IS EMPTY. conftest with no .rego,     is missing, so the
+#          a schema validator with no schemas. Runs,     zero means nothing
+#          finds nothing, exits 0. Same shape again.
 #
 # ABSENT and N/A both produce "no findings". Treating them alike is the same
 # defect as change/guard4.sh:142, where an empty check-run filter scores green:
@@ -21,7 +25,7 @@
 # gate    required | advisory
 #         NOTE: `advisory` CONTRADICTS CLAUDE.md:70 ("Do not add a warning tier
 #         to any gate. Zero findings or the gate failed."). Every advisory row
-#         here is a proposal, not a ruling. See docs/maximal-checks.org.
+#         here is a proposal, not a ruling.
 #
 # id	scope	phase	tier	gate	tool	applies	what
 build-matrix	root	static	ready	required	node	package.json	compile on every supported version, warnings as errors
@@ -60,13 +64,13 @@ actions-lint	root	static	push	required	actionlint	.github/workflows/*.yml	workfl
 tf-validate	root	static	push	required	terraform	**/*.tf	terraform validate
 tf-lint	root	static	push	required	tflint	**/*.tf	tflint
 tf-checkov	root	static	ready	required	checkov	**/*.tf	IaC policy
-k8s-kubeconform	root	static	push	required	kubeconform	**/*.yaml	manifest schema
-k8s-kube-linter	root	static	ready	required	kube-linter	**/*.yaml	kube-linter policy
+k8s-kubeconform	root	static	push	required	kubeconform	**/*.{yml,yaml}	manifest schema
+k8s-kube-linter	root	static	ready	required	kube-linter	**/*.{yml,yaml}	kube-linter policy
 helm-lint	root	static	push	required	helm	**/Chart.yaml	helm lint and template
-dockerfile-lint	root	static	push	required	hadolint	**/Dockerfile	hadolint, pinned digest, non-root
-config-schema	root	static	push	required	yq	**/*.yml	YAML/JSON against JSON Schema
+dockerfile-lint	root	static	push	required	hadolint	**/{Dockerfile*,Containerfile*}	hadolint, pinned digest, non-root
+config-schema	root	static	push	required	ajv	**/*.{yml,yaml}	YAML/JSON against JSON Schema
 envvar-manifest	root	static	push	required	node	**/*.sh	env references checked against a manifest
-policy-opa	root	static	ready	required	conftest	**/*.yaml	policy as code
+policy-opa	root	static	ready	required	conftest	**/*.{yml,yaml}	policy as code
 openapi-lint	root	static	push	required	spectral	**/openapi.yaml	OpenAPI lint
 openapi-breaking	root	static	push	required	oasdiff	**/openapi.yaml	breaking-change detection
 proto-lint	root	static	push	required	buf	**/*.proto	buf lint
@@ -116,13 +120,13 @@ compat-rolling	root	dynamic	ready	required	node	apps/*/routes.json	new server vs
 bench-micro	root	dynamic	label	advisory	node	apps/*/src/*.js	microbenchmarks with statistical comparison
 load-k6	root	dynamic	label	advisory	k6	apps/*/routes.json	p95 latency and error rate against main
 web-vitals	root	dynamic	label	advisory	lighthouse	apps/*/routes.json	Lighthouse budgets
-image-size	root	dynamic	ready	advisory	podman	**/Dockerfile	container image size and RSS
+image-size	root	dynamic	ready	advisory	podman	**/{Dockerfile*,Containerfile*}	container image size and RSS
 query-analysis	root	dynamic	ready	required	node	db/migrate/**	N+1 detection, EXPLAIN plan regression
 migrate-fwd-back	root	dynamic	ready	required	podman	db/migrate/**	apply forward and backward, measure locks
 dast-zap	root	dynamic	label	required	zap	apps/*/routes.json	OWASP ZAP against the preview
 authz-matrix	root	dynamic	ready	required	node	apps/*/routes.json	every endpoint by every role, plus anonymous
 egress-denied	root	dynamic	ready	advisory	podman	package.json	build with network egress denied
-image-scan	root	dynamic	ready	required	trivy	**/Dockerfile	image scan, non-root, read-only rootfs
+image-scan	root	dynamic	ready	required	trivy	**/{Dockerfile*,Containerfile*}	image scan, non-root, read-only rootfs
 security-headers	root	dynamic	ready	required	node	apps/*/routes.json	security headers and CSP on live responses
 pii-logs	root	dynamic	ready	required	node	apps/*/src/*.js	PII detectors on test-run log output
 preview-env	root	dynamic	ready	required	node	apps/*/routes.json	ephemeral environment per PR, smoke tested
@@ -133,9 +137,9 @@ fault-injection	root	dynamic	label	required	podman	apps/*/src/*.js	latency, rese
 dependency-down	root	dynamic	ready	required	node	apps/*/src/*.js	each dependency unavailable in turn
 otel-assertions	root	dynamic	ready	required	node	apps/*/src/*.js	required spans, metrics and log events emitted
 log-schema	root	dynamic	ready	advisory	node	apps/*/src/*.js	log schema and volume budget
-promtool-rules	root	dynamic	push	required	promtool	**/*.rules.yml	alert rule unit tests
+promtool-rules	root	static	push	required	promtool	**/*.rules.yml	alert rule unit tests
 tf-plan-comment	root	dynamic	ready	required	terraform	**/*.tf	plan posted, block on destroy of stateful
-k8s-dry-run	root	dynamic	ready	required	kubectl	**/*.yaml	server-side dry run, kind deploy test
+k8s-dry-run	root	dynamic	ready	required	kubectl	**/*.{yml,yaml}	server-side dry run, kind deploy test
 dbt-tests	root	dynamic	ready	required	dbt	**/*.sql	dbt build on state:modified
 model-eval	root	dynamic	label	required	python3	**/*.pkl	evaluation regression, determinism, fairness
 smoke-estate	root	dynamic	push	required	node	apps/*/routes.json	walk the estate as a browser would

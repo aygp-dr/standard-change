@@ -1,4 +1,4 @@
-#+TITLE: Staging entry under gate flakiness — what our checks cost, and what a red run does to the berth
+#+TITLE: Staging entry under gate flakiness -- what our checks cost, and what a red run does to the berth
 #+DATE: 2026-09-15
 
 Our gate checks, our label distribution, our singleton berth. Everything here
@@ -36,7 +36,7 @@ not an assumption:
 
 | group set                    | PRs | n  | P(clean entry) at f=10% |
 |------------------------------+-----+----+-------------------------|
-| =(no app label)=             |  22 | —  | not a unit; never enters |
+| =(no app label)=             |  22 | --  | not a unit; never enters |
 | =pdp=                        |  16 | 12 | 28.24%                  |
 | =core=                       |  14 | 19 | 13.51%                  |
 | =checkout=                   |  13 | 14 | 22.88%                  |
@@ -47,7 +47,7 @@ not an assumption:
 | =pdp+plp=                    |   1 | 15 | 20.59%                  |
 
 65 of 87 are units (=CLAUDE.md=: a unit carries at least one =app:*= label).
-The 22 without one never reach the berth and are excluded — including them
+The 22 without one never reach the berth and are excluded -- including them
 would describe a population a quarter of which cannot enter staging at all.
 
 *The shape is the finding.* n runs 12 to 31 with a hole in the middle: in 87
@@ -64,7 +64,7 @@ whole-estate, nothing between.
 
 =x -> (1-f)^x= is convex, so the mixture always beats its own mean
 (Jensen). With a bimodal n the two *diverge* instead of nearly agreeing. Plan
-on the mean and you will under-provision by 14% — in the safe direction for
+on the mean and you will under-provision by 14% -- in the safe direction for
 capacity, but it also hides where the loss is: the single-app changes carry
 the pass rate, and the seven-plus-two whole-estate changes are already lost
 before anyone looks at them.
@@ -102,7 +102,7 @@ to a deploy. It is ≥ 1 for every f ≥ 0: *releasing can never cost throughput
 
 ** Simulated against that, 1000 PRs, hold 30m, debug 60m
 
-Saturated on purpose — every change carries =release:start= and takes the
+Saturated on purpose -- every change carries =release:start= and takes the
 berth the moment it is free, the "if it's free I'm deploying" regime with no
 calendar. That is the only regime where the policy difference is visible
 rather than absorbed by idle time.
@@ -122,7 +122,7 @@ rather than absorbed by idle time.
 
 Simulation matches the closed form everywhere. The one cell at 5.5% is
 f=50% HOLD, which produces the fewest greens in the run and therefore the
-widest Monte Carlo error; it is sampling noise, not disagreement — it tightens
+widest Monte Carlo error; it is sampling noise, not disagreement -- it tightens
 with =--prs 10000=.
 
 ** The ratio, three ways
@@ -144,7 +144,7 @@ doubles with it, and p95 goes from 963h to 2019h.
 Neither was the object of the exercise. Both are on staging entry, so they
 belong in this analysis rather than in a research note.
 
-** D1 — the workflow passes deploy groups where both targets read a SHA
+** D1 -- the workflow passes deploy groups where both targets read a sha
 
 =spec.org:1574= and =docs/deployment-targets.org:102= both document
 =deploy.sh <env> <groups...>=. *Both implementations disagree with the spec*,
@@ -153,31 +153,31 @@ and with each other about the consequence:
 | target | signature | handed =groups.sh= output |
 |--------+-----------+---------------------------|
 | =targets/node/deploy.sh:37= | =sha="${2:?}"= | *refuses*, exit 3 |
-| =targets/bastille/deploy.sh:10= | =sha="${2:-$(git rev-parse --short HEAD)}"= | *accepts*, writes it into =version.json= as the build SHA |
+| =targets/bastille/deploy.sh:10= | =sha="${2:-$(git rev-parse --short HEAD)}"= | *accepts*, writes it into =version.json= as the build sha |
 
 =deploy-staging.yml:26= (and =deploy-production.yml:42=) pass
 ="$(./change/groups.sh "$PR")"= as =$2=. Measured against the real
 =git rev-parse=, every possible =groups.sh= output is refused by the node
-target — including the empty string a non-unit produces:
+target -- including the empty string a non-unit produces:
 
 : 'core'                    REFUSED     'checkout core pdp plp'   REFUSED
 : ''                        REFUSED     '43a8e3e'                 OK
 
 Two things follow. The node target *cannot ever* deploy through this workflow,
-at any failure rate — a deterministic 100% loss that no retry policy and no
-gate reliability touches. And the bastille target's silent acceptance puts a
+at any failure rate -- a deterministic 100% loss that no retry policy and no
+gate reliability touches. And the Bastille target's silent acceptance puts a
 group list where guard 5 expects a build identity.
 
 The refusal arrives as exit 3, which =docs/exit-codes.org:15= defines as
-"freeze, or the SHA does not exist". *A wiring bug wearing a freeze's
-clothes* — the same confusion of categories as =guard4.sh:141=, where an empty
+"freeze, or the sha does not exist". *A wiring bug wearing a freeze's
+clothes* -- the same confusion of categories as =guard4.sh:141=, where an empty
 filter reads as consent.
 
 =change/activate.sh:294= passes =targets/node/deploy.sh staging "$SHA"=
 correctly. That is the path that built the live estate, and it is why this has
 stayed invisible.
 
-** D2 — =vars.DEPLOY_TARGET= is not set
+** D2 -- =vars.DEPLOY_TARGET= is not set
 
 =gh variable list= returns =PRODUCTION_URL= and =STAGING_URL= only. The
 workflow expands to =./targets//deploy.sh=. D2 stops the run before D1 can,
@@ -200,7 +200,7 @@ which is why D1 has never produced a visible failure.
   | 50% | 4.28% | 95.72% |
 
   A gate that is "99% reliable" puts us at a *15% per-PR failure rate*. This
-  is the argument for =CLAUDE.md='s "zero findings or the gate failed" — a
+  is the argument for =CLAUDE.md='s "zero findings or the gate failed" -- a
   warning tier is a check that fails 10% of the time on purpose.
 
 - *Whole-estate changes are the expensive ones and we make them often.* Nine
@@ -208,11 +208,11 @@ which is why D1 has never produced a visible failure.
   rate. Under the spec's own =deploy.sh <env> <groups...>= these would pay for
   what they touch. Under what is implemented, =deploy.sh= loops all five apps
   and =gates/e2e.sh= probes all sixteen routes regardless of the groups it is
-  handed — so a one-line =pdp= change pays the whole-estate toll anyway. D1 is
+  handed -- so a one-line =pdp= change pays the whole-estate toll anyway. D1 is
   the same divergence seen from the other end: *the groups argument is
   computed, passed, and then discarded by every consumer.*
 
-- *State the berth policy.* RELEASE is free — it never loses throughput at
+- *State the berth policy.* RELEASE is free -- it never loses throughput at
   any failure rate, and it is worth 1.2×–2.0× at ours. If we want it, the
   place it becomes true is =deploy-staging.yml='s =always()= steps, which
   already release the lock and close the window; what is missing is that a red
@@ -235,5 +235,5 @@ Monte Carlo that agrees with nothing external is asserting its own output.
 Correlated failure (checks are independent here; real red runs cluster, which
 makes the per-PR rate *better* and the queue *worse*), the calendar
 (=preflight.sh= exit 3 and 4 are absent; both can only lower throughput),
-debug time as anything but a constant, and any priority rule on the berth —
+debug time as anything but a constant, and any priority rule on the berth --
 so =itil:emergency= preemption is not represented.
