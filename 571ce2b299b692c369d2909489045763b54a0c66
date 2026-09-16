@@ -7,3 +7,5 @@ Reproduction
   python3 sim/label_sim.py --bound 8 --walks 0 --disable Interfere --disable UnaffectedMerges -> VERDICT violated UnaffectedNeverDeploys
   TLC NoUnaffected -> Invariant UnaffectedNeverDeploys is violated
   TLC Labels (positive) -> restarted 13:23Z with a 2 GB disk guard; result appended when done
+
+TLC positive (17 rules, pruned): No error. 1,903,257,904 states generated, 102,726,288 distinct, depth 37; run 2026-09-16 00:26Z to 01:45Z under caffeinate, 8g heap.
