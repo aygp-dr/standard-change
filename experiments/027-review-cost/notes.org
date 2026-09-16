@@ -76,5 +76,8 @@ the rows.
 - A driver agent is given rows, one per turn, with the row's evidence in the
   prompt, or it is not given the walk at all. "Follow the procedure" over
   185 rows is a request a cheap model answers by summarising.
-- The cost table above is the one to compare against when the walk is
-  rerun with the mechanical checks in place.
+- Done the same day: =extract.py --mechanical= settles 178 of 185 rows in
+  7.5 seconds (85 confirmed by survival, 84 unverifiable of which 50 are the
+  protocol defect, 10 by a complete note, 7 no-claim), against the driver's
+  171 unverifiable at USD 0.41. The cheapest model for a mechanical check is
+  no model.

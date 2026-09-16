@@ -385,6 +385,71 @@ def build_rows(commits, notes):
     return rows
 
 
+
+# ---- the mechanical part of the walk (experiments/027 F1: the cheap driver did not walk) ----
+SKIP_LEAD = ("#", "//", ";", "*")
+
+def survival(sha, paths):
+    """Step 7: are the commit's added lines still in the tree at HEAD?
+    -> ('present'|'gone'|'na', 'k/n', superseding sha or '')"""
+    diff = git(["show", "--format=", "--unified=0", sha, "--"] + list(paths))
+    lines = []
+    cur_path = None
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            cur_path = line[6:]
+        elif line.startswith("+") and not line.startswith("+++"):
+            text = line[1:]
+            stripped = text.strip()
+            if len(stripped) < 20 or stripped.startswith(SKIP_LEAD):
+                continue
+            lines.append((cur_path, text))
+        if len(lines) >= 3:
+            break
+    if not lines:
+        return "na", "0/0", ""
+    hits = 0
+    for path, text in lines:
+        try:
+            subprocess.run(["git", "grep", "-F", "-q", text, "HEAD", "--", path],
+                           cwd=REPO_ROOT, check=True, capture_output=True)
+            hits += 1
+        except subprocess.CalledProcessError:
+            pass
+    n = len(lines)
+    present = (n >= 3 and hits >= 2) or (n < 3 and hits == n)
+    if present:
+        return "present", "%d/%d" % (hits, n), ""
+    newest = ""
+    for path, _ in lines:
+        log = git(["log", "--format=%h", "-1", sha + "..HEAD", "--", path]).strip()
+        if log:
+            newest = log
+            break
+    return "gone", "%d/%d" % (hits, n), newest
+
+
+def mechanical_verdict(row, surv):
+    """Step 12, the rules a machine can apply (1, 4, 5, 7, 8, 9, 10, 11).
+    Rules 2, 3 and 6 need a reproduction or the forge; those rows keep '?'."""
+    status, frac, superseded = surv
+    if row["merge"] == "yes":
+        return "no-claim", "merge commit"
+    if row["required"] == "yes" and row["note"] == "no":
+        return "unverifiable", "protocol defect: kind=%s requires a note, none present" % row["kind"]
+    if row["required"] == "yes" and row["note"] == "yes" and (row["timeline"] == "no" or row["repro"] == "no"):
+        return "unverifiable", "note incomplete: timeline=%s repro=%s" % (row["timeline"], row["repro"])
+    if row["note"] == "yes" and row["timeline"] == "yes" and row["repro"] == "yes":
+        return "confirmed-by-note-only", "note complete; reproduction not re-run by the extractor (rule 6 needs a run)"
+    if row["kind"] == "chore" and row["issues"] == "-" and row["note"] == "no":
+        return "no-claim", "chore with no issue and no note"
+    if status == "present":
+        return "confirmed", "survival present %s" % frac
+    if status == "gone":
+        return "unverifiable", "survival gone %s, superseded by %s" % (frac, superseded or "?")
+    return "unverifiable", "survival na: no added line long enough to grep"
+
+
 def write_ledger(rows, out_path):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as handle:
@@ -433,6 +498,8 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("base", help="base ref, exclusive; the walk is <base>..main")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="ledger path")
+    parser.add_argument("--mechanical", action="store_true",
+                        help="fill verdict and evidence where the decision table needs no run (rules 1,4,5,7,8,9,10,11)")
     arguments = parser.parse_args(argv)
 
     out_path = pathlib.Path(arguments.out).resolve()
@@ -441,6 +508,13 @@ def main(argv):
         sys.exit("no commits in {}..main".format(arguments.base))
     notes = read_notes()
     rows = build_rows(commits, notes)
+    if arguments.mechanical:
+        by_sha = {c["sha"]: c for c in commits}
+        for row in rows:
+            surv = survival(row["sha"], by_sha[row["sha"]]["paths"])
+            row["verdict"], row["evidence"] = mechanical_verdict(row, surv)
+        import collections as _c
+        print("mechanical verdicts:", dict(_c.Counter(r["verdict"] for r in rows)))
     write_ledger(rows, out_path)
     report_counts(rows, arguments.base, out_path)
     return 0
