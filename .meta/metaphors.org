@@ -274,6 +274,89 @@ reaching for FIFO reflexively:
 - control :: the run queue and the policy over it
 - audit :: accounting, which is a different subject and a different structure
 
+** The deli counter: take a number, and the trouble with taking two
+
+The owner's picture -- a ticket queue where you might take a couple of numbers
+because your release could fail -- is not a loose analogy. Both halves are
+named, and one of them is a live gap.
+
+*The deli counter is an algorithm.* Lamport's *Bakery Algorithm* (1974, "A New
+Solution of Dijkstra's Concurrent Programming Problem") is the bakery ticket
+made formal: each process takes a number, and the lowest number goes next.
+Lamport chose it because it needs no atomic operation underneath -- fairness
+comes from the numbering, not from the hardware. That is precisely the property
+a label-based berth would want, since labels have no atomic operation either.
+
+And it gives the rule the picture implies: *each process takes exactly one
+number.* The bakery's fairness guarantee is stated over one ticket per
+participant. Take two and you have not cheated the implementation, you have
+left the algorithm it was proved under.
+
+*Taking two tickets is also named.* Dean and Barroso call it a *hedged request*
+or *backup request* ("The Tail at Scale", CACM 56(2), 2013): issue the same
+work twice, take whichever completes first, because the tail is worse than the
+duplication. That is exactly "my release might fail, so enter me twice", and in
+their setting it is a *good* idea -- which is the interesting part. Hedging is
+rational for the individual and corrosive for the queue, and the thing that
+decides which you get is whether the queue has *admission control*.
+
+*We have none.* =change/schedule.sh block= validates the groups, validates the
+duration against a floor, then walks to the back of the queue -- and never asks
+whether this change already holds a window. Two calls, two windows, each an
+entitlement to the path. The comment at =:120= says the quiet part: "Without
+=--now= this never refuses for a clash; it places itself behind whatever is
+already booked."
+
+Hedging is also *rational* here, not merely possible, and ADR 0003 is why:
+=reap.sh= deliberately does not rebook, so a lapsed window costs you a full
+re-request. An author who expects to fail is correct to take two tickets, and
+the only thing preventing a queue of hedges is that nobody has tried.
+
+The fix is one line of the domain's own vocabulary -- admission control, one
+ticket per identity -- and it belongs in =block=, not in the reaper.
+
+** Ejection, timeout, debounce: three different refusals
+
+The owner named these together and they are three distinct mechanisms, which
+is worth keeping apart because each answers a different question.
+
+*Timeout* is the lease's term, and it is already above: when does the holder
+stop being the holder. =BERTH_TTL_MIN=.
+
+*Debounce* is about the *requester*, and we need it. In eventing, debounce
+collapses a burst into one act; *request coalescing* (nginx =proxy_cache_lock=,
+Varnish) is the same idea for identical in-flight work. Experiment 022 measured
+the un-debounced case: #94 added =deploy:staging= *fourteen times*, each one a
+fresh claim, none of them distinguishable from the others by the label alone.
+A debounce on acquisition would have collapsed those into one claim and one
+refusal, and =change/berth.sh= has to ignore all but the last labeled event
+precisely because no debounce exists upstream of it.
+
+*Ejection* is about the *repeat failer*, and it is the one with no analogue
+here at all. Envoy calls it *outlier ejection*: a host that fails often enough
+is removed from the pool for a cooldown that grows with each ejection, then
+readmitted on probation. Nygard's circuit breaker is the same shape. Applied
+here it would say: a change that has claimed the berth and failed N times is
+not eligible to claim it again for M minutes -- which is the only mechanism in
+this family that protects *other changes* from one change's thrash.
+
+Experiment 022 is the case for it. #94 took five claim rounds over
+twenty-four minutes; every one of those rounds was a berth acquisition that
+displaced nobody but delayed everybody. Ejection is what a scheduler does with
+a process that keeps faulting, and it is the missing third term:
+
+| mechanism | answers | subject | have it? |
+|---+---+---+---|
+| timeout | when does the holder stop holding | the holder | yes -- =berth.sh= |
+| debounce | how many claims is one intent | the requester | no |
+| ejection | who may not claim again yet | the repeat failer | no |
+| admission control | how many tickets may one change hold | the queue | no |
+
+*And note the ordering.* Ejection and admission control only make sense once a
+queue exists, because both are policies *over* a waiting line. Debounce does
+not: it is worth having today, against a mutex with no queue at all, and it is
+the cheapest of the four.
+
 * On borrowing domains at all
 
 These are reasoning aids and they are not free. Three cautions earned here:
