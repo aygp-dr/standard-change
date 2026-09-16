@@ -1,0 +1,11 @@
+Timeline
+- 00:34:05Z release-start skill: berth free, no scheduler; #61 skipped by hand for its future window; start said on #65; scheduler started.
+- 00:34:07Z scheduler took #61 first (oldest number); killed at 00:34:40Z after guard 0 had merged main into its branch (ca58f2b).
+- 00:37Z "dry run" of driver.sh 61 to test the new deferral: the calendar ref is absent on this host, `windows` printed nothing, the driver claimed the lock, deployed staging and production, LANDED at 00:38:38Z, killed before settle.
+- 00:40Z both blocks returned to 6b97fae; abort.sh 61 --backed-out --to 6b97fae; the start restored to #61 (a machine fault spent it, 024 F7).
+
+Reproduction
+  DRIVER_DRY_RUN=1 ./change/driver.sh 65   -> "dry run: would proceed ... for 3d22ddd", exit 0
+  ./change/driver.sh 71                   -> "no release:start", exit 2 (start is checked before the calendar)
+  git ls-remote origin 'refs/idp/*'       -> nothing: the calendar is not on the forge
+  cell: macOS 24.1.0, blocks :9010/:9020
