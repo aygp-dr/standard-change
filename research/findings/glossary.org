@@ -7,7 +7,11 @@ arriving from another domain: the same word means something else in git,
 in release engineering, on a platform, and in ITIL, and the paper uses it
 in one sense. The second table is for the reader of the history: the words
 that changed meaning inside this project between the 12th and the 16th,
-and why. A term absent from both is used in its ordinary sense.
+and why. A term absent from both is used in its ordinary sense. For the
+same *object* under each substrate's name (a berth is a lock row, a
+Kubernetes Lease, a Durable Object field), see =history/five-properties.org=
+§Vocabulary map; this glossary is about the same *word* across domains, and
+the two tables are meant to be read together.
 
 * One word, several domains
 
@@ -34,6 +38,8 @@ and why. A term absent from both is used in its ordinary sense.
 | verdict     | an instrument's pass or fail, keyed to the build it measured           |                                                   | a check-run conclusion                                                 |                                                     | experiment 014; label-ownership rule 5 |
 | observation | a label written by the instrument that took the measurement, never by hand | | a metric; a log line                                                 | monitoring                                          | =findings/label-ownership.org=         |
 | record      | what survives the labels being cleared: the PIR, =mergedAt=, the closure code | the commit                                 | provenance, an attestation                                             | the change record                                   | spec §Nomenclature; #122               |
+| build       | the head sha, identified at the front by what it serves in a header  | a commit, a tree                                 | an image digest, a Workers version id, Kargo Freight                   | a release package                                   | five-properties §Vocabulary map        |
+| settle      | ask production what it serves now, then write the outcome, merge, PIR, clear | | saga completion; =status.phase=complete=; Stage Healthy               | PIR and closure                                      | five-properties §Vocabulary map; =change/settle.sh= |
 | unit        | one pull request carrying at least one =app:*=                          | a commit                                          | an artifact, a package, a service                                      | a configuration item                                | CLAUDE.md; =adoption.org=              |
 | class       | standard, normal or emergency, derived by the labeller or declared      |                                                   |                                                                        | the ITIL change type                                | =adoption.org=; #124                   |
 | operator    | a person and their agent driving one estate (the mini, the bastille)    |                                                   | an SRE; a Kubernetes controller                                        | the service desk                                    | D21; =.meta/carried-forward.org=       |
