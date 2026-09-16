@@ -27,6 +27,9 @@ the findings rest on are in the adopting volume.
 #+INCLUDE: "../experiments/023-start-only/notes.org" :minlevel 2
 #+INCLUDE: "../experiments/024-five-owners/notes.org" :minlevel 2
 
+* Glossary
+#+INCLUDE: "findings/glossary.org" :minlevel 2
+
 * The tables
 #+INCLUDE: "appendix/label-table.org" :minlevel 2
 #+INCLUDE: "appendix/scenario-index.org" :minlevel 2

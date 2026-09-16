@@ -23,5 +23,8 @@ issue #126 apply here first; until they land this volume is the largest.
 #+INCLUDE: "history/changeflow-state-machine.org" :minlevel 2
 #+INCLUDE: "history/deploy-ledger-comparison.org" :minlevel 2
 
+* Glossary
+#+INCLUDE: "findings/glossary.org" :minlevel 2
+
 * The tables
 #+INCLUDE: "appendix/issue-index.org" :minlevel 2

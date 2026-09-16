@@ -23,6 +23,7 @@ described in Part I without touching the labels it already has.
 #+INCLUDE: "substrates/conformance-ladder.org" :minlevel 3
 #+INCLUDE: "../spec.org::*Nomenclature" :only-contents t :minlevel 3
 #+INCLUDE: "../docs/exit-codes.org" :minlevel 3
+#+INCLUDE: "findings/glossary.org" :minlevel 3
 
 * Part II: What was found
 #+INCLUDE: "findings/label-ownership.org" :minlevel 3

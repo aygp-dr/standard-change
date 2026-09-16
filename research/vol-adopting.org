@@ -21,6 +21,9 @@ rebuild order.
 #+INCLUDE: "../spec.org::*Nomenclature" :only-contents t :minlevel 2
 #+INCLUDE: "../docs/exit-codes.org" :minlevel 2
 
+* Glossary
+#+INCLUDE: "findings/glossary.org" :minlevel 2
+
 * The tables
 #+INCLUDE: "appendix/label-table.org" :minlevel 2
 #+INCLUDE: "appendix/issue-index.org" :minlevel 2
