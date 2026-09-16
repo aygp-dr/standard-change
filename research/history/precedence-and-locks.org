@@ -1,0 +1,140 @@
+#+TITLE: Precedence, locks and freezes -- what other systems call these
+#+DATE: 2026-09-13
+
+* The distinction that started this
+
+=itil:emergency= is *not* "I am ready to go out". It is *"if I am ready, I win
+over anything else"*. A precedence claim; readiness is a separate claim.
+
+That matters because the pipeline was using one label for three different
+facts, and only one of them is about the change:
+
+| fact                                        | about        | when |
+|---------------------------------------------+--------------+------|
+| this change outranks others                 | *the change* | from the moment it is classified |
+| an emergency is deploying *right now*       | *the estate* | only while it runs |
+| ordinary change is suspended                | *the estate* | until lifted |
+
+=itil:emergency= is the first. It says nothing about the second or third, and
+using it for them is why =sim/label_sim.py= found "'is there an emergency?'
+cannot distinguish 'am I one' from 'is one running'".
+
+* What other systems call each
+
+** 1. Precedence -- "I outrank you"
+
+| system              | term                      |
+|---------------------+---------------------------|
+| ITIL 4              | *emergency change*, assessed by a separate authority (ECAB) |
+| ServiceNow          | =Emergency= change type, plus a =priority= field, *kept separate* |
+| Kubernetes          | =PriorityClass= + preemption |
+| Linux / POSIX       | =nice=, real-time priority |
+| Airflow, Celery     | task =priority_weight= / queue priority |
+
+*Note what ServiceNow does*: change **type** and change **priority** are
+different fields. An emergency change is a type; whether it preempts is a
+priority. We collapsed those, which is the same collapse as class-vs-lifecycle.
+
+** 2. In flight -- "something is running, wait"
+
+| system              | term                      |
+|---------------------+---------------------------|
+| Slack, Etsy, Chef   | *deploy lock* -- "who has the lock?", "holding the lock" |
+| Argo CD             | *sync window* |
+| PagerDuty, Nagios   | *maintenance window* |
+| Jenkins             | *Lockable Resources* plugin |
+| databases           | *advisory lock*, *lease* |
+| GitHub Actions      | =concurrency: group= -- one run at a time |
+
+*=lock= is the industry word*, and "holding the deploy lock" is idiom people
+already have. It is also what guard 1 already is: the berth is a lock on the
+path to production, wearing a =deploy:staging= label.
+
+** 3. Suspended -- "nothing goes, by policy"
+
+| system              | term                      |
+|---------------------+---------------------------|
+| ITIL 4              | *change freeze*, *blackout window* |
+| ServiceNow          | *blackout schedule* |
+| retail / finance IT | *code freeze*, *peak freeze*, *quiet period* |
+| security releases   | *embargo* |
+| Argo CD             | a deny-type sync window |
+
+=freeze= is the right word and we already use it.
+
+* What follows for this repo
+
+Three names, three subjects, and the test for each is *what question does it
+answer*:
+
+| label            | answers                              | subject | owner |
+|------------------+--------------------------------------+---------+-------|
+| =itil:emergency= | *what kind of change is this?*       | the PR  | a person |
+| =lock=           | *is something deploying right now?*  | the estate | the pipeline, held for the duration |
+| =freeze=         | *is ordinary change suspended?*      | the estate | a person |
+
+** Why =lock= is not redundant with =deploy:staging=
+
+=deploy:staging= is a lock *and* it is on the PR holding it, so "is the estate
+busy?" is answered by scanning every open PR for a label. That works and it is
+indirect -- and it cannot express *"an emergency is deploying, so even the
+things that normally proceed should not"*, because the label is scoped to one
+berth.
+
+=lock= would be estate-level and bare, symmetric with =freeze=: both are facts
+about the world, neither is a property of any change.
+
+** Why an emergency deploying is different from a berth being held
+
+A held berth says *the path to production is busy*; wait your turn and nothing
+about your change has changed. An emergency deploying says *production is being
+changed outside the normal path* -- your staging pass describes a world that is
+being actively rewritten, so guard 4b will invalidate you whether or not you
+wait politely.
+
+They block for different reasons and the recovery is different: one is "wait",
+the other is "wait and then re-verify".
+
+* Rejected: =hold:staging=
+
+A per-change hold -- *"keep this in staging, I want to look"* -- shipped as guard
+4c and is *rejected as of 2026-09-13*. Recorded rather than deleted, because
+the reasoning is the useful part.
+
+*Why it looked necessary.* It was the only human stop the pipeline modelled.
+Everything else was derived or automated, so a person who wanted to interrupt a
+promotion had nowhere to say so.
+
+*Why it is not.* The human stops were always there and they are *earlier*:
+
+| to stop a change | use | scope |
+|------------------+-----+-------|
+| it should not go at all | *do not add =change:requested=* | that change |
+| it is not fit to ship | *do not approve* | that change |
+| nothing should go right now | *=freeze=* | the estate |
+| this outranks everything | *=itil:emergency=* | the estate's ordering |
+
+A change nobody wants promoted is simply *not requested and not approved*.
+=hold:staging= added a fourth way to stop a deploy, with a fifth scope, and no
+rule saying which applied when two were present.
+
+*The specific hazard it left.* =freeze= and =hold:staging= both mean "do not
+promote" and are owned by different writers at different scopes, so a change
+could be frozen, held, both, or neither, and the four states had no ordering.
+That is the two-writers-one-fact defect in a new place, and it is exactly what
+=itil:*= and =change:*= were split to stop.
+
+*What is lost.* The narrow case =hold:staging= served -- *"I approve this, and
+I want to look at staging before it promotes"* -- is now expressed by not
+approving until after looking. That is strictly slower and it is honest: the
+approval then means what it says.
+
+* Not decided here
+
+Whether =lock= is worth adding, or whether scanning for =deploy:*= is enough,
+is being determined by the simulator rather than argued -- the same treatment
+the bare-=emergency= question is getting. The requirement is a concrete state
+where the ambiguity changes a verdict.
+
+What *is* decided: =itil:emergency= is precedence, it is not readiness, and it
+must not be used to answer a question about the estate.

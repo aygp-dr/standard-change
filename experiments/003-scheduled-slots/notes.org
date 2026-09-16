@@ -132,7 +132,7 @@ change with no =app:*= label that premise is false. Two consequences:
 
 Same shape as the #50 booking an hour earlier: both treated a control-plane
 change as if it travelled the artifact road. The pipeline has one road, and
-=docs/changing-the-pipeline.org= already says control-plane changes are proven
+=research/findings/changing-the-pipeline.org= already says control-plane changes are proven
 by *use across later deployments* rather than by a deployment of their own —
 but nothing implements that path, so everything is routed through the one built
 for artifacts.

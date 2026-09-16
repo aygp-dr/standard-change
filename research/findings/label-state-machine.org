@@ -1,0 +1,269 @@
+#+TITLE: The label state machine -- as it is, where the scripts disagree with the declaration, and the bounds
+#+SUBTITLE: tla/Labels.tla and sim/label_sim.py, cross-checked
+#+AUTHOR: aygp-dr
+#+DATE: 2026-09-14
+#+OPTIONS: toc:2 num:nil
+
+* Status
+
+*Research notes with a verdict.* =spec.org= governs. Everything measured here
+was observed on the mini (macOS, OpenJDK 21.0.4, Python 3.11.10, Hypothesis
+6.111.0) on 2026-09-14 [E]; the run commands are at the end.
+
+The question: README.org now names one vocabulary for the lifecycle -- three
+axes (class, lifecycle, action) plus observations, readiness, the booking and
+the estate. Neither existing model can say what a PR's labels *are*:
+=StandardChange.tla= folds them into booleans about promotion, =Concurrent.tla=
+into berths. So the namespace was transcribed as its own machine, twice, from
+the *scripts* rather than the declaration, and the two transcriptions were
+made to agree.
+
+* The verdict, first
+
+| question | answer |
+|----------+--------|
+| Does the machine the scripts implement satisfy the seventeen rules? | *Yes, with three exceptions the model had to be told about* (§Disagreements 1–3). With the rules as stated, TLC finds no violation over the full reachable space. |
+| Can each rule fail? | *Yes, seventeen of seventeen.* Flipping any one constant makes TLC name the invariant it protects; the simulator names the same one. |
+| Do the two transcriptions agree? | *Yes, 16/16* on the verdicts. The state count agreed at 2,336,400 while the simulator could exhaust; the fourteen-rule machine has 25,066,512 states and only TLC exhausts it. |
+| Is the space finite and exhausted? | *Yes, by TLC.* Two PRs, depth 37, 25,066,512 distinct states. The simulator covers a depth-12 slice (1,644,696 states) and random walks past it. |
+| Are the reaper, the merge and the cleanup modelled? | *Now, yes.* The first cut fused completion with cleanup and had no merge. The machine now carries settle.sh's four writes in order, the automatic merge path, and a reaper that reads only the clock -- which is what surfaced disagreements 2 and 3. |
+
+* The machine
+
+One PR is a tuple; two PRs and the estate make a state.
+
+| axis | values | written by (script:line) | withdrawn by |
+|------+--------+--------------------------+--------------|
+| class =itil:*= | ⊆ {standard, normal, emergency} | labeller.yml:44-48 derives standard/normal on every push; a person declares emergency | the labeller replaces standard↔normal; a person removes the derived one beside an emergency (preflight.sh:190) |
+| lifecycle =change:*= | ⊆ {requested, scheduled, complete} | watch.sh:38 or a person (requested); schedule.sh:257 (scheduled); settle.sh:105 (complete) | schedule.sh:257 (requested→scheduled); cancel.sh:303 and reap.sh:74 (scheduled); settle.sh:252 (all but complete) |
+| action | deploy:staging (the berth), deploy:production | activate.sh:268; promote.yml:26 | settle.sh:252; reap.sh:77 when the window lapsed; abort.sh:100 |
+| observation | staging verdict ∈ {none, pass, fail}; staging:uat; production:healthy | e2e.sh:202 / smoke.sh:173; observe.sh:44; health.sh:99 | labeller.yml:101 on synchronize; settle; abort |
+| readiness | draft | the author, at open | =gh pr ready= -- the author, only |
+| booking | none / queued / designated | schedule.sh block | cancel, reap, settle |
+| closure | change:failed / change:backed-out | abort.sh:113-114 | never |
+| settlement | served (a fact), merged, PIR posted, cleaned | health.sh; merge-on-healthy.yml→release.sh or settle.sh:127; settle.sh:150-168; settle.sh:244-252 | served: a push or an abort |
+| estate | freeze, emergency | a person, on issue #1 | a person |
+
+Thirty-seven actions, each cited to the line it was read from in
+=tla/Labels.tla= and =sim/label_sim.py=. Six history variables -- =badClaim=, =badClass=, =badPromote=, =badVerdict=, =emgWaited= and =refusedDirty= -- record a berth claim that a rule would have refused, so that
+the freeze, estate and class rules -- whose subject can change *after* the
+claim, since a person can freeze or declare mid-flight -- have a state
+predicate to violate.
+
+#+begin_src mermaid :eval never-export
+stateDiagram-v2
+    direction TB
+    [*] --> Opened: labeller writes app and itil on every push
+    Opened --> Unaffected: a person says release-unaffected and no app label is on
+    Unaffected --> Opened: withdrawn, or the labeller attaches a unit (refused until one goes)
+    Unaffected --> Merged: MergeUnaffected, no berth, no window, no observation
+    Opened --> Requested: a person says start
+    Requested --> Scheduled: Book, window reserved
+    Scheduled --> Requested: Cancel
+    Scheduled --> Forfeited: Reap, window lapsed unattempted, closure expired
+    Forfeited --> Requested: the person states the intent again
+    Scheduled --> Refused: lock or preflight refusal (draft, freeze, estate, two classes)
+    Refused --> Opened: every marker cleared, intent included
+    Scheduled --> Berth: Activate, preflight 0, deploy-staging is the singleton
+    Berth --> Opened: Evict, a ready emergency takes the berth (specified, unbuilt)
+    Berth --> StagingDeployed: DeployStaging
+    StagingDeployed --> StagingHealthy: guard 5 on staging, this head
+    StagingHealthy --> Verified: e2e and smoke record pass, keyed to the sha
+    StagingHealthy --> Closed: a verdict of fail, then Abort
+    Verified --> Berth: Push, head moved, every observation void
+    Verified --> Accepted: uat record (journey replayed, or a person)
+    Accepted --> Held: a person says hold
+    Held --> Accepted: the person lifts it
+    Accepted --> Promoted: promote lands deploy-production
+    Promoted --> ProdDeployed: DeployProduction
+    ProdDeployed --> ProdHealthy: Converge, every sample serves this head
+    ProdHealthy --> Complete: settle asks production now, writes change-complete
+    ProdHealthy --> Merged: MergeOnHealthy, no record (disagreement 3)
+    ProdHealthy --> Closed: rollback, change-backed-out
+    Complete --> Merged: SettleMerge
+    Merged --> Recorded: Pir
+    Recorded --> Cleaned: Cleanup clears every transient label, no tombstone
+    Cleaned --> [*]: mergedAt is the record
+    Berth --> Closed: Abort, change-failed
+    Closed --> [*]: change-end, the tombstone, only on this path
+#+end_src
+
+The diagram names labels with a hyphen where the label has a colon
+(=deploy-staging= is =deploy:staging=), because the renderer refuses a colon
+inside a transition label. =abandoned= and =superseded= fold into =Closed=.
+This is the machine at commit =fd6e740=, seventeen rules; the README diagram
+is the person's view of the same machine and draws fewer states.
+
+* The seventeen rules, and what each protects
+
+| # | constant | the rule, and where it lives | invariant TLC names when it is off | simulator names |
+|---+----------+------------------------------+------------------------------------+-----------------|
+| 1 | =DraftGuard= | preflight.sh:210 -- a draft is refused before the class is read | =NoDraftDeployed= | same |
+| 2 | =WindowGuard= | preflight.sh:36 -- no reservation, no deployment, no exemption | =NoUnbookedDeploy= | same |
+| 3 | =FreezeGuard= | preflight.sh:292 -- a freeze stops everything but an emergency | =NoRefusedClaim= | same |
+| 4 | =EstateGuard= | preflight.sh:298 -- an emergency in flight stops standard and normal | =NoRefusedClaim= | same |
+| 5 | =BerthGuard= | activate.sh:266 -- deploy:staging is a singleton | =AtMostOneHolder= | same |
+| 6 | =ClassGuard= | preflight.sh:187 -- two classes is an undefined class; refused, and a person resolves | =NoDeployWithTwoClasses= | same |
+| 7 | =LifecycleExclusive= | label-owners.tsv group =lifecycle= -- at most one active change:* | =OneLifecycle= | same |
+| 8 | =ReapFreesBerth= | reap.sh:77 -- a lapsed window releases the berth it held | =NoUnbookedDeploy= | same |
+| 9 | =SettleClears= | settle.sh:244-252 -- cleanup clears every transient label, change:complete included | =CleanIsClean= | same |
+| 10 | =ReapSparesInFlight= | a lapsed window is not reaped while its change carries deploy:production | =NoUnbookedDeploy= | same |
+| 11 | =RecordOnMerge= | the path that merges also records -- change:complete and the PIR | =MergedHasRecord= | same |
+| 12 | =EmergencyPreempts= | a declared, booked, ready =itil:emergency= evicts a standard or normal holder of the berth (README §5b); *specified, unbuilt* | =EmergencyNeverWaits= | same |
+| 13 | =HoldGuard= | promote.yml -- a person's =staging:hold= stops =deploy:production= landing, at the moment of promoting | =NoPromoteUnderHold= | same |
+| 14 | =HealthyBeforeVerdict= | e2e and smoke measure staging only once =staging:healthy= is recorded; the next step keys on the observation, not the action | =VerdictOnHealthy= | same |
+| 15 | =LockResets= | queue.sh -- refused at the lock, a change keeps no marker: window, lifecycle, observations and human intent all go; the person re-states it | =LockRefusalResets= | same |
+| 16 | =MergeIsTheTombstone= | settle.sh -- once the forge records MERGED the change does not keep =change:end=; the abort path keeps it, having no mergedAt | =NoTombstoneOnMerged= | same |
+| 17 | =UnaffectedMerges= | =release:skip= -- a person's claim that the estate is untouched: no berth, no window, no observation, the merge is the only act, and only when the labeller attached no =app:*=; a claim the labeller contradicts is refused until a person withdraws one | =UnaffectedNeverDeploys= | same (the sim finds the violation at depth 2: declare, then merge with a unit) |
+
+Rule 12 is the one rule here that is *specified and unbuilt*: no script evicts a holder, and the model adds no new states for it -- every state an eviction reaches, a reaped window already reached -- so it costs nothing to carry until the ADR decides who performs it.
+
+Two coincidences worth stating so they are not read as gaps. Rules 3 and 4
+share an invariant because they are the same kind of rule -- a refusal whose
+subject (the estate) can change after the claim -- and =badClaim= is how both
+become checkable. Rules 2, 8 and 10 share one because they reach the same
+state by three roads: a deployment with no reservation behind it, once by
+claiming without booking, once by a window lapsing under a claim, and once by
+a window lapsing under a production deploy. =BerthHasCause= is also in the
+config and is implied by =NoUnbookedDeploy= in this model, where a booking
+and =change:scheduled= are set and cleared together.
+
+=OneLifecycle= counts *active* states only. settle.sh writes =change:complete=
+at :105 while =change:scheduled= is still on and clears both at :244-252, so
+a terminal label beside an active one is the script's own order, not a
+violation; the declaration says "≤1 active" for the same reason.
+
+* Disagreements -- where the scripts are not the declaration
+:PROPERTIES:
+:CUSTOM_ID: disagreements
+:END:
+
+The frames are generated: every action ends in =/\ FRAME= in the source and
+=tla/frames.py= writes the exact =UNCHANGED= tuple from the =vars= tuple;
+=check.sh= refuses to run on a stale model. Twenty-six variables by hand is
+how the fourteen-rule cut first shipped with duplicated names and a missing
+history variable, which TLC reports as "successor state not completely
+specified" and which took longer to bisect than the generator took to write.
+
+The model was built from the scripts. Twice the positive run failed, and each
+time the trace pointed at a script doing something the declaration's exclusion
+groups forbid. Each is now a constant the model *needs on* to pass, which is
+the honest form: the rule is stated, and the script implements the rule
+*off*.
+
+** 1. A declared emergency plus a re-derived class -- by design, resolved by a person [E]
+
+=labeller.yml:44-48= derives =itil:standard= or =itil:normal= on every push
+and never reads =itil:emergency=. That is correct: the class is a derivation
+from the diff and the emergency is a declaration by a person, and the
+labeller has no business reading one to decide the other. So a declared
+emergency that receives a push carries two classes, and =preflight.sh:187=
+refuses it -- "this change has 2 classes" -- with the stated recovery that a
+person removes the wrong one; the pipeline does not. The first cut of this note
+filed that as a labeller defect (#87); it is not, and #87 is closed with the
+reframing. The model carries the rule as preflight states it: =ClassGuard=
+refuses a claim on an undefined class, =ResolveClass= is the person's act,
+and the property is recorded at the claim because a person can declare an
+emergency on a change already holding the berth -- TLC found that trace in
+five states.
+
+** 2. watch.sh records the ask on a change that is already booked [E]
+
+=watch.sh:37-38= consumes =release= and then adds =change:requested=
+unconditionally. A change that was booked first and released second -- the
+normal order when a person wants to watch it go out -- ends with
+=change:requested= *and* =change:scheduled=. TLC's counterexample:
+AddRelease, Book, Watch. The model implements =LifecycleExclusive= as "the ask
+is not re-recorded on a scheduled change"; the script does not (#88).
+
+** 3. The reaper reads only the clock [E]
+
+=reap.sh:10-14= closes every open window whose end has passed and removes
+=change:scheduled= and, if held, =deploy:staging=. It reads nothing about the
+change. Two consequences, both found once the merge and settlement were
+modelled (#90):
+
+- *Mid-flight.* =activate.sh= keeps the window open until production
+  converges (:362) or the run fails (:263). A window whose end passes during
+  the production deploy is reaped: the berth is released while
+  =deploy:production= is on, and the next change may claim staging under a
+  deployment still in progress. =ReapSparesInFlight= is the rule; the script
+  implements it off; =NoUnbookedDeploy= is what fails.
+- *After the automatic merge.* =merge-on-healthy.yml= runs =release.sh=,
+  which merges and clears =deploy:*= and =production:healthy= but leaves
+  =change:scheduled= and posts no PIR; the workflow itself says settlement
+  must run from a host that can see the estate. If the window lapses before
+  someone runs =settle.sh=, reap removes =change:scheduled= and the PR is
+  merged with no lifecycle label and no record. =RecordOnMerge= is the rule;
+  the tree implements it off; =MergedHasRecord= is what fails.
+
+The reaper's own comment says it deliberately does not re-book and does not
+re-add =change:requested=, and both are right. What it should also not do
+is act on a change that is deploying or merged, and it has no way to know
+either, because it reads the schedule and not the PR.
+
+** 4. Three writes to labels the declaration retires or does not own [E]
+
+Found by reading the writes, not by the model -- the model does not carry
+retired labels because nothing reads them.
+
+- =activate.sh:298= adds =staging:passed= and =activate.sh:368= removes it.
+  =label-owners.tsv= marks it *RETIRED*, replaced by the =staging:*= stack.
+  =release.sh= and =main-moved.yml= also still remove it.
+- =activate.sh:363= adds =production:healthy=, whose declared owner is
+  =gates/health.sh --pr=. activate.sh calls health.sh three lines earlier and
+  then writes the label itself -- the second writer the declaration exists to
+  prevent, on the label that flipped five times on #9.
+- =deploy-production.yml:51= adds =deployed:production=, *RETIRED*.
+
+** 5. Declared and never written, or written and never declared
+
+- =release:start= is declared with owner "the pipeline" and written by no
+  script. The model dropped it; the declaration should either gain a writer
+  (activate.sh, at the berth claim) or lose the row. There is no
+  =release:completed= either: the terminal label is =change:complete=, set by
+  settle.sh before the merge and cleared by its own cleanup once the forge
+  records MERGED -- the record after that is the PIR and the deployment
+  annotation; no label carries it.
+- =blocked:lock= is declared with owner =change/lock.sh=, which does not
+  exist. =release.sh:37= and both deploy workflows call it.
+
+** 6. What reap leaves behind is documented and modelled
+
+=reap.sh= removes =change:scheduled= and leaves *no* lifecycle label, on the
+stated ground that re-adding =change:requested= would be automation speaking
+for a person. The model does the same; the Forfeited state in README.org's
+diagram is this.
+
+* The bounds
+
+| checker | what it covers | number |
+|---------+----------------+--------|
+| TLC, all rules on | every reachable state, two PRs | 25,066,512 distinct, depth 37, several minutes with =-workers auto= (was 2,336,400 at twelve rules, 616,000 at nine) |
+| TLC, each rule off | to the first violation | 4 to 8 states deep in every case |
+| =label_sim.py --bound 12= | BFS to depth 12 | not exhausted, ~10 s |
+| =label_sim.py --bound 12= | a slice, with =--census= | 1,644,696 states, 173 distinct per-change shapes, ~50 s |
+| =label_sim.py= walks | Hypothesis random walks past the bound | 200 walks of ≤40 steps by default, nothing the BFS had not covered |
+| =cross_check.py= | fifteen questions to both | 15/15 agree on the verdict; the count is compared only when the simulator exhausts |
+| first cut, before the merge and the reaper were modelled | same two PRs | 616,000 states, depth 22, nine rules |
+
+What the bound does *not* cover: three or more PRs (the estate blockers are
+pairwise, so two suffice for every rule here, but that is an argument, not a
+run); the observation instruments as separate labels (e2e and smoke are one
+verdict here; their exclusion groups are the same shape); main's version, so
+=blocked:diverged= and the BEHIND refusal at settle.sh:93 and
+merge-on-healthy.yml are =StandardChange.tla='s business, not this model's;
+and any label the model does not carry -- the retired ones, =control-plane=,
+=labeler:skip=, =blocked:*=. A rule about one of those needs a variable
+first.
+
+* Reproducing
+
+: ./tla/check.sh                       # 7 existing runs + 12 label runs
+: python3 sim/label_sim.py             # bound 12, 200 walks
+: python3 sim/label_sim.py --bound 40  # exhausts
+: python3 sim/label_sim.py --disable RecordOnMerge   # must print VERDICT violated MergedHasRecord
+: LABEL_BOUND=40 python3 sim/cross_check.py   # needs tla2tools.jar; TLA2TOOLS= to point at it
+
+=python3= must have Hypothesis for the walks; without it the exhaustive pass
+still runs and says the walks were skipped.

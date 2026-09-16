@@ -93,7 +93,7 @@ review=$(gh pr view "$pr" --repo "$repo" --json reviewDecision -q '.reviewDecisi
 # fails, and a proxy record for a different SHA still fails.
 # NAME THE APPROVER; DO NOT ASSERT PERSONHOOD FROM A STATE THAT CANNOT SHOW IT.
 # This printed "APPROVED by a person" for any APPROVED review. Once a reviewer
-# identity exists (docs/reviewer-identity.org) that became false the first time
+# identity exists (research/findings/reviewer-identity.org) that became false the first time
 # it was true: #42 was approved by a TOKEN authenticating as jwalsh, and the
 # line claimed a person. reviewDecision cannot tell a human from a second
 # credential, so it must not be read as if it could. Print who, and whether the

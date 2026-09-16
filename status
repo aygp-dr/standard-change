@@ -11,7 +11,7 @@ Three questions, and the third is the one with teeth:
 
 A deploy:* label outside the change window is a VIOLATION: the window is the
 authorization, and deploying without one means the guards were evaluated at a
-moment nobody agreed to. The single exception is change:emergency, which is
+moment nobody agreed to. The single exception is itil:emergency, which is
 the one authorized bypass and is why it carries an audit trail.
 
 Reads live from gh, or from recorded JSON with --fixture so it is testable
@@ -25,7 +25,7 @@ import subprocess
 import sys
 
 DEPLOY = ("deploy:staging", "deploy:production")
-EMERGENCY = "change:emergency"
+EMERGENCY = "itil:emergency"
 SKIP = "labeler:skip"
 
 
@@ -98,7 +98,7 @@ def main():
         w = wins.get(str(pr["number"]), {})
         start = parse(w.get("window", ""))
         if emerg:
-            rec["why_ok"] = "change:emergency — authorized bypass"
+            rec["why_ok"] = "itil:emergency — authorized bypass"
         elif not start:
             violations.append({**rec, "reason": "no reserved change window"})
         elif not (start <= now <= start + dt.timedelta(minutes=args.grace_minutes)):
@@ -135,7 +135,7 @@ def main():
             print(f"    {v['title']}")
         print(f"\n  {len(violations)} violation(s). A deploy:* label without a window means"
               "\n  the guards were evaluated at a moment nobody authorized. The only"
-              "\n  exception is change:emergency, which leaves an audit trail.")
+              "\n  exception is itil:emergency, which leaves an audit trail.")
     else:
         print("  none")
 

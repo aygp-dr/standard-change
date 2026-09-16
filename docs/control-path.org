@@ -128,12 +128,12 @@ made without anyone deciding to make it.
 - *deploy to production* — =targets/node/deploy.sh=, gated by guard 4
 - *cutover* — =targets/node/switch.sh=, which refuses a colour that is not
   answering
-- *emergency* — =change:emergency= is a person's declaration, always
+- *emergency* — =itil:emergency= is a person's declaration, always
 
 * See also
 
 - =.claude/agents/jwalsh.md= — the proxy's rules and refusal conditions
 - =change/label-owners.tsv= — one declared writer per label
-- =docs/label-ownership.org= — why adding and removing are different acts
+- =research/findings/label-ownership.org= — why adding and removing are different acts
 - =docs/adr/0001-automatic-promotion.org=, "The human is the serialization
   point" — why acceptance is the resource with no second copy

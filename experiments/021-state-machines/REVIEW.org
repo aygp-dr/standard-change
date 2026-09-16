@@ -945,7 +945,7 @@ And the =Labels= case is *checked in the rejected direction*:
 =tla/Labels.cfg:15= sets =EmergencyPreempts = TRUE= and =:21= checks
 =EmergencyNeverWaits=, so the verified model asserts that preemption always
 happens — the side ADR 0003 rejects [E]. This is acknowledged as open elsewhere
-(=README.org:385=, =docs/label-state-machine.org:93=), but the configuration as
+(=README.org:385=, =research/findings/label-state-machine.org:93=), but the configuration as
 shipped verifies the wrong arm.
 
 *This is the single most useful thing in §5 for the five builders*: INV-4 is a

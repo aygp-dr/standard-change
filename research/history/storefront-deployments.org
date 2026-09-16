@@ -1,0 +1,101 @@
+#+TITLE: How a real storefront deploys, and where this model departs from one
+#+SUBTITLE: Comparison notes -- affects no simulator, gate or guard
+#+DATE: 2026-09-13
+#+OPTIONS: toc:2 num:t
+
+* Scope
+
+The four apps here are *fixtures*: the product is the gate sequence
+(=spec.org= §Purpose). This note asks a different question -- how would an
+actual ecommerce storefront deploy? -- purely as a comparison.
+
+*Nothing here changes a guard, a gate, a simulator or the spec.* If a claim
+below contradicts =spec.org=, the spec is right and this file is a note.
+
+* The shapes a storefront actually has
+
+** Traffic is not uniform, and neither is the risk
+
+Our model treats every change as one unit. A storefront does not:
+
+| surface           | change rate | blast radius of a bad deploy          |
+|-------------------+-------------+---------------------------------------|
+| product pages     | high        | lost browse traffic, recoverable      |
+| search / browse   | high        | lost discovery, recoverable           |
+| cart              | medium      | *lost baskets* -- customer-visible loss |
+| checkout / payment| *low*       | *lost revenue and trust*, often not recoverable |
+
+This is why real storefronts do not ship one pipeline. Checkout gets change
+freezes, longer soaks and more approvals than a product page does, and a model
+with one berth for all four cannot express that. §The balance would predict the
+consequence exactly: a uniform gate tuned for checkout makes product-page
+changes expensive enough to route around.
+
+** Seasonality is a first-class control
+
+=FREEZE:= in this repo is a calendar event someone sets. In a storefront it is
+a *quarter*: a peak-season code freeze covering weeks, with an exception
+process rather than a label. The interesting difference is that our freeze
+blocks and theirs *raises the approval bar* -- a graduated control where ours is a gate.
+
+** The rollback that does not exist
+
+Our guard 5 failure path assumes rollback. A storefront's does not, in the
+places that matter most:
+
+- an order placed against the new checkout *exists*; redeploying the old code
+  does not un-place it;
+- a price change that was read and acted on cannot be recalled;
+- a schema migration behind the cart is forward-only in practice.
+
+This is axiom *A5, "deployment is undoable"*, which =spec.org= §Changelog
+records as *unencoded*: none of the six guards has a state dimension. A
+storefront is where that gap is most obvious, because its state is money.
+
+* What a storefront does that this model does not
+
+| practice                | what it buys                          | why it is absent here |
+|-------------------------+---------------------------------------+-----------------------|
+| feature flags           | decouples deploy from release; rollback becomes a flag flip, not a redeploy | the model conflates deploy and release |
+| canary by traffic share | risk proportional to exposure         | guard 5 cannot read an intended split (§C6) |
+| per-surface pipelines   | checkout gated harder than browse     | one berth, one policy |
+| synthetic checkout probes | catches a broken funnel that returns 200 | guard 5 asserts the served BUILD, not that the funnel works |
+| session draining        | in-flight carts survive a deploy      | no notion of in-flight state |
+
+*Feature flags are the sharpest omission.* They separate "the code is deployed"
+from "the behaviour is live", which is precisely the release-management vs
+deployment-management split ITIL names and this repo keeps only in prose. With
+flags, guard 5's question changes from "is the new build serving?" to "is the
+new build serving with the flag off?" -- and rollback stops needing a deploy at
+all.
+
+* What this model has that a storefront usually does not
+
+Not a one-way comparison:
+
+- *The divergence classifier.* Most pipelines treat any trunk movement alike,
+  or ignore it. Classifying =inert/pipeline/artifact/hotfix= so only the last
+  two withdraw a verdict is the thing that stops guard 4b being either noise or
+  absent (=experiments/001=).
+- *An audit that admits what it cannot read.* Four outcomes rather than two, so
+  "unreadable" never becomes "no findings" (=gates/audit-controls.py=).
+- *A named bypass for every automation*, with the two that have none stated and
+  justified (§Every automation has a bypass).
+- *The guards as predicates* over a content hash, so they survive a change of
+  forge (§Domain model).
+
+* If this model were applied to a storefront
+
+Three changes, in order of how much they would matter:
+
+1. *Split the berth per surface.* Checkout and browse should not queue behind
+   one another; they have different risk and different cadence. This is ADR
+   0001's Option A arriving from the business side rather than the
+   architectural one.
+2. *Encode A5.* A guard that asks "is this change reversible, and if not what
+   is the forward fix?" before production. Nothing in the six guards asks it.
+3. *Make release separable from deploy.* Feature flags, so guard 5 verifies the
+   artifact and a separate control governs the behaviour.
+
+None of those are simulator changes. They are changes to what the model is
+*about*, which is why they belong in a note rather than in =spec.org=.

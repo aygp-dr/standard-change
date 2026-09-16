@@ -1,0 +1,47 @@
+#+TITLE: The issue index
+#+DATE: 2026-09-15
+
+Generated from the forge at build time. The paper cites issues by number; a
+reader elsewhere has no tracker, so this is the one-line meaning of each.
+
+| issue | state | title |
+|-------+-------+-------|
+| #1 | open | ESTATE STATE -- the holder for freeze and emergency |
+| #8 | closed | checkout: pink background |
+| #10 | closed | OneUI: a shared UI surface across the apps |
+| #13 | closed | Reflected XSS: OneUI interpolates the request path into the document unescaped |
+| #14 | open | e2e.sh takes its oracle from the tree it runs in, not the build under test |
+| #15 | closed | The page does not say which environment you are looking at |
+| #16 | closed | Stale staging observations survive a push: labeller withdrawal is not firing |
+| #17 | closed | pdp: display product details |
+| #18 | open | "New" / "Updated" badge on products -- and where product metadata lives |
+| #23 | open | Deployment event markers -- emit from observation, not intent |
+| #24 | open | Guard 5 reads routes.json from the caller's cwd, so its verdict depends on where you stand |
+| #25 | open | deploy-staging has never run: GITHUB_TOKEN cannot read PRs via GraphQL |
+| #26 | open | Nothing stops a production deploy from main -- the other half of production-first |
+| #29 | open | production-first is a required check that can never block: it runs before the labels exist and label events ca |
+| #30 | closed | The approve half of the proxy delegation cannot be executed: same identity as every PR author |
+| #32 | open | Nothing guards the ACT of deploying: a protected environment accepts any commit, with no PR, window or berth |
+| #34 | closed | Every workflow reports failure because Actions is not starting jobs (billing) -- and a job that never ran is in |
+| #35 | closed | plp: a search input, and /search?q= that actually searches |
+| #37 | open | Nothing cleans up after a failed deployment: every cleanup runs only on the success path |
+| #51 | open | Guard 3 is enforced only in preflight -- revisit when a deploy is first automated |
+| #77 | open | Change type is decided by path, not blast radius: a four-app manifest is itil:standard |
+| #78 | open | The reviewer identity can merge what it approves: reviewer-identity.org rule 2 is not met |
+| #84 | open | e2e.sh defaults ROUTER_URL to :10000 and exits 7 silently when nothing listens |
+| #85 | open | dashboard hardcodes staging :9201 / production :9200, the pre-correction scheme |
+| #86 | open | pbt reports an ImportError as 'clean model reports a violation' |
+| #87 | closed | labeller re-derives itil:standard/normal beside a declared itil:emergency |
+| #88 | open | watch.sh adds change:requested to a change that is already change:scheduled |
+| #89 | open | label writes that the declaration retires, does not own, or never performs |
+| #90 | open | reap.sh reads only the window's end: it strips a berth mid-flight and erases the last label of a merged, unset |
+| #91 | open | browser walk on block 0 (dff0887): four storefront enhancement opportunities, and what the smoke proxy measure |
+| #102 | open | Option: GitHub's merge queue as the berth, with the ordering inverted -- and how an emergency gets to the fron |
+| #103 | open | Five releases that failed on staging never ended: #97-#101 carry staging:uat written by a driver |
+| #109 | open | Final gate as commit statuses + required checks: the host reports, the forge merges |
+| #120 | open | spec self-contradiction: 9100 is both 'a dead end by construction' and the production front router |
+| #121 | open | spec uses change:standard/change:normal for CLASSIFICATION, which is the itil:* namespace |
+| #122 | open | change:end is a trigger that clears labels, not a tombstone: the merge is the record |
+| #124 | open | Rebuild: the label namespaces and their boundaries (the labeller's vs the change-control machine's) |
+| #125 | open | The prefix names the writer: release:* is the person's, change:* is the pipeline's (rename change:start -> rel |
+| #126 | open | Paper: contradictions between documents and the cuts a DevOps reader asked for |

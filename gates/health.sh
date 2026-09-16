@@ -17,7 +17,7 @@
 # --pr <n> [--env <name>] records the verdict as <env>:healthy. The gate records
 # its own result because the gate is the instrument. Without this flag the label
 # had to be typed by hand, which is asserting a measurement you did not take --
-# and it is exactly what happened on PR #9 (docs/label-ownership.org).
+# and it is exactly what happened on PR #9 (research/findings/label-ownership.org).
 #
 # It matters more here than for e2e or smoke: no GitHub runner can reach any
 # environment in this repository, so this label is the ONLY evidence the forge

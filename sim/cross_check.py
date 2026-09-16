@@ -25,7 +25,7 @@ TLA = ROOT / "tla"
 RULES = ["DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
          "ClassGuard", "LifecycleExclusive", "ReapFreesBerth", "SettleClears",
          "ReapSparesInFlight", "RecordOnMerge", "EmergencyPreempts",
-         "HoldGuard", "HealthyBeforeVerdict", "LockResets"]
+         "HoldGuard", "HealthyBeforeVerdict", "LockResets", "UnaffectedMerges"]
 JAR = os.environ.get("TLA2TOOLS",
       str(pathlib.Path.home() / "ghq/github.com/aygp-dr/tla-plus-tutorial/tla2tools.jar"))
 BOUND = int(os.environ.get("LABEL_BOUND", "12"))  # the 14-rule machine has 25M states; a slice by default

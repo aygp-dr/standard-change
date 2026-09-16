@@ -148,6 +148,16 @@ const sh = (cmd, args) => new Promise((res) =>
   execFile(cmd, args, { cwd: new URL('..', import.meta.url).pathname, timeout: 5000 },
     (e, out) => res(e ? '' : out)));
 
+// A NON-ZERO EXIT IS NOT ALWAYS AN ERROR. gates/pr-state-audit.py exits 1 when
+// it FINDS something -- that is its verdict, not a failure to produce one --
+// and sh() above discards stdout on any non-zero exit, so the dashboard threw
+// away 210 bytes of correct JSON and rendered "the audit did not run".
+// Findings read as inability to look: spec.org class 1, in the panel built to
+// show class-1 defects. This keeps stdout and reports the exit separately.
+const shOut = (cmd, args) => new Promise((res) =>
+  execFile(cmd, args, { cwd: new URL('..', import.meta.url).pathname, timeout: 15000 },
+    (e, out) => res({ out: out || '', failed: !!(e && e.killed) })));
+
 // WHAT the window is for, not just which number. A row reading `#42` makes the
 // reader open GitHub to find out whether staging is held by a one-line copy
 // tweak or a five-app release. The branch answers it in place.
@@ -306,6 +316,18 @@ async function snapshot() {
   // instead: the change is IN an environment when that environment is serving
   // its build. Same rule as everywhere else here -- prefer the fact the system
   // reports about itself over the one the caller supplied.
+  // THE INVARIANTS, ASKED OF THE FORGE. gates/pr-state-audit.py holds the five
+  // and their self-test; the dashboard does not reimplement them, because two
+  // copies of one rule is the defect this repo keeps finding. It shells out and
+  // renders what it is told. A failure to run is reported as a failure to run,
+  // never as "no violations" -- unreachable is not falsified.
+  const invariants = await shOut('python3', ['gates/pr-state-audit.py', '--json'])
+    .then(({ out, failed }) => {
+      if (failed) return { ok: false, error: 'the audit timed out' };
+      try { return { ok: true, ...JSON.parse(out) }; }
+      catch { return { ok: false, error: 'the audit produced no JSON' }; }
+    });
+
   const [envs, windows, flags] = await Promise.all([
     Promise.all(ENVS.map(probe)), schedule().catch(() => []),
     estateFlags().catch(() => ({ freeze: null, emergency: null, unknown: true,
@@ -325,7 +347,7 @@ async function snapshot() {
     flags,
     live_colour: front?.colour ?? null,
     live_sha: front?.sha ?? null,
-    envs, windows,
+    envs, windows, invariants,
   };
   mirror(snap);
   return snap;
@@ -532,6 +554,10 @@ background:#1a1d26;color:#c9d1d9;border:1px solid #30363d}
 button:hover{background:#232733}
 button.clr{font-size:11px;padding:2px 8px;border-color:#30363d;color:#8b93a7;margin-left:8px}
 button.clr:hover{border-color:#b45309;color:#fde68a;background:#2a2010}
+.inv-ok{color:#86efac;margin:4px 0}
+.inv-unknown{color:#fcd34d;margin:4px 0}
+tr.inv-bad td{background:#2a1212}
+td.inv-kind{color:#fca5a5;white-space:nowrap}
 button.b-freeze{border-color:#2563eb;color:#93c5fd}
 button.b-freeze:hover{background:#12233d}
 button.b-emergency{border-color:#b91c1c;color:#fca5a5}
@@ -566,8 +592,35 @@ letter-spacing:.04em}
 
 <h2>environments</h2>
 <table><thead><tr><th>environment</th><th>tier</th><th>port</th><th>state</th><th>build</th><th>app</th><th>deployed</th></tr></thead><tbody id=e></tbody></table>
+
+<h2>invariants</h2>
+<div id=inv></div>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// THE INVARIANTS PANEL. Only failures are listed, because a green list of
+// five is furniture and an operator scanning a board needs the exception. The
+// clean state gets one line, and a panel that could not run says so in its own
+// words rather than showing nothing -- "no violations" and "we could not look"
+// must never render the same.
+function renderInvariants(d){
+  const el=document.getElementById('inv'); if(!el) return;
+  const v=d.invariants;
+  if(!v||!v.ok){
+    el.innerHTML='<p class="inv-unknown">INDETERMINATE &mdash; the audit did not run'+
+      (v&&v.error?': '+esc(v.error):'')+'. This is not a clean estate; it is an unread one.</p>';
+    return;
+  }
+  const f=v.findings||[];
+  if(!f.length){
+    el.innerHTML='<p class="inv-ok">all five invariants hold across '+esc(v.open)+' open pull requests</p>';
+    return;
+  }
+  el.innerHTML='<table><thead><tr><th>invariant</th><th>what is wrong</th><th>changes</th></tr></thead><tbody>'+
+    f.map(x=>'<tr class=inv-bad><td class=inv-kind>'+esc(x.kind)+'</td><td>'+esc(x.detail)+'</td><td>'+
+      (x.prs||[]).map(n=>'<a href="https://github.com/aygp-dr/standard-change/pull/'+esc(n)+'">#'+esc(n)+'</a>').join(' ')+
+      '</td></tr>').join('')+'</tbody></table>';
+}
+
 function flagbox(d){
   const f=d.flags||{};
   const cell=(label,state,extra)=>'<span class="f '+state+'">'+esc(label)+'</span>'+
@@ -752,6 +805,7 @@ function render(d){
     // reservation, not that a deploy could start right now (a freeze, an
     // emergency or a held berth all still refuse). Say the narrow true thing.
     :'<tr><td colspan=6 class=dim>no reservation — nobody has booked staging</td></tr>';
+  renderInvariants(d);
   document.getElementById('e').innerHTML=d.envs.map(x=>{
     const state=x.declared?'<td class=decl>declared</td>'
       :'<td class='+(x.up?'up':'down')+'>'+(x.up?'up '+esc(x.status):'dark')+'</td>';

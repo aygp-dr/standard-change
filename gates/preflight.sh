@@ -5,7 +5,7 @@
 # and never existed until now. Exit codes are the ones the spec assigned:
 #   0 proceed   2 lock held   3 freeze   4 calendar unreachable   5 queue busy
 # 4 BLOCKS. "I could not read the calendar" is not "the calendar is clear" --
-# the same rule as docs/label-ownership.org: unreachable is not falsified.
+# the same rule as research/findings/label-ownership.org: unreachable is not falsified.
 #
 # It is deliberately VERBOSE. ADR 0001 Option 0 says a person still confirms the
 # things a machine cannot judge, and a person cannot confirm a list they have
@@ -92,7 +92,7 @@ self=$(gh api "repos/$R/commits/$head/check-runs" \
 # exactly like a real gate-selftest failure, and cost half an hour of chasing a
 # CI/local divergence that did not exist.
 #
-# The distinction is the same rule as docs/label-ownership.org rule 2 --
+# The distinction is the same rule as research/findings/label-ownership.org rule 2 --
 # UNREACHABLE IS NOT FALSIFIED -- applied to the forge rather than the estate.
 # merge-on-healthy.yml was fixed so "I could not reach production" stops being
 # recorded as "production is unhealthy"; this is that collapse one level up.

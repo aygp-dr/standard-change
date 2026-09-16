@@ -1,0 +1,192 @@
+#+TITLE: Release Engineering, Deployment Pipelines, and Change Management -- Verified Reference Survey and Timeline
+#+DATE: 2026-09-14
+#+OPTIONS: toc:2 num:nil
+
+* Provenance and reconciliation
+
+Produced by a second research agent and filed here verbatim below the line.
+It overlaps =research/history/pipeline-history.org= and =research/history/five-properties.org=, which
+carry the =:VERIFIED:= drawers from the citation audit; this file carries
+none, and where the two disagree the audited file's drawer is the record and
+this file is the dissent. The disagreements, so nobody has to diff them:
+
+| claim | this survey | audited note | note |
+|-------+-------------+--------------+------|
+| GitHub merge queue GA | 18 July 2023, GitHub blog | 12 July 2023, GitHub changelog | both first-party; the changelog is the earlier notice |
+| in-toto spec v0.9 | 11 April 2017 | 24 May 2018 (specification repo tag) | probably different artifacts -- the docs repo's v0.9 versus the spec repo's tag; unresolved |
+| Hodgson, Feature Toggles | 2017 | published 2016-02-08, revised 2017-10-09 | survey took the revision date |
+| GitHub flow deploy-before-merge | "first-party blog; URL/date to confirm" | Gupta, "Deploying branches to GitHub.com", 2015-06-02; Chacon 2011 prescribes merge-then-deploy | resolved in the audited note |
+| Fowler CI rewrite | "2023" per Fowler's text | published 2024-01-18 per the article's revision list | written 2023, published 2024; both first-party |
+| Firefox first rapid release | 16 Aug 2011 (Firefox 6, "first true rapid release milestone", Nightingale) | Firefox 5, 21 June 2011, first on the six-week cycle | Mozilla's own blog counts 6 as the first *true* one; the audited note counts the first shipped on the cycle. Both defensible |
+| CVS C rewrite | 1989 (secondary) | in use at Prisma December 1988; USENIX Winter 1990 | audited note has the primary |
+| Docker | 1.0, 9 June 2014 | open-sourced March 2013 | different events, both correct |
+| Kubernetes | 1.0, 21 July 2015 | first commit 2014-06-06 | different events, both correct |
+| SLSA L2 versus L3 | L2 platform-generated, L3 hardened against tenant | same, after correction | agree |
+
+What this survey adds that the audited note does not: the verbatim ITIL 4
+definitions; the in-toto Statement =_type=; the Spinnaker constraint spelling
+(=manual-judgement=); the CodePipeline =DeploymentWindow= rule provider
+confirmed from CloudFormation docs; AWS Change Calendar's launch date; AWS
+Proton's end of support; the Chrome two-week cycle announcement of 3 March
+2026; and the explicit finding that *no primary source was located for
+formal modelling of deployment pipelines* -- which is a gap this repo's
+=tla/StandardChange.tla= sits in, and worth a citation search of its own.
+
+-----
+
+This document is a references section for aygp-dr/standard-change. It groups primary sources by topic, provides a dated semantic timeline, compares branching policies, and surveys release trains. Every claim carries a source; unverified attributions and cross-index conflicts are flagged explicitly rather than smoothed over.
+
+* TL;DR
+- Nearly all core dates verify against primary sources: SCCS (Rochkind, IEEE TSE, 1975), RCS (Tichy, SPE, 1985), Sagas (SIGMOD 1987), Leases (SOSP 1989), Continuous Delivery (2010), ITIL 4 Change Enablement guide (9 January 2020), SLSA v1.0 (19 April 2023), in-toto spec v1.0 (2 June 2023), GitHub merge queue GA (18 July 2023), AWS Proton end of support (7 October 2026).
+- The model's primitives map cleanly onto published prior art: the "berth" lease onto Gray & Cheriton leases and the Kubernetes coordination.k8s.io Lease API; gate observations bound to a build SHA onto in-toto/SLSA subject-digest binding; the change calendar onto RFC 5545 VFREEBUSY and AWS Systems Manager Change Calendar; standard/normal/emergency classes onto the ITIL 4 Change Enablement practice guide.
+- Two conflicts/gaps to flag: the Rochkind 1975 issue number (Issue 1 vs No. 4) and month (March vs December) differ across indexes; and several items (Git/Mercurial/CVS/Perforce dates, GitHub-flow deploy-before-merge, NIST/ISO clause text) rest on secondary or first-party-but-unquoted sources and are labeled as such. No primary source was located for formal-methods modeling of deployment pipelines.
+
+* BOOKS, STANDARDS, AND ARTICLES
+
+** Version control history
+- *SCCS* -- M. J. Rochkind, "The Source Code Control System," IEEE Transactions on Software Engineering, vol. SE-1, no. 4, pp. 364–370, 1975. DOI:10.1109/TSE.1975.6312866. Contributes the first well-known version control system: per-file repositories storing every change with author, time, and reason; introduced identification-string embedding. Note: the ACM index lists "Volume 1, Issue 1, Published 01 March 1975"; Wiley/BibSonomy and the IEEE reprint list "no. 4, December 1975." The volume/issue and month are inconsistent across indexes; the year 1975 and the DOI are consistent. A 2024 retrospective by Rochkind ("A Retrospective on the Source Code Control System," IEEE TSE, DOI:10.1109/TSE.2024.3524947) confirms authorship and history.
+- *RCS* -- W. F. Tichy, "RCS -- A System for Version Control," Software: Practice and Experience, vol. 15, no. 7, pp. 637–654, July 1985. DOI:10.1002/spe.4380150703. Contributes reverse-delta storage and revision groups; the tool was first released 1982 (per RCS/GNU history). An earlier paper is Tichy, "Design, Implementation, and Evaluation of a Revision Control System," Proc. 6th ICSE, 1982, pp. 58–67.
+- *CVS* -- Concurrent Versions System. Originated as shell scripts by Dick Grune (1986) and rewritten in C by Brian Berliner (1989). Contributes concurrent multi-developer editing over RCS files with a client-server model; commits are per-file, not atomic across a tree. [Dates commonly cited but not confirmed here from a primary venue.]
+- *Subversion* -- Apache Subversion 1.0 first released 23 February 2004, per the Apache Subversion Release Notes (svn.apache.org): "Subversion 1.0 (first released – February 23, 2004)." Contributes tree-wide atomic commits: a single commit produces one global, monotonically increasing revision number naming a whole tree state.
+- *Perforce* -- Contributes the "changelist" as an atomic unit grouping a set of file revisions committed together. [Primary-source date verification pending.]
+- *Git* -- Initial release 2005 by Linus Torvalds. Contributes content-addressed storage: a commit names a whole tree by SHA-1, making a revision an immutable snapshot identified by a cryptographic digest. [Date widely cited; primary-source confirmation pending.]
+- *Mercurial* -- Initial release 2005 by Matt Mackall. Contributes an alternative distributed model with content-addressed changesets. [Date widely cited; primary-source confirmation pending.]
+
+** Continuous integration and delivery
+- *Fowler, "Continuous Integration"* -- M. Fowler and M. Foemmel, martinfowler.com. Original publication 10 September 2000 ("Continuous Integration (original version)"); major revision 2006; rewritten again in 2023 (Fowler states "I originally wrote this article in 2001, with an update in 2006 … I rewrote this article again in 2023"). Contributes the canonical definition of CI: developers integrate to mainline at least daily, each integration verified by an automated self-testing build. Note the 2000 vs 2001 discrepancy: the original-version page is dated 10 September 2000, while Fowler's 2023 text says "originally … in 2001." Both are first-party.
+- *Humble & Farley, "Continuous Delivery"* -- J. Humble and D. Farley, Addison-Wesley, 2010. Contributes the deployment-pipeline abstraction: every change flows through automated build/test/deploy stages, with promotion gates between them.
+- *Kim, Humble, Debois, Willis, "The DevOps Handbook"* -- IT Revolution Press, 2016. Contributes codified deployment-pipeline and change-practice patterns (the "Three Ways").
+- *Forsgren, Humble, Kim, "Accelerate"* -- IT Revolution Press, 2018. Contributes the four key delivery metrics (deployment frequency, lead time, change fail rate, MTTR) used to reason about pipeline throughput and stability.
+- *Google SRE book, ch. 8 "Release Engineering"* -- B. Beyer, C. Jones, J. Petoff, N. R. Murphy (eds.), "Site Reliability Engineering," O'Reilly, 2016. Contributes the principles of identifiability, reproducibility, consistency, and hermetic builds; release engineering as a distinct discipline.
+- *Amazon Builders' Library, "Automating safe, hands-off deployments"* -- Clare Liguori (AWS Principal Engineer), published 18 June 2020, per AWS What's New (aws.amazon.com/about-aws/whats-new/2020/06): "the Amazon Builders' Library published a new article titled, Automating Safe, Hands-off Deployments … AWS Principal Engineer Clare Liguori dives deep into the strategies used at Amazon." Contributes a first-party account of promotion through waves/stages with automatic rollback and bake times.
+
+** Academic release engineering
+- *Adams & McIntosh, "Modern Release Engineering in a Nutshell -- Why Researchers Should Care"* -- B. Adams, S. McIntosh, Proc. IEEE 23rd Int'l Conf. on Software Analysis, Evolution, and Reengineering (SANER), Future of Software Engineering track (invited), pp. 78–90, March 2016, Osaka, Japan. Contributes a taxonomy of the modern release pipeline (branching, CI, infrastructure, deployment, release) and a research agenda.
+- *Savor et al., "Continuous Deployment at Facebook and OANDA"* -- T. Savor, M. Douglas, M. Gentili, L. Williams, K. Beck, M. Stumm, Proc. 38th ICSE Companion (ICSE-SEIP), pp. 21–30, 14 May 2016. DOI:10.1145/2889160.2889223. Contributes empirical evidence that continuous deployment scales; verbatim: "this is the first study to show it is possible to scale the size of an engineering team by 20X and the size of the code base by 50X without negatively impacting developer productivity or software quality." A companion FSE 2016 paper (Rossi, Shibley, Su, Beck, Savor, Stumm, "Continuous deployment of mobile software at Facebook") extends this to mobile.
+- *Khomh et al., Firefox rapid release* -- F. Khomh, T. Dhaliwal, Y. Zou, B. Adams, "Do Faster Releases Improve Software Quality? An Empirical Case Study of Mozilla Firefox," Proc. 9th IEEE MSR, 2012. Contributes evidence on how a shift to rapid release affects defect fixing and crash rates. [Title/venue widely cited; confirmed here as MSR 2012.]
+- *Shahin, Babar, Zhu systematic review* -- M. Shahin, M. A. Babar, L. Zhu, "Continuous Integration, Delivery and Deployment: A Systematic Review on Approaches, Tools, Challenges and Practices," IEEE Access, vol. 5, 2017. Contributes a consolidated map of CI/CD approaches, tools, and challenges.
+- *Rahman et al., "Synthesizing Continuous Deployment Practices"* -- A. A. U. Rahman, E. Helms, L. Williams, C. Parnin, 2015 ("Synthesizing Continuous Deployment Practices Used in Software Development"). Contributes a synthesis of CD practices from grey literature and case studies.
+- *Potvin & Levenberg, Google monorepo* -- R. Potvin, J. Levenberg, "Why Google Stores Billions of Lines of Code in a Single Repository," Communications of the ACM, vol. 59, no. 7, pp. 78–87, 24 June 2016. DOI:10.1145/2854146. Contributes the monorepo + trunk-based-development model at ultra-large scale (95% of Google developers on the shared repository), with atomic cross-project changes and automated commit gating.
+- *Formal modeling of pipelines* -- No single canonical primary source was verified in this pass for TLA+/model-checking/property-based testing specifically of deployment pipelines. This is a genuine gap; flag as "primary source not located." Adjacent primitives (sagas, leases) are covered under Concurrency, and the merge-queue "not rocket science rule" is the closest published correctness invariant.
+
+** Supply-chain and attestation
+- *in-toto specification v1.0.0* -- in-toto, Version 1.0.0, dated 2 June 2023 (in-toto-spec.md). Contributes step authentication and traceability; verbatim: "if Alice tagged a release, the evidence provided could only be produced by Alice." History: v0.1 released 19 September 2016; v0.9 released 11 April 2017. The in-toto Attestation Framework Statement layer (v1) binds an attestation to a subject artifact set identified by digest; the Statement `_type` is `https://in-toto.io/Statement/v1`. This is the clause governing "who may assert a verdict about an artifact": the actor who performs a step signs an unforgeable statement whose subject is the artifact digest.
+- *SLSA v1.0* -- OpenSSF, released 19 April 2023 (OpenSSF/Linux Foundation press release, "OpenSSF Announces SLSA Version 1.0 Release"). Contributes the Build Track (levels 0–3) and provenance: Level 2 requires signed provenance generated by a hosted build platform; Level 3 hardens the platform against tenant falsification. SLSA v1.1 approved 21 April 2025. The key clause for the model: at L2+, the build platform (not the tenant) asserts provenance.
+- *Sigstore/cosign* -- Sigstore project; cosign signs and verifies container images/artifacts and produces in-toto attestations. Contributes keyless signing tied to OIDC identities, so a verifier can bind an artifact digest to a signer identity. [First-party; specific version/date to be confirmed.]
+- *OpenSSF Scorecard* -- OpenSSF. Contributes automated checks of a repository's security posture, producing a score a policy engine can consume. [First-party; date/clauses to be confirmed.]
+
+** Change management standards
+- *ITIL 4 Change Enablement practice guide* -- AXELOS, dated 9 January 2020. Definitions (verbatim): standard change = "A low-risk, pre-authorized change that is well understood and fully documented, and which can be implemented without needing additional authorization"; normal changes follow "a process that includes collective expert assessment, authorization, and control"; the practice "should ensure that changes are implemented effectively, safely, and promptly in emergency situations." Change authority = "A person or group responsible for authorizing a change." Contributes the standard/normal/emergency classification, the change schedule, and the change-authority role that the repository's ITIL 4 change classes model.
+- *ISO/IEC 20000-1:2018, clause 8.5.1* -- Service management system requirements for change management. Contributes the requirement to define change types, records, and approval/authority for changes to services. [Clause referenced by the task; text not quoted from the paywalled standard here -- citation without verbatim.]
+- *NIST SP 800-53 Rev. 5, CM-3* -- "Configuration Change Control," with enhancements (e.g., CM-3(1) automated documentation/notification/approval, CM-3(2) test/validate/document changes, CM-3(4) security/privacy representative on the change control body). Contributes the control that changes be reviewed and explicitly approved/disapproved, and tracked. [Referenced; verbatim enhancement text to be confirmed from the NIST publication.]
+- *IEEE 828-2012* -- "IEEE Standard for Configuration Management in Systems and Software Engineering." Contributes CM planning requirements including change control and configuration status accounting. [Referenced; not quoted here.]
+- *COBIT / SOX separation of duties* -- COBIT (ISACA) and Sarbanes-Oxley Act §404 practice guidance establish that the person who approves a change should not be the person who deploys it. Contributes the separation-of-duties principle that motivates distinct "who may approve" vs "who may deploy" roles. [Principle widely documented; specific COBIT control ID to be confirmed.]
+
+** Concurrency primitives referenced by the model
+- *Gray & Cheriton, "Leases"* -- C. G. Gray, D. R. Cheriton, "Leases: An Efficient Fault-Tolerant Mechanism for Distributed File Cache Consistency," Proc. 12th ACM SOSP, pp. 202–210, 1989. DOI:10.1145/74850.74870. Contributes the time-bounded lease: a holder gains exclusive rights for a bounded interval, and non-Byzantine failures affect performance only; correctness is preserved. This is the direct model for the environment lease ("berth").
+- *Garcia-Molina & Salem, "Sagas"* -- H. Garcia-Molina, K. Salem, Proc. 1987 ACM SIGMOD, pp. 249–259. DOI:10.1145/38713.38742. Contributes the long-lived transaction decomposed into steps with compensating transactions -- the model for multi-stage promotion with rollback/compensation.
+- *Kubernetes coordination.k8s.io Lease API* -- Kubernetes. Contributes a first-class Lease object used for leader election and node heartbeats; a concrete implementation of leases for the "berth." [First-party API; version/date to be confirmed.]
+- *PostgreSQL EXCLUDE constraints* -- PostgreSQL. Contributes exclusion constraints (typically GiST over range types) that prevent overlapping reservations at the database level -- a mechanism for enforcing non-overlapping berth/window bookings. [First-party docs; version to be confirmed.]
+- *RFC 7232* -- R. Fielding, J. Reschke (eds.), "Hypertext Transfer Protocol (HTTP/1.1): Conditional Requests," IETF, 2014. Contributes ETag/If-Match conditional requests enabling optimistic concurrency ("compare-and-swap" over HTTP) for gate/promotion state.
+- *IETF Idempotency-Key header* -- Internet-Draft (draft-ietf-httpapi-idempotency-key-header). Contributes a standard header for safe retries of non-idempotent operations. Status: an active IETF HTTP API working-group draft; it has not yet been published as an RFC. [Exact current draft revision/expiry to be confirmed.]
+- *RFC 5545* -- B. Desruisseaux (ed.), "Internet Calendaring and Scheduling Core Object Specification (iCalendar)," IETF, 2009. VFREEBUSY defines free/busy time intervals -- the model for a change calendar expressing when deployment is permitted or blocked.
+
+** Feature flags and decoupling deploy from release
+- *Hodgson, "Feature Toggles (aka Feature Flags)"* -- P. Hodgson, martinfowler.com, 2017. Contributes the taxonomy (release, experiment, ops, permission toggles) and the principle that deployment can be decoupled from release: code ships dark and is activated separately.
+- *OpenFeature* -- CNCF project. Contributes a vendor-neutral feature-flag API/SDK specification. [First-party; date/incubation status to be confirmed.]
+
+** Merge queues
+- *Graydon Hoare, "The Not Rocket Science Rule"* -- G. Hoare, "technicalities: 'not rocket science' (the story of monotone and bors)," graydon2.dreamwidth.org, 2014. States the rule (attributed to Ben Elliston): "automatically maintain a repository of code that always passes all the tests." Bors was implemented by Hoare (c. 2013) for Rust; it tests the merge result against the exact target commit before promoting to the trunk, preventing semantic/merge-skew breakage.
+- *Bors / Homu / Bors-NG* -- Homu is a reimplementation/extension of bors (Barosl Lee, 2014). Bors-NG later announced deprecation in favor of GitHub's native merge queue.
+- *Zuul* -- OpenStack's gating CI system implementing speculative, dependency-aware merge testing. [First-party; date to be confirmed.]
+- *GitHub merge queue* -- Public beta February 2023; generally available 18 July 2023 (GitHub blog, "GitHub merge queue is generally available"). Each queue entry builds a temporary branch combining the base, earlier queued PRs, and the candidate, and merges only if required checks pass. Note: GA is scoped to public repositories owned by organizations and private repos under GitHub Enterprise Cloud.
+- *Mergify* -- Third-party merge-queue service predating GitHub's native feature. [First-party; date to be confirmed.]
+
+** Promotion tooling as contrasting designs
+- *Kargo* (Akuity) -- Model: Warehouse (discovers artifacts) → Freight (immutable versioned collection of artifacts) → Stage → Promotion → Verification. GA v1.0.0 (with final removal of legacy promotion mechanisms deprecated in v0.9.0). Contributes an explicit promotion model layered over GitOps: Freight is verified in one Stage before becoming eligible downstream; auto-promotion policies (NewestFreight, MatchUpstream) and holds. Verification can invoke Argo Rollouts AnalysisRuns.
+- *Spinnaker Managed Delivery* -- Constraint types verified from spinnaker.io: depends-on ("will not deploy into the environment it is attached to, unless it has successfully deployed into the dependent environment"), allowed-times ("a time based gate on promotion into an environment"), manual-judgement ("prevents an artifact from deploying to an environment without explicit approval via an external API client"); also pipeline and canary constraints. Note the spelling: the Managed Delivery constraint is `manual-judgement` (with an "e"), distinct from the classic pipeline stage "Manual Judgment." Contributes declarative, constraint-gated environment promotion.
+- *GitHub Environments deployment protection rules* -- Launched open beta 15 December 2020 (GitHub changelog). Rules include wait timer, required reviewers, deployment branch/tag policies, and custom deployment protection rules (GitHub Apps, public preview 20 April 2023). Contributes per-environment gates on a deployment job.
+- *Google Cloud Deploy* -- GA per release notes 19 January 2022 (blog announcement 25 January 2022). Contributes delivery pipelines with ordered target progression and automation rules (promoteReleaseRule, timedPromoteReleaseRule, advanceRolloutRule, repairRolloutRule). Deploy policies with `rolloutRestriction` `timeWindows` (preview 10 October 2024) block rollouts during specified windows; timed promotion GA 31 March 2025.
+- *AWS CodePipeline stage conditions and rule types* -- Stage-level conditions launched 1 August 2024 (AWS What's New). A built-in rule provider named DeploymentWindow DOES exist ("check … whether the current time is within the deployment window"); the CloudFormation RuleTypeId doc names it explicitly ("The rule provider, such as the DeploymentWindow rule"). Other rules include CloudWatch alarm check and Lambda custom check (both at launch), VariableCheck (27 September 2024), and CodeBuild/Commands rules (14 March 2025). Conditions apply beforeEntry, on-success, and on-failure with configurable results (e.g., ROLLBACK/FAIL). This directly answers the task's question: yes, a DeploymentWindow rule exists.
+- *AWS Systems Manager Change Calendar* -- Launched 6 January 2020 (AWS What's New). Stores iCalendar 2.0 (RFC 5545) data as a ChangeCalendar document; entries are "Open by default" or "Closed by default," with events opening/closing change windows. Change Manager (change requests, approvals) integrates with Change Calendar to block changes that conflict with scheduled events. Note: Change Manager closed to new customers 7 November 2025.
+- *Pact Broker can-i-deploy* -- The Pact Broker asserts deployability by inspecting the "matrix" and confirming a successful verification result between the version to be deployed and every integrated application version already in the target environment; the CLI returns exit code 0 (safe) or 1 (not safe). Verbatim (docs.pact.io): the broker "can now determine whether or not a particular application version can be deployed safely into an environment by inspecting the matrix, and making sure that there is a successful verification result between the version that is about to be deployed, and all the versions of the integrated applications that are already in that environment." Contributes contract-based deploy gating where the broker, not the deploying service, renders the verdict.
+- *Argo Rollouts analysis* -- Argo Rollouts AnalysisRun/AnalysisTemplate. Contributes automated, metric-driven verification of a progressive rollout (canary/blue-green), with automatic promotion or abort based on metric queries.
+
+* TIMELINE -- changes that altered deployment-pipeline SEMANTICS
+
+| Year | Change | Semantic effect |
+|------+--------+-----------------|
+| 1975 | SCCS (Rochkind, IEEE TSE) | Per-file version history: a revision names one file's change, with author/time/reason recorded. |
+| 1982/1985 | RCS (Tichy; released 1982, SPE paper 1985) | Reverse deltas and revision groups; still per-file revisions. |
+| 1986/1989 | CVS (Grune scripts 1986; Berliner C rewrite 1989) | Concurrent multi-developer edits; commits remain per-file, not atomic across a tree. [dates secondary] |
+| ~1995 | Perforce changelists | A changelist groups a set of file revisions committed together as one atomic unit. [date secondary] |
+| 2004 | Subversion 1.0 (23 Feb 2004) | Atomic commits: one commit is a global revision naming a whole tree. |
+| 2005 | Git initial release | Content-addressed snapshots: a commit SHA names an entire immutable tree state. [date secondary] |
+| 2005 | Mercurial initial release | Distributed content-addressed changesets (alternative to Git). [date secondary] |
+| ~2001 | CruiseControl | First open-source CI server: build/test triggered automatically on commit. [date secondary] |
+| 2000/2006/2023 | Fowler "Continuous Integration" | Defines mainline integration ≥ daily, each verified by an automated self-testing build. |
+| 2005 | Hudson (later Jenkins, forked 2011) | Mainstream extensible CI automation; pipelines become plugin-driven. [date secondary] |
+| 2006 | Eclipse simultaneous release ("Callisto") | Multiple projects release together on a shared date: a "release" becomes a coordinated train across repos. [date secondary] |
+| 2010 | Humble & Farley "Continuous Delivery" | The deployment pipeline: change flows through staged automated gates with explicit promotion. |
+| 2010 | Chrome 6-week rapid release | A "release" becomes a time-boxed train; features that miss the cut wait for the next train. |
+| 2011 | Firefox rapid release | Adopts a Chrome-like rapid train; stabilization moves to release/beta channels. |
+| 2014 | Docker 1.0 (9 June 2014, DockerCon14) | The artifact becomes immutable; the deployed identifier is an image (later a digest). |
+| 2015 | Kubernetes 1.0 (21 July 2015) | Deployment target becomes declarative desired state reconciled by a controller. |
+| 2016 | Google monorepo paper (Potvin & Levenberg, CACM) | Trunk-based development + atomic cross-project change at ultra-large scale documented as viable. |
+| 2016 | Flux open-sourced (initial commit 7 July 2016) | Cluster state is reconciled from Git: deploy becomes convergence, not a push. |
+| 2017 | GitOps term coined (Weaveworks, Alexis Richardson) | Deploy = reconciliation toward Git-declared state, so promotion needs a separate model from "run a deploy." |
+| 2018/2019 | Argo CD (Intuit 2018; v1.0.0 16 May 2019) | Pull-based GitOps CD with per-app sync/health; promotion still external to reconciliation. |
+| 2020 | GitHub Environments + protection rules (15 Dec 2020) | Per-environment gates (reviewers, wait timers) attach to a deployment job. |
+| 2020 | AWS SSM Change Calendar (6 Jan 2020) | Time becomes a first-class gate: change windows expressed as iCalendar open/closed states. |
+| 2020 | ITIL 4 Change Enablement guide (9 Jan 2020) | Standard/normal/emergency classes + change authority + change schedule formalized. |
+| 2023 | SLSA v1.0 (19 Apr 2023) | Build provenance is signed by the platform; a verdict about an artifact is asserted by the builder, not the tenant. |
+| 2023 | in-toto spec v1.0 (2 Jun 2023) | Attestations bind a signer identity to an artifact subject digest; gate observations can be bound to a build SHA. |
+| 2023 | GitHub merge queue GA (18 Jul 2023) | Merge is serialized and re-verified against the exact target commit before landing. |
+| 2024 | Cloudflare Workers Versions + Gradual Deployments (beta 3 Apr 2024; GA 26 Sep 2024) | A deployed Worker is a versioned immutable artifact; traffic shifts gradually by percentage. |
+| 2024 | AWS CodePipeline stage conditions incl. DeploymentWindow (1 Aug 2024) | Time-window and alarm gates become built-in pipeline stage conditions. |
+| 2022 | Google Cloud Deploy GA (19 Jan 2022) | Managed CD with ordered target progression; later adds deploy-window restrictions and timed promotion. |
+| 2024/2025 | Kargo GA v1.0.0 | Promotion is modeled explicitly (Warehouse→Freight→Stage→Promotion→Verification) atop GitOps. |
+| 2026 | AWS Proton end of support (7 Oct 2026) | A managed platform-provisioning service is withdrawn; deployed infra remains but console/resources become inaccessible. |
+
+* BRANCHING POLICIES
+
+| Policy | Originator / date | What a "release" is | Where stabilization happens | Deploy vs merge | Named users (with source) |
+|--------+-------------------+---------------------+-----------------------------+-----------------+---------------------------|
+| git-flow | Vincent Driessen, nvie.com, 5 January 2010; note of reflection added 5 March 2020 | A tagged commit on master, produced from a dedicated release branch | On release/* and hotfix/* branches, merged to master and develop | Merge precedes deploy | Driessen's 2020 note scopes it to software with versioned releases and multiple in-the-wild versions; advises simpler models for web apps |
+| GitHub flow | GitHub, 2011 | Whatever is on main, deployed continuously | On the feature branch before merge; main is always deployable | Originally deploy PRECEDES merge (deploy the branch, verify in production, then merge) | GitHub (first-party). [Original deploy-before-merge practice: first-party blog; exact URL/date to confirm] |
+| GitLab flow | GitLab, 2014 | A commit promoted through environment branches (e.g., production) | On environment/release branches downstream of main | Merge precedes deploy; deploy = merge to an environment branch | GitLab (first-party). [Date/URL to confirm] |
+| Trunk-based development | Popularized by Paul Hammant, trunkbaseddevelopment.com | A release cut/branch taken from trunk (or trunk itself) | On short-lived release branches with cherry-picks, or behind flags on trunk | Merge to trunk precedes deploy | Google (Potvin & Levenberg, CACM 2016: 95% of developers on the monolithic trunk) |
+| Release branches with cherry-picks | Google Rapid / Chromium | A stabilized release branch cut from trunk on a schedule | On the release branch; fixes cherry-picked ("uplifted") from trunk | Merge to trunk precedes deploy; release branch is deployed | Chromium (release-branch process), Google (Rapid). [Chromium process public; specific doc to confirm] |
+| Stacked diffs | Phabricator (Facebook); Sapling (Meta); Graphite | Not a branch concept per se; each diff is an independently reviewable/landable unit | Each diff is tested; the stack lands in order | Merge (land) precedes deploy | Meta (Sapling/Phabricator lineage); Graphite (commercial). [First-party; dates to confirm] |
+| Merge queues | Bors (Hoare, Rust, ~2013); GitHub merge queue GA 2023 | Whatever the queue has proven green against the exact target commit | In the queue: the merge result is tested before landing | Merge (via queue) precedes deploy | Rust/Servo (bors/homu); GitHub (its merge queue handles 2,500+ PRs/month from 500+ engineers in its monorepo, per Mergify) |
+
+* RELEASE TRAINS
+
+Origin and definition. A release train is a fixed-cadence schedule where a "release" is whatever has reached required maturity by the departure time; work that misses the cut waits for the next train rather than delaying the train.
+
+- *Eclipse simultaneous release* -- Eclipse Foundation, first as "Callisto" in 2006. Multiple projects release together on one date; the train is a coordination mechanism across independent repositories. [date secondary]
+- *Chrome* -- Google shipped a new milestone every six weeks "for more than a decade" (from 2010). The move to a four-week cycle starting Chrome 94 was announced 4 March 2021 on the Chrome for Developers blog by Pete LePage ("Speeding up Google Chrome's release cycle"): "we plan to shorten the release cycle and ship a new version of Google Chrome to the stable channel every four weeks, down from the current six-week cycle … Chrome 94 … will be released on September 21st, 2021." Chrome also added an eight-week Extended Stable channel for enterprises and bi-weekly (later weekly) security updates. A further move to a two-week cycle was announced 3 March 2026 to begin with Chrome 153 on 8 September 2026: "Starting September 8, 2026 (with the Chrome 153 release), Chrome is officially moving to a 2-week release cycle across all major platforms … we want to ensure that developers and users have immediate access to the latest capabilities, security fixes and performance improvements."
+- *Firefox* -- Mozilla's own futurereleases blog (gjimenez, "Every Six Weeks," 19 July 2011) described the model: "an individual release train is 6 weeks of development time followed by 12 weeks of stabilization." The first true rapid-release milestone shipped 16 August 2011 (Johnathan Nightingale, "Rapidity," 26 August 2011: "Last week we released a new version of Firefox … 6 weeks after the last update, making it our first true rapid release milestone"). Mozilla later moved to a four-week cycle in 2020 (shift begun late 2019). Mozilla uses staged rollout: updates go first to a small fraction of users with telemetry monitoring before full release.
+- *SAFe Agile Release Train (ART)* -- Scaled Agile Framework. A long-lived team-of-teams that delivers on a fixed Program Increment cadence; the train metaphor is explicit. [First-party; edition/date to confirm.]
+- *Mobile app-store trains* -- iOS/Android app releases are batched into store-review-gated trains; a build that misses the submission cutoff waits for the next scheduled submission. [Practice widely documented; primary source to confirm.]
+
+How a train handles a change that misses the cut. Under a train model, cadence is fixed and scope is variable: a feature not ready at branch-point is held for the next train (Chromium release-cycle docs note branch-point dates are fixed while release dates can slip for late-breaking regressions). Urgent fixes are cherry-picked/uplifted onto the already-cut release/stabilization branch rather than delaying the train (Chromium/Google Rapid; cf. Khomh et al. MSR 2012 and follow-on work on patch uplift in rapid-release pipelines).
+
+Trains vs fixed windows vs reservation calendars. A release train is a producer-side fixed schedule (departures at t, t+Δ, …). A fixed deployment window is a consumer/operations-side recurring permission interval (e.g., "changes allowed Tue–Thu 10:00–16:00"), expressible as recurring iCalendar events (RFC 5545) or an AWS SSM Change Calendar "closed by default / open during event" policy. A reservation-based calendar differs from both: it grants a specific actor an exclusive interval on a specific environment on request -- the lease/berth model (Gray & Cheriton 1989; Kubernetes Lease; PostgreSQL EXCLUDE constraints to prevent overlapping reservations; VFREEBUSY to publish busy intervals). The repository's "berth" is a reservation in this sense: an exclusive, time-bounded environment lease acquired per promotion. It is never a fixed window.
+
+* Recommendations
+- Cite the SCCS paper as "SE-1, no. 4, 1975" but footnote the ACM index's conflicting "Vol. 1, Issue 1, March 1975"; do not assert a single month without noting the conflict.
+- For the "who may assert a verdict about an artifact" requirement, anchor on in-toto step authentication (signer identity ⇒ artifact subject digest) and SLSA L2+ (build platform, not tenant, signs provenance); these are the two clauses that most directly justify binding gate observations to a build SHA. For deploy-time verdicts, contrast Pact Broker can-i-deploy (broker asserts) with GitHub Environments/Spinnaker manual-judgement (a human/API client asserts).
+- Model the "berth" on Gray & Cheriton leases + Kubernetes Lease + PostgreSQL EXCLUDE constraints; model the change calendar on RFC 5545 VFREEBUSY + AWS SSM Change Calendar; keep the two distinct (reservation vs recurring window). Use RFC 7232 If-Match for optimistic concurrency on gate state and the Idempotency-Key draft for safe promotion retries.
+- Before publishing, verify from primary sources the items flagged "[date secondary]" / "to confirm": CVS/Perforce/Git/Mercurial release dates; GitHub-flow/GitLab-flow blog URLs and dates; NIST CM-3 enhancement text; ISO/IEC 20000-1 clause 8.5.1 text; the Idempotency-Key draft's current revision; OpenFeature and Argo Rollouts/OpenSSF Scorecard first-party specifics; and the SAFe ART edition. Subversion 1.0 (23 Feb 2004), Chrome/Firefox cadence dates, and the promotion-tooling dates above are already primary-verified.
+- Fill the one substantive research gap: locate a primary source for formal modeling of CI/CD pipelines (TLA+/model checking/property-based testing) or state explicitly in the repo that no canonical primary source was found.
+
+* Caveats
+- Rochkind 1975: volume/issue/month conflict across indexes (flagged above); year and DOI consistent.
+- Fowler CI: original-version page dated 10 September 2000, but Fowler's 2023 text says "originally … in 2001." Both are first-party; note the discrepancy.
+- Docker 1.0: the original docker.com blog post URL was not re-confirmed; the 9 June 2014 date and Docker's "1.0 signifies … enterprise IT standards" quote are corroborated by multiple contemporaneous sources (TechCrunch, The Register).
+- Flux "first release": primary sources confirm the initial commit 7 July 2016 and open-sourcing in 2016 (fluxcd.io, fluxcd/flux); a secondary source (Platform9) cites a tagged 0.1.0 on 27 January 2017. Use "open-sourced 2016."
+- AWS Proton EOL (7 Oct 2026) is firmly primary-sourced from AWS docs; the original announcement date (~Oct 2025) is secondary only.
+- AWS CodePipeline: the canonical "rule reference" page could not be fetched directly, but the DeploymentWindow rule and other rule names are confirmed via AWS's CloudFormation docs, API reference, and What's New posts. Naming nuance: provider = "DeploymentWindow"; a CloudFormation example resource name is "DeploymentWindowRule."
+- Items marked "[date secondary]" or "to confirm" rest on secondary or first-party-but-unverified-in-this-pass sources; they should not be presented as primary-verified until checked.
+- No primary source for formal-methods modeling of deployment pipelines was located; this is an acknowledged gap, not a claim of nonexistence.

@@ -60,8 +60,8 @@ triggered by that. Each transition is caused by an observation, not a command
 | act                  | who    | why it cannot be automated              |
 |----------------------+--------+-----------------------------------------|
 | raise the change     | human  | it is the intent                        |
-| approve =change:normal= | human | the gates cannot judge a control-plane change |
-| break glass          | human  | =change:emergency= is an authorization, not a measurement |
+| approve =itil:normal= | human | the gates cannot judge a control-plane change |
+| break glass          | human  | =itil:emergency= is an authorization, not a measurement |
 
 Everything else is the system. *The approval gate sits before production, not
 between staging and production* — a change that has earned staging has earned
@@ -146,7 +146,7 @@ invalidation, and with it the ratio.
 A release train attacks the same ratio from the other side by validating a
 batch once — measured at *0.58 validations per ship against 13.63*, a 23×
 reduction, at the cost of mean latency (2.6 h vs 12.5 h). See
-=docs/release-strategies.org=; that note also finds the throughput-optimal
+=research/history/release-strategies.org=; that note also finds the throughput-optimal
 train is red more often than green, and that the analytic optimum sits at a
 92–99% predicted emergency share on this repo's own balance curve — i.e.
 unreachable. A short (≈1 h) train captures ~98% of the available amortization
@@ -297,7 +297,7 @@ defeats them in a specific way:
 |-------------------------------------+-------------------------------------------|
 | a change touched one app            | a =shared/= change touches *every* app    |
 | blast radius was in the manifest    | the manifest still says =app:core=        |
-| =change:standard= was defensible    | it is a coordinated change wearing a standard label |
+| =itil:standard= was defensible    | it is a coordinated change wearing a standard label |
 
 *=apps/**= is no longer the deployable entity, and the classifier still thinks
 it is.* The =apps/**=-blocks rule was a coarse but honest approximation while
@@ -323,11 +323,11 @@ repos each importing an unversioned OneUI from a sixth deploy together exactly
 as they do now. The work that pays is *versioning the shared artifact so a
 consumer can lag* — and that is a different task from moving files, which is
 the failure mode most likely to make A2 disappointing. See
-=docs/cross-cutting-coupling.org= and issue #10.
+=research/findings/cross-cutting-coupling.org= and issue #10.
 
 *Open, not scheduled:* the classifier has no notion of blast radius, and
 =idp.py change risk= — which does — is not wired into the pipeline. PR #5
-carries five =app:*= labels and is labelled =change:standard= today.
+carries five =app:*= labels and is labelled =itil:standard= today.
 
 *** Consequence — the environment tiers (was ADR 0002)
 
@@ -383,7 +383,7 @@ still need somewhere to run, which is what staging remains for.
 ** Option A3 — release trains
 
 Batch whatever is ready on a cadence and validate the batch once.
-=docs/release-strategies.org= measured it: *0.58 validations per shipped change
+=research/history/release-strategies.org= measured it: *0.58 validations per shipped change
 against 13.63*, a 23× reduction, at 2.6 h mean latency against 12.5 h.
 
 It attacks the ratio directly rather than the capacity, which makes it the only
@@ -408,7 +408,7 @@ Every deployment is a deployment *of main*; features are independently tested,
 merged, and then main is what ships. Guard 0 becomes *unstateable* — there is
 no branch to be behind — and the berth stops needing to bind a branch.
 
-What it costs is what =docs/release-strategies.org= names: *"on main" becomes
+What it costs is what =research/history/release-strategies.org= names: *"on main" becomes
 intent, not evidence.* The merge happens before the production evidence exists,
 so the thing that says a change is good is a merge rather than an observation.
 It also leaves guard 4b's predicate merely relocated from a branch to a SHA,
@@ -622,7 +622,7 @@ The finding above — ten to twenty validation runs per shipped change — is ab
 it does not parallelize at all.
 
 It also sharpens why release trains win by so much (0.58 validations per ship
-against 13.63, =docs/release-strategies.org=). A train does not merely amortize
+against 13.63, =research/history/release-strategies.org=). A train does not merely amortize
 gate runs. *It amortizes the human*: one acceptance covers the batch, and
 acceptance is the resource that has no second copy.
 
@@ -718,8 +718,8 @@ a freeze, exit 2 for an emergency in flight.
 | cause                    | declared by                          | exit |
 |--------------------------+--------------------------------------+------|
 | freeze                   | =freeze= on *any* open PR, or a scheduled freeze overlapping the window | 3 |
-| emergency in flight      | =change:emergency= on any *other* open PR | 2 |
-| *exemption*              | *being =change:emergency= yourself*  | *proceeds* |
+| emergency in flight      | =itil:emergency= on any *other* open PR | 2 |
+| *exemption*              | *being =itil:emergency= yourself*  | *proceeds* |
 
 *Why they are one rule and not two.* Not "two risky things at once". A freeze
 says the estate is in a state where normal change is unsafe. An emergency says
@@ -740,14 +740,14 @@ exemption is narrow: guard 2 (gates green on this head) and guard 5
 (convergence) still have *no bypass*, and the exemption is recorded in the PIR
 rather than waved through.
 
-*Walked, both directions*: =freeze= on #3 refused #28 (=change:standard=) with
+*Walked, both directions*: =freeze= on #3 refused #28 (=itil:standard=) with
 exit 3; the same freeze let #2 through once a person declared it
-=change:emergency=, with the freeze named in the output and a note that it
+=itil:emergency=, with the freeze named in the output and a note that it
 lands in the PIR.
 
 *** The defect the walk found: a change with two classes
 
-#2 came out of that test carrying *=change:standard= and =change:emergency= at
+#2 came out of that test carrying *=itil:standard= and =itil:emergency= at
 once*. The labeller derives the class from the diff; a person declares an
 emergency; *nothing reconciles them*.
 
@@ -758,7 +758,7 @@ runs first.
 Preflight now refuses it (exit 2) rather than picking one. *Picking would mean
 the pipeline deciding whether something is an emergency*, and that is a
 declaration a person makes, never a derivation — =change/label-owners.tsv= gives
-=change:emergency= a human owner for exactly this reason.
+=itil:emergency= a human owner for exactly this reason.
 
 The deeper shape is one this repo keeps finding: *two writers, one fact, no
 reconciliation.* Same as =production:healthy= flipping between a person and a
@@ -806,7 +806,7 @@ not been walked at all.
 3. *Is a failed deployment still =change:complete= eligible?* The ITIL machine
    says =implementing → failed=, and =failed → implementing= (guile) or
    =failed → assessing= (our copy). *The two disagree*
-   (=docs/idp-service.org=) and the disagreement only appears on failure.
+   (=research/history/changeflow-state-machine.org=) and the disagreement only appears on failure.
 4. *Does the window survive a failure?* If a deploy fails at 17:05 in a
    17:00–17:30 window, is the remainder still the change's to retry in, or
    forfeited? Nothing decides.

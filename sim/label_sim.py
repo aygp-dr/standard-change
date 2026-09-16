@@ -28,33 +28,52 @@ Two checks, and they are different kinds of evidence:
                (lifecycle, action labels, observations, flags) -- so README's
                lifecycle diagram can be checked against what is reachable.
 
-Fifteen RULES, each switchable with --disable so the checker can FAIL
-fifteen ways. sim/cross_check.py flips each one here and in TLC and requires
+Seventeen RULES, each switchable with --disable so the checker can FAIL
+seventeen ways. sim/cross_check.py flips each one here and in TLC and requires
 the same invariant to be named.
 """
 import argparse, collections, itertools, sys
 
-RULES = ["DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
+# INTERFERE is not a rule of the pipeline. It is a rule of the WORLD: any
+# actor -- a human, a CI workflow, a scheduler, another agent -- may add or
+# remove any label at any moment, and none of them can see the others. The
+# labels are the entire channel (research/findings/labels-are-the-only-channel.org).
+#
+# With it ON, label-set invariants like OneLifecycle STOP BEING INVARIANTS,
+# because no guard on one writer can prevent a violation produced by a writer
+# it does not control. That is not the model breaking; it is the model finally
+# describing the estate we actually run, where five identities wrote
+# deploy:staging in one day.
+#
+# What must survive interference is the ACTION invariants: no deploy on a
+# draft, no deploy with two classes, no unbooked deploy, no verdict without a
+# measurement. Those hold because the refusal happens at the deploy, not at
+# the labelling -- which is the whole reason guard 4 reads observation records
+# that name a build, and why a label cannot name one.
+RULES = ["Interfere", "DraftGuard", "WindowGuard", "FreezeGuard", "EstateGuard", "BerthGuard",
          "ClassGuard", "LifecycleExclusive", "ReapFreesBerth", "SettleClears",
          "ReapSparesInFlight", "RecordOnMerge", "EmergencyPreempts",
-         "HoldGuard", "HealthyBeforeVerdict", "LockResets"]
+         "HoldGuard", "HealthyBeforeVerdict", "LockResets", "UnaffectedMerges"]
 
 PRS = ("p1", "p2")
 
 PR = collections.namedtuple("PR", "cls life draft release booking berth sdep shealthy hold prod pdep "
-                                  "verdict uat healthy closed served merged pir cleaned")
-State = collections.namedtuple("State", "prs freeze emg bad badcls badpromote badverdict emgwaited refuseddirty")
+                                  "verdict uat healthy closed served merged pir cleaned unit unaff")
+State = collections.namedtuple("State", "prs freeze emg bad badcls badpromote badverdict emgwaited refuseddirty badunaff")
 
-def fresh(draft):
+def fresh(draft, unit):
     return PR(cls=frozenset(), life=frozenset(), draft=draft, release=False, booking="none",
               berth=False, sdep=False, shealthy=False, hold=False, prod=False, pdep=False,
               verdict="none", uat=False, healthy=False, closed=False,
-              served=False, merged=False, pir=False, cleaned=False)
+              served=False, merged=False, pir=False, cleaned=False, unit=unit, unaff=False)
 
 def inits():
+    # draft is the author's; unit is the labeller's finding (the diff touches an app:*), fixed per head
     for d in itertools.product([False, True], repeat=len(PRS)):
-        yield State(prs=tuple(fresh(x) for x in d), freeze=False, emg=False,
-                    bad=False, badcls=False, badpromote=False, badverdict=False, emgwaited=False, refuseddirty=False)
+        for u in itertools.product([False, True], repeat=len(PRS)):
+            yield State(prs=tuple(fresh(x, y) for x, y in zip(d, u)), freeze=False, emg=False,
+                        bad=False, badcls=False, badpromote=False, badverdict=False, emgwaited=False,
+                        refuseddirty=False, badunaff=False)
 
 def is_open(q):       return not q.closed and not q.merged and "complete" not in q.life
 def active(q):        return q.life - {"complete"}
@@ -67,7 +86,33 @@ def put(st, i, q, **est):
 CLEAR_STAGING = dict(berth=False, sdep=False, shealthy=False)
 CLEAR_BUILD = dict(verdict="none", uat=False, healthy=False, served=False, sdep=False, shealthy=False, pdep=False)
 
+# `abandoned` is a CHANGE closure: nobody is driving this any more. It is not
+# `failed` (nothing was wrong with it), not `backed-out` (it never deployed),
+# and not `cancelled` or `expired` -- those are WINDOW results and can never be
+# true of a change. spec.org §Nomenclature, corrected 2026-09-15.
+LIFE_LABELS = ("requested", "scheduled", "start", "complete", "abandoned", "superseded")
+
+
 def actions(st, R):
+    # THE UNCOORDINATED WRITER. Enabled by default; --disable Interfere turns
+    # the world back into one where every actor is well behaved, which is the
+    # world the earlier model assumed and the estate has never been in.
+    if R["Interfere"]:
+        for i, q in enumerate(st.prs):
+            p = PRS[i]
+            if q.closed:
+                continue
+            for lab in LIFE_LABELS:
+                if lab not in q.life:
+                    yield (f"Interfere({p},+{lab})",
+                           put(st, i, q._replace(life=q.life | {lab})))
+                else:
+                    yield (f"Interfere({p},-{lab})",
+                           put(st, i, q._replace(life=q.life - {lab})))
+            # somebody else's berth label, added or taken -- scenarios D21
+            yield (f"Interfere({p},berth={not q.berth})",
+                   put(st, i, q._replace(berth=not q.berth)))
+
     for i, q in enumerate(st.prs):
         p = PRS[i]
         if q.closed:
@@ -104,23 +149,29 @@ def actions(st, R):
             yield f"ResolveClass({p})", put(st, i, q._replace(cls=frozenset({"emergency"})))
         if q.draft:
             yield f"MarkReady({p})", put(st, i, q._replace(draft=False))
-        if not q.release:
+        if not q.release and not q.unaff:   # nothing to release
             yield f"AddRelease({p})", put(st, i, q._replace(release=True))
         if q.release:  # watch.sh:37-38
             life = q.life if (R["LifecycleExclusive"] and "scheduled" in q.life) else q.life | {"requested"}
             yield f"Watch({p})", put(st, i, q._replace(release=False, life=life))
-        if "requested" not in q.life and "scheduled" not in q.life:
+        if "requested" not in q.life and "scheduled" not in q.life and not q.unaff:
             yield f"Request({p})", put(st, i, q._replace(life=q.life | {"requested"}))
-        if "scheduled" not in q.life:  # schedule.sh block:257
+        if "scheduled" not in q.life and not q.unaff:  # schedule.sh block:257
             life = ((q.life - {"requested"}) | {"scheduled"}) if R["LifecycleExclusive"] else q.life | {"scheduled"}
             for b in ("queued", "designated"):
                 yield f"Book({p},{b})", put(st, i, q._replace(life=life, booking=b))
-        # preflight, then activate.sh:265-268 -- claim the berth
+        # preflight, then activate.sh:271-275 -- claim the berth.
+        # WAS activate.sh:265-268, which is the window-close trap, a different
+        # control entirely. The citation rotted when lines moved and nothing
+        # noticed, because nothing here executes activate.sh: this simulator
+        # replays its OWN table and the pointer to the driver is prose.
+        # Peer standard-change-002 names the general case F-15.
         if not q.berth:
             others = holder(st) - {i}
-            refused = (q.draft or q.booking == "none" or (st.freeze and not is_emg(q))
+            refused = (q.unaff or q.draft or q.booking == "none" or (st.freeze and not is_emg(q))
                        or (st.emg and not is_emg(q)) or bool(others))
-            permitted = ((not R["ClassGuard"] or len(q.cls) <= 1)
+            permitted = ((not R["UnaffectedMerges"] or not q.unaff)
+                         and (not R["ClassGuard"] or len(q.cls) <= 1)
                          and (not R["DraftGuard"] or not q.draft)
                          and (not R["WindowGuard"] or q.booking != "none")
                          and (not R["FreezeGuard"] or not st.freeze or is_emg(q))
@@ -128,7 +179,8 @@ def actions(st, R):
                          and (not R["BerthGuard"] or not others))
             if permitted:
                 yield f"Activate({p})", put(st, i, q._replace(berth=True),
-                                            bad=st.bad or refused, badcls=st.badcls or len(q.cls) > 1)
+                                            bad=st.bad or refused, badcls=st.badcls or len(q.cls) > 1,
+                                            badunaff=st.badunaff or q.unaff)
         # THE LOCK: deploy:staging is the environment lock. Refused while another
         # holds it, a change loses every marker, human intent included; the
         # person re-states it (rule LockResets).
@@ -170,6 +222,19 @@ def actions(st, R):
         if "scheduled" in q.life or q.berth:
             yield f"Abort({p})", put(st, i, q._replace(closed=True, life=q.life - {"scheduled"}, berth=False,
                                                       release=False, **CLEAR_BUILD))
+        # release:skip -- a person's claim that the estate is untouched; the only
+        # act left is the merge, and only when the labeller agrees (no app:*).
+        # A claim that contradicts the labeller is withdrawn by a person. [UnaffectedMerges]
+        # said FIRST, about a change nothing else has been said about (also what keeps the space checkable)
+        if not q.unaff and not q.life and not q.release and q.booking == "none" and not q.berth:
+            yield f"DeclareUnaffected({p})", put(st, i, q._replace(unaff=True))
+        if q.unaff and not q.merged:
+            yield f"WithdrawUnaffected({p})", put(st, i, q._replace(unaff=False))
+        if q.unaff and not q.draft and not q.berth and (not R["UnaffectedMerges"] or not q.unit):
+            yield f"MergeUnaffected({p})", put(st, i, q._replace(merged=True, pir=True, cleaned=True, life=frozenset(),
+                                                                 release=False, booking="none", hold=False,
+                                                                 verdict="none", uat=False),
+                                               badunaff=st.badunaff or q.unit)
         # labeller.yml:101 on synchronize: everything about the old head
         if q.verdict != "none" or q.uat or q.healthy or q.sdep or q.shealthy or q.pdep:
             yield f"Push({p})", put(st, i, q._replace(**CLEAR_BUILD))
@@ -195,7 +260,28 @@ def invariants():  # same order as tla/Labels.cfg
                                           and q.verdict == "none" and not q.uat and not q.healthy and q.booking == "none")
                                           for q in st.prs)
     yield "MergedHasRecord", lambda st: all(not (q.merged and not q.life) or q.pir for q in st.prs)
+    # NOT CHECKED UNDER INTERFERENCE. At most one active lifecycle label is a
+    # property the pipeline CONVERGES to, not one it can hold against an
+    # uncoordinated writer. It is still checked when Interfere is disabled,
+    # which is where it says something: it means the pipeline's own actions
+    # never produce two.
     yield "OneLifecycle", lambda st: all(len(active(q)) <= 1 for q in st.prs)
+    # --- LABEL-SET PROPERTIES vs ACTION PROPERTIES ---------------------------
+    #
+    # The four below are stated over the LABEL, not over the act of deploying,
+    # and `--disable Interfere` is the only world in which they can hold. Run
+    # with interference and NoUnbookedDeploy falls at depth 1 to a single
+    # Interfere(p1,berth=True): somebody set the berth label without a booking,
+    # which is a thing that happens (deploy-staging.yml sets it; a person can
+    # set it; a second driver set it on 2026-09-15 at 02:51:42Z).
+    #
+    # That is not a bug in the estate. It is these four being MISNAMED: they
+    # read as "no unbooked deploy" and they check "no unbooked LABEL". The
+    # deploy is what must be refused, and the pipeline does refuse it -- at the
+    # deploy, from a record, not from the label. The model has not caught up.
+    #
+    # They are reported under interference rather than silently skipped,
+    # because the gap between what they say and what they check is the finding.
     yield "NoDraftDeployed", lambda st: all(not q.draft or (not q.berth and not q.prod) for q in st.prs)
     yield "NoUnbookedDeploy", lambda st: all(not (q.berth or q.prod) or q.booking != "none" for q in st.prs)
     yield "BerthHasCause", lambda st: all(not q.berth or "scheduled" in q.life for q in st.prs)
@@ -205,6 +291,7 @@ def invariants():  # same order as tla/Labels.cfg
     yield "NoPromoteUnderHold", lambda st: not st.badpromote
     yield "VerdictOnHealthy", lambda st: not st.badverdict
     yield "LockRefusalResets", lambda st: not st.refuseddirty
+    yield "UnaffectedNeverDeploys", lambda st: not st.badunaff
 
 def violated(st):
     for name, inv in invariants():
@@ -219,7 +306,8 @@ def shape(q):
                            ("production:deployed", q.pdep)) if v]
     obs = [n for n, v in (("staging:healthy", q.shealthy), (f"staging:{q.verdict}", q.verdict != "none"),
                           ("staging:uat", q.uat), ("production:healthy", q.healthy)) if v]
-    flags = [n for n, v in (("hold", q.hold), ("merged", q.merged), ("pir", q.pir), ("cleaned", q.cleaned)) if v]
+    flags = [n for n, v in (("hold", q.hold), ("merged", q.merged), ("pir", q.pir), ("cleaned", q.cleaned),
+                            ("unit", q.unit), ("unaffected", q.unaff)) if v]
     return (life, " ".join(acts) or "-", " ".join(obs) or "-", " ".join(flags) or "-")
 
 def explore(R, bound, census=None):
@@ -274,7 +362,7 @@ def random_walks(R, bound, walks, length):
 def show(q):
     return (f"cls={sorted(q.cls)} life={sorted(q.life)} draft={q.draft} book={q.booking} berth={q.berth} "
             f"sdep={q.sdep} shealthy={q.shealthy} hold={q.hold} prod={q.prod} pdep={q.pdep} v={q.verdict} "
-            f"uat={q.uat} healthy={q.healthy} merged={q.merged} pir={q.pir} closed={q.closed}")
+            f"uat={q.uat} healthy={q.healthy} merged={q.merged} pir={q.pir} closed={q.closed} unit={q.unit} unaff={q.unaff}")
 
 def main():
     ap = argparse.ArgumentParser()

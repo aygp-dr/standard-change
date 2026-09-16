@@ -1,0 +1,39 @@
+extends: existence
+message: "LLM-speak: avoid '%s' — rewrite without filler."
+level: error
+tokens:
+  - honesty
+  - the honesty
+  - delve
+  - delving
+  - utilize
+  - utilizing
+  - facilitate
+  - facilitating
+  - seamless
+  - seamlessly
+  - cutting-edge
+  - paradigm shift
+  - game-changer
+  - game changer
+  - unlock the
+  - unlocking the
+  - empower
+  - empowering
+  - harness the power
+  - harnessing the power
+  - dive deep
+  - diving deep
+  - at its core
+  - in today's world
+  - it's worth noting
+  - it is worth noting
+  - it's important to note
+  - let's explore
+  - as we can see
+  - one might argue
+  - it could be said
+  - arguably
+  - revolutionize
+  - supercharge
+  - transformative

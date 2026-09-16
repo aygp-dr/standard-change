@@ -19,7 +19,7 @@ THE COUNTING RULE, and it is the whole reason this file exists:
   a message id, never the sum -- the records for one id are successive
   snapshots of one call's running total, so the last (largest) one IS the call.
 
-  docs/time-spent.org shipped the naive sum, 2,245,451,282. It is 1.9x the
+  research/findings/time-spent.org shipped the naive sum, 2,245,451,282. It is 1.9x the
   truth. This is spec.org's defect class 2 -- superseded is not current --
   wearing different clothes: the same defect that let guard 2 count a
   superseded check run as a verdict. A number that is the sum of its own
