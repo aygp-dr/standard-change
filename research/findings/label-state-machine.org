@@ -24,7 +24,7 @@ made to agree.
 |----------+--------|
 | Does the machine the scripts implement satisfy the seventeen rules? | *Yes, with three exceptions the model had to be told about* (§Disagreements 1–3). With the rules as stated, TLC finds no violation over the full reachable space. |
 | Can each rule fail? | *Yes, seventeen of seventeen.* Flipping any one constant makes TLC name the invariant it protects; the simulator names the same one. |
-| Do the two transcriptions agree? | *Yes, 16/16* on the verdicts. The state count agreed at 2,336,400 while the simulator could exhaust; the fourteen-rule machine has 25,066,512 states and only TLC exhausts it. |
+| Do the two transcriptions agree? | *Yes, 16/16* on the verdicts. The state count agreed at 2,336,400 while the simulator could exhaust; the seventeen-rule machine has 102,726,288 distinct states (TLC, 2026-09-16, no error) and only TLC exhausts it. |
 | Is the space finite and exhausted? | *Yes, by TLC.* Two PRs, depth 37, 25,066,512 distinct states. The simulator covers a depth-12 slice (1,644,696 states) and random walks past it. |
 | Are the reaper, the merge and the cleanup modelled? | *Now, yes.* The first cut fused completion with cleanup and had no merge. The machine now carries settle.sh's four writes in order, the automatic merge path, and a reaper that reads only the clock -- which is what surfaced disagreements 2 and 3. |
 

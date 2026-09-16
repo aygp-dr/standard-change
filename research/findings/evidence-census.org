@@ -18,7 +18,7 @@ disagreeing rule counts, each a true snapshot of a different day.
 | label-model-coverage        | labels vs the model             | none                                     | every declared label must be a model row            | gating (ADR 0005)                        | =gates/label-model-coverage.py= |
 | TLC, StandardChange         | promotion, guard 4b             | Guard4b off, ProdFirst off               | 3 runs, 830 states                                  | negatives fail as required               | =tla/check.sh=                  |
 | TLC, Concurrent             | berths                          | MergeGuard4b off, LabellerOwns off       | 4 runs                                              | negatives fail as required               | =tla/check.sh=                  |
-| TLC, Labels                 | the label machine, 2 changes    | each of 17 constants off                 | 17 negatives + 1 positive; 37 actions, 16 invariants, 31 variables | 17/17 name their invariant; positive 22,624,272 states at 15 rules (2026-09-14); at 17 rules pending (the unpruned run passed 113M states and filled the disk) | =tla/Labels.tla=, =tla/check.sh= |
+| TLC, Labels                 | the label machine, 2 changes    | each of 17 constants off                 | 17 negatives + 1 positive; 37 actions, 16 invariants, 31 variables | 17/17 name their invariant; positive: no error over 102,726,288 distinct states, depth 37, at 17 rules (2026-09-16; the unpruned model passed 113M states and filled the disk, and was pruned where the semantics allowed) | =tla/Labels.tla=, =tla/check.sh= |
 | label_sim.py                | the same machine, from scripts  | =--disable <rule>=                       | BFS to a stated bound; random walks past it         | the same invariant per rule, 16 of 17 (rule 16 is in the model only) | =sim/label_sim.py=   |
 | cross_check.py              | TLC vs the simulator            | per rule                                 | one question per rule                               | agreement required, or the run fails     | =sim/cross_check.py=            |
 | pbt-pipeline.py             | pipeline properties over op permutations | none                            | see the file                                        | sampling does not find D4; enumeration does (WALKTHROUGH §5) | =gates/pbt-pipeline.py= |
@@ -44,4 +44,4 @@ its date. Every number elsewhere in the paper is one of these rows.
 | 09-14 19:02     |    15 |      31 |         13 |        27 |
 | 09-15 05:20     |    16 |      31 |         14 |        28 |
 | 09-15 12:19     |    17 |      34 |         15 |        31 |
-| 09-15 13:23     |    17 |      37 |         16 |        31 |
+| 09-15 13:23     |    17 |      37 |         16 |        31 | positive: 102,726,288 states, no error (2026-09-16) |
