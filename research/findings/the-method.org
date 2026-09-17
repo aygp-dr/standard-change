@@ -131,6 +131,27 @@ its history, and the framing tightened each time.
   what a rebuild is graded against; 0.4 described a pipeline and 0.5
   describes what goes wrong in pipelines that judge things.
 
+What the three rebuilds did not tighten is the scope. Each was handed the
+whole pipeline, calendar included, and graded on all of it. The evidence
+for narrowing was already in the findings: ADR 0003 made scheduling a
+separate component; experiment 003 found six of seven guards never read
+the calendar; the release night found about half the booked windows
+expired unattempted. And the label machine still carries the calendar as
+an axis: four of its seventeen rules (WindowGuard, ReapFreesBerth,
+ReapSparesInFlight, LifecycleExclusive) are about windows and bookings, so
+the 102 million states of the positive run include a booking dimension the
+core case never uses.
+
+*Rebuild 005 tightens the scope.* The core is the =release:*= grammar and
+its machine: the person's verbs, the runner's participles, the berth, the
+observations keyed to a build, the outcomes, and the estate's two labels.
+The calendar is an extension: one coupling point (=release:schedule=
+answered by =release:scheduled=) and its own module in the model, adding the
+booking axis and the four window rules on top of the core. A rebuilder
+without a calendar then builds and grades the core alone; one with a
+calendar adds the module and its rules. The same split applies to the
+grading: the held-out defects are sorted by which module they belong to.
+
 The adoption toolkit (=adopt/generate.sh=) is the same idea turned outward:
 it reads a profile of the adopting repository and refuses, by name, every
 control whose precondition the profile does not meet, because a guard that
