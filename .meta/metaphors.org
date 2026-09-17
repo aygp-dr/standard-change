@@ -401,7 +401,12 @@ equal the class.
 
 That last point is the opening for the next section.
 
-** A credit score for changes: the destination without the mechanism
+** A credit score for changes -- a NON-GOAL, and why it is worth naming anyway
+
+*Ruled a non-goal by the owner, 2026-09-16.* Nothing here is a plan. It is
+written down so the next reader recognises the shape and does not build it,
+because the section below describes a gap well enough to be mistaken for a
+backlog item.
 
 The guess is right, and change management has several versions of it.
 
@@ -450,8 +455,19 @@ Stated as the three things a scoring system would need, in this repo's terms:
 The second row is the blocker and it is structural, not missing work: *a score
 needs something that persists across changes to attach to*, and every label
 here is deliberately per-change and transient. That is the same property that
-makes the labels honest, so this is a real design tension rather than an
-oversight -- and it belongs in the record as one.
+makes the labels honest.
+
+*Which is why the non-goal is the right call and not an omission.* Scoring
+would require a durable per-path or per-template record that outlives any
+change, and that object is exactly what this repo has spent its defects
+learning not to keep: a second store, owned by us, that can disagree with the
+platform. =research/findings/labels-are-the-only-channel.org= is the argument
+in full. Buying a credit score means buying the thing the repo refuses.
+
+The trigger that would force a revisit, per =CLAUDE.md=: *a durable
+change-outcome store arrives for another reason* -- an external ITSM of record,
+or the IDP owning change history -- at which point scoring is reading something
+that already exists rather than minting it. Until then it stays out.
 
 * On borrowing domains at all
 
