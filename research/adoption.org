@@ -156,22 +156,28 @@ writer.
 | =app:*=, =itil:*=                        | the labeller; a person for =emergency= | the repository's own, read and never written (§What a repository must already have) |
 
 *standard-change provides the =release:*= primitives: a person declares
-their intent about the release, and nothing else.* The words name the
-intent and never the environment: =release:hold= says "not further yet"
-wherever "further" is in the adopting repository, where =staging:hold= would
-bind the person's word to one repository's environment names, which change
-with the kind of repository being supported (=history/promotion-models.org=:
-seven kinds behind one word). A person's words are =release:start=,
-=release:hold=, =release:skip=, =release:scheduled= and =release:end=. They are said about a branch, which
-is what makes branch deployment legible: the branch is deployed and verified
-on the person's word, and the merge follows the verification (GitHub flow's
-original order, =history/pipeline-history.org= §Branching policies); the
-default branch never needs a word, because reaching it is the record.
-Everything else is written by the thing that knows the fact, and an
-observation is written only by the instrument that measured it
-(=findings/label-ownership.org=, experiments 014 and 023 F4). In this
-repository's tree on 2026-09-15 the person's word is still spelled
-=release:start= and the hold =staging:hold=; the rename to the table above is
+their intent about the release, and nothing else.* Three words are the base
+and the only ones a change-control process built on this model requires:
+=release:start=, =release:end=, =release:skip=. Nothing about a branching
+model, an environment, a build identifier or a calendar changes what those
+three mean, or is needed for them to work. Two more words are secondary,
+adopted by a repository because of what it is building rather than because
+the base process requires them: =release:hold= (a person wants to look
+before promotion) and =release:schedule= (the estate has a calendar to book
+against). The words name the intent and never the environment:
+=release:hold= says "not further yet" wherever "further" is in the adopting
+repository, where =staging:hold= would bind the person's word to one
+repository's environment names, which change with the kind of repository
+being supported (=history/promotion-models.org=: seven kinds behind one
+word). All five are said about a branch, which is what makes branch
+deployment legible: the branch is deployed and verified on the person's
+word, and the merge follows the verification (GitHub flow's original order,
+=history/pipeline-history.org= §Branching policies); the default branch
+never needs a word, because reaching it is the record. Everything else is
+written by the thing that knows the fact, and an observation is written
+only by the instrument that measured it (=findings/label-ownership.org=,
+experiments 014 and 023 F4). In this repository's tree on 2026-09-17 the
+hold is still spelled =staging:hold=; the rename to the table above is
 filed for the two operators to make together.
 
 * Every decision, with its options and where each was watched

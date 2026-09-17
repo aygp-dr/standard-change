@@ -21,7 +21,18 @@ INTERVAL="${SCHED_INTERVAL:-20}"
 told=''; deferred=''
 log() { printf '%s  scheduler  %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 tick() {
-  # release:skip first: nothing to release, no berth to wait for
+  # release:end -- the three base verbs are release:start, release:end,
+  # release:skip, and only start and skip were pollable; a person could say
+  # end only by running /release-end or abort.sh directly. A label with no
+  # free-text channel carries no reason, so this path uses a fixed one; a
+  # person who has a real reason to give still says it through /release-end.
+  for pr in $(gh pr list --repo "$R" --state open --label release:end --json number -q 'sort_by(.number)|.[].number'); do
+    log "release:end on #$pr"
+    gh pr edit "$pr" --repo "$R" --remove-label release:end >/dev/null 2>&1 || true
+    ./change/abort.sh "$pr" "ended via release:end (no reason given on the label; run /release-end with one to say why)" \
+      || log "#$pr: abort.sh exit $?"
+  done
+  # release:skip: nothing to release, no berth to wait for
   for pr in $(gh pr list --repo "$R" --state open --label release:skip --json number -q 'sort_by(.number)|.[].number'); do
     log "release:skip on #$pr"; ./change/unaffected.sh "$pr" || log "#$pr: unaffected.sh exit $?"
   done

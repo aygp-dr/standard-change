@@ -280,13 +280,43 @@ that *drives the side effects*: the merge to =main=, the PIR, and whatever
 else must hear that the change shipped (a ticket, a message). Cleanup then
 clears it — once the forge records =MERGED=, the label restates a fact the
 platform owns, and two records of one fact can disagree while the platform's
-cannot. The person's three words are =release:start=, =staging:hold= and
-=release:skip= (skip the estate: nothing to release, the only act left is
-the merge, and only if the labeller attached no =app:*=); =complete= is the
-pipeline's, and =end= is the pipeline's on one path only. The grammar these
-spellings will become in rebuild 005, one namespace where the person says the
-verb and the runner answers the participle, is set out in
-=research/findings/release-grammar.org=.
+cannot. =complete= is the pipeline's outcome on the success path; =end= is
+the pipeline's tombstone on every other path. A person never writes either.
+
+*** The three base primitives, and nothing else is required
+
+A person needs exactly three words to run a change-control process built on
+this model: =release:start=, =release:end=, =release:skip=. Say one and the
+process takes over. Nothing about a branching model, an environment tier, a
+build identifier, or a calendar changes what those three words mean, and
+none of the three requires any of those things to exist. This is the final
+nomenclature for the base process. Everything else in this document -- =staging:hold=,
+the scheduled case, the runner's participles that answer each verb
+(=release:started=, =release:ended=, =release:skipped=), the specific
+branching model, the port tiers, the blue/green colours -- is a *secondary*
+layer. A repository adopts a secondary layer because of what it is building
+(a calendar because it has one to book against, a hold because a person
+wants to look before promotion), never because the base process requires
+it. The grammar the secondary layers will settle into, one namespace where
+the person says the verb and the runner answers the participle, is set out
+in =research/findings/release-grammar.org=.
+
+**** Levels of compliance
+
+A repository can say, precisely, how much of this it has adopted. Each
+level composes on the one below; adopting a higher level never changes what
+a lower level's words mean.
+
+| level | adds                                                          | a repository at this level can...                                  |
+|-------+---------------------------------------------------------------+----------------------------------------------------------------------|
+| 0 Base | =release:start=, =release:end=, =release:skip=; a person, a runner | say go, say stop, say nothing to release -- no environments, no calendar, no branching model required |
+| 1 Acknowledged | the runner answers each verb with its participle (=release:started=, =release:ended=, =release:skipped=) | tell whether anything is listening, from the ticket alone (024 F4) |
+| 2 Held | =release:hold=, one person-owned pause at one scope | let a person look before promotion, without a second stop mechanism competing with it |
+| 3 Scheduled | =release:schedule= / =release:scheduled=, a calendar, windows | book a slot, defer a start to it, reap one that lapsed unattempted |
+| 4 Estate | environment tiers, a berth and its lock, guards, an =itil:*= classification | what this repository demonstrates in full: staging, production, blue/green, freeze, emergency |
+
+A repository claiming level 0 and nothing else is not doing less of this
+process. It is doing all of it that its own shape requires.
 
 *** The merge is the tombstone
 

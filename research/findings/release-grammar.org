@@ -14,15 +14,26 @@ spellings until then, with one rename made now (=release:unaffected= is
 The person says the verb; the runner answers the participle. The tense is the
 writer, so a reader needs no owner table to know who wrote a label.
 
-| the person says (a verb) | the runner answers (a participle) | the pair means                                                   |
-|--------------------------+-----------------------------------+------------------------------------------------------------------|
-| =release:start=          | =release:started=                 | the verb was consumed; a driver holds this change                |
-| =release:schedule=       | =release:scheduled=               | a window is booked; the id is in the comment                     |
-| =release:hold=           | =release:held=                    | promotion was refused while the hold is on; the person lifts it  |
-| =release:end=            | =release:ended=                   | every marker cleared; a closure code says why                    |
-| =release:skip=           | =release:skipped=                 | the estate untouched, the labeller agreed, the merge is the record |
-|                          | =release:completed=               | production converged on this head; merge and PIR follow          |
-|                          | =release:failed=, =release:backed-out=, =release:abandoned=, =release:superseded= | closure codes; they stay |
+*Final decision, 2026-09-17: three of the five verbs are the base, and two
+are secondary.* =release:start=, =release:end= and =release:skip= are the
+whole of what a change-control process built on this model requires; a
+repository with no calendar and no per-change hold implements only these
+three and is not doing a reduced version of the process. =release:hold= and
+=release:schedule= are options a repository adopts because of what it is
+building, layered on top of the same grammar (README §The three base
+primitives). The table below keeps all five together because the *grammar*
+is one grammar regardless of tier; §How the current tree does with it and
+=README.org= §Levels of compliance state which tier each belongs to.
+
+| tier      | the person says (a verb) | the runner answers (a participle) | the pair means                                                   |
+|-----------+---------------------------+-------------------------------------+------------------------------------------------------------------|
+| base      | =release:start=           | =release:started=                   | the verb was consumed; a driver holds this change                |
+| base      | =release:end=             | =release:ended=                     | every marker cleared; a closure code says why                    |
+| base      | =release:skip=            | =release:skipped=                   | the estate untouched, the labeller agreed, the merge is the record |
+| secondary | =release:hold=            | =release:held=                      | promotion was refused while the hold is on; the person lifts it  |
+| secondary | =release:schedule=        | =release:scheduled=                 | a window is booked; the id is in the comment                     |
+|           |                           | =release:completed=                 | production converged on this head; merge and PIR follow          |
+|           |                           | =release:failed=, =release:backed-out=, =release:abandoned=, =release:superseded= | closure codes; they stay |
 
 Three properties fall out, and each is an invariant the model can check.
 
