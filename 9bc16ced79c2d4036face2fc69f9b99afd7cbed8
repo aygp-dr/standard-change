@@ -1,0 +1,26 @@
+Timeline
+- 2026-09-16 03:40-04:05Z: release:skip on #127/#128/#130/#131 all refused
+  "gates not green" every ~20s poll. Ran gates/report.sh 127 by hand in a
+  scratch worktree: it refused with "this tree is at <main's current sha>,
+  #127 is at eb53c18" -- report.sh was designed never to check anything
+  out, and nothing else did either.
+- First fix used one shared worktree (worktrees/skip-check). The running
+  scheduler picked up the live edit immediately (it execs the file fresh
+  each call) and started gating #131 in it while a manual test of #127
+  ran concurrently in the same directory -- confirmed via ps: two
+  unaffected.sh/report.sh trees under different parents, 11-14 minutes
+  in, sharing one worktree. Killed both.
+- A later `git checkout <branch> -- change/unaffected.sh` while moving the
+  fix onto its own branch overwrote the live, uncommitted fix on disk with
+  an older committed copy -- the scheduler would have started reading the
+  broken version again. Caught before the next poll tick and rewritten.
+
+Reproduction
+  ./gates/report.sh 127            (from the main checkout, on any other
+                                     branch) -> "refused: #127 is at
+                                     eb53c18, this tree is at <HEAD>", exit 3
+  ./change/unaffected.sh 127       -> creates worktrees/skip-check-127,
+                                     checks out eb53c18 there, runs
+                                     report.sh 127 inside it
+  cell: macOS 24.1.0, the mini, scheduler pid 72819 continuously running
+  since 2026-09-15 23:34Z
