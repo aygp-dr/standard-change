@@ -1,0 +1,139 @@
+#+TITLE: Patent landscape check -- "standard rebuild of pipelines"
+#+DATE: 2026-09-17
+
+This is due-diligence research, not legal advice. It was produced by reading
+patent pages found via web search and Google Patents, not by counsel, and it
+has not been checked against a professional prior-art search. Do not rely on
+it for a filing or a freedom-to-operate opinion. Every claim below is marked
+[E] if a patent page was actually fetched and its number, assignee, and dates
+confirmed, or [H] if it rests on a search-result snippet only.
+
+* Summary
+
+The phrase "standard rebuild of pipelines" was read four ways: (1) generating
+CI/CD pipeline configuration from a declared profile of answers, (2)
+converting a pipeline from one CI system to another, (3) label- or
+state-machine-driven deployment gating, and (4) automation of the ITIL
+"standard change" class specifically. Angle 1 turned up one close analogue
+(Amazon's Live Pipeline Templates family) and one adjacent compliance-artifact
+patent (Optum), but nothing assigned to GitLab, GitHub, CircleCI, Harness, or
+JFrog on generating-and-refusing pipeline config from a profile [E]/[H] mixed,
+see table. Angle 2 turned up almost nothing on point -- no patent was found
+covering translation of a pipeline definition from one CI system's format to
+another (Jenkins to GitHub Actions or similar); the one hit found
+(Red Hat, containerizing a pipeline) is a different mechanism [E]. Angle 3
+turned up several patents on data-driven or metric-driven automated
+promotion and canary rollout (Kyndryl, Microsoft, Netflix, Citrix) and one
+Atlassian automation-rule-builder application that names "label" as a
+trigger input, but none of them describe a label on a change record driving
+an explicit finite-state promotion machine the way this repo's
+=release:start= / =release:end= / =release:skip= labels do [E]. Angle 4,
+despite ServiceNow's dominance in ITSM, produced no ServiceNow patent found
+and fetched that squarely claims automated, unattended execution of a
+pre-authorized "standard change" class; the closest hits are IBM/Kyndryl
+change-risk-assessment and template-generation patents, and the 2014 BMC v.
+ServiceNow litigation, which covered CMDB/discovery/license-compliance
+patents rather than the standard/normal/emergency change classification
+itself [E]. Overall: the space is crowded with deployment-automation patents
+in general, but nothing found and verified reads on the specific mechanisms
+this repo implements as a research artifact.
+
+* Angle 1: automated CI/CD pipeline (re)generation from a declared profile
+
+| number | assignee | title | filed / granted | verified | relevance |
+|--------+----------+-------+------------------+----------+-----------|
+| US10193961B2 (family incl. US20170180459A1, WO2017112801A1) | Amazon Technologies Inc | Building deployment pipelines for a production computing service using live pipeline templates | filed 2015-12-21, granted 2019-01-29 | [E] yes, https://patents.google.com/patent/US20170180459A1/en | Closest angle-1 hit. A developer supplies minimal service details; the system merges them with enterprise "best practice" encoded in extensible template classes to emit a concrete pipeline. This is generation-from-inputs, but the mechanism is template inheritance/merge, not a REQUIRED-key precondition check that refuses to emit a control when the profile does not support it. |
+| US20250284493A1 | Optum Inc | Automated compliance and artifact generation for regulatory software change management policies | filed 2025-05-22, published 2025-09-11, still pending | [E] yes, https://patents.google.com/patent/US20250284493A1/en | Adjacent, not on point. It automates producing a standardized *compliance report* (requirements, test/security results, approvals) attached to a change ticket. It is about evidence assembly for an existing pipeline's output, not about generating or refusing pipeline *configuration* from a profile of answers. |
+| (none found) | GitLab Inc | -- | -- | search result only, not fetched -- no GitLab-assigned patent on profile-driven pipeline generation turned up in several queries | GitLab's own patents found in search (e.g. US20210132935A1, US11593084B2) turned out on fetch to describe GitLab only as an example tool inside someone else's patent (Dell), or to be off-topic; none is GitLab as assignee on this mechanism |
+| (none found) | CircleCI / Harness / JFrog | -- | -- | search result only, not fetched -- no patent surfaced | Harness's marketing describes a "patented Migration Assistant" for Jenkins-to-Harness conversion but no patent number was found or fetched; treat that claim as unverified marketing copy, not a confirmed patent |
+
+* Angle 2: migrating/converting a pipeline from one CI system to another
+
+| number | assignee | title | filed / granted | verified | relevance |
+|--------+----------+-------+------------------+----------+-----------|
+| US11915007B2 | Red Hat Inc | CI/CD pipeline to container conversion | filed 2021-06-08, granted 2024-02-27 | [E] yes, https://patents.google.com/patent/US11915007B2/en | Not on point. On fetch, this converts an *existing* CI/CD pipeline's stage code into a container image for disconnected execution. It does not translate a pipeline definition from one CI vendor's format into another's (no Jenkins-to-GitHub-Actions style claim). |
+| (GitHub Actions Importer) | GitHub / Microsoft | -- (open-source tool, not a found patent) | -- | search result only, not fetched -- no patent found | GitHub's own docs describe the Importer as a tool, with no patent citation found in several searches. Treated as unpatented tooling unless shown otherwise. |
+| (Harness Migration Assistant) | Harness Inc | -- | -- | search result only, not fetched -- marketing claims "patented" but no number surfaced | Same caveat as above: cannot confirm this is a real, issued patent from the material found. |
+| (CloudBees / GitLab migration assistants) | CloudBees Inc / GitLab Inc | Declarative Pipeline Migration Assistant (Jenkins plugin), Jenkins-to-GitLab migration docs | -- | search result only, not fetched -- these are documented as open-source plugins/docs, not patents | No patent found behind either tool in the searches run |
+
+This angle came back close to empty. That is a real finding: heavy public
+tooling investment (GitHub, GitLab, Harness, Buildkite, JetBrains all publish
+Jenkins-migration tooling) with, as far as this search reached, little to no
+defensive patenting specifically on the cross-system pipeline-translation
+mechanism itself.
+
+* Angle 3: label-driven or state-machine-driven deployment gating
+
+| number | assignee | title | filed / granted | verified | relevance |
+|--------+----------+-------+------------------+----------+-----------|
+| US12182567B2 | Kyndryl Inc | Code change request management and human gate free deployment based on data collected from a development system | filed 2023-03-15, granted 2024-12-31 | [E] yes, https://patents.google.com/patent/US12182567 | Strongest angle-3 hit. Collects development-system data on a merge request, computes a confidence score, and auto-promotes high-confidence changes while routing low-confidence ones to a human gate. Same *shape* as a label-driven gate (some changes skip human review, others don't) but the trigger is a computed confidence score, not an explicit label token, and there is no berth/lock/lease concept. |
+| US10341465B2 | Microsoft Technology Licensing LLC | Policy driven flight management | filed 2016-06-29, granted 2019-07-02 | [E] yes, https://patents.google.com/patent/US10341465 | A "flight" state machine (created / active / suspended / expired / deleted) governs gradual feature rollout across deployment environments per policy. Genuinely a state-machine-driven promotion model, but for feature flags/flighting, not a change-request label, and no lock/berth exclusivity concept. |
+| US20250307773A1 | Atlassian Pty Ltd | Automation rule builder for collaboration platforms | filed 2024-03-26, published 2025-10-02, pending | [E] yes, https://patents.google.com/patent/US20250307773A1/en | Names "adding a label" as one trigger/action among many in a Jira automation-rule builder. Relevant only at the surface: it patents the *rule-authoring UI* (compatible-trigger/action filtering), not a specific label-to-deployment-promotion state machine. |
+| US10355950B2 | Netflix Inc | Progressive deployment and termination of canary instances for software analysis | filed 2017-07-14, granted 2019-07-16 | [E] yes, https://patents.google.com/patent/US10355950B2/en | Canary rollout driven by live performance metrics and automatic traffic-shift/rollback. Same "automated promotion" family as this repo's gates, but metric-driven, not label-driven, and single-environment traffic-shifting rather than a multi-environment berth/lock. |
+| US11099826B2 | Citrix Systems Inc | Canary deployment using an application delivery controller | filed 2019-10-14, granted 2021-08-24 | [E] yes, https://patents.google.com/patent/US11099826B2/en | Same family as above, implemented at the ADC/load-balancer layer. Not label- or change-record-driven. |
+| US20130006701A1 | International Business Machines Corp | Assessing and managing risks of service related changes based on dynamic context information | filed 2011-07-01, published 2013-01-03, abandoned | [E] yes, https://patents.google.com/patent/US20130006701A1/en | Automates risk-question filtering per change category to compute a risk score. Relevant background for "what decides whether a change needs a human," not label-driven and not a deployment state machine. |
+| US8561010B2 | IBM Corp (50% interest later held with ServiceNow, Inc.) | Software approval process using service governance | filed 2010-06-17, granted 2013-10-15 | [E] yes, https://patents.google.com/patent/US8561010B2/en | A lifecycle-state transition on a governed object triggers an approval-process engine. This is the inverse shape of a "standard change": it exists to route work *into* approval, not to authorize skipping it. |
+
+No patent was found and fetched that describes the specific combination this
+repo implements: an exclusive, deadline-bearing berth/lock plus a small
+vocabulary of PR labels (=release:start=, =release:end=, =release:skip=)
+driving a promotion state machine across named environment tiers. The nearest
+analogues split the mechanism apart -- Kyndryl automates the "skip human
+review" decision, Microsoft and Netflix/Citrix automate progressive
+environment promotion, and Atlassian automates the rule-authoring surface
+that labels could plug into.
+
+* Angle 4: ITIL "standard change" automation specifically
+
+| number | assignee | title | filed / granted | verified | relevance |
+|--------+----------+-------+------------------+----------+-----------|
+| US12182567B2 | Kyndryl Inc | Code change request management and human gate free deployment based on data collected from a development system | see angle 3 row | [E] yes | Closest thing found to "pre-authorized change executes without individual approval," but framed as confidence-scored CI/CD promotion, not as an ITIL standard-change record/class. |
+| US11836446B2 | Kyndryl Inc | Dynamic creation of change management templates | filed 2015-11-03, granted 2023-12-05 | [E] yes, https://patents.google.com/patent/US11836446B2/en | Automates *building* a change template from history of similar past changes. Does not address pre-authorized, no-approval execution; it is about template creation, not the standard-change authorization model. |
+| US20130006701A1 | IBM Corp | Assessing and managing risks of service related changes | see angle 3 row | [E] yes | Background on risk-based change classification, not a standard-change execution patent. |
+| US8713146B2 | PayPal Inc (orig. eBay Inc) | Change management automation tool | filed 2009-03-27, granted 2014-04-29 | [E] yes, https://patents.google.com/patent/US8713146B2/en | Automates concatenating technician work orders into a master change plan with status tracking. Not ITIL standard-change specific, no pre-authorization/no-approval claim. |
+| US8646093B2 (one of 7 patents in BMC Software, Inc. v. ServiceNow, Inc., No. 2:14-cv-903, E.D. Tex., filed 2014-09-23) | BMC Software Inc (now BMC Helix Inc) | Method and system for configuration management database software license compliance | filed 2009-12-09, granted 2014-02-04 | [E] yes, https://patents.google.com/patent/US8646093B2/en | Fetched as a check on the BMC v. ServiceNow litigation (widely reported: PCWorld, Computerworld, PRNewswire, BMC's own release). On fetch this specific patent is about CMDB license-compliance detection, unrelated to change classification. The other six asserted patents (5,978,594; 6,816,898; 6,895,586; 7,062,683; 7,617,073; 8,674,992) were reported in the litigation coverage [H] search result only, not individually fetched, but secondary reporting describes the suit as covering incident/problem management, discovery, and CMDB, not the standard/normal/emergency change model. |
+| (no ServiceNow "standard change" patent found) | ServiceNow Inc | -- | -- | search result only, not fetched -- none surfaced | Despite ServiceNow's ITSM market position and its product literally implementing "Standard Change" as a pre-authorized, no-approval record type, no patent was found in this search that claims that specific mechanism (pre-authorized change class executes without per-instance approval). This is a genuine gap in what this search reached, not a claim that no such patent exists. |
+
+* What this means for this repo
+
+standard-change is a research and simulation project, not a shipped product,
+so none of this is a freedom-to-operate clearance. Read plainly:
+
+- Nothing found and verified reads on =adopt/generate.sh='s specific
+  mechanism: enumerate a fixed set of REQUIRED profile keys, check each
+  control's precondition against the profile's own vocabulary, and *refuse
+  by name* the controls whose precondition fails, rather than emitting them
+  weakened or with a TODO. The Amazon Live Pipeline Templates family is the
+  closest analogue on angle 1 and it does not have a refusal mechanism --
+  it merges inputs into inherited templates. [E] confirmed by fetch.
+- Nothing found and verified reads on the =release:start= / =release:end= /
+  =release:skip= label-state-machine plus the berth (single exclusive,
+  deadline-bearing lease on the path to production) plus the lock. The
+  closest analogues (Kyndryl's confidence-scored auto-promotion, Microsoft's
+  flight state machine, Netflix/Citrix canary automation) all automate a
+  *different* trigger (a computed score or a metric) rather than a small
+  fixed vocabulary of labels on the change record itself, and none of them
+  couple that to an explicit singleton-lease guard the way spec.org's guard 1
+  (=|{x : holds_berth(x)}| <= 1=) does. [E] confirmed by fetch.
+- Angle 4 is the most surprising result: for a company as dominant in ITSM
+  as ServiceNow, and for a mechanism (standard change = pre-authorized,
+  no-approval, per the ITIL definition ServiceNow's own product documentation
+  states almost verbatim) that sounds obviously patentable, no ServiceNow
+  patent squarely on that mechanism was found or fetched. Either it exists
+  under different claim language this search did not hit, or ServiceNow has
+  not chosen to patent the standard-change concept itself (plausible, since
+  it is largely process/definition rather than a novel technical mechanism,
+  and ITIL itself predates ServiceNow). This should be read as "not found,"
+  not "does not exist."
+- The general deployment-automation and canary-rollout space (Netflix,
+  Citrix, Amazon, Microsoft) is crowded, but every patent actually fetched
+  in that space keys its automation off a computed signal (confidence score,
+  performance metric, risk score) rather than off a human-chosen label
+  applied to a change record. That is the one structural difference that
+  held up across every fetched patent in this search.
+- Net assessment: a clean search, in the sense that due diligence turned up
+  no patent that, on being read, looks like it would read on this repo's
+  specific mechanisms. That is a real and useful finding for a research
+  artifact like this one -- it is not evidence of a thorough
+  freedom-to-operate clearance, only evidence that an ordinary diligence pass
+  did not find a problem.
