@@ -40,7 +40,7 @@ next_id() {
 show_state() {
   echo
   echo "-- db/tables/migrations.csv --"
-  column -s, -t "$LEDGER" 2>/dev/null || cat "$LEDGER"
+  xsv table "$LEDGER" 2>/dev/null || column -s, -t "$LEDGER" 2>/dev/null || cat "$LEDGER"
   echo
   echo "-- db/tables --"; ls db/tables
   echo

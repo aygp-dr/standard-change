@@ -141,6 +141,34 @@ anything was ever created.
 *Idempotence.* =migrate.sh up= run a second time after all three migrations
 are applied reports =skip (applied)= for each and touches nothing.
 
+* Using xsv, with a note to upgrade
+
+Column-projection tasks (the pretty-printed ledger in =migrate.sh='s
+=show_state=, the view in =0003_add_email_index_and_public_view.sh=, both
+=app/read_users_v1.sh= and =app/read_users_v2.sh=) now use =xsv table= /
+=xsv select= when the binary is present, falling back to the original awk if
+it isn't. The email index stays hand-rolled awk either way -- it needs a row
+number attached only to non-blank emails, and =xsv= has no
+select-with-computed-column verb, so there was nothing to swap there.
+
+Two things worth writing down rather than discovering later:
+
+- =xsv= (BurntSushi) is unmaintained upstream -- the repository is archived
+  and its own README says so, pointing at =qsv= (dathere) or =xan=
+  (medialab) as successors. This POC uses =xsv= only because it was already
+  installed locally when this was built; it should move to whichever of
+  those two settles as the better-maintained choice once one is actually
+  installed somewhere this repo runs. [E, checked 2026-09-18: archived,
+  README's first line is "xsv is now unmaintained"]
+- Neither is packaged for FreeBSD. =xsv= is not in FreeBSD ports and
+  =cargo install xsv= is the only route there [E, tried on a real FreeBSD
+  15.1 host]. =qsv= needs an explicit =--features feature_capable= (its
+  binaries are feature-gated, off by default) and, at the version current
+  when this was checked, needs a newer =rustc= than FreeBSD 15.1 ships with
+  [E, same host, same session]. Neither installs cleanly on the machine
+  =standard-change='s own =hydra= describes -- which is exactly why every
+  xsv call here has an awk fallback rather than a hard dependency.
+
 * Where this is honest about being a toy
 
 - =read_users_v2.sh= reading a not-yet-expanded table (only the =id= column)
