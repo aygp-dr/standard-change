@@ -80,3 +80,6 @@ described in Part I without touching the labels it already has.
 #+INCLUDE: "appendix/label-table.org" :minlevel 3
 #+INCLUDE: "appendix/scenario-index.org" :minlevel 3
 #+INCLUDE: "appendix/issue-index.org" :minlevel 3
+
+* Compliance levels and their names
+#+INCLUDE: "findings/compliance-naming.org" :minlevel 3

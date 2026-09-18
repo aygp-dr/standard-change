@@ -27,3 +27,6 @@ rebuild order.
 * The tables
 #+INCLUDE: "appendix/label-table.org" :minlevel 2
 #+INCLUDE: "appendix/issue-index.org" :minlevel 2
+
+* Compliance levels and their names
+#+INCLUDE: "findings/compliance-naming.org" :minlevel 2

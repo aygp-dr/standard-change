@@ -1,0 +1,167 @@
+#+TITLE: Compliance levels and their names: what enterprise certification borrows, and what this repository could
+#+DATE: 2026-09-18
+
+Research notes, speculative throughout. Not a spec, not an ADR, not legal or
+audit advice. Every claim about an external standard is marked [H] and rests
+on general familiarity with the standard's public shape, not a fetched primary
+source; where this note is wrong about a standard, the standard is right. The
+question: what do enterprises call their compliance tiers, and what would a
+naming scheme for this repository's own tags look like if it borrowed from
+them, including a repository with none of this repository's own history.
+
+* What enterprises call their tiers, and what each naming axis is actually doing
+
+Five conventions, chosen because each names its tiers along a different axis.
+The axis matters more than the specific standard: it is what a repository
+copying the idea actually inherits.
+
+** Severity, not maturity: SOX and its auditors' vocabulary [H]
+
+Sarbanes-Oxley itself has no named levels. What travels is the auditor's
+severity ladder for a finding against internal controls (ITGC, IT general
+controls): no finding, then a *deficiency*, then a *significant deficiency*,
+then a *material weakness*, each a more severe failure than the last. This is
+an ordinal scale of *badness found*, not of maturity achieved. A repository
+borrowing this axis would name states by what went wrong, not by what was
+adopted -- closer to this repository's own closure codes
+(=release:failed=, =release:backed-out=) than to a compliance level.
+
+** Statement of Applicability: ISO 27001 [H]
+
+ISO 27001 does not name levels at all. A certified organisation declares,
+against a fixed list of about ninety-three Annex A controls, which apply and
+which are excluded with a stated reason, in a document called the *Statement
+of Applicability*. Certification is binary (certified or not); what varies
+between organisations is which boxes are checked, not a single number.
+
+This is the axis =adopt/generate.sh= already uses: a profile of answers, a
+fixed list of controls, each control's precondition checked against the
+profile, and a control *refused by name* rather than emitted weakened when
+its precondition fails. The user's own checklist in this document's
+prompt -- a list of parenthesised boxes, one tag-group per line -- is a
+Statement of Applicability in miniature, and the closest-fitting native model
+for this repository's compliance question. §Proposed naming below keeps it.
+
+** Process maturity: CMMI and COBIT [H]
+
+CMMI names five ascending levels: *Initial*, *Managed*, *Defined*,
+*Quantitatively Managed*, *Optimizing*. COBIT (ISACA, the body that also
+supplies much SOX ITGC methodology) has its own six-level capability scale
+with nearly the same shape: *Incomplete*, *Performed*, *Managed*,
+*Established*, *Predictable*, *Optimizing*. ITIL 4 borrows CMMI's numbering
+for its own practice-maturity assessments.
+
+The naming register is participles and gerunds -- *Managed*, *Defined*,
+*Optimizing* -- which is the tense-pair grammar's own register
+(=release:started=, =release:ended=, the runner's answer to a verb). This
+resonance is worth noting and not more: CMMI's participles describe a
+*process's* maturity: this repository's participles describe a *label's*
+writer. Borrowing the words without importing the meaning would be a false
+cognate.
+
+** Exposure, not maturity: PCI-DSS merchant levels and FedRAMP impact levels [H]
+
+PCI-DSS numbers merchants 1 through 4 by transaction *volume*: Level 1 is the
+*highest* exposure and carries the *most* required controls. FedRAMP names
+its baselines by *impact* -- Low, Moderate, High, and a newer lightweight
+Li-SaaS tier -- again ordered by consequence of a breach, not by adoption
+maturity. NIST SP 800-53 baselines are the same shape under a different name.
+
+The caution this axis earns: *enterprise precedent runs both directions*.
+CMMI's Level 1 is the least mature; PCI's Level 1 is the most scrutinised. A
+reader arriving from one background will misread a number from the other
+without being told which direction it runs. Any numbered scheme for this
+repository must state its direction in the same sentence that introduces it.
+
+** A different register entirely: Six Sigma belts [H]
+
+White, Yellow, Green, Black, Master Black Belt -- a person-certification
+scale borrowed from martial arts ranking, naming individual competence
+rather than a system's state. Notable here for a collision this repository
+should avoid: it already uses colour for something else entirely (blue/green
+production, the idle and live halves of a cutover). A colour-coded
+compliance scale would read, in this repository, as a third meaning for a
+word already carrying two.
+
+** SOC 2: a time axis, not a level axis [H]
+
+SOC 2 Type I attests that controls are *designed* correctly at a point in
+time; Type II attests that they were *observed operating* correctly over a
+period, typically six to twelve months. This is depth of evidence, not
+height of a ladder, and it maps cleanly onto this repository's own epistemic
+markers: Type I is [H] (declared, not yet observed), Type II is [E]
+(established by observation). A compliance claim for this repository's own
+tags should carry the same distinction: a repository that has *added* a tag
+group is Type I on it; one with a grind's worth of runs behind it is Type II.
+
+* What this suggests for standard-change's own naming
+
+Three findings survive the survey, in order of how much weight to put on
+them.
+
+1. *A Statement of Applicability fits better than a ladder.* This
+   repository's own tags are not a strict dependency chain -- a repository can
+   adopt =itil:*= classification without ever adopting a calendar, or adopt a
+   calendar without a multi-colour estate. README's existing "Levels of
+   compliance" table (0 Base through 4 Estate) is a reasonable *reading order*
+   through the tag groups, and it should stay; it is not the only valid claim
+   a repository can make about itself, and a strict ladder implies an order
+   of adoption that ISO 27001's own model does not require. The checklist
+   below is the Statement-of-Applicability form of the same five tiers: check
+   what is true, independent of what else is checked.
+2. *State the direction, every time a number is used.* If this repository or
+   an adopter ever numbers its tiers, say in the same sentence whether 1 means
+   least adopted (CMMI's convention) or most scrutinised (PCI's), because both
+   conventions are equally established in the wild and a reader will assume
+   their own.
+3. *Type I / Type II is worth adding as a qualifier, not a new tier.* Each box
+   below can be suffixed (declared) or (observed) -- a repository that has
+   written the workflow but never run it under load is meaningfully different
+   from one with a grind's worth of runs, and the existing =[H]=/=[E]=
+   convention already says which.
+
+* The checklist, extended, in the tags a repository would actually add
+
+The four items are the user's own, with the tags corrected to what this
+repository's tree actually declares (verified against
+=change/label-owners.tsv=, not invented), and three more added to reach
+parity with README's five-level ladder. Every box is independent; check what
+is true.
+
+- [ ] *=release:{start,end,skip}=* -- the three base verbs (README level 0,
+  Base). A person can say go, stop, or nothing to release. No environment, no
+  calendar, no classification is required for this box alone to be true.
+- [ ] *={staging,production}:healthy= with manual promotion* -- staging and
+  production each answer whether they are serving the build, but the label
+  that starts the *next* step (=deploy:production=) is added by a person
+  reading the observation rather than by a workflow that reads it
+  automatically. This is the box a repository checks before it trusts
+  automated promotion with anything; it corresponds to no numbered README
+  level on its own, because it is a *configuration* of level 0/1 (the
+  observation exists; the automation that acts on it does not yet).
+- [ ] *=itil:{standard,normal,emergency}=* -- a classification axis exists,
+  derived by a labeller from the diff for the first two and declared by a
+  person for the third (README level 4, part of Estate, though classification
+  alone does not require the rest of Estate to be true).
+- [ ] *=app:{service}=, one label per deployable unit* -- the generic form
+  of this repository's =app:core=/=app:plp=/=app:pdp=/=app:checkout=: a new
+  repository names its own units the same way, one label per independently
+  deployable thing, derived from which paths a change touches. A unit with no
+  explicit label deploys via whatever the repository calls its default path;
+  this box is what makes "default" a *stated* choice rather than an absent
+  one.
+- [ ] *=release:hold=* -- a person can pause promotion at one scope, without
+  a second mechanism competing with it (README level 2, Held).
+- [ ] *=release:schedule= / =release:scheduled=, a calendar* -- windows can be
+  booked, a start can be deferred to one, a lapsed window is reaped (README
+  level 3, Scheduled).
+- [ ] *environment tiers, a berth and its lock, guards, blue/green* -- what
+  this repository demonstrates in full: staging, production, a singleton
+  lease on the path between them, and an idle colour to cut over to (README
+  level 4, Estate).
+
+A repository checking only the first and fourth boxes -- base verbs plus one
+label per unit -- has a complete, honest, minimal change-control process. It
+is not a smaller version of this repository's own claim; it is a different,
+equally valid claim, in the same sense that an ISO 27001 Statement of
+Applicability with forty boxes checked is not a failed attempt at ninety-three.
