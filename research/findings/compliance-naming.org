@@ -11,7 +11,7 @@ them, including a repository with none of this repository's own history.
 
 * What enterprises call their tiers, and what each naming axis is actually doing
 
-Five conventions, chosen because each names its tiers along a different axis.
+Nine conventions, chosen because each names its tiers along a different axis.
 The axis matters more than the specific standard: it is what a repository
 copying the idea actually inherits.
 
@@ -73,15 +73,33 @@ reader arriving from one background will misread a number from the other
 without being told which direction it runs. Any numbered scheme for this
 repository must state its direction in the same sentence that introduces it.
 
-** A different register entirely: Six Sigma belts [H]
+** Six Sigma: two different scales sharing one name [H]
 
-White, Yellow, Green, Black, Master Black Belt -- a person-certification
-scale borrowed from martial arts ranking, naming individual competence
-rather than a system's state. Notable here for a collision this repository
-should avoid: it already uses colour for something else entirely (blue/green
-production, the idle and live halves of a cutover). A colour-coded
-compliance scale would read, in this repository, as a third meaning for a
-word already carrying two.
+Six Sigma is two naming conventions, not one, and confusing them is easy
+because both use the same word.
+
+The *belts* -- White, Yellow, Green, Black, Master Black Belt -- are a
+person-certification scale borrowed from martial arts ranking, naming
+individual competence rather than a system's state. Notable here for a
+collision this repository should avoid: it already uses colour for something
+else entirely (blue/green production, the idle and live halves of a
+cutover). A colour-coded compliance scale would read, in this repository, as
+a third meaning for a word already carrying two.
+
+The *sigma level itself* is a different, measured axis: a defect rate,
+expressed as how many standard deviations fit between a process's mean and
+its nearest specification limit, read off a table of defects per million
+opportunities (DPMO) -- roughly 690,000 DPMO at one sigma, 66,800 at three,
+233 at five, 3.4 at six. This is not a declared checklist (ISO) or an
+audited maturity (CMMI); it is an *empirical* tier, computed from observed
+outcomes over a period, closer in shape to DORA's four keys than to any
+audit standard here. This repository already has the raw material for a
+sigma-style number and has never expressed it as one: guard 5's N-sample
+convergence check and experiment 016's measured change-failure rate are
+both defect-rate measurements; a repository could report "the last N
+releases converged at five-sigma" as a *third kind* of compliance claim,
+neither a checked box nor an assigned maturity level but a number computed
+from its own run history. See §What this suggests, finding 4.
 
 ** SOC 2: a time axis, not a level axis [H]
 
@@ -94,9 +112,95 @@ markers: Type I is [H] (declared, not yet observed), Type II is [E]
 tags should carry the same distinction: a repository that has *added* a tag
 group is Type I on it; one with a grind's worth of runs behind it is Type II.
 
+** The EU: named assurance levels exist, and one name collides with this repository's own [H]
+
+The EU does have named compliance levels, in more than one place, and one of
+them shares a word this repository's own research documents already use for
+something unrelated.
+
+The EU Cybersecurity Act's certification scheme for ICT products (EUCC, the
+descendant of the older Common Criteria EAL structure) names three
+assurance levels: *Basic*, *Substantial*, *High* -- the same shape as
+FedRAMP's Low/Moderate/High, ordered by assurance rigour rather than by
+adoption maturity. The NIS2 Directive sorts regulated organisations into
+two categories, *essential* and *important* entities, by sector and size,
+each carrying different obligation stringency -- a binary/categorical
+tiering, not ordinal. GDPR itself names no levels, but its administrative
+fines fall into two pre-declared tiers by *which article was violated*: up
+to EUR 10 million or 2% of global turnover for the lower tier (records,
+security measures, certain processor duties), up to EUR 20 million or 4%
+for the higher (core principles, lawful basis, consent, special-category
+data) -- severity assigned in advance by the rule, unlike SOX's
+after-the-fact auditor judgement.
+
+*The collision*: the EU's Digital Operational Resilience Act, a financial-
+sector ICT risk and third-party-resilience regulation that entered into
+force in 2025, is also abbreviated *DORA*. This repository's own research
+documents (=history/pipeline-history.org=, experiment 016) use "DORA" for a
+different thing entirely -- Forsgren, Humble and Kim's DevOps Research and
+Assessment, the four keys (deployment frequency, lead time, change failure
+rate, MTTR). A reader from EU financial-services regulation who encounters
+"DORA metrics" in this repository's papers would reasonably expect the
+resilience regulation. Worth a disambiguating footnote wherever this
+repository's DORA is first used without its full name; not fixed in this
+pass.
+
+** HIPAA and HITRUST: required-versus-addressable, and the industry's own ladder [H]
+
+HIPAA's Security Rule does not number covered entities, but it splits every
+technical safeguard into two kinds: *Required* (must be implemented, no
+exception) and *Addressable* (the entity must assess whether it is
+reasonable and appropriate, implement it if so, and document an equivalent
+alternative or the reason not to if not). This is a third way to decide
+which controls apply, next to ISO 27001's self-declared Statement of
+Applicability and PCI's exposure-assigned levels: here the *standard*
+pre-declares which controls are negotiable and which are not, and the
+entity's only freedom is on the addressable half.
+
+HIPAA's own civil penalty tiers are graded by *culpability* rather than
+technical severity: Did Not Know, Reasonable Cause, Willful Neglect (later
+Corrected), Willful Neglect (Not Corrected) -- a state of mind axis, not a
+count of missing controls. This repository's own closure codes gesture at
+the same distinction without naming it: =release:failed= implies no fault;
+an emergency that bypasses review and is never paid back as
+=release:backfill-owed= debt is closer to willful neglect than to an honest
+miss, and the vocabulary does not currently say so.
+
+Healthcare's actual named compliance ladder is not HIPAA itself but
+*HITRUST CSF*, a third-party certification framework that maps HIPAA
+alongside other standards into one assessable model, with three named
+levels of assessment depth: *e1* (Essentials, roughly forty controls,
+entry-level), *i1* (Implemented, roughly 180 controls), and *r2*
+(Risk-based, a tailored control set, the most comprehensive). If this
+repository or an adopter ever wants a single named healthcare-flavoured
+ladder to point at, HITRUST's three-letter names are the industry's own
+answer, not HIPAA's.
+
+** Data classification: the axis this repository does not have [H]
+
+Separately from any of the above, most large enterprises maintain a *data
+classification* scheme -- typically three or four tiers such as Public,
+Internal, Confidential, and Restricted (or Highly Confidential), each
+carrying its own handling, retention, and access rules. This classifies the
+*data a system touches*, not the system's control maturity, its exposure,
+or its process discipline, and it is a genuinely separate axis from every
+convention above.
+
+This repository has no data-sensitivity label at all. =itil:*= classifies
+the change, =app:*= classifies the unit; nothing classifies what a unit's
+data actually is, because the mock storefront's apps carry no real data.
+A repository adopting this tagging system for a service that does handle
+real customer data would want a fourth axis alongside the three this
+repository already has -- a =data:*= label per unit (=data:public=,
+=data:internal=, =data:pii=, =data:restricted=, or whatever vocabulary the
+adopter's own compliance regime already uses) -- named here as a gap, not
+proposed as a design, since this repository has never needed to build one
+and speculating further than naming the gap would be inventing a control
+this project has not tested.
+
 * What this suggests for standard-change's own naming
 
-Three findings survive the survey, in order of how much weight to put on
+Five findings survive the survey, in order of how much weight to put on
 them.
 
 1. *A Statement of Applicability fits better than a ladder.* This
@@ -119,6 +223,18 @@ them.
    written the workflow but never run it under load is meaningfully different
    from one with a grind's worth of runs, and the existing =[H]=/=[E]=
    convention already says which.
+4. *An empirical claim is a third kind, next to the checklist and the
+   ladder.* A sigma-style "N releases, converged at five-sigma" is computed
+   from run history, not checked off or assigned by an auditor; this
+   repository already produces the raw numbers (guard 5's samples,
+   experiment 016's change-failure rate) and has never reported them this
+   way. Worth trying once, not designed here.
+5. *Who decides a box's applicability is itself a choice worth stating.*
+   ISO leaves it to the organisation (self-declared); HIPAA's Required
+   safeguards leave it to the standard, with Addressable ones split back to
+   the organisation; PCI and FedRAMP assign it by measured exposure. The
+   checklist below is entirely self-declared, ISO-style; an adopter in a
+   regulated industry may want some of its boxes pre-decided instead.
 
 * The checklist, extended, in the tags a repository would actually add
 
@@ -165,3 +281,14 @@ label per unit -- has a complete, honest, minimal change-control process. It
 is not a smaller version of this repository's own claim; it is a different,
 equally valid claim, in the same sense that an ISO 27001 Statement of
 Applicability with forty boxes checked is not a failed attempt at ninety-three.
+
+One further box, unchecked by default and not part of the parity count
+above, for a repository whose units handle real data rather than a mock
+storefront's:
+
+- [ ] *=data:{public,internal,pii,restricted}=, one label per unit* --
+  named in §Data classification above as a gap this repository has, not
+  designed here. A repository checking this box should say, in its own
+  words, who decided each unit's classification and under which regime
+  (self-declared, ISO-style, or pre-decided by a standard the way HIPAA's
+  Required safeguards are).
