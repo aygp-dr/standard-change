@@ -42,6 +42,25 @@ cd experiments/030-csv-db-migrations-poc
 ./migrate.sh down      # rolls back the single most recently applied migration
 #+end_src
 
+Or from the repo root, via the =Makefile= in this directory:
+
+#+begin_src sh
+gmake -C experiments/030-csv-db-migrations-poc db-migrate   # ./migrate.sh up
+gmake -C experiments/030-csv-db-migrations-poc db-seed      # ./db/seeds.sh
+gmake -C experiments/030-csv-db-migrations-poc db-status    # print the ledger, change nothing
+gmake -C experiments/030-csv-db-migrations-poc db-check     # prove idempotency: run db-migrate twice, fail if the ledger moved
+gmake -C experiments/030-csv-db-migrations-poc db-rollback  # ./migrate.sh down
+gmake -C experiments/030-csv-db-migrations-poc db-reset     # roll back everything
+#+end_src
+
+=db-migrate= is idempotent by construction -- the ledger check in =migrate.sh=
+(=is_applied=) is what makes re-running it a no-op, not anything in the
+=Makefile=. =db-check= exists to *prove* that rather than assume it: it runs
+=db-migrate= twice and fails the build if =db/tables/migrations.csv= differs
+between the two runs, the same "don't trust a gate that's never been shown to
+reject anything" instinct this repo already applies to its own
+=gate-selftest=.
+
 * Shape
 
 #+begin_src text
@@ -57,12 +76,106 @@ db/
     0001_create_users_table.sh       / .down.sh
     0002_add_name_email_columns.sh   / .down.sh
     0003_add_email_index_and_public_view.sh / .down.sh
+    0004_add_is_active_column.sh     / .down.sh
   seeds.sh              -- reference data, not a migration, not in the ledger
 app/
   read_users_v1.sh      -- pre-migration reader, frozen at round 1
   read_users_v2.sh      -- post-migration reader, exists from round 2
 migrate.sh              -- the runner: up | down
+Makefile                -- gmake db-migrate | db-rollback | db-seed | db-status | db-check | db-reset
 #+end_src
+
+* Control flow
+
+#+begin_src mermaid :eval never-export
+flowchart TD
+    Start([migrate.sh cmd]) --> Cmd{cmd}
+
+    Cmd -->|up| U1[ensure db/tables db/indexes db/views exist]
+    U1 --> U2[ensure ledger has header row]
+    U2 --> U3[next file in db/migrations/*.sh, in order]
+    U3 --> U4{name already in ledger?}
+    U4 -->|yes| U5[skip: applied]
+    U4 -->|no| U6[run the .sh]
+    U6 --> U7[append id,app,name,applied to ledger]
+    U5 --> U8{more files?}
+    U7 --> U8
+    U8 -->|yes| U3
+    U8 -->|no| UEnd[show_state]
+
+    Cmd -->|down| D1{ledger exists and has a data row?}
+    D1 -->|no| DNone[nothing to roll back]
+    D1 -->|yes| D2[read name from last ledger row]
+    D2 --> D3{matching .down.sh exists?}
+    D3 -->|no| DRefuse[refuse, exit 1]
+    D3 -->|yes| D4[run the .down.sh]
+    D4 --> D5[drop last line from ledger]
+    D5 --> DEnd[show_state]
+#+end_src
+
+=up= and =down= are not mirror images of the same loop: =up= walks every
+pending migration in file order; =down= only ever touches the single most
+recent ledger row, matching Rails' default =rails db:rollback= rather than
+golang-migrate's numeric-target rollback.
+
+* Adding a migration, worked example
+
+=0004_add_is_active_column.sh= was added and run live in this session, via
+=gmake -C experiments/030-csv-db-migrations-poc db-migrate= from the repo
+root, to check the whole thing actually behaves the way this file claims.
+Three steps:
+
+1. Write the up script, next number, verb-first name:
+
+   #+begin_src sh
+   #!/usr/bin/env bash
+   set -euo pipefail
+   cd "$(dirname "$0")/../.."
+
+   TABLE=db/tables/users.csv
+   TMP=$(mktemp)
+   awk -F, 'BEGIN{OFS=","} NR==1{print $0,"is_active"; next} {print $0,"true"}' "$TABLE" > "$TMP"
+   mv "$TMP" "$TABLE"
+   echo "expanded $TABLE: added is_active (default true for every row)"
+   #+end_src
+
+2. Write the matching =.down.sh= -- same base name, =.down.sh= instead of
+   =.sh=. This one drops the last column generically (=NF--=) rather than
+   naming columns to keep, the way =0002='s down does -- either technique is
+   fine, but the down script has to exist or =migrate.sh down= refuses
+   rather than guessing.
+
+3. =chmod +x= both, then run it:
+
+   #+begin_src sh
+   gmake -C experiments/030-csv-db-migrations-poc db-migrate
+   #+end_src
+
+   Output, unedited from this session:
+
+   #+begin_example
+   skip (applied): 0001_create_users_table
+   skip (applied): 0002_add_name_email_columns
+   skip (applied): 0003_add_email_index_and_public_view
+   applying: 0004_add_is_active_column
+   expanded db/tables/users.csv: added is_active (default true for every row)
+
+   -- db/tables/migrations.csv --
+   id  app  name                                  applied
+   1   poc  0001_create_users_table               2026-09-18T16:25:19Z
+   2   poc  0002_add_name_email_columns           2026-09-18T16:25:19Z
+   3   poc  0003_add_email_index_and_public_view  2026-09-18T16:25:39Z
+   4   poc  0004_add_is_active_column             2026-09-18T20:46:01Z
+   #+end_example
+
+   A second run of the same command reported =skip (applied)= for all four
+   and =gmake ... db-check= confirmed the ledger was byte-identical before
+   and after.
+
+This one didn't need a corresponding change to =db/seeds.sh= -- unlike
+=0002=, it's a default-value expand (every row gets =true=), not a
+blank-and-backfill one, so there's nothing for a seed script to fill in
+later.
 
 * The ledger shape, and why it's Django's
 
