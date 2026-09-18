@@ -1,0 +1,174 @@
+#+TITLE: CSV-on-disk "database" with a Django-shaped migration ledger
+#+DATE: 2026-09-18
+
+* Hypothesis
+
+A flat-file "database" -- CSV tables, indexes and views on disk, mutated by
+numbered shell scripts -- is enough to demonstrate the code/schema
+separation argument from the migration-vs-deploy research
+(=research/findings/=, and the private prior-art gist it produced) without
+needing a real database engine. Specifically: application code that only
+reads the columns it knows about survives an *expand* migration unmodified,
+because the schema only grows underneath it; and a *down* migration for an
+expand is a literal *contract*, not a different kind of operation.
+
+Deliberately dumb by design: no SQL, no locking, no real index maintenance
+(everything is rebuilt in full on every migration that touches it). The
+point is the shape of the separation, not a usable data store.
+
+* Success criterion
+
+- =./migrate.sh up= run twice in a row is idempotent: the second run applies
+  nothing (falsifies if a re-run duplicates a ledger row or re-mutates a
+  table).
+- =app/read_users_v1.sh=, written before migration =0002= exists, produces
+  the same output before and after =0002= runs, unmodified (falsifies if v1
+  needs an edit to keep working after the schema expands).
+- =app/read_users_v2.sh= tolerates a row that hasn't been seeded, rather
+  than crashing on it (falsifies if an unseeded row breaks the reader that
+  is supposed to already know about the new columns).
+- =./migrate.sh down= three times in a row returns the tree to its
+  pre-migration state: no =users.csv=, an empty ledger (falsifies if a
+  column or a row survives a full teardown).
+
+* Run it
+
+#+begin_src sh
+cd experiments/030-csv-db-migrations-poc
+./migrate.sh up       # applies db/migrations/*.sh in order, once each
+./db/seeds.sh          # reference data -- separate from migrations, on demand
+./app/read_users_v1.sh # the "old" app -- never touched after round 1
+./app/read_users_v2.sh # the "new" app -- exists from round 2 on
+./migrate.sh down      # rolls back the single most recently applied migration
+#+end_src
+
+* Shape
+
+#+begin_src text
+db/
+  tables/
+    users.csv          -- the data
+    migrations.csv      -- the ledger. also just a table.
+  indexes/
+    users_by_email.csv
+  views/
+    users_public.csv
+  migrations/
+    0001_create_users_table.sh       / .down.sh
+    0002_add_name_email_columns.sh   / .down.sh
+    0003_add_email_index_and_public_view.sh / .down.sh
+  seeds.sh              -- reference data, not a migration, not in the ledger
+app/
+  read_users_v1.sh      -- pre-migration reader, frozen at round 1
+  read_users_v2.sh      -- post-migration reader, exists from round 2
+migrate.sh              -- the runner: up | down
+#+end_src
+
+* The ledger shape, and why it's Django's
+
+Three real systems were checked before picking a shape for
+=db/tables/migrations.csv=:
+
+| system              | table               | columns                | what it buys                              |
+|---------------------+---------------------+-------------------------+--------------------------------------------|
+| Django              | =django_migrations= | =id, app, name, applied= | which app, which migration, when -- three facts |
+| Rails               | =schema_migrations= | =version=                | just "this version ran" -- no app, no timestamp |
+| Clojure (Ragtime)    | =ragtime_migrations= | =id, created_at=         | id + timestamp, no app column              |
+
+Django's is the richest without inventing anything new, so that's what this
+ledger copies: =id,app,name,applied=. =app= is fixed at =poc= here because
+there is exactly one "app" in this toy, but the column exists so a second
+migrated component could share the same ledger and stay distinguishable --
+the same reason Django needs it in a real multi-app project.
+
+The ledger is not a separate mechanism bolted onto the "database" -- it is
+=db/tables/migrations.csv=, one more table, read and written by the same
+kind of awk that reads =users.csv=.
+
+* Migrations vs. seeds: a second split, not just up vs. down
+
+=db/seeds.sh= mirrors Rails' =db/seeds.rb= (=rails db:seed=): reference/demo
+data, run on demand, deliberately *not* tracked in the migrations ledger.
+=0002_add_name_email_columns.sh= only expands the shape -- three new columns,
+blank for every row. Naming Kurt Gödel, Hannah Arendt and Ada Lovelace is
+=db/seeds.sh='s job, not the migration's. This is the same argument the
+migration-vs-deploy research keeps making at a different layer: a schema
+change and a data change are two different kinds of change, and conflating
+them (backfilling real data inside the migration that also changes the
+shape) is exactly the pattern PostHog's engineering handbook and Prisma's
+docs warn against.
+
+=db/seeds.sh= only knows about ids 1-3 on purpose. Id 4 stays unseeded not
+because a migration forgot it, but because the seed script itself was never
+taught about it -- the same way a real =seeds.rb= quietly falls behind rows
+a later migration adds.
+
+* Up/down file pairing, and why it isn't Rails' or Django's
+
+Each migration is a =NNNN_name.sh= / =NNNN_name.down.sh= pair, borrowed from
+golang-migrate's and Flyway's =.up=/=.down= file convention rather than
+Rails' single invertible =change= method or Django's in-file
+=reverse_code=. Neither of those frameworks' reversibility tricks apply here
+because there is no framework introspecting the script to invert it
+automatically -- these are shell scripts, so the down half has to be written
+by hand, the same as golang-migrate requires.
+
+=migrate.sh down= rolls back exactly one migration -- the most recently
+applied row in the ledger -- matching Rails' default =rails db:rollback=
+(one step unless told otherwise). It refuses if no =.down.sh= file exists
+for that migration, rather than silently doing nothing.
+
+* What the run actually showed [E]
+
+*Up.* Round 1 creates =users.csv= with four bare =id= rows. Round 2 expands
+it with =first_name,last_name,email=, blank for every row -- pure structure,
+no data. Round 3 builds =db/indexes/users_by_email.csv= and
+=db/views/users_public.csv=, fully rebuilt from current table state.
+=read_users_v1.sh=, unmodified since round 1, prints all four ids at every
+stage without ever being edited.
+
+*Seed.* =db/seeds.sh= backfills ids 1-3 with Kurt Gödel (math), Hannah
+Arendt (philosophy) and Ada Lovelace (computing); id 4 stays blank.
+=read_users_v2.sh= prints =(unbackfilled)= for id 4 rather than crashing.
+
+*Down.* =migrate.sh down= run three times in a row: first removes the
+derived index/view (0003's down), then contracts =users.csv= back to a bare
+=id= column (0002's down -- the literal contract of that expand), then drops
+=users.csv= entirely (0001's down). After three downs the ledger is back to
+just its header row, and =read_users_v1.sh= fails exactly as it did before
+anything was ever created.
+
+*Idempotence.* =migrate.sh up= run a second time after all three migrations
+are applied reports =skip (applied)= for each and touches nothing.
+
+* Where this is honest about being a toy
+
+- =read_users_v2.sh= reading a not-yet-expanded table (only the =id= column)
+  would print blank fields rather than crash, because awk returns an empty
+  string for an unset array key. A real strongly-typed reader (a Python
+  dataclass, a Rust struct) would raise on a missing field instead. This
+  demo is more lenient than the failure mode it's meant to illustrate --
+  worth remembering if this shape is ever pointed at as evidence rather than
+  illustration.
+- No concurrency: two =migrate.sh up= runs racing each other would both pass
+  =is_applied= before either writes the ledger row and both would re-run the
+  migration. The prior-art research (Kubernetes init-container migrations)
+  flags exactly this race and fixes it with an advisory lock -- deliberately
+  not built here.
+- =id= in the ledger is =wc -l= of the ledger file, not a real sequence --
+  fine for a single-writer toy, wrong the moment two writers exist.
+- =migrate.sh down= only ever rolls back one step. A real rollback tool
+  (Rails' =STEP=N=, golang-migrate's numeric target) lets you name how far
+  back to go; this one doesn't, because one step was enough to prove the
+  point.
+
+* Relationship to the rest of this repo
+
+This is illustration for =research/=, not a component of the
+=standard-change= pipeline itself -- nothing here is wired into =change/= or
+=gates/=. It exists because the migration-vs-code-deploy research (four
+research agents, plus a follow-up private gist on the same question)
+produced a lot of citations for the *pattern* and this makes the pattern
+concrete: an "old app" that never gets touched again after round 1, running
+correctly against a table three migrations ahead of what it was written
+against, and unwinding cleanly back to nothing when asked.
