@@ -1,5 +1,6 @@
 ---
 name: standard-change
+license: MIT
 description: >-
   Check or bootstrap the standard-change label-driven deploy pattern in any
   repository. Use "check" when a person asks whether a repo is
