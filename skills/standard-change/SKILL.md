@@ -1,6 +1,16 @@
 ---
 name: standard-change
-description: Check or bootstrap the standard-change label-driven deploy pattern in any repository. Use "check" when a person asks whether a repo is standard-change compliant, what level it's at, or to audit its release labels — read-only, never writes anything. Use "adopt" when a person asks to adopt, set up, bring in, wire up, or "add standard-change" to a repo that has none of it yet. Trigger on any of these even if the person doesn't say "standard-change" explicitly: label-driven deploys, release labels, PR labels for starting/ending a release, or "what level is this repo at." Always survey the repo's existing labels and PR history before proposing or claiming anything.
+description: >-
+  Check or bootstrap the standard-change label-driven deploy pattern in any
+  repository. Use "check" when a person asks whether a repo is
+  standard-change compliant, what level it's at, or to audit its release
+  labels — read-only, never writes anything. Use "adopt" when a person asks
+  to adopt, set up, bring in, wire up, or "add standard-change" to a repo
+  that has none of it yet. Trigger on any of these even if the person
+  doesn't say "standard-change" explicitly, such as label-driven deploys,
+  release labels, PR labels for starting or ending a release, or "what
+  level is this repo at." Always survey the repo's existing labels and PR
+  history before proposing or claiming anything.
 ---
 
 # /standard-change [check | adopt]
