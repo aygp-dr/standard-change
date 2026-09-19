@@ -56,12 +56,32 @@ name alone.
 Every row in the `check` table below is a citation, not this skill's own
 invention: the level definitions are `aygp-dr/standard-change`'s
 `README.org`, "Levels of compliance"; the label-ownership rule is
-`research/findings/labels-are-the-only-channel.org`; the present/used/
-unverifiable evidence distinction borrows the same discipline as that
-repo's own `research/substrates/conformance-ladder.org`. When reporting a
-verdict, name which of these a level's requirement came from, so a
-skeptical reader can go check the source instead of taking the skill's
-word for it.
+`research/findings/label-ownership.org` (not `labels-are-the-only-channel.org`
+— that file is about uncoordinated concurrent writers racing on lifecycle
+labels, a different problem; `label-ownership.org` is the one that actually
+states "every label has exactly one writer" and the opt-out-not-edit rule
+this skill's refusal logic borrows); the present/used/unverifiable evidence
+distinction borrows the same discipline as that repo's own
+`research/substrates/conformance-ladder.org`. When reporting a verdict, name
+which of these a level's requirement came from, so a skeptical reader can go
+check the source instead of taking the skill's word for it.
+
+Two of README.org's own table cells don't match what its reference
+implementation actually built, confirmed against that repo's live label
+roster (`gh label list`) and its scripts, not just its prose: level 2's cell
+says `release:hold`, but the label every script and the rest of README.org
+itself uses is `staging:hold` (README.org's own base-primitives section says
+so directly: only the three level-0 verbs are "the final nomenclature for
+the base process" — a hold label's name is a repository's own choice, not
+fixed vocabulary). Level 3's cell lists `release:schedule` alongside
+`release:scheduled`, but only `release:scheduled` exists anywhere in that
+repo's label roster or scripts — booking a window is a script call
+(`change/schedule.sh block`), not a verb-label, so there is nothing named
+`release:schedule` to ever find. The `check` table below uses the names that
+actually exist rather than repeating README.org's cells verbatim; say so
+when reporting a level 2 or 3 verdict, since a reader who goes to verify
+against the literal table text will otherwise think this skill invented the
+correction.
 
 ## The survey both modes run first
 
@@ -74,8 +94,7 @@ word for it.
   (`risk:*` / `type:*` / a Jira priority; `component:*` / `area:*` / a
   CODEOWNERS path). These are the repo's own inputs. standard-change never
   adds, removes, or repairs a label in either namespace — see
-  `aygp-dr/standard-change`'s
-  `research/findings/labels-are-the-only-channel.org`.
+  `aygp-dr/standard-change`'s `research/findings/label-ownership.org`.
 
 ## check
 
@@ -93,8 +112,8 @@ merely unverified.
 |---|---|---|
 | 0 Base | `release:start`, `release:end`, `release:skip` exist | `gh label list` |
 | 1 Acknowledged | the participle labels (`release:started`/`release:ended`/`release:skipped`) exist AND at least one was actually applied to a real PR | labels, plus `gh pr list --state all --label release:started --limit 3` (etc.) |
-| 2 Held | `release:hold` exists and was applied at least once | same two-step pattern |
-| 3 Scheduled | `release:schedule`/`release:scheduled` exist, applied at least once, AND a workflow file references a calendar or scheduler | labels + PR history + `grep -l -i 'schedul\|calendar' .github/workflows/*.yml` |
+| 2 Held | a person-owned pause label exists and was applied at least once — only the level-0 verbs are fixed nomenclature, so this is a name the target repo chose itself (the reference repo's own is `staging:hold`, despite README.org's table cell saying `release:hold`); look for it rather than assuming the literal string | same two-step pattern, once the label's actual name is found |
+| 3 Scheduled | `release:scheduled` exists and was applied at least once, AND a workflow file references a calendar or scheduler — don't also require `release:schedule` (no trailing "d"): README.org's table cell lists it, but no such label exists in that repo's own roster or scripts; booking a window there is a script call (`change/schedule.sh block`), not a verb-label | labels + PR history + `grep -l -i 'schedul\|calendar' .github/workflows/*.yml` |
 | 4 Estate | an `itil:*` label family exists, a `deploy:*`/environment-tier label family exists, and at least one workflow references a lock or berth mechanism | labels + PR history + workflow grep |
 
 Every level's verdict is one of three things, never collapsed to yes/no:
