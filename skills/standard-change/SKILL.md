@@ -126,6 +126,20 @@ Every level's verdict is one of three things, never collapsed to yes/no:
   configuration; say so rather than assuming a workflow file that mentions
   the right keyword is actually wired up correctly.
 
+`gh pr list --label X` matches only labels *currently* attached — it says
+nothing about a label that was applied and then removed, and removing a
+label once it's been acted on is exactly what a well-run instance of this
+pattern does (the reference repo clears `release:started`, `release:
+scheduled`, and every observation label at settlement; see
+`research/appendix/label-table.org`'s persistent column there). An empty
+result from that search is not evidence the label was never used — it's
+evidence the current-label search can't see history here. Before reporting
+"not used," check a fading trail instead: `gh pr view <n> --json
+timelineItems` or `gh api repos/<owner>/<repo>/issues/<n>/events` on a few
+closed PRs, both of which retain add/remove events after the label itself
+is gone. Only report "not used" once that trail comes up empty too, not
+from the label search alone.
+
 A repo can be *present* at level 2 and have never *used* it — report that
 distinction, don't round up. Close with the highest level where every rung
 up to it is at least *used*, plus everything above as present-but-unused or
