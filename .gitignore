@@ -53,3 +53,6 @@ research/appendix/
 # under experiments/ that are tracked stay tracked -- gitignore does not
 # untrack -- because they are recorded evidence, and they were scanned clean.
 *.log
+
+# skill-creator eval workspace: regenerable test transcripts and benchmarks
+skills/standard-change-workspace/
