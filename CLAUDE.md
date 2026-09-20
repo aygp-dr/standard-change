@@ -6,6 +6,43 @@ Derived from `spec.org`. **`spec.org` governs; when they disagree, `spec.org` wi
 
 A label-driven, gate-checked deployment pipeline demonstrated on a mock ecommerce monorepo. The four apps (`core`, `plp`, `pdp`, `checkout`) are fixtures — the product is the gate sequence, the labels that drive it, the change-schedule integration, and the checklists. A **unit** is one pull request carrying at least one `app:*` label. It is *done* when all three gates are green on the head SHA, a staging slot has deployed and re-run e2e against it, and — for production — the PIR comment is posted.
 
+## Mandate, priority, and definition of done
+
+Set by the owner, 2026-09-20: this project has a fixed goal, not an
+open-ended one, and the priority from here is finishing it, not expanding
+it. The two things this repo is for producing:
+
+- **`skills/standard-change/`** — the portable adoption/check skill,
+  installable into a repo that has never seen this pattern. **Done**, as of
+  this note: built, tested against a real GitHub-backed eval loop (two
+  iterations, 100% assertion pass rate with the skill vs. 72–74% without),
+  reviewed by an independent pass that found and fixed real citation and
+  label-naming bugs, validated clean by `gh skill publish --dry-run`, and
+  published as release `v0.1.0`. Future work on it should be maintenance
+  (a real bug, a new install target failing) — not new scope, unless the
+  owner reopens it.
+- **`research/`** — the buildable corpus (`gmake -C research html | md |
+  org | pdf`) arguing the pattern and surveying prior art. **Not yet
+  declared done.** Known open items from the most recent review pass: (a)
+  `research/index.org`'s Part I include list omits `README.org`'s
+  compliance-levels table and the merge-is-tombstone section, so the
+  assembled paper doesn't carry what an external adopter needs most (the
+  gap that caused two real misreadings, documented in a 2026-09-18 adoption
+  report); (b) the conformance ladder's rung 6 doesn't cover the case where
+  the instrument exists but the pipeline is architecturally barred from
+  reaching it; (c) `adoption.org` doesn't warn that an `app:*`-based
+  re-derivation check presumes total `app:*` coverage; (d) no label-color
+  convention is recorded anywhere despite one being proposed. A definition
+  of done for `research/` — which of these are blocking, what else counts,
+  when to stop adding findings and call the corpus closed — is itself
+  undecided and worth settling explicitly rather than by drift.
+
+Everything else in this file (the four fixture apps, the gate sequence, the
+change-schedule integration) is the demonstration substrate that argues for
+the pattern the skill packages — not itself a second deliverable to keep
+growing. New experimental work should serve one of the two items above or
+name explicitly why it doesn't.
+
 ## Status: built, and running
 
 46 scripts under `change/` and `gates/`, a live estate on hydra (staging 9200, blue 9210, green 9220, front 9230), 55+ merged changes. This section previously read *"nothing is built yet … the scripts it names do not exist"* and carried its own removal condition — *"treat this section as removed once the first gate runs"*. The first gate ran; the condition fired; nobody removed it, and it kept telling every agent that loads this file that the repo was empty. Corrected 2026-09-15 by counting the files.
