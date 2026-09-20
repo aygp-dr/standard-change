@@ -5,11 +5,26 @@ The owner's question of 2026-09-15: a developer, release engineer or
 operator owns the =release:*= tags, even when a tool applies them on their
 behalf. Should the words follow the Ruby state-machine convention, a verb for
 the event and a past participle for the state? Four options were on the
-table. The decision for rebuild 005 is the first; the tree keeps its current
-spellings until then, with one rename made now (=release:unaffected= is
-=release:skip=, a verb like the others).
+table. The decision for rebuild 005 is the first. *Updated 2026-09-20:* two of
+the three base pairs are no longer pending -- =release:start=/=release:started=
+and =release:end=/=release:ended= are live and wired (the latter "Wired
+2026-09-17" per =change/label-owners.tsv=), confirmed against the full
+=gh label list --limit 200= and against every consuming script. What still
+waits for rebuild 005 is =release:skip='s participle (=release:skipped= does
+not exist on the forge) and the whole secondary tier
+(=release:hold=/=release:held=, =release:schedule=; the tree still spells the
+hold =staging:hold= and has no separate schedule verb, only
+=release:scheduled=). One rename was also made directly
+(=release:unaffected= is =release:skip=, a verb like the others).
 
 * Option 1: one namespace, two tenses (chosen for rebuild 005)
+:PROPERTIES:
+:CUSTOM_ID: grammar-file
+:VERIFIED_AT: 2026-09-20T16:52:39Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: n/a
+:FINDING: internal empirical/design finding about this repo's own label grammar; no external citation to check (grepped for external refs/years -- none beyond the repo's own 2026 timeline).
+:END:
 
 The person says the verb; the runner answers the participle. The tense is the
 writer, so a reader needs no owner table to know who wrote a label.

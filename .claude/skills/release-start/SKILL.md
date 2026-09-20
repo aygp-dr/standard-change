@@ -10,7 +10,12 @@ The person's word. The process (`change/scheduler.sh` consuming through
 word correctly and to tell the person what will happen, so that a start
 said twice or said on the wrong change does not thrash the pipeline.
 
-The label is `release:start` (renamed from `change:start` on 2026-09-16; the rest of the tense-pair grammar waits for rebuild 005).
+The label is `release:start` (renamed from `change:start` on 2026-09-16). Its
+participle, `release:started`, is already live and wired (the driver and
+scheduler write it) — confirmed 2026-09-20 against the full label list and
+every consuming script. What still waits for rebuild 005 is `release:skip`'s
+own participle (`release:skipped` does not exist yet) and the secondary tier
+(`release:hold`/`release:held`, `release:schedule`).
 
 ## Preconditions, checked before writing
 

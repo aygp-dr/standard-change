@@ -711,8 +711,8 @@ PR that holds it. Slots may return later as an optimization; they are not in
 | =itil:standard=      | labeller    | labeller          | Diff limited to =apps/**=                                     |
 | =itil:normal=        | labeller    | labeller          | Diff touches =router/=, =gates/=, =change/=, =targets/=, =.github/= |
 | =itil:emergency=     | human       | human             | Authorizes the staging bypass. The only such authorization    |
-| =change:requested=     | *human*     | release / close   | *Start my change request.* The only label a person adds to set a change going |
-| =change:scheduled=     | scheduler   | activation        | A window is booked on the change schedule                    |
+| =release:start=        | *human*     | release / close   | *Start my change request.* The only label a person adds to set a change going |
+| =release:scheduled=    | scheduler   | activation        | A window is booked on the change schedule                    |
 | =deploy:staging=       | workflow    | the action ends   | *Action in flight:* deploying to staging right now           |
 | =staging:passed=       | workflow    | push to PR        | Authorizing e2e passed *on the current head SHA*             |
 | =staging:failed=       | workflow    | push to PR        | Staging deploy or e2e failed; fix and re-request             |
@@ -789,7 +789,7 @@ jobs:
         # saying so.
         if: "!contains(github.event.pull_request.labels.*.name, 'labeler:skip')"
         with:
-          sync-labels: true          # the labeller OWNS app:* and change:{standard,normal}
+          sync-labels: true          # the labeller OWNS app:* and itil:{standard,normal}
       # itil:standard is the COMPLEMENT of itil:normal, which actions/labeler
       # cannot express -- it matches globs, it cannot say "matched no other rule".
       # The offline oracle modelled this as derived and the config never
@@ -1067,14 +1067,14 @@ which frees the queue -- an expired claimant must not keep holding it.
 
 A person raises a change request. *That is the whole of their part.*
 
-: change:requested          <- the human act, and the only one
+: release:start             <- the human act, and the only one
 
 Everything after is the system acting or observing, and none of it is a thing
 to type:
 
 | emitted            | kind        | means                                |
 |--------------------+-------------+--------------------------------------|
-| =change:scheduled= | observation | a window was booked for you          |
+| =release:scheduled= | observation | a window was booked for you          |
 | =deploy:staging=   | *action*    | the workflow is deploying, right now |
 | =staging:passed=   | observation | the authorizing run passed on this SHA |
 | =deploy:production=| *action*    | the workflow is deploying to production |
@@ -2305,9 +2305,9 @@ has one sharp consequence.
 | kind          | examples                                      | emitted by      | forgeable? |
 |---------------+-----------------------------------------------+-----------------+------------|
 | *derived*     | =app:*=, =itil:standard=, =itil:normal=   | the labeller, from the diff | no -- resynced on every push |
-| *request*     | =change:requested=, =itil:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
+| *request*     | =release:start=, =itil:emergency=, =labeler:skip= | a human   | yes, and that is the point  |
 | *action*      | =deploy:staging=, =deploy:production=         | the workflow    | no -- it marks work in flight |
-| *observation* | =staging:passed=, =production:healthy=, =change:scheduled=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
+| *observation* | =staging:passed=, =production:healthy=, =release:scheduled=, =blocked:*= | a gate or the scheduler | *yes, and that is a hole* |
 
 A request label is meant to be added by hand. An observation label is a
 *claim that something was measured*, and GitHub does not distinguish a label
@@ -2320,7 +2320,7 @@ table:
 
 | shape                    | kind        | reads as              |
 |--------------------------+-------------+-----------------------|
-| =change:requested=       | request     | someone asked         |
+| =release:start=          | request     | someone asked         |
 | =deploy:<env>=           | action      | work is happening     |
 | =<subject>:<state>=      | observation | *a check came back*   |
 
@@ -2348,7 +2348,7 @@ That is the state machine rendered by the forge for free, and it is worth
 having on purpose rather than by accident. One caveat on reading it: GitHub
 says *skipped* for "the =if:= condition was not met", which looks like a
 decision and is really just "not this change's turn yet". A stage that is
-skipped because =change:requested= has not been added is indistinguishable, in
+skipped because =release:start= has not been added is indistinguishable, in
 that list, from one skipped because a guard refused.
 
 ** So a label-triggered workflow must re-derive, not trust
@@ -2814,10 +2814,10 @@ disagreed about the vocabulary, which is a sharper problem.
 | =deploy:<env>= | *intent, environment scope* | =deploy:staging= | START the deploy process into that environment |
 | =<env>:<action>= | *annotation* | =staging:e2e= | what HAPPENED inside that environment |
 | =blocked:<cause>= | *annotation* | =blocked:queue= | why a refusal happened |
-| =change:<state>= | *annotation* | =change:complete= | how far it got |
+| =release:<state>= | *annotation* | =release:completed= | how far it got |
 | =freeze=, =emergency= | *estate* | | properties of the WORLD. No prefix, because there is no subject to name -- they are not about a change |
 
-Read the colon twice. In =app:=, =itil:=, =change:=, =deploy:= and =blocked:=
+Read the colon twice. In =app:=, =itil:=, =release:=, =deploy:= and =blocked:=
 the part BEFORE the colon names the subject and the part after is its value. In
 =staging:e2e= and =production:healthy= the part before the colon is the
 ENVIRONMENT and the part after is the action taken in it. Two grammars, one
@@ -2829,8 +2829,8 @@ punctuation mark, which is why the models disagreed.
 
 It appeared 23 times in this document and was *declared nowhere* -- no row in
 =change/label-owners.tsv=, which is the file that says who may write a label.
-Every declared member of =change:*= is a LIFECYCLE state: =requested=,
-=scheduled=, =complete=, =failed=, =backed-out=, =backfill-owed=. Each answers
+Every declared member of =release:*= is a LIFECYCLE state: =started=,
+=scheduled=, =completed=, =failed=, =backed-out=, =backfill-owed=. Each answers
 /how far did this get/.
 
 "Emergency" is not a point in a lifecycle. It is what KIND of change this is,
@@ -2855,7 +2855,7 @@ It is a claim about the CHANGE. The bare =emergency= label on the holder issue
 is a claim about the WORLD, and stops everyone including its declarer. Same
 word, different subject, different scope.
 
-*** =change:start= is the human intent. =deploy:<env>= is not.
+*** =release:start= is the human intent. =deploy:<env>= is not.
 
 Corrected 2026-09-14, replacing an earlier reading in this document that made
 =deploy:<env>= the human's signal. It is not, and the distinction is the whole
@@ -2863,7 +2863,7 @@ entry point of the pipeline:
 
 | label | who | means |
 |-------+-----+-------|
-| =change:start= | *a person* | I am starting this change. It may be acting on an external change-request ticket, or on nothing at all |
+| =release:start= | *a person* | I am starting this change. It may be acting on an external change-request ticket, or on nothing at all |
 | =deploy:<env>= | *the pipeline* | begin the deploy process into that environment |
 | =<env>:<action>= | an instrument | what happened inside that environment |
 
@@ -2872,10 +2872,12 @@ A person says /start/. The pipeline decides what that means and sets
 past the thing that is supposed to decide whether deploying is allowed -- which
 is why =change/label-owners.tsv= gives =deploy:*= =human_add=no=.
 
-=change:start= is deliberately the ONLY thing a person has to say. Whether it
+=release:start= is deliberately the ONLY thing a person has to say. Whether it
 corresponds to a ticket in some other system is outside this pipeline: the
 label carries the fact that a human started it, and the external reference, if
-there is one, belongs in the change record rather than in the label.
+there is one, belongs in the change record rather than in the label. (Named
+=change:start= at the time of this decision; renamed to =release:start= on
+2026-09-16 -- see §Nomenclature sealed against ground truth.)
 
 This supersedes =change:requested= and =release= as two separate human signals.
 They said /I want this/ and /go now/, and the split earned nothing: nobody used
@@ -2920,7 +2922,7 @@ point in the process.
 #+end_quote
 
 That is exactly what =staging:e2e=, =staging:smoke=, =staging:uat=,
-=deploy:staging=, =blocked:queue= and =change:complete= are. They are a trace of
+=deploy:staging=, =blocked:queue= and =release:completed= are. They are a trace of
 execution, written at each step so a reader can see where control reached.
 
 *A print statement is a fine thing. These are print statements with side
@@ -2995,7 +2997,7 @@ The terms a rebuild must keep, and what each one is *not*.
 |------+----+--------|
 | *change* | a proposed alteration, with a record | a commit, a branch, or a PR |
 | *classification* | what KIND of change (standard/normal/emergency) | how far it has got |
-| *lifecycle* | how far it has got (requested/scheduled/complete/failed/backed-out) | what kind it is |
+| *lifecycle* | how far it has got (started/scheduled/completed/failed/backed-out) | what kind it is |
 | *window* | an entitlement to the path to production | permission to deploy, or a promise it will happen |
 | *berth* | the singleton lock on the path | a lock on an environment |
 | *observation* | a measurement, by an instrument, naming a build | a label |
@@ -3003,7 +3005,7 @@ The terms a rebuild must keep, and what each one is *not*.
 | *freeze* | a property of the WORLD, blocking everyone including its declarer | a property of a change |
 | *emergency (estate)* | something is wrong out there; everything stops | a classification |
 | *itil:emergency* | THIS change is the remedy; it passes the freeze | the estate being shut |
-| *change closure* | complete / backed-out / *abandoned* / superseded | a boolean, and never =expired= or =cancelled= |
+| *change closure* | completed / backed-out / *abandoned* / superseded | a boolean, and never =expired= or =cancelled= |
 | *window result* | passed / failed / cancelled / forfeited / *expired* | a property of the CHANGE |
 | *soak* | proof by use across N *later* deployments | a longer test run |
 | *control-plane* | changes how every FUTURE change is verified | a big change |
@@ -3029,7 +3031,7 @@ reached production (not =complete=), nothing about it was wrong (not =failed=
 (not =backed-out=). Its window lapsed and =change/reap.sh= closed that window
 =expired=, which is correct and says nothing about the change.
 
-So the change sat tombstoned with =change:end= and no closure code at all -- 
+So the change sat tombstoned with =release:end= and no closure code at all --
 unresolvable from the labels, because nothing on it says whether it needs
 resubmitting or merging. *A change nobody is driving any more is =abandoned=,
 and the absence of that word is why the state had no name.*
@@ -3044,6 +3046,66 @@ exempted its own carrier.
 
 Three subjects, three namespaces, and the estate's belongs on something that
 cannot be deployed.
+
+** Nomenclature sealed against ground truth (2026-09-20) [E]
+
+This document's own =change:*= base-verb vocabulary (=change:start=,
+=change:requested=, =change:scheduled=, =change:end=, =change:complete=) was
+stale: the live label schema and every consuming script
+(=change/driver.sh=, =change/scheduler.sh=, =change/settle.sh=,
+=change/abort.sh=, =change/queue.sh=, =change/watch.sh=, =change/state.sh=,
+=change/reap.sh=, =change/unaffected.sh=) use =release:start=,
+=release:started=, =release:scheduled=, =release:end=, =release:ended= and
+=release:completed=; =change:*= appears zero times in any script. Checked
+2026-09-20 against =gh label list --limit 200= (30 is the silent default page
+size; pass =--limit 200= or the read is wrong) and against a full grep of
+=change/*.sh=. §Labels, §One label starts a change, §Labels as state
+transitions and §The label grammar have been updated to read =release:*=
+throughout; occurrences left unchanged are deliberate:
+
+- =change:emergency= at §The label grammar names a *retired* label being
+  discussed as history (the classification rename to =itil:emergency= is a
+  different rename from the lifecycle one, and is already complete and
+  self-consistent where it stands).
+- The two rows citing =experiments/021-state-machines/merge.py='s measured
+  label-transition-mass percentages (§Measured: where the vocabulary's weight
+  actually sits) keep =change:requested/scheduled= and
+  =change:complete/failed/backed-out= because that script's own category
+  buckets are hardcoded to those exact strings (verified by reading
+  =merge.py=); relabelling the prose without rerunning the measurement would
+  misreport what was measured. =merge.py='s bucket definitions are themselves
+  now stale and are out of this document's scope to fix.
+
+Two label pairs the owner asked to be checked for orphaned/duplicate cruft,
+both resolved by reading =change/label-owners.tsv= plus every consuming
+script and workflow:
+
+- =hold:staging= vs =staging:hold= are NOT a live/dead pair by simple
+  absence -- both are referenced in code. =staging:hold= is canonical and
+  live (=change/label-owners.tsv= line 42; read by =.github/workflows/
+  promote.yml='s HoldGuard, and by =change/driver.sh=, =change/queue.sh=,
+  =change/abort.sh=). =hold:staging= is declared *REJECTED* in
+  =change/label-owners.tsv= line 36 (superseded 2026-09-13 by =freeze= plus
+  approval discipline) and is a documented, tracked bug that it is still
+  enforced in three scripts anyway -- =gates/preflight.sh=,
+  =change/guard4.sh=, =change/activate.sh= -- exactly as ADR 0005 (
+  =docs/adr/0005-labels-are-modelled-before-they-are-built.org=) already
+  names it. Not this document's defect to fix by itself; flagged for the
+  owner to retire the dead enforcement or the dead label.
+- Bare =emergency=/=freeze= vs =itil:emergency=/=blocked:freeze= are *not*
+  duplicates at all -- =change/label-owners.tsv= lines 57-60 document four
+  distinct, all-live labels at two different scopes: =emergency= and
+  =freeze= are ESTATE-level facts (read by =gates/preflight.sh=, written by
+  no in-tree automation, symmetric by design -- §The label grammar,
+  §itil:emergency stated once); =itil:emergency= is a PR's own ITIL
+  classification (grants that PR an exemption); =blocked:freeze= is
+  preflight's own set-and-cleared annotation of a refused PR. No cruft here.
+
+A further, secondary-tier rename (=staging:hold= to =release:hold=,
+=release:schedule= to sit beside =release:scheduled=) is proposed in
+=research/findings/release-grammar.org= and =research/adoption.org= and is
+*not yet live* -- neither =release:hold= nor =release:schedule= (no trailing
+"d") exists in the live label schema. Do not write either.
 
 * Version
 

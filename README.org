@@ -311,8 +311,8 @@ a lower level's words mean.
 |-------+---------------------------------------------------------------+----------------------------------------------------------------------|
 | 0 Base | =release:start=, =release:end=, =release:skip=; a person, a runner | say go, say stop, say nothing to release -- no environments, no calendar, no branching model required |
 | 1 Acknowledged | the runner answers each verb with its participle (=release:started=, =release:ended=, =release:skipped=) | tell whether anything is listening, from the ticket alone (024 F4) |
-| 2 Held | =release:hold=, one person-owned pause at one scope | let a person look before promotion, without a second stop mechanism competing with it |
-| 3 Scheduled | =release:schedule= / =release:scheduled=, a calendar, windows | book a slot, defer a start to it, reap one that lapsed unattempted |
+| 2 Held | =staging:hold=, one person-owned pause at one scope | let a person look before promotion, without a second stop mechanism competing with it |
+| 3 Scheduled | =release:scheduled=, a calendar, windows | book a slot, defer a start to it, reap one that lapsed unattempted |
 | 4 Estate | environment tiers, a berth and its lock, guards, an =itil:*= classification | what this repository demonstrates in full: staging, production, blue/green, freeze, emergency |
 
 A repository claiming level 0 and nothing else is not doing less of this
