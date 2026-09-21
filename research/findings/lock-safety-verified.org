@@ -1,0 +1,158 @@
+#+TITLE: We can't get locked: TLA+ and the simulator agree, and the harness comparing them had two real bugs
+#+DATE: 2026-09-21
+#+PROPERTY: header-args :mkdirp t
+
+* Status
+
+A verification run, not a proposal -- everything below was actually
+executed on 2026-09-21, against the tree at commit =896289b=. Where a
+number appears, it is a number a tool printed, not an estimate.
+
+* The question
+
+Whether the pipeline's berth-lock mechanism can reach a state where a
+change is stuck holding (or waiting on) a lock with no way forward --
+"locked" in the sense that matters operationally, not TLC's generic
+state-graph deadlock (which is deliberately *not* what is being checked
+here; see §Deadlock checking is off, on purpose).
+
+* Deadlock checking is off, on purpose
+
+All three =.cfg= files (=StandardChange.cfg=, =Concurrent.cfg=,
+=Labels.cfg=) carry =CHECK_DEADLOCK FALSE=. This is not an oversight: a
+merged, settled change is a legitimate terminal state in every one of
+these models, and TLC's built-in deadlock check would flag every ordinary
+completion as a "deadlock" unless the spec were written to stutter forever
+past it, which none of these are. So "can we get locked" is answered by a
+*named safety invariant*, not by TLC's generic check -- specifically
+=LockRefusalResets= (Labels.tla) and =NoSweptLock= (StandardChange.tla,
+the D21 scenario: a lock swept out from under its holder).
+
+* What was run, and what it found
+
+** =tla/check.sh= -- the full positive/negative suite
+
+Ran to completion. Every positive run passed ("No error has been found");
+every negative run -- each one flipping a single guard constant to =FALSE=
+-- correctly reproduced the *specific* violation that guard exists to
+prevent, including:
+
+#+begin_example
+== labels negative: LockResets=FALSE   must violate LockRefusalResets  FAIL as required
+== labels positive: all seventeen rules on .................... PASS
+== both directions confirmed
+#+end_example
+
+"FAIL as required" is =check.sh='s own phrasing for "the negative model
+correctly failed to verify" -- i.e. TLC found the counterexample it was
+supposed to find. A model that can only pass proves nothing; this is why
+every one of the seventeen =Labels.tla= rules, plus =StandardChange.tla='s
+=Guard4b=/=ProdFirst=/=LockOwned= and =Concurrent.tla='s
+=MergeGuard4b=/=LabellerOwns=, gets both directions checked, not just the
+positive one.
+
+** =gates/simulate-gates.py --check=
+
+#+begin_example
+simulate-gates: closed form and simulation agree
+#+end_example
+
+The berth-soak closed-form expression and its Monte-Carlo simulation
+produce the same throughput/wait numbers -- the =2.2 days=/=26-hour
+mean wait=/=100% emergency-bypass= figures already cited in
+=research/substrates/conformance-ladder.org= and in
+=research/findings/auto-progression-to-merge.org= rest on a
+self-consistent model, checked directly rather than assumed consistent.
+
+** =sim/label_sim.py=, run directly
+
+With interference disabled (=--disable Interfere=): 3,357,912 states
+explored to depth 10 (bound reached, not exhausted), no violation --
+=VERDICT holds=.
+
+With interference *enabled* (the default): =NoUnbookedDeploy= violates at
+depth 1, immediately, regardless of any other setting. This is not a bug;
+it is exactly what the simulator's own source comments already say (in
+capitals, =sim/label_sim.py= lines ~277-279): four label-set properties
+(=NoDraftDeployed=, =NoUnbookedDeploy=, =BerthHasCause=, and =OneLifecycle=
+by extension) are *MISNAMED* -- they read as "no unbooked deploy ever
+happens" but actually check "no unbooked *label* exists," and an
+uncoordinated writer can set a label without a booking (deploy-staging.yml
+does; a person can; a second driver did, 2026-09-15 02:51:42Z). The actual
+*deploy* action is refused at deploy-time from a verified record, not
+trusted from the label -- the model just hadn't caught up to say so
+precisely. Confirmed directly this session; not a new finding, but now
+independently re-verified rather than taken on the comment's word.
+
+** =sim/cross_check.py= -- asks TLC and the simulator the same question, requires the same answer
+
+This is where two real bugs in the *verification tooling itself* turned
+up -- not in the pipeline, not in either model, in the harness comparing
+them.
+
+*** Bug 1: no bounded JVM heap
+
+=tla/check.sh= already carries a comment naming an incident: "an unbounded
+JVM under a loaded desktop got the whole gate killed for memory
+(2026-09-14)," and fixed it with =-Xmx${TLC_HEAP:-3g}=. =sim/cross_check.py=
+had the identical exposure and never got the fix -- it was killed for
+memory three times in a row this session before that was noticed and
+patched (now respects =TLC_HEAP=, same default). The fix is generic and
+not specific to any one machine's load; a script performing the same
+JVM invocation as a sibling script that already learned this lesson should
+not have to relearn it.
+
+*** Bug 2: the two checkers were being asked different questions
+
+=cross_check.py='s =sim()= function never disabled =Interfere=.
+=Labels.tla= has no =Interfere= action at all -- it is not one of the
+model's seventeen constants, and TLC's "all rules on" run explored *102,726,288*
+states with no violation. Meanwhile =label_sim.py='s default (interference
+on) falls to =NoUnbookedDeploy= at depth 1 regardless of which rule was
+actually under test, per §label_sim.py above. Left uncontrolled, every row
+of the comparison was answering "does this rule protect against
+=NoUnbookedDeploy= under uncoordinated interference," which is a different,
+and for the TLA+ side unanswerable, question -- =Labels.tla= was never
+asked it, because it has no way to be. Result before the fix: *3 of 17*
+questions answered the same way. After adding =--disable Interfere=
+alongside whichever rule is under test: *17 of 17.*
+
+#+begin_example
+  (all on)             holds (102726288 states)       holds (bound 12, not exhausted) yes
+  DraftGuard           violated NoDraftDeployed       violated NoDraftDeployed       yes
+  LockResets           violated LockRefusalResets     violated LockRefusalResets     yes
+  ... [all 17 rows agree]
+  17/17 questions answered the same way by both checkers
+#+end_example
+
+Confirmed by hand first, before touching the script: running
+=label_sim.py --disable DraftGuard= alone reproduces the masking
+(=violated NoUnbookedDeploy=, the wrong answer); adding
+=--disable Interfere= alongside it correctly reproduces
+=violated NoDraftDeployed=, matching TLC. The fix to =cross_check.py= makes
+that pairing the default for every row rather than something done by hand.
+
+* The answer
+
+=LockRefusalResets= holds -- confirmed by TLC (both the positive run over
+100M+ states and the negative run that correctly fails when =LockResets=
+is disabled) and independently by the Python simulator, and the two are
+now verified to be answering the *same* question rather than two
+superficially similar ones. =NoSweptLock= (the D21 scenario, a lock swept
+out from under its holder) passed the same way in =StandardChange.tla=.
+
+Nothing above claims TLC's generic deadlock check was run -- it was not,
+deliberately, for the reason in §Deadlock checking is off, on purpose. What
+was checked is narrower and more useful: not "does every state have a
+successor" but "can a change end up holding, or waiting behind, a lock that
+never releases." That is what =LockRefusalResets= and =NoSweptLock= name,
+and both hold.
+
+* Fixed, pushed
+
+=sim/cross_check.py= (commit =9dfeb06=): bounded JVM heap
+(=TLC_HEAP=, default =3g=), and =--disable Interfere= added to every
+=sim()= invocation. Neither fix touches =tla/*.tla=, =sim/label_sim.py=, or
+any pipeline script -- the models were already correct; the tool
+comparing them was not controlling for a confound its own sibling
+document already knew about.
