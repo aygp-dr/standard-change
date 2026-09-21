@@ -56,3 +56,6 @@ research/appendix/
 
 # skill-creator eval workspace: regenerable test transcripts and benchmarks
 skills/standard-change-workspace/
+
+# tangled from research/findings/auto-progression-to-merge.org -- regenerable
+research/findings/reference/

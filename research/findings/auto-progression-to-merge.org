@@ -1,0 +1,304 @@
+#+TITLE: Auto-progression to merge: the two gates between release:start and the forge's own record
+#+DATE: 2026-09-21
+#+PROPERTY: header-args :mkdirp t
+
+* Status
+
+Documents existing, running behavior in =change/*.sh= and
+=.github/workflows/promote.yml= -- nothing here is proposed or speculative.
+Written because the mechanism is real but was never assembled into one
+place: it currently lives split across a workflow file and two scripts, each
+commented for the reader who is already looking at it, none of them written
+for a reader who is not. Citations are to real line numbers, checked
+2026-09-21; re-check before trusting a line number against a tree that has
+moved.
+
+The =#+begin_src= blocks below carry =:tangle= targets under
+=reference/auto-progression/=, resolved relative to this file
+(org-babel's default), so tangling writes to
+=research/findings/reference/auto-progression/= -- not to =change/= or
+=.github/workflows/=. Tangling this file produces a *standalone,
+illustrative* mirror of the real logic -- runnable on its own for study or
+for mocking in a scratch repo (see §Testing this in a minimal context) --
+and will never overwrite the actual pipeline scripts, which stay governed by
+their own tangle discipline (=spec.org= tangles nothing; =change/*.sh= is
+hand-maintained source, not a tangle target of anything in this repo).
+
+* The two gates, named
+
+A change that says =release:start= crosses exactly two gates before the
+forge's own merge record becomes the account of what happened. Both are
+re-derived at the moment they matter, not trusted from an earlier point in
+time -- the repo's own recurring lesson (=research/findings/concurrent-change.org=,
+kind 4: "an observation outlives the build it described") is why neither
+gate reads a label and stops there.
+
+** Gate 1 -- promotion to production (staging -> production)
+
+Fires on a =labeled= event, when the label added is =staging:smoke= or
+=staging:uat= (.github/workflows/promote.yml:14, the =if:= condition --
+promotion fires on whichever of the two lands last, since 2026-09-16, #60).
+
+Three checks, in order, each one capable of stopping everything after it:
+
+1. */Gates green on the head SHA, re-derived, not assumed./* Reads
+   =check-runs= for that exact SHA and takes the *latest run per gate name*,
+   because every label event re-triggers =gate.yml= and an in-progress
+   duplicate must read as "not yet," not as "red" -- promotion failed on #93
+   for exactly the opposite mistake, four seconds after =staging:smoke=
+   landed (promote.yml:20-33). =gate-selftest= must itself appear in that
+   set, or the gate results it would have validated are void
+   (promote.yml:32).
+
+2. */A person's =staging:hold= stops this, here./* Not earlier, not
+   implicitly -- checked at the moment of promoting, nowhere else
+   (promote.yml:39-47). This is the *only* place =staging:hold= is ever
+   checked in the whole pipeline.
+
+3. */All three staging observations, on this head./* =staging:e2e=,
+   =staging:smoke=, =staging:uat= -- the third is a person's acceptance and
+   cannot be re-derived by any script, which is exactly why the run that
+   lands =deploy:production= is the one where the *last* of the three
+   arrives (promote.yml:49-, the =req= step).
+
+If all three pass, the job lands =deploy:production= itself; nothing beyond
+that workflow makes the actual production deployment happen. That is a
+separate consumer of the label, out of scope for this note.
+
+** staging:hold, in full -- because nobody else writes this down
+
+=staging:hold= is *exclusively a person's label.* Grep the whole =change/=
+tree and no script ever calls
+=gh pr edit ... --add-label staging:hold=. =change/driver.sh:88= says so in
+a comment: "the person's own words (=staging:hold=, =release:backfill-owed=)."
+It exists at level 2 of the compliance ladder (=README.org=, "Levels of
+compliance": "=release:hold=, one person-owned pause" -- corrected
+2026-09-20 in the spec-sealing pass to read =staging:hold=, the label that
+actually exists).
+
+*Clearing it is where the gap is.* No script ever *deliberately* removes
+=staging:hold= either. It appears in exactly two label-clearing sweeps:
+
+- =change/abort.sh:108= -- cleared along with every other working label when
+  a change is aborted.
+- =change/queue.sh:60= -- cleared when a change is dequeued.
+
+Both are *incidental*: =staging:hold= is one name among a dozen being wiped
+because the change record itself is closing, not because anyone decided the
+hold specifically should lift. There is no =change/unhold.sh=, no skill
+equivalent to =release-start='s, no command whose job is "a person now says
+proceed." The only way to lift a hold on a change that is *not* being
+aborted or dequeued is a bare =gh pr edit --remove-label staging:hold=,
+typed by hand, undocumented anywhere as the sanctioned way to do it. Compare
+=change/driver.sh=, which treats =staging:hold= as one of a small set of
+labels a person may hold *at all* (driver.sh:93, the case arm that leaves
+=release:start=, =staging:hold=, =release:backfill-owed=, =blocked:lock=,
+=app:*=, =itil:*=, =control-plane= alone rather than treating them as the
+driver's own state) -- the write side is specified; the *un*-write side
+never was.
+
+** Gate 2 -- settlement (production -> the merge)
+
+=change/settle.sh <pr>= is the terminal transition, and its own header
+comment states the design precisely: the terminal state is
+=release:completed=, not =production:healthy= and not =staging:uat=,
+because the first is a statement about *the change record* and the other
+two are statements about *a build* -- and observations about a build expire
+when the head moves; a change record does not, "because it is a statement
+about something that happened rather than about something that is currently
+true" (settle.sh:4-14).
+
+Order of operations, each one capable of stopping settlement outright:
+
+1. */Production is asked what it is serving, right now./* Not "was healthy
+   once" -- an HTTP probe against the live front door, compared against the
+   PR's current head SHA (settle.sh:38-42). This is guard 5, re-derived
+   directly rather than trusted from a stale label -- the file's own
+   rationale (settle.sh:44-67) is worth reading in full: requiring the label
+   *in addition to* the live probe once let a workflow that cannot reach
+   production veto a real settlement by withdrawing a measurement it never
+   had standing to take, three times, on #9.
+2. */e2e and smoke, re-derived against the current head; =staging:uat=,
+   required as a label./* The first two are re-checked the same way guard 4
+   checks review records, because a second operator's label sweep once
+   withdrew every label from #92 *after* production had gone healthy and
+   guard 4 had authorized it -- and =settle.sh= read the labels instead of
+   the record, and refused a change that had, in fact, settled
+   (settle.sh:69-83). =staging:uat= alone stays label-gated: a person's
+   acceptance cannot be re-run by any script, so a person's withdrawal of it
+   must stand (settle.sh:78-79).
+3. */Guard 3, reported, not enforced, here./* Was the deployment inside a
+   booked window? Refusing at settlement would leave production ahead of
+   trunk, which is worse than the deviation it would be objecting to -- so
+   this step records a deviation in the PIR rather than blocking
+   (settle.sh:98-117).
+4. */=mergeStateStatus= re-checked, because trunk can move between the
+   promotion workflow and this script./* =BEHIND= or =DIRTY= stops
+   settlement and marks the change =blocked:diverged= (settle.sh:135-141).
+5. */=release:completed= is written -- before the merge, not after./*
+   "Set before the merge, because the merge is what follows completion, not
+   what constitutes it" (settle.sh:143-144). This is the fact the user
+   asked about: the participle the runner auto-applies once everything
+   above has passed, and it is applied *before* =gh pr merge= runs, not as
+   a confirmation afterward.
+6. */The merge./* =gh pr merge --squash --delete-branch=, and a failed
+   merge call is treated as fatal to the rest of settlement -- checked
+   directly, not just attempted and assumed -- because a prior version of
+   this script said "merged" for a PR that was still open and conflicting,
+   observed for real on #40 (settle.sh:161-177, the comment names the
+   incident in full).
+7. */The PIR is posted, then the working labels are cleared, then
+   =release:completed= itself is cleared and =release:ended= written./*
+   The record (the merge commit, =mergedAt=, the PIR comment) outlives the
+   labels on purpose -- see =README.org=, "The merge is the tombstone": on
+   the merged path the tombstone is =mergedAt=, never a label.
+
+* The whole shape, one table
+
+| step | what's asked | where | stops everything after it on failure |
+|---+---+---+---|
+| 1 | gates green on this exact head SHA | promote.yml | yes |
+| 2 | staging:hold absent | promote.yml | yes, exit 78 |
+| 3 | staging:e2e, staging:smoke, staging:uat all on this head | promote.yml | yes (waits for the last one) |
+| -- | =deploy:production= lands; a separate consumer deploys | -- | -- |
+| 4 | production observed serving this head, asked now | settle.sh | yes |
+| 5 | e2e/smoke re-derived on this head; staging:uat present as a label | settle.sh | yes |
+| 6 | deployed inside a booked window | settle.sh | no -- recorded as a deviation in the PIR |
+| 7 | mergeStateStatus is clean (not BEHIND/DIRTY) | settle.sh | yes, marks blocked:diverged |
+| 8 | release:completed written | settle.sh | (this is the fact itself, not a check) |
+| 9 | gh pr merge --squash --delete-branch | settle.sh | yes, exits 8, settlement stops |
+| 10 | PIR posted, labels cleared, release:ended written | settle.sh | -- terminal |
+
+* Reference implementation (tangle target, illustrative only)
+
+Mirrors steps 1-3 and 4-9 above as two standalone scripts. These are a
+*teaching mirror*, trimmed of the incident-specific hardening comments and
+the live HTTP probes the real scripts use -- an agent wanting the actual,
+battle-tested version should read =change/settle.sh= and
+=.github/workflows/promote.yml= directly, cited throughout this file by line
+number. Tangling this file writes these two files under =reference/=; it
+does not touch =change/= or =.github/workflows/=.
+
+#+begin_src sh :tangle reference/auto-progression/gate1-promote.sh :shebang "#!/bin/sh" :mkdirp t
+# gate1-promote.sh <pr> -- illustrative mirror of .github/workflows/promote.yml
+# Real thing: fires on a `labeled` event for staging:smoke or staging:uat.
+# This mirror takes the PR number and re-derives the same three checks.
+set -eu
+pr="${1:?usage: gate1-promote.sh <pr>}"
+R="${GH_REPO:-${GITHUB_REPOSITORY:?set GH_REPO or GITHUB_REPOSITORY}}"
+
+sha=$(gh pr view "$pr" --repo "$R" --json headRefOid -q .headRefOid)
+labels=$(gh pr view "$pr" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')
+
+# 1. gates green on this exact head -- real version waits up to 10 minutes
+#    for in-progress runs and takes latest-per-gate-name. This mirror does
+#    one check, no retry loop -- see promote.yml:20-33 for the real one.
+bad=$(gh api "repos/$R/commits/$sha/check-runs?per_page=100" \
+        --jq '[.check_runs[] | select(.conclusion != "success")] | length')
+[ "$bad" -eq 0 ] || { echo "gate(s) not green on $sha" >&2; exit 1; }
+
+# 2. staging:hold stops this here, and only here.
+case " $labels " in
+  *" staging:hold "*) echo "staging:hold is on #$pr -- not proceeding" >&2; exit 78 ;;
+esac
+
+# 3. all three staging observations, on this head (label presence only --
+#    real version re-derives e2e/smoke against the head SHA via evidence.sh).
+for req in staging:e2e staging:smoke staging:uat; do
+  case " $labels " in
+    *" $req "*) ;;
+    *) echo "not yet: $req not recorded" >&2; exit 0 ;;
+  esac
+done
+
+gh pr edit "$pr" --repo "$R" --add-label deploy:production >/dev/null
+echo "deploy:production landed on #$pr @ $(echo "$sha" | cut -c1-7)"
+#+end_src
+
+#+begin_src sh :tangle reference/auto-progression/gate2-settle.sh :shebang "#!/bin/sh" :mkdirp t
+# gate2-settle.sh <pr> -- illustrative mirror of change/settle.sh
+# Real thing probes a live front door for X-Build-Sha; this mirror takes
+# "what production is serving" as an argument instead, so it can run without
+# a real estate. See change/settle.sh for the actual HTTP-probe version.
+set -eu
+pr="${1:?usage: gate2-settle.sh <pr> <production-sha>}"
+served="${2:?usage: gate2-settle.sh <pr> <production-sha>}"
+R="${GH_REPO:-${GITHUB_REPOSITORY:?set GH_REPO or GITHUB_REPOSITORY}}"
+
+sha=$(gh pr view "$pr" --repo "$R" --json headRefOid -q .headRefOid)
+short=$(echo "$sha" | cut -c1-7)
+labels=$(gh pr view "$pr" --repo "$R" --json labels -q '[.labels[].name]|join(" ")')
+
+# 4. production observed serving this head, asked now (caller supplies the
+#    observation; the real script asks a live host itself).
+[ "$served" = "$short" ] || { echo "production serves '$served', not $short" >&2; exit 1; }
+
+# 5. staging:uat required as a label (e2e/smoke re-derivation omitted in
+#    this mirror -- see change/evidence.sh and settle.sh:69-83 for the real
+#    record-over-label logic).
+case " $labels " in
+  *" staging:uat "*) ;;
+  *) echo "staging:uat missing -- no person's acceptance on this head" >&2; exit 1 ;;
+esac
+
+# 7. mergeStateStatus must be clean.
+ms=$(gh pr view "$pr" --repo "$R" --json mergeStateStatus -q .mergeStateStatus)
+case "$ms" in
+  BEHIND|DIRTY) echo "main moved during deploy ($ms)" >&2; exit 9 ;;
+esac
+
+# 8. release:completed, before the merge.
+gh pr edit "$pr" --repo "$R" --add-label release:completed >/dev/null
+echo "release:completed on #$pr -- merging"
+
+# 9. the merge, checked, not assumed.
+if gh pr merge "$pr" --repo "$R" --squash --delete-branch >/dev/null 2>&1; then
+  echo "merged, branch deleted"
+else
+  echo "REFUSED: merge failed, settlement stops here" >&2
+  exit 8
+fi
+#+end_src
+
+* Tested in a minimal context [E]
+
+Done, 2026-09-21, against a real disposable scratch repo
+(=jwalsh/auto-progression-test=, private, archived after), because every
+incident cited above (#9, #40, #92, #93, #60) is evidence about individual
+guards under production load, not evidence that the *whole* chain -- gate 1
+through gate 2 through an actual merge -- had ever been run against a clean,
+minimal target on purpose.
+
+Setup: the seven labels above, a trivial =gate-selftest= workflow that
+always succeeds (real check-runs, not faked ones -- =gate1-promote.sh='s
+check-run query needs a genuine =check-runs= API response to test
+honestly), one branch, one real PR.
+
+Result: every step behaved exactly as documented above, observed directly
+rather than inferred from the source:
+
+1. =release:start= alone, gates green, no staging evidence -- "not yet:
+   staging:e2e not recorded," exit 0. Correctly does not proceed.
+2. All three staging labels added, plus =staging:hold= -- "staging:hold is
+   on #1 -- not proceeding," *exit 78*, no =deploy:production=. The hold
+   overrides everything else, exactly as designed.
+3. =staging:hold= removed by hand -- there being no other way, confirmed by
+   trying to find one and finding none -- =gate1= immediately lands
+   =deploy:production=.
+4. =gate2-settle.sh 1 <head-sha>= (the local head, standing in for a real
+   production probe reporting what it serves): =release:completed= applied,
+   then =gh pr merge --squash --delete-branch= ran for real. The PR's final
+   state: =MERGED=, a real =mergedAt= timestamp, =release:completed= present
+   alongside the rest of the trail.
+
+*One honest limitation surfaced by building the test, not by running it.*
+=gate1-promote.sh='s check-run gate is =bad=$(... | length); [ "$bad" -eq 0
+]= -- if the query returns *zero* check-runs (no CI ever ran on this SHA at
+all), =bad= is trivially =0= and the gate vacuously passes. This test never
+exercised that path, because it deliberately stood up a real, passing
+=gate-selftest= workflow first. The real =promote.yml= does not have this
+gap: it explicitly requires the name =gate-selftest= to appear among the
+completed runs (promote.yml:32), which the mirror above dropped for brevity.
+Worth fixing in the mirror if it is ever used for more than illustration --
+left as-is here so the diff between "the real thing" and "the simplified
+teaching version" stays visible rather than quietly patched away.
