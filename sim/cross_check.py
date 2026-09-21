@@ -42,7 +42,11 @@ def tlc(rule):
             cfg = cfg.replace(f"{rule} = TRUE", f"{rule} = FALSE")
         (td / f"{name}.tla").write_text(tla)
         (td / f"{name}.cfg").write_text(cfg)
-        out = subprocess.run(["java", "-XX:+UseParallelGC", "-cp", JAR, "tlc2.TLC",
+        # Bounded heap: an unbounded JVM under a loaded desktop got check.sh's
+        # run killed for memory (2026-09-14, tla/check.sh's own comment).
+        # This script had the same exposure and hadn't been given the fix.
+        heap = os.environ.get("TLC_HEAP", "3g")
+        out = subprocess.run(["java", f"-Xmx{heap}", "-XX:+UseParallelGC", "-cp", JAR, "tlc2.TLC",
                               "-workers", "auto", "-cleanup", name],
                              cwd=td, capture_output=True, text=True).stdout
     m = re.search(r"Invariant (\w+) is violated", out)
@@ -51,7 +55,16 @@ def tlc(rule):
     return verdict, int(m2.group(1)) if m2 else None
 
 def sim(rule):
-    argv = [sys.executable, str(ROOT / "sim" / "label_sim.py"), "--bound", str(BOUND), "--walks", "0"]
+    # Labels.tla has no Interfere action at all -- Interfere isn't in RULES,
+    # isn't a TLA+ constant, and TLC's (all on) run holds over 100M+ states
+    # while label_sim.py's Interfere-on default falls to NoUnbookedDeploy at
+    # depth 1 (documented in label_sim.py as a MISNAMED-invariant limitation,
+    # not a defect). Left uncontrolled, every row asks label_sim a different
+    # question than the one TLC answers, and NoUnbookedDeploy masks whatever
+    # the disabled rule was actually meant to elicit -- 14/17 rows disagreed
+    # for this reason alone before the fix, confirmed 2026-09-21.
+    argv = [sys.executable, str(ROOT / "sim" / "label_sim.py"), "--bound", str(BOUND),
+            "--walks", "0", "--disable", "Interfere"]
     if rule:
         argv += ["--disable", rule]
     out = subprocess.run(argv, capture_output=True, text=True).stdout
