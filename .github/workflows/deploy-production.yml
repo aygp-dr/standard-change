@@ -11,7 +11,7 @@ jobs:
     environment: production          # require reviewers here for itil:normal
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Guard 2 AGAIN, here and not only in promote.yml. promote.yml is gated on
       # the staging:passed label, so the emergency path never reaches it; without
       # this step guard 2 has exactly the bypass the spec says it does not have.
