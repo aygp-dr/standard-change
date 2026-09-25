@@ -63,6 +63,7 @@ described in Part I without touching the labels it already has.
 
 * Part V: History of the ideas
 #+INCLUDE: "history/pipeline-history.org" :minlevel 3
+#+INCLUDE: "history/deployment-artifact-history.org" :minlevel 3
 #+INCLUDE: "history/release-strategies.org" :minlevel 3
 #+INCLUDE: "history/reference-survey.org" :minlevel 3
 #+INCLUDE: "history/release-standards.org" :minlevel 3

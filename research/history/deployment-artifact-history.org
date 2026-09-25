@@ -1,0 +1,132 @@
+#+TITLE: Before the artifact/gate split: Zope, OpenACS, and what serverless changed
+#+DATE: 2026-09-25
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+=research/history/pipeline-history.org= already covers microservices
+("you build it, you run it," Amazon 2006) and container-based deploys.
+Three earlier and later systems were missing entirely: Zope, OpenACS, and
+the serverless/FaaS shift. All three answer the same question this repo's
+own model turns on -- *is the deployable thing a versioned artifact, and is
+there a gate between publishing it and it going live* -- and they answer it
+three different ways, none of which is "yes to both" until the third one.
+
+* Zope: edit-time and deploy-time are the same act
+
+Zope (a Python application server, late 1990s) stores application objects
+in ZODB, a live transactional object database, "not files on a file
+system, as is usual with most web servers" [[https://en.wikipedia.org/wiki/Zope][Wikipedia: Zope]]. Two deploy
+paths, both real, neither involving a versioned artifact:
+
+- *Product Refresh.* Extension code ("Products") were filesystem Python
+  packages under =Products/=. From Zope 2.4 on, a =refresh.txt= marker plus
+  a ZMI button called Python's =reload()= on the product's modules and
+  cleared ZODB's class cache, live, no restart [[https://zope.readthedocs.io/en/2.12/INSTALL.html][Zope INSTALL docs]]; [[https://engineering.purdue.edu/Control_Panel/Products/OFSP/Help/Product_Refresh.stx][Product
+  Refresh help page]]. No numbered-release discipline found for this path --
+  edit the file, click refresh, that *is* production.
+- *Through-the-web (TTW) editing.* DTML templates and Python Scripts were
+  written directly in the ZMI browser and persisted straight into ZODB.
+  Zope's own current docs: TTW code "lived in the database with no version
+  control" [[https://zope.readthedocs.io/en/latest/zopebook/ZopeArchitecture.html][Zope Architecture docs]]. There is no artifact in this path at all
+  -- the thing being edited and the thing being served are the same ZODB
+  object.
+
+Neither path has anything resembling review or staged promotion. This is
+the zero point on the axis this repo's whole model lives on: no artifact,
+no gate, because there was never a moment where "written" and "live" were
+two different states of the world.
+
+* OpenACS: a versioned artifact, a convention instead of a gate
+
+OpenACS (built on AOLserver/NaviServer, descended from ArsDigita's ACS) is
+closer to a modern release than Zope, but the gap is instructive. Numbered
+release tarballs are real and current -- =openacs.org='s [[https://openacs.org/projects/openacs/download/][download page]]
+ships e.g. 5.10.1 Final. The documented *non-CVS* upgrade path is a literal
+overwrite onto a live tree: =tar xzf openacs-5-1.tar.gz= then
+=cp -r openacs-5-1/* openacs-4= [[https://openacs.org/doc/upgrade-openacs-files][upgrade-openacs-files]]. A CVS-based path
+(freeze, import, stage, apply) is documented too, for production use.
+
+Package-level versioning has a real name and a real mechanism: *APM*, the
+Application Package Manager [[https://openacs.org/doc/apm-design][apm-design]]; [[https://openacs.org/doc/tutorial-upgrade-scripts][tutorial-upgrade-scripts]]. APM tracks
+installed packages in database tables, enforces a version grammar, and runs
+numbered SQL upgrade scripts (=upgrade-OLDVERSION-NEWVERSION.sql=) when it
+finds them. The documentation states the direction of causality plainly:
+"upgrades work by first changing the filesystem and then using the APM to
+scan the filesystem, find upgrade scripts, and execute them" -- the file
+lands, and the database migration follows automatically, unconditionally,
+the moment APM next scans.
+
+*This is the finding worth keeping.* OpenACS has half of the split this
+repo cares about -- the tarball is a versioned artifact -- but the other
+half is procedural, not mechanical: APM's scan-and-execute has no gate
+built in. The documentation's own safety advice (freeze first, stage, test,
+then apply) is human discipline layered on top of a tool that will run
+unconditionally the moment files land. Merge and deploy are decoupled by
+*convention*, never by a required check -- which is exactly the gap a
+label the labeller re-derives, rather than a person remembering to follow
+a runbook, is meant to close.
+
+* Serverless: the first of the three with both halves
+
+AWS Lambda's model has both an immutable artifact and a mechanically
+enforced gate between publishing it and routing traffic to it:
+
+- *Versions* are immutable code+config snapshots with their own ARN;
+  =$LATEST= is the only mutable pointer [[https://docs.aws.amazon.com/lambda/latest/dg/configuration-versions.html][configuration-versions]].
+- *Aliases* are named pointers (e.g. =prod=) that callers actually invoke --
+  "going live" is a pointer update, not a redeploy [[https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html][configuration-aliases]].
+- *Weighted aliases* split traffic by percentage across two versions, the
+  primitive under canary and blue/green rollout
+  [[https://docs.aws.amazon.com/lambda/latest/dg/configuring-alias-routing.html][configuring-alias-routing]].
+- *CodeDeploy for Lambda* builds a real gate on top of the pointer:
+  =Canary10Percent5Minutes=, =Linear10PercentEvery10Minutes=,
+  =AllAtOnce=, with alarm-triggered automatic rollback
+  [[https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations.html][deployment-configurations]]. AWS's own Well-Architected serverless lens
+  names this pattern "immutable infrastructure" explicitly
+  [[https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_tracking_change_management_immutable_infrastructure.html][rel_tracking_change_management]]. Cloudflare Workers ships a near-identical
+  versions/deployments split [[https://developers.cloudflare.com/workers/versions-and-deployments/][versions-and-deployments]].
+
+Two sources make the comparison to git-gated promotion explicit rather than
+leaving it inferred -- [[https://github.com/clowdhaus/trunk-based-artifact-promotion][clowdhaus/trunk-based-artifact-promotion]] and
+[[https://blog.inflection.com/gradual_deployments_with_serverless/][Inflection Engineering's "Gradual Deployments with Serverless"]] both argue
+"build once, deploy many": CI builds one immutable artifact per merge, and
+promotion (the alias move) is a separate, later, independently-gated act.
+That is structurally the same split this repo makes -- merge is not deploy;
+a label authorizes promotion -- but it is worth being honest that these are
+blog-tier sources, not an established consensus, and that AWS's own
+documentation states the mechanism without drawing the git-gating analogy
+itself.
+
+* The line across all three
+
+| system | versioned artifact? | mechanical gate before "live"? |
+|--------+----------------------+----------------------------------|
+| Zope (Product Refresh / TTW) | no -- edit *is* deploy | no |
+| OpenACS (tarball + APM) | yes | no -- convention, not mechanism |
+| Lambda / Workers (versions + aliases) | yes | yes -- CodeDeploy / gradual rollout |
+
+Zope and OpenACS both predate, and structurally reject, the split between
+"artifact published" and "artifact live." Zope collapses it entirely.
+OpenACS has the artifact half but not the gate half -- the closest thing in
+this survey to this repo's own starting complaint about a repository with
+no tracking layer at all: a real, versioned, deployable thing, and nothing
+mechanical standing between "it exists" and "it is what's running." Lambda
+is the first system here with both halves, which is also the first point in
+this history where the comparison to a label-gated promotion model is
+apt rather than anachronistic.
+
+* What's unverified, stated plainly rather than smoothed over
+
+- No formal, numbered-release discipline was found for Zope Products
+  specifically (as opposed to Zope core itself) -- the refresh mechanism is
+  documented, a changelog'd release *practice* for third-party Products is
+  not. A zope-dev mailing list thread exists on this exact question
+  ("Refresh ZEO interactive python when changing product's code?") but was
+  not read for content; a lead, not a citation.
+- No atomic or rollback-safe cutover mechanism was found documented for
+  OpenACS's non-CVS upgrade path -- the documented instruction is a direct
+  in-place =cp -r= overwrite, not a symlink swap or equivalent.
+- The explicit serverless-vs-git-gating comparison rests on two engineering
+  blog posts, not AWS's own documentation or a peer-reviewed source. Treat
+  it as suggestive, not established.
