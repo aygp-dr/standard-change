@@ -1,0 +1,124 @@
+#+TITLE: Version control outside a git/GitHub read: Sapling, Piper, and Perforce streams
+#+DATE: 2026-09-25
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+=research/history/release-strategies.org= already has real, sourced
+material on Facebook's 2012-2013 weekly-push and cherry-pick release
+process, and =experiments/029-stacked-diffs= explores stacked-diff-native
+PR workflows in this repo's own fixture. Three large-scale, monorepo-native
+version-control systems were missing -- all genuinely different from a
+standard git/GitHub read, and each one separates "propose a change" from
+"land a change" in its own way, which is the exact separation this repo's
+=release:start= / gate-and-promote model makes too.
+
+* Meta's Sapling: stacked-diff-native, built on Mercurial
+
+*Mechanism.* Meta's own framing: Sapling is "built as an extension to
+Mercurial," not a clean-room design ([[https://engineering.fb.com/2022/11/15/open-source/sapling-source-control-scalable/][Meta Engineering blog, Nov 15,
+2022]]); its git history contains Mercurial commits back to 2005, per
+[[https://lwn.net/Articles/915136/][LWN's discussion]], with a backend rewritten onto a Facebook-specific
+distributed object store. Stack-native behavior draws on Mercurial's
+*Evolve* extension: Sapling tracks each commit's mutation history so it
+can algorithmically rebuild a whole stack after an edit, rather than
+requiring manual rebase bookkeeping the way git does. Stack commands:
+=sl next/prev=, =sl goto top/bottom=, =sl fold=, =sl split=, =sl absorb=
+(auto-distributes working-copy edits into the correct commit mid-stack) --
+[[https://sapling-scm.com/docs/introduction][sapling-scm.com/docs/introduction]].
+
+*Origin.* Open-sourced November 15, 2022, same date as the announcement.
+
+*Review/gating.* =sl pr submit= creates one GitHub PR per commit in the
+stack, each containing that commit plus everything below it -- visually
+noisy on raw GitHub, which is why Meta built *ReviewStack* to present only
+the single commit under review per PR
+([[https://sapling-scm.com/docs/addons/reviewstack][sapling-scm.com/docs/addons/reviewstack]]). Internally, stacks are described
+elsewhere as landing through Phabricator-style Diff review rather than
+GitHub PRs, but that specific integration is not confirmed from a Meta
+primary source in the public docs -- flagged [H], not verified further.
+
+*Comparison.* Sapling separates "propose a commit for review" from "land
+it" the same way this repo separates =release:start= from gate-and-promote
+-- but the separation is per-commit-within-a-stack, finer-grained than a
+label-driven per-PR gate.
+
+* Google's Piper: centralized, not distributed, at a scale nothing else here approaches
+
+*Mechanism.* A single, company-wide centralized repository -- not
+clone-based like git or Mercurial. Storage moved from Bigtable to Spanner,
+replicated across roughly ten data centers via Paxos, per Potvin and
+Levenberg, ["Why Google Stores Billions of Lines of Code in a Single
+Repository," CACM 59 (2016), 78-87](https://dl.acm.org/doi/10.1145/2854146)
+([[https://research.google/pubs/why-google-stores-billions-of-lines-of-code-in-a-single-repository/][Google Research pub page]]). Instead of a full local clone, most engineers
+use *CitC* (Clients in the Cloud): a cloud-storage backend plus a Linux
+FUSE filesystem presenting an overlay of a developer's uncommitted changes
+on top of the whole repository -- over 80% of Piper users are on CitC per
+the paper, with workspaces averaging under ten modified files and no full
+checkout needed. Piper replaced Perforce internally once Perforce stopped
+scaling for Google, per the paper.
+
+*Scale.* As of the data in the 2016 paper: roughly 2 billion lines of code
+across 9 million source files, ~25,000 engineers, ~16,000 human-submitted
+changes per day plus ~24,000 automated commits per day, ~86 TB repository
+size. These figures are corroborated across independent secondary
+summaries of the paper (the primary PDF was not directly fetchable in this
+pass) -- worth a direct fetch of the CACM PDF before quoting the numbers
+verbatim elsewhere.
+
+*Review/gating.* Mandatory code review before any submit, via *Critique*,
+Google's internal review tool, plus *presubmit* checks -- automated,
+project-defined invariant checks that run before a change even reaches a
+human reviewer and can reject it outright. Submission only commits
+atomically once review and automated checks both pass. Documented in the
+freely-hosted *Software Engineering at Google* book: [[https://abseil.io/resources/swe-book/html/ch09.html][Code Review chapter]],
+[[https://abseil.io/resources/swe-book/html/ch19.html][Critique chapter]] -- a Google-authored but secondary source, distinct from
+the CACM paper itself.
+
+*Comparison.* Close to this repo's own model: "propose" (send to Critique)
+is separable from "land" (submit), gated by presubmit plus human approval
+-- the same separation of concerns as gate-then-promote, but enforced
+per-change at write time rather than via a PR label.
+
+* Perforce Helix Core streams: topology, not gating
+
+*Mechanism.* Perforce's own current documentation defines a stream as "an
+enhanced type of branch with a dedicated view for clients of the stream
+and built-in rules that determine how changes flow across the stream
+depot," organized into a declared hierarchy governed by *flow rules* --
+"merge down, copy up": changes merge downward from parent to child, get
+copied upward from child to parent
+([[https://help.perforce.com/helix-core/server-apps/p4guide/current/Content/P4Guide/chapter.streams.html][Helix Core streams docs]]; [[https://www.perforce.com/manuals/v18.3/p4v/Content/P4V/streams.merge_copy.html][merge-down/copy-up docs]]). Git branches carry no
+declared hierarchy or built-in merge-direction policy at all; streams make
+that hierarchy and direction first-class and enforced.
+
+*Origin.* Streams were introduced in the 2011.1 Perforce release, per
+Perforce's own version-tagged release notes -- a primary but indirect
+source (no standalone 2011 press release was found in the currently
+indexed archive).
+
+*Review/gating -- the key finding.* Streams are a branching/merge-topology
+feature, not a review-gate feature. The docs describe flow control -- what
+is allowed to merge where, in which direction -- but do not build in a
+mandatory-review-before-submit gate the way Piper's Critique/presubmit or a
+GitHub PR check does. Gating in Perforce shops is typically bolted on
+separately, via triggers or Swarm (Perforce's own review tool, not
+researched in this pass -- [H]). So streams answer "where is this branch
+allowed to flow" -- a topology question, closer to this repo's own
+=app:*=-label ownership and merge-direction model -- but not "who must
+approve before it lands." The two concerns this repo's own pipeline
+explicitly unifies (labels declare intent and ownership; gates enforce
+release readiness) are, in Perforce, split across two different products
+rather than combined in one pipeline.
+
+* What this changes
+
+Sapling and Piper both make the same move this repo's own model makes --
+propose is a distinct, earlier act from land, with a gate in between -- at
+two very different scales and with two very different mechanisms
+(per-commit stack review; centralized presubmit-plus-human-review). Streams
+is the useful negative case: a real, structured, declared-hierarchy
+branching model that answers a genuinely hard question (where is this
+allowed to flow) while leaving the gating question -- who must approve --
+to a separate tool entirely, which is precisely the coupling this repo's
+own single-pipeline design chose not to split.

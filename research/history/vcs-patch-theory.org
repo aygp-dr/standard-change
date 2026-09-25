@@ -1,0 +1,129 @@
+#+TITLE: Does any VCS's own theory solve the semantic-overlap problem? No, and one of them says so in writing.
+#+DATE: 2026-09-25
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+=research/findings/concurrent-change.org= names an unsolved problem in this
+repo's own pipeline: *semantic overlap* -- two changes that touch different
+files, never textually conflict, and silently disagree about a fact, with
+"every gate stays green" while the result is wrong. The file states
+plainly that nothing in this repository catches it today. This note asks a
+narrower, sharper question: does any version-control system's *underlying
+theory* -- not a code-review process bolted on top, the theory itself --
+give a formal answer to "when can two changes be safely combined regardless
+of order," beyond git's purely syntactic line-based conflict detection.
+
+*Short answer, stated first because it is the actual finding: no.* All
+three systems below formalize or harden *structural* consistency --
+line/token identity, causal dependency, history mutability -- not semantic
+agreement. One of them, Pijul, says this about itself in its own
+documentation, which is stronger evidence than an inference from outside.
+
+* Darcs and Pijul: patch theory answers a precise, different question
+
+*Darcs.* David Roundy's theory models a patch as a tuple of (identity,
+context, effect) and defines *commutation*: two patches P1;P2 can be
+proven to commute to P2';P1' exactly when reordering them preserves the
+resulting state [[https://darcs.net/Theory][darcs.net/Theory]]; [[https://darcs.net/Theory/GaneshPatchAlgebra][Theory/GaneshPatchAlgebra]]. This gives a
+principled way to reorder and merge non-conflicting patches instead of
+git's line-diff heuristics -- a real, formal improvement over "the diffs
+don't overlap, so it's probably fine." Darcs's own theory pages do *not*
+claim to detect semantic disagreement; they stay at the level of mergers
+and conflictors, textual/structural effects, never business-fact
+consistency. Origin: Roundy began the work mid-2002 out of a GNU arch
+patch-format discussion, wrote Darcs in Haskell that autumn, first public
+release v0.9.3, April 3, 2003 ([[https://en.wikipedia.org/wiki/Darcs][Wikipedia: Darcs]]).
+
+*Pijul.* Built on Mimram and Di Giusto's ["A Categorical Theory of
+Patches," arXiv:1311.3903 (2013)](https://arxiv.org/pdf/1311.3903), also
+in Electronic Notes in Theoretical Computer Science. Merge is modeled as a
+categorical *pushout* -- files are objects, patches are morphisms; when a
+pushout doesn't exist in the base category, Pijul uses the free
+finite-colimit completion to guarantee one always does. Built explicitly
+to fix soundness bugs in Darcs's original theory: per Pijul's own manual,
+"conflicting changes always commute in Pijul and never commute in Darcs"
+([[https://pijul.org/manual/why_pijul.html][pijul.org/manual/why_pijul.html]]). Pijul also models changes as a CRDT
+(graph vertex/edge additions), giving deterministic, order-independent
+merge. History: a research project from roughly 2015, alpha around
+November 2020 ([[https://pijul.org/posts/2020-11-07-towards-1.0/]["Towards 1.0"]]), v0.12 released April 2019
+([[https://pijul.org/posts/2019-04-23-pijul-0.12][pijul.org/posts/2019-04-23-pijul-0.12]]).
+
+*The confirming quote, fetched directly from Pijul's own theory page*
+([[https://pijul.org/manual/theory.html][pijul.org/manual/theory.html]]): "Pijul's datastructure models, in a
+conflict-free way, the conflicts that can happen over a text file" --
+three specific structural cases (vertices with no path between them,
+cyclic paths, "zombie vertices" from conflicting deletions). And,
+directly on point: change associativity does *not* guarantee the result
+will have intended semantics, "because languages have context-specific
+rules" -- "hooks and scripts may add extra language-dependent dependencies
+based on semantics." Pijul delegates semantic checking outward, on
+purpose; it does not claim to solve it.
+
+*What this means for this repo's own problem.* A SKU listed under two
+different categories in two different files -- the concrete case
+=concurrent-change.org= names -- is two patches that structurally commute
+cleanly (no shared vertices, no cycle) while being semantically wrong. That
+is exactly the class patch theory is defined *not* to catch, by its own
+authors' account. Patch theory is a real, necessary correctness layer --
+it rules out a class of structural corruption a naive three-way merge
+could silently introduce -- but it is not sufficient for, and was never
+meant to reach, the semantic-overlap problem. This is a genuine negative
+result, worth having on record precisely because it closes off a plausible
+line of investigation rather than leaving it open by omission.
+
+* Mercurial phases: the closest analogue to this repo's own tombstone rule
+
+Three ordered phases -- public < draft < secret -- with the invariant that
+no changeset can sit in a lower phase than its ancestors. This is *not*
+purely advisory: public changesets are treated as immutable, and
+Mercurial's history-rewriting commands refuse to operate on them, "to
+prevent creating duplicate changesets" ([[https://www.mercurial-scm.org/help/topics/phases][mercurial-scm.org/help/topics/phases]]).
+A changeset auto-promotes draft to public on push to another repository;
+secret changesets are excluded from push, pull, and clone entirely.
+Introduced in Mercurial 2.1, 2012
+([[http://ewaldertl.blogspot.com/2012/02/mercurial-21-new-feature-phases-prevent.html][contemporaneous blog confirmation]]; design retrospective at
+[[https://octobus.net/blog/2020-11-26-modern-mercurial.html][octobus.net, "Modern Mercurial"]]).
+
+*The real analogy.* This is structurally close to this repo's own "the
+merge is the tombstone" argument (=README.org=; the
+=NoTombstoneOnMerged= invariant verified in this session's own TLA+ work,
+=research/findings/lock-safety-verified.org=): Mercurial made "this fact
+is now durable" a state the *tool itself* protects by refusing mutation,
+not a convention a person is trusted to honor. But phases is a
+mutability/visibility gate, not a correctness gate -- it says nothing about
+whether two draft or public changesets *agree* with each other. It is the
+closest thing in this survey to this repo's tombstone pattern, and it does
+not touch semantic overlap either.
+
+* Jujutsu (jj): solves a real problem, an orthogonal one
+
+Created by Martin von Zweigbergk at Google, started as a hobby project
+late 2019, grew into a full Google project with a public repository, now
+[[https://github.com/jj-vcs/jj][github.com/jj-vcs/jj]] (formerly =martinvonz/jj=). Git-compatible backend,
+written in Rust. The working copy is itself a commit, automatically
+amended on every change -- no index, no staging area, no stash -- and
+editing an ancestor commit triggers automatic rebase of every descendant,
+with conflicts recorded as first-class objects whose resolution propagates
+through descendants too.
+
+This is a genuinely good answer to git's staging-area ergonomics and
+manual-rebase pain (and to =rerere='s awkwardness), and worth naming as a
+live, active area rather than settled history. It is orthogonal to
+semantic-overlap detection: nothing in jj's model checks cross-file factual
+agreement either.
+
+* The line across all three
+
+None of the three -- patch theory, phases, jj's commit model -- gives a
+formal answer to "safe to combine regardless of order" at the semantic
+level this repo's own research already flagged as open. Patch theory is
+the closest attempt and, in this survey, the most directly on-point
+*negative* result: it is precise, in its own documentation, about exactly
+the boundary it declines to cross. If this repository ever wants a real
+answer to the semantic-overlap problem, it will not come from any VCS's
+merge theory as currently designed -- it would need something closer to
+the cross-app agreement assertion =concurrent-change.org= already proposes
+as a practical rule ("a change that adds a cross-app fact must add the
+assertion that the two sides agree, in the same PR"), not a smarter merge
+algorithm.

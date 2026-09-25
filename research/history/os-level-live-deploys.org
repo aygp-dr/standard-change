@@ -1,0 +1,123 @@
+#+TITLE: Below the application: OS boot environments, functional deploys, live migration, and online schema change
+#+DATE: 2026-09-25
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+=deployment-artifact-history.org= surveys application-level systems (Zope,
+OpenACS, Erlang/OTP, Lambda). This note goes one layer down: four
+mechanisms that operate on the operating system, the hypervisor, or the
+database itself, still asking the same question -- versioned artifact,
+mechanical gate, or neither.
+
+* Solaris Live Upgrade / ZFS Boot Environments / FreeBSD bectl
+
+*Mechanism.* Clone the active boot environment onto a second slice or
+dataset, patch the clone while the original stays live and serving, then
+=luactivate=/=beadm activate=/=bectl activate= plus a reboot atomically
+swaps which environment boots -- rollback is reactivating the prior one,
+no rebuild. FreeBSD's =bectl(8)= is a from-scratch 2017 Google Summer of
+Code rewrite "derived from =beadm(8)=" [[https://www.freebsd.org/releases/12.0R/relnotes/][FreeBSD 12.0 release notes]],
+December 2018.
+
+*Origin date, corrected rather than kept flattering.* The claim going in
+was "Solaris Live Upgrade dates to ~2000, predating Fowler's blue-green
+naming by a decade." That does not survive scrutiny. The earliest *dated
+primary document* found is Sun's "Live Upgrade 2.0" guide for Solaris 8
+10/01, part #806-7933, dated **October 2001**
+([[https://www.filibeto.org/sun/lib/solaris8-docs/_solaris8_2_02_update_collection/806-7933.pdf][PDF]], [[https://docs.oracle.com/cd/E19455-01/806-7933/6jgp914ad/index.html][Oracle docs mirror]]). Solaris 8 itself shipped February 2000, and
+secondary sources disagree on whether Live Upgrade shipped with 2.6, 8, or
+9 -- no primary Sun document pins a date earlier than October 2001. Cite
+"documented from October 2001, plausibly earlier but unconfirmed," not a
+firm ~2000 date -- it is not, on present evidence, a stronger anchor than
+Amazon's Weblab (2003, already cited in =release-strategies.org=) for
+predating Fowler's 2010 naming.
+
+ZFS Boot Environments are a separate, better-evidenced, later mechanism:
+ZFS-root support landed in Solaris 10 10/08, October 2008.
+
+*Framing fit.* Both halves present -- the boot environment is a real,
+bootable, snapshot-identified artifact (ZFS gives it a stable clone
+identity), and activate-plus-reboot is a genuinely atomic single-pointer
+gate. But it is operator-invoked, not pipeline-gated: nothing external
+decides whether an activation is authorized the way a label or a review
+does.
+
+* NixOS/Guix generations -- the tightest coupling in this whole survey
+
+*Mechanism.* The Nix store path (=/nix/store/<hash>-<name>=) is
+content-addressed over every build input -- this *is* the versioned
+artifact, worked out in Eelco Dolstra's original paper (with de Jonge and
+Visser), ["Nix: A Safe and Policy-Free System for Software Deployment,"
+LISA 2004](https://www.usenix.org/legacy/publications/library/proceedings/lisa04/tech/dolstra.html),
+and his ["The Purely Functional Software Deployment Model," PhD thesis,
+January 2006](https://edolstra.github.io/pubs/phd-thesis.pdf).
+=nixos-rebuild switch= builds a new generation, then atomically repoints
+the profile symlink (=/nix/var/nix/profiles/system=,
+=/run/current-system=); =--rollback= flips the symlink back with no
+rebuild at all ([[https://www.mankier.com/8/nixos-rebuild][nixos-rebuild(8)]]; [[https://nixos.org/manual/nixos/stable/index.html][NixOS manual]]). Guix mirrors this exactly via
+=/var/guix/profiles/system= ([[https://guix.gnu.org/manual/devel/en/html_node/Invoking-guix-system.html][Guix manual]]); the project began June 2012, first
+release January 2013 ([[https://arxiv.org/pdf/1305.4584][Courtès, "Functional Package Management with Guix,"
+ELS 2013]]).
+
+*Framing fit.* Both halves, and they are not two separate mechanisms
+bolted together -- store-path identity and the profile-symlink gate are
+the *same underlying filesystem primitive*. Nothing else in this survey,
+including Lambda, couples the two as tightly.
+
+* VMware vMotion / Xen / KVM live migration -- a genuinely different axis
+
+Everything else in this note and in =deployment-artifact-history.org=
+answers "which version of the code is live." Live migration answers a
+different question entirely: can a *running instance* move to different
+hardware without stopping. Mechanism: iterative pre-copy of dirty memory
+pages while the original keeps running and serving, then a brief
+stop-and-copy "stun" to transfer residual state and cut execution over --
+VMware reports roughly 100-200ms; the original Xen paper reports 60-210ms
+depending on workload. Canonical citation: Clark, Fraser, Hand, Hansen,
+Jul, Limpach, Pratt, Warfield, ["Live Migration of Virtual Machines,"
+NSDI '05](https://www.usenix.org/conference/nsdi-05/live-migration-virtual-machines)
+([[https://www.usenix.org/legacy/event/nsdi05/tech/full_papers/clark/clark.pdf][PDF]]). vMotion shipped with VMware VirtualCenter 1.0, December 2003.
+
+*Framing fit.* Neither, cleanly -- and that is the point of including it.
+No artifact is swapped; the same running instance relocates. The
+stun/cutover gates *where* code executes, not *which version* executes.
+Worth keeping in this survey specifically as the contrast case that shows
+the artifact/gate axis isn't the only axis a deployment model can be built
+around.
+
+* Online schema redefinition -- both halves, and a direct line to this repo's own migration research
+
+*Mechanism.* Build a shadow table, copy rows across in chunks, replay
+concurrent writes against the original (via triggers or binlog streaming),
+then an atomic rename cuts over. Oracle's =DBMS_REDEFINITION= (introduced
+in Oracle9i, 2001) ends the same way, via
+=FINISH_REDEF_TABLE= ([[https://oracle-base.com/articles/9i/high-availability-enhancements-9i][Oracle-Base 9i article]]; [[https://docs.oracle.com/en/database/oracle/oracle-database/19/arpls/DBMS_REDEFINITION.html][current docs]]).
+
+*Lineage on MySQL, dated precisely.* Shlomi Noach's =oak-online-alter-table=
+(openark-kit, pre-March 2010) → Facebook's PHP-forked
+=OnlineSchemaChange=, announced September 2010
+([[https://www.theregister.com/2010/09/21/facebook_online_schema_change_for_mysql/][The Register]]) → Maatkit's =mk-online-schema-change= → renamed
+=pt-online-schema-change= when Percona Toolkit forked from Maatkit
+mid-2011 (v0.9.5, August 2011; redesigned by v2.1.1, April 2012, per the
+[[https://github.com/percona/percona-toolkit/blob/3.x/Changelog][Percona Toolkit changelog]]). MySQL's own native InnoDB online DDL landed in
+5.6, January 2013; GitHub's triggerless =gh-ost= followed August 2016
+([[https://github.blog/news-insights/company-news/gh-ost-github-s-online-migration-tool-for-mysql/][GitHub Engineering blog]]).
+
+*Framing fit.* Both -- the shadow table under construction is the
+versioned artifact, the atomic rename (or =FINISH_REDEF_TABLE=) is the
+mechanical gate. This is the direct database-side counterpart to the
+migration-vs-code-deploy research already in this repo (the private
+prior-art survey on code/schema separation from this session, and
+=research/findings/auto-progression-to-merge.org='s two-gate model) -- the
+shadow-table-then-rename pattern is exactly the "expand" half of
+expand/contract, mechanized at the table level rather than left to
+application-level discipline.
+
+* Net finding
+
+Three of the four -- Nix/Guix, vMotion/Xen, online schema change -- came
+back with precisely dated primary sources and clean framing answers.
+Solaris Live Upgrade's flattering ~2000 origin date is the one place a
+comfortable claim did not survive being checked; recorded here as
+corrected rather than quietly kept.

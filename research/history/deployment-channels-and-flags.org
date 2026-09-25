@@ -1,0 +1,115 @@
+#+TITLE: Rings, channels, and flags: a different shape than blue-green or a three-stage canary
+#+DATE: 2026-09-25
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+=release-strategies.org= already dates Facebook's three-stage H1/H2/H3
+canary (2012-2013) and Fowler's 2010 blue-green/canary naming. Three
+patterns are missing that are not variations on those two -- they are a
+different *shape* (continuous, subscribable tiers rather than a temporary
+rollout percentage), a different *axis* (deploy vs. release, not staging
+vs. production), and a different *mechanism* (traffic mirroring, not
+traffic splitting).
+
+* Ring/channel deployment: N continuous tiers, not a temporary rollout
+
+A binary blue-green swap and a three-stage canary both converge to 100%
+and stop being three stages. A channel model does not converge -- Canary
+stays Canary indefinitely, and a user or machine explicitly opts into a
+tier rather than being temporarily included in one.
+
+*Chrome.* Beta and Dev channels were both live within weeks of Chrome's
+public launch, per the [[https://chromereleases.googleblog.com/2008/09/][Chrome Releases blog, September 2008]]. Canary came
+later: Google's [[https://www.chromium.org/getting-involved/chrome-release-channels/][July 22, 2010 announcement]] shortened the stable cadence
+to six weeks and introduced Canary as a distinct, more experimental tier.
+Canary really is the nightly build: "Canary builds contain changes as soon
+as we make them, and are released twice daily with only automated
+testing," installable side by side with any other channel
+([[https://developer.chrome.com/docs/web-platform/chrome-release-channels][Chrome for Developers: release channels]]).
+
+*Windows Insider.* Launched October 1, 2014 with the first Windows 10
+Technical Preview, using the literal word "ring" from day one -- Insider
+Fast and Insider Slow, with a Release Preview ring added February 2016.
+Microsoft replaced "rings" with "channels" (Dev/Beta/Release Preview) on
+June 15, 2020 ([[https://blogs.windows.com/windows-insider/2020/06/15/introducing-windows-insider-channels/][Windows Insider Blog]]); a public Canary channel followed
+March 6, 2023. Microsoft is the more literal of the two about "ring" as
+the model's own name.
+
+*Debian, much older than either.* Founded August 1993; Debian 1.1
+"Buzz," the first *stable* release, shipped June 17, 1996 -- implying an
+"unstable" counterpart track already existed by then. The formal
+three-way stable/testing/unstable ("sid") structure came later: "testing"
+was introduced as its own distribution in **December 2000**, per Debian's
+own [[https://www.debian.org/doc/manuals/project-history/detailed.en.html][detailed project history]]: "a new distribution /testing/ was
+introduced... packages from unstable that are said to be stable moved to
+testing."
+
+*Is "predates by years" an honest claim?* Partially, and precision
+matters here. Package-repo tracks and app-release channels solve related
+but not identical problems: a package repo gates what enters a shared
+archive many other packages transitively depend on (hence "testing" as a
+quarantine before promotion), while Chrome/Windows channels gate what one
+product ships to one opted-in user. Do not conflate the mechanisms. But
+the *structural* claim -- N continuous, subscribable tiers rather than a
+temporary rollout -- holds across all three, and Debian's 1996/2000 dates
+are eight to eighteen years ahead of Chrome/Windows Insider's 2008/2014.
+
+* Feature flags: the formal articulation of "deploy != release"
+
+*Origin, corrected.* The canonical long-form treatment,
+[[https://martinfowler.com/articles/feature-toggles.html][martinfowler.com/articles/feature-toggles.html]], is written by **Pete
+Hodgson**, published September 19, 2016 (updated October 9, 2017) -- hosted
+on Fowler's site, not authored solely by Fowler. It names four toggle
+categories (Release, Experiment, Ops, Permissioning) and states the core
+claim directly: toggles "allow incomplete and un-tested codepaths to be
+shipped to production as latent code which may never be turned on" -- the
+explicit articulation of deploy ≠ release. A shorter bliki entry,
+[[https://martinfowler.com/bliki/FeatureToggle.html][FeatureToggle]], traces to around October 2010, earlier than Hodgson's full
+treatment.
+
+*Earlier still: Flickr, 2009.* John Allspaw and Paul Hammond, "10+ Deploys
+Per Day: Dev and Ops Cooperation at Flickr," Velocity 2009 (June 2009),
+names "feature flags" explicitly as one of the practices that let Flickr
+decouple deploy from release -- one year before Fowler's bliki entry and
+five years before LaunchDarkly's founding. Primary materials:
+[[https://www.slideshare.net/jallspaw/10-deploys-per-day-dev-and-ops-cooperation-at-flickr][SlideShare deck]], [[https://www.youtube.com/watch?v=LdOe18KhtT4][video]], contemporaneous writeup at
+[[http://dev2ops.org/2009/06/10-deploys-per-day-dev-and-ops-cooperation-at-flickr/][dev2ops.org, June 2009]].
+
+*LaunchDarkly (founded 2014, Oakland, Edith Harbaugh and John Kodumal)*
+does not claim to have invented flags -- their own framing is
+productizing/service-ifying a practice that already existed as homegrown
+tooling at companies including Facebook and Flickr
+([[https://launchdarkly.com/about-us/][about-us]]).
+
+* Shadow traffic / dark launch -- real, but the exact term is weakly sourced
+
+Traces to Facebook Chat, 2008. Engineer Eugene Letuchy described the
+technique in Chat-architecture talks (Erlang Factory / CUFP, 2008-2009):
+before any UI existed, Facebook pages silently connected to chat servers,
+queried presence, and simulated message sends, "without a single UI
+element drawn on the page," purely to load-test under real traffic --
+[[http://www.erlang-factory.com/upload/presentations/31/EugeneLetuchy-ErlangatFacebook.pdf][Erlang at Facebook: Chat Architecture (PDF)]], corroborated by
+[[https://www.infoq.com/news/2008/05/facebookchatarchitecture/][InfoQ's contemporaneous summary]].
+
+*Honest gap.* Facebook's own [[https://engineering.fb.com/2008/05/13/web/facebook-chat/][engineering blog post on Chat]] (May 13, 2008)
+documents the rollout but could not be fetched directly in this pass to
+confirm it uses the literal phrase "dark launch." Every secondary
+retrospective found repeats the Facebook/Letuchy attribution, but none
+supplies a dated primary quote using that exact term. The *mechanism* --
+mirroring real traffic to unreleased infrastructure without serving its
+output -- is solidly attested to 2008. The *name* "dark launch" attached
+to it is not independently confirmed from a primary 2008 source in this
+pass. Cite the mechanism as [E]; cite the specific term's 2008 origin as
+[H].
+
+* What this changes
+
+Three genuinely distinct shapes now sit alongside blue-green and
+Facebook's three-stage canary: a continuous N-tier channel (opt-in,
+non-converging), a flag (decouples deploy from release entirely, no
+traffic-routing mechanism required at all), and shadow traffic (observes a
+version under real load with zero user-facing risk, before it is ever a
+release candidate). None of the three collapse into either blue-green or
+canary -- they answer adjacent but different questions about what "safe to
+expose" means.
