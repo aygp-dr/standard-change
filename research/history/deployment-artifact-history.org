@@ -6,11 +6,13 @@
 
 =research/history/pipeline-history.org= already covers microservices
 ("you build it, you run it," Amazon 2006) and container-based deploys.
-Three earlier and later systems were missing entirely: Zope, OpenACS, and
-the serverless/FaaS shift. All three answer the same question this repo's
-own model turns on -- *is the deployable thing a versioned artifact, and is
-there a gate between publishing it and it going live* -- and they answer it
-three different ways, none of which is "yes to both" until the third one.
+Four earlier and later systems were missing entirely: Zope, OpenACS,
+Erlang/OTP, and the serverless/FaaS shift. All four answer the same
+question this repo's own model turns on -- *is the deployable thing a
+versioned artifact, and is there a gate between publishing it and it going
+live* -- and they answer it in four different shapes, one of which
+(Erlang's) does not fit the two-axis table cleanly at all, which is the
+most interesting result of adding it.
 
 * Zope: edit-time and deploy-time are the same act
 
@@ -67,7 +69,65 @@ unconditionally the moment files land. Merge and deploy are decoupled by
 label the labeller re-derives, rather than a person remembering to follow
 a runbook, is meant to close.
 
-* Serverless: the first of the three with both halves
+* Erlang/OTP: no artifact, but a formally scripted gate anyway
+
+Erlang breaks the pattern the first two sections set up. It has *no*
+versioned deployable artifact in the OpenACS or Lambda sense -- and yet it
+has the most mechanically rigorous transition-gate of anything in this
+note, scripted module by module. Both things are true because of how the
+BEAM VM manages code in memory, confirmed directly against Erlang/OTP's own
+documentation:
+
+*Two versions of a module can be resident at once, on purpose.* "The code
+of a module can exist in two variants in a system: current and old...
+Fully qualified function calls always refer to current code. Old code may
+still be evaluated because of processes lingering in the old code."
+[[https://www.erlang.org/doc/system/code_loading.html][Compilation and Code Loading -- erlang.org]]. =code:purge/1= kills any
+process still lingering in old code and removes it; =code:soft_purge/1= is
+the non-destructive variant that only succeeds once nothing is still
+running the old version -- the primitive that makes an upgrade *safe*
+rather than merely forced.
+
+*The gate is a file, and it is a script, not a convention.* A =.appup=
+file names, per module, exactly what an upgrade does:
+={load_module, Module}=, ={add_module, Module}=, ={delete_module, Module}=,
+or ={update, Module, {advanced, Extra}}= -- the last of these triggers the
+module's own =code_change/3= callback to transform *live process state* in
+place. A =.relup= file, generated from a whole release's =.appup= files via
+=systools:make_relup/3,4=, sequences this across every module in the
+release, with order enforced (new modules load before the supervisors that
+depend on them update; a downgrade reverses the sequence exactly)
+[[https://www.erlang.org/doc/system/appup_cookbook.html][Appup Cookbook -- erlang.org]]; [[https://www.erlang.org/doc/system/release_handling.html][Release Handling -- erlang.org]].
+
+So Erlang sits in a cell the OpenACS/Lambda framing doesn't have room for:
+no separate versioned artifact to publish (the two module versions live in
+the same running VM), but the most formally specified transition gate of
+any system in this note -- expressed as an actual file format the tooling
+parses and sequences, not a runbook a person is trusted to follow.
+
+*Origin, with a caveat stated as one.* Joe Armstrong's PhD thesis, /Making
+reliable distributed systems in the presence of software errors/ (KTH,
+December 2003), is the primary source
+[[https://erlang.org/download/armstrong_thesis_2003.pdf][full text, erlang.org]]. Ericsson's AXD301 ATM switch (announced 1998, ~2M
+lines of Erlang) is the standard example cited for hot-upgrading a live
+telephone switch without dropping calls, and for the famous "nine nines"
+availability claim -- but a 2010 Erlang Factory talk by Mats Cronqvist
+treats that specific number as closer to a repeated design target than a
+systematically measured field result
+[[https://www.erlang-factory.com/upload/presentations/243/ErlangFactorySFBay2010-MatsCronqvist.pdf][Cronqvist, "The Nine Nines," Erlang Factory SF Bay 2010]]. Cite the
+mechanism as [E]; cite "nine nines" specifically as [H].
+
+*One adjacent lineage, named rather than explored.* Erlang's in-memory,
+two-versions-coexisting model, and Zope's through-the-web live editing
+above, both descend from an older idea: Smalltalk-80's persistent,
+live-editable virtual image (Xerox PARC, Kay/Ingalls/Goldberg). Alan Kay's
+own retrospective is the primary source -- "The Early History of
+Smalltalk," HOPL 1993, ACM SIGPLAN Notices 28(3)
+[[https://dl.acm.org/doi/10.1145/155360.155364][dl.acm.org]], freely readable at
+[[https://worrydream.com/EarlyHistoryOfSmalltalk/][worrydream.com/EarlyHistoryOfSmalltalk]]. Noted as the root of this lineage,
+not developed further here.
+
+* Serverless: the first with a versioned artifact and a mechanical gate together
 
 AWS Lambda's model has both an immutable artifact and a mechanically
 enforced gate between publishing it and routing traffic to it:
@@ -98,12 +158,13 @@ blog-tier sources, not an established consensus, and that AWS's own
 documentation states the mechanism without drawing the git-gating analogy
 itself.
 
-* The line across all three
+* The line across all four
 
 | system | versioned artifact? | mechanical gate before "live"? |
 |--------+----------------------+----------------------------------|
 | Zope (Product Refresh / TTW) | no -- edit *is* deploy | no |
 | OpenACS (tarball + APM) | yes | no -- convention, not mechanism |
+| Erlang/OTP (hot code loading) | no -- two versions coexist in one VM | yes -- =.appup=/=.relup=, module-scripted |
 | Lambda / Workers (versions + aliases) | yes | yes -- CodeDeploy / gradual rollout |
 
 Zope and OpenACS both predate, and structurally reject, the split between
@@ -111,10 +172,17 @@ Zope and OpenACS both predate, and structurally reject, the split between
 OpenACS has the artifact half but not the gate half -- the closest thing in
 this survey to this repo's own starting complaint about a repository with
 no tracking layer at all: a real, versioned, deployable thing, and nothing
-mechanical standing between "it exists" and "it is what's running." Lambda
-is the first system here with both halves, which is also the first point in
-this history where the comparison to a label-gated promotion model is
-apt rather than anachronistic.
+mechanical standing between "it exists" and "it is what's running." Erlang
+is the system that breaks the table's implicit assumption that the two
+columns move together -- no artifact at all, yet the most formally
+specified gate of the four, because the gate lives in the VM's own code
+manager rather than in anything published externally. Lambda is the first
+system here with *both* halves in the shape this repo's own model expects
+(a published, versioned thing, and a separate, later, mechanically gated
+act that makes it live), which is also the first point in this history
+where the comparison to a label-gated promotion model is apt rather than
+anachronistic -- Erlang got the gate right decades earlier, just built into
+a different place than an artifact registry.
 
 * What's unverified, stated plainly rather than smoothed over
 
@@ -127,6 +195,14 @@ apt rather than anachronistic.
 - No atomic or rollback-safe cutover mechanism was found documented for
   OpenACS's non-CVS upgrade path -- the documented instruction is a direct
   in-place =cp -r= overwrite, not a symlink swap or equivalent.
+- The AXD301 "nine nines" availability figure is cited everywhere Erlang's
+  origin story is told, but a 2010 Erlang Factory talk treats it as a
+  repeated design target rather than a systematically measured field
+  result -- cited here as [H], not [E], on purpose.
+- The Smalltalk lineage note is confirmed real and correctly sourced (Kay's
+  own HOPL 1993 retrospective) but deliberately not developed -- it is
+  named as the root of the Zope/Erlang live-image lineage, not analyzed on
+  its own terms in this pass.
 - The explicit serverless-vs-git-gating comparison rests on two engineering
   blog posts, not AWS's own documentation or a peer-reviewed source. Treat
   it as suggestive, not established.

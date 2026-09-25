@@ -4,6 +4,16 @@
 #+OPTIONS: toc:2 num:nil
 
 * Status
+:PROPERTIES:
+:CUSTOM_ID: rs-status
+:VERDICT: n/a
+:FINDING: Framing/status section; no external citations to audit.
+:CUSTOM_ID: rs-status
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Scope framing and epistemic labels are consistent with the rest of the file; proxy-access method note is disclosed, not hidden.
+:END:
 
 *Research notes. Neither spec nor ADR nor proposal.* Nothing here is
 adopted and nothing here amends =spec.org=. The question is narrow: the repo
@@ -36,8 +46,28 @@ unreachable.
 #+end_quote
 
 * The two strategies, in this repo's vocabulary
+:PROPERTIES:
+:CUSTOM_ID: rs-two-strategies
+:VERDICT: n/a
+:FINDING: Definitional framing against this repo's own guard vocabulary; no external citations.
+:CUSTOM_ID: rs-two-strategies
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Pure container heading, no independent falsifiable claim.
+:END:
 
 ** Release trains
+:PROPERTIES:
+:CUSTOM_ID: rs-release-trains-def
+:VERDICT: n/a
+:FINDING: Internal definition; no external citations.
+:CUSTOM_ID: rs-release-trains
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: "A train is a change" mapping (base/head/manifest, one berth claim for N units) is internally consistent with the guard table and the 4b fan-out diagram that follow.
+:END:
 
 Work marked ready collects on a branch. The train departs on a cadence;
 whatever is ready rides, whatever is not waits for the next one.
@@ -67,6 +97,16 @@ flowchart TB
 #+end_src
 
 ** Mainline-only deployment
+:PROPERTIES:
+:CUSTOM_ID: rs-mainline-only-def
+:VERDICT: n/a
+:FINDING: Internal definition; no external citations.
+:CUSTOM_ID: rs-mainline-only-deployment
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Orthogonality-to-trains claim is upheld later at §Rollback targets, the one place the note treats them as composable.
+:END:
 
 Features are independently tested, then merged to main. Every deployment is a
 deployment *of main* -- never of a branch.
@@ -77,6 +117,16 @@ to main and deploying main, and that combination is the only one in this note
 where the two strategies genuinely compose (§Services deployed over time).
 
 ** Where a verdict can be bound
+:PROPERTIES:
+:CUSTOM_ID: rs-verdict-bound
+:VERDICT: n/a
+:FINDING: Internal argument referencing spec.org's own C2 capability; no external citations.
+:CUSTOM_ID: rs-verdict-bound
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: C1/C2 diagram (A=PR head has verdict, B=merge commit usually doesn't, C=artifact checked for identity only) is used consistently in every later section that invokes C1/C2.
+:END:
 
 The two strategies differ in *which* of three objects carries the verdict that
 authorizes a production deployment. C2 -- "verdicts bound to a content hash,
@@ -100,6 +150,16 @@ Mainline-only insists the thing deployed is a descendant of =B=, which is a
 statement about =C=, and says nothing about whether =B= has a verdict.
 
 * What each buys and costs, guard by guard
+:PROPERTIES:
+:CUSTOM_ID: rs-guard-by-guard
+:VERDICT: n/a
+:FINDING: Internal comparison table; no external citations.
+:CUSTOM_ID: rs-guard-by-guard
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Every per-guard cell is independently argued in a later section (4b, 5) and none contradicts this summary table.
+:END:
 
 | Guard | Predicate | Per-change (today) | Release train | Mainline-only |
 |-------+-----------+--------------------+---------------+---------------|
@@ -114,6 +174,16 @@ Two entries are the ones to argue with, and both are below: guard 4b under
 mainline-only, and guard 5 under rolling deploys.
 
 * Mainline-only does not touch guard 4b
+:PROPERTIES:
+:CUSTOM_ID: rs-mainline-4b
+:VERDICT: n/a
+:FINDING: Internal argument; no external citations.
+:CUSTOM_ID: rs-mainline-guard-4b
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: The three-arrangement enumeration (pre-merge/post-merge-last-green/post-merge-tip) is exhaustive for "when is the deployed tree validated", and the closing reduction (closing the gap = validating every merge = a merge queue = a train relocated to the merge point) is a sound, non-circular argument.
+:END:
 
 The tempting reading is that deploying main makes divergence moot: if everyone
 deploys main, nothing can be behind main. That is false, and the reason is
@@ -157,8 +227,28 @@ that batches speculatively is a release train relocated from the deploy point
 to the merge point; the amortization arithmetic below is the same arithmetic.
 
 * The amortization analysis
+:PROPERTIES:
+:CUSTOM_ID: rs-amortization
+:VERDICT: n/a
+:FINDING: Section header over simulator output; citations appear only in child headings under History.
+:CUSTOM_ID: rs-amortization-analysis
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Pure container heading, no independent claim.
+:END:
 
 ** The direct answer to 1/20
+:PROPERTIES:
+:CUSTOM_ID: rs-direct-answer-1-20
+:VERDICT: n/a
+:FINDING: [E] here denotes the repo's own train_sim.py output, not a bibliographic citation.
+:CUSTOM_ID: rs-direct-answer-1-20
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Reproduced: `python3 sim/train_sim.py` §1 and §1b match the org file's #+begin_example tables byte-for-byte (1/20 at 1,4,8 berths; 20/20 on one train).
+:END:
 
 ADR-0001's row is reproduced first, so the comparison is against the same
 engine and not against a paraphrase of it. [E]
@@ -180,6 +270,16 @@ zero forfeits. That is the claim, and it is trivially true once stated: the
 one merge.
 
 ** But 1/20 is a transient, and the honest baseline is worse
+:PROPERTIES:
+:CUSTOM_ID: rs-transient-baseline
+:VERDICT: n/a
+:FINDING: Simulator output, not a bibliographic citation.
+:CUSTOM_ID: rs-honest-baseline
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: corrected
+:FINDING: Table 2's #+begin_example silently drops 3 of the script's 12 rows (offered=12/berths=8; offered=48/berths=4; offered=48/berths=8, all reproduced by running train_sim.py directly). The dropped 48/day rows are 57.5 and 60.5 validations/ship, not ~68 -- so "validations/ship is ~68 at every berth count tested" overstates uniformity; true range at 48/day is 57.5-68.3. Directional conclusion (capacity doesn't fix revalidation cost) still holds; the flat-~68 phrasing does not.
+:END:
 
 ADR-0001's harness runs each change once: forfeit and you are done. A human
 would rebase, re-gate and re-book. Doing that turns 1/20 into eventual
@@ -215,6 +315,16 @@ worth recording because the ADR's phrasing invites an overstatement.
   it survives the refinement intact.
 
 ** What a train does to the same load
+:PROPERTIES:
+:CUSTOM_ID: rs-train-same-load
+:VERDICT: n/a
+:FINDING: Simulator output, not a bibliographic citation.
+:CUSTOM_ID: rs-train-same-load
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Table 11 reproduced exactly by running train_sim.py; the 23x, 0.58 vs 13.63, and 2.6h vs 12.5h figures derived from it check out arithmetically (13.63/0.58=23.5).
+:END:
 
 #+begin_example
 == 11. Cadence latency fed to gates/simulate-gates.py's own curve ==
@@ -235,6 +345,16 @@ eight-berth per-change pipeline, and lands at 2.6 hours mean latency instead
 of 12.5.* [E] That is the direct answer to the question this note was asked.
 
 ** Batch latency, priced
+:PROPERTIES:
+:CUSTOM_ID: rs-batch-latency
+:VERDICT: n/a
+:FINDING: Simulator output, not a bibliographic citation.
+:CUSTOM_ID: rs-batch-latency-priced
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Table 4 reproduced exactly; C/2+V+H closed form tracks the simulated mean latency closely at every cadence tested.
+:END:
 
 Mean wait is half the cadence, as expected, and the simulator agrees with the
 closed form to within the queueing delay of the path itself. [E]
@@ -254,6 +374,16 @@ Cadence does not buy throughput once the surface is not the constraint; it
 buys *revalidation efficiency*, and it is paid for in latency.
 
 ** Debugging a red train: the crossing point
+:PROPERTIES:
+:CUSTOM_ID: rs-debugging-red-train
+:VERDICT: n/a
+:FINDING: Simulator + internal model; the two external quotes it foreshadows (Google ICSE-SEIP 2017, Facebook/OANDA ICSE'16) are verified under rs-batch-size-attribution, where they are formally cited.
+:CUSTOM_ID: rs-crossing-point
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: yield(N,p) formula and table 6 reproduce exactly against train_sim.py's `yield_per_validation`/`optimum_batch`. One disclosed liberty: the p=0 row prints "(unbounded)" where the script literally prints "512 (capped)" (a search-range artifact, not a math bound, since yield(N,0)=N is unbounded) -- this is explained in the very next paragraph ("Note also the degenerate row..."), so it is a disclosed simplification, not an undisclosed mismatch like §But 1/20 is a transient.
+:END:
 
 The other cost is attribution. A red train tells you the *batch* is bad and
 nothing about which member. The model charges =ceil(log2 N)= validation runs to
@@ -302,6 +432,16 @@ says only "if nothing ever fails, never validate twice". Any argument for large
 trains that does not carry a failure rate is that row in disguise.
 
 ** The negative result that matters
+:PROPERTIES:
+:CUSTOM_ID: rs-negative-result
+:VERDICT: n/a
+:FINDING: Simulator output, not a bibliographic citation.
+:CUSTOM_ID: rs-negative-result
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: N*=16 at p=0.05 / cadence 8-16h / 92-99% emergency share cross-checks against table 11 (8h→92.5%, 12h→99.4%) and table 7 (p=0.05 best cadence 32 slots=16h→cars/train 16.1); the [E, given the logistic...][H] about the world hedge is correctly placed (agreement between two internal models is not an external observation).
+:END:
 
 The optimum is unreachable, and this repo's own model says so. Feeding the
 measured train latencies into =gates/simulate-gates.py='s =emergency_pressure=
@@ -331,6 +471,16 @@ hours", and Chrome has compressed its train from six weeks to two rather than
 abolishing it.
 
 ** Bisect is not optional
+:PROPERTIES:
+:CUSTOM_ID: rs-bisect-not-optional
+:VERDICT: n/a
+:FINDING: Simulator output; forward-references citations verified under rs-batch-size-attribution.
+:CUSTOM_ID: rs-bisect-not-optional
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Table 8 reproduced exactly (bisect vs dissolve, p=0.02..0.20); livelock claim (23.3→1.5 completions/day, 8/24 runs ship nothing at p=0.20) matches the script's output verbatim.
+:END:
 
 "Roll the train back and everyone tries again" is not a recovery, it is a
 deferral: somebody still has to find out which car broke it. Modelling that as
@@ -363,11 +513,31 @@ that batches of thousands of changes made "failures identified at deployment
 time significantly harder to isolate" (ICSE'16).
 
 * Intent is not evidence
+:PROPERTIES:
+:CUSTOM_ID: rs-intent-not-evidence
+:VERDICT: n/a
+:FINDING: Section header/argument; no external citations.
+:CUSTOM_ID: rs-intent-not-evidence
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Framing sentence only; the claim is argued in the subsections below.
+:END:
 
 This is the central point and it defeats both strategies for the case that
 matters.
 
 ** The distinction is already in the spec
+:PROPERTIES:
+:CUSTOM_ID: rs-distinction-in-spec
+:VERDICT: n/a
+:FINDING: Quotes spec.org (in-repo), not an external source requiring bibliographic verification.
+:CUSTOM_ID: rs-distinction-in-spec
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Correctly applies the C1 (mutable, unowned by automation)/C2 (hash-bound verdict) distinction already established at §Where a verdict can be bound to "on main"; no new claim introduced, consistent reuse of the same framework.
+:END:
 
 =spec.org= §Domain model states it twice, about two other things, and both
 statements transfer without modification:
@@ -402,6 +572,16 @@ thing C2 exists to forbid. The disciplined form is "deploy =main@<sha>= where
 which is the cost the train was supposed to amortize away.
 
 ** What each strategy actually does to C5
+:PROPERTIES:
+:CUSTOM_ID: rs-c5
+:VERDICT: n/a
+:FINDING: Internal argument + simulator table; no external citations.
+:CUSTOM_ID: rs-c5-effect
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Table 10 reproduced exactly. Correctly separates "reduces cost" (yes, by N) from "reduces necessity" (no) for C5 -- this is the same discipline requested for the DORA section, applied consistently here.
+:END:
 
 C5 -- verdicts revocable after issue -- is one of the two capabilities
 =spec.org= marks *rare*, and it is guard 4b's. Neither strategy removes the
@@ -425,6 +605,16 @@ does not absorb them *at all* in the sense that matters, because the emergency
 never rides.
 
 ** A train that can be jumped is not a train for the case that matters
+:PROPERTIES:
+:CUSTOM_ID: rs-train-jumped
+:VERDICT: n/a
+:FINDING: Internal argument referencing spec.org; no external citations.
+:CUSTOM_ID: rs-train-jumped
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: "A response to having been jumped, not a way of not being jumped" is a precise, non-overclaiming statement backed by §What each strategy actually does to C5's numbers.
+:END:
 
 By construction, an emergency cannot wait for the cadence -- mean wait is =C/2=,
 and an emergency that waits two hours was not an emergency. So every train has
@@ -458,12 +648,32 @@ Stated plainly, which is what this section exists for:
 | Does it make emergencies *cheaper*? | *Yes*: 1 revocation and 1 rebuild for the batch, +0.10 validations/ship at 8/day [E] | *Marginally*: the revert target is nameable |
 
 * Services deployed continuously over time
+:PROPERTIES:
+:CUSTOM_ID: rs-services-deployed
+:VERDICT: n/a
+:FINDING: Section header; no external citations.
+:CUSTOM_ID: rs-services-continuous
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Framing sentence only.
+:END:
 
 This is where the notes matter most, and where the repo's guards are weakest -- 
 because guard 5 as written assumes an atomic cutover, and a long-lived service
 with rolling deploys does not have one.
 
 ** Guard 5 is false by construction during a roll
+:PROPERTIES:
+:CUSTOM_ID: rs-guard5-false
+:VERDICT: n/a
+:FINDING: Internal argument about gates/health.sh; no external citations.
+:CUSTOM_ID: rs-guard5-false-during-roll
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Tautologically valid given rolling-deploy semantics (some replicas necessarily serve the previous sha mid-roll); the proposed replacement predicate (∀responses: served_build ∈ {prev, H(c)} during the roll; ∀replicas = H(c) after deadline D) is well-formed and correctly marked [I], not [E].
+:END:
 
 : 5 | served_build(production) = H(c) | after deploy
 
@@ -486,6 +696,16 @@ set means an earlier deploy never finished -- and it cannot be expressed at all
 by a guard that compares against a single expected value.
 
 ** "The deployed version" is not one thing, so the record must say so
+:PROPERTIES:
+:CUSTOM_ID: rs-deployed-version
+:VERDICT: n/a
+:FINDING: Internal argument; no external citations.
+:CUSTOM_ID: rs-deployed-version-not-one-thing
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: C6 argument reuses the attested-vs-self-reported distinction consistently with §The distinction is already in the spec; no internal contradiction.
+:END:
 
 C6 -- a platform-attested deployment record -- is the capability guard 4 rests
 on. Under rolling deploys, "artifact X reached environment Y" is ambiguous for
@@ -498,6 +718,16 @@ that writes "deployed" when it finishes *starting* the roll is self-reporting
 an event that has not happened yet.
 
 ** Guard 4b needs a third evaluation point
+:PROPERTIES:
+:CUSTOM_ID: rs-guard4b-third-point
+:VERDICT: n/a
+:FINDING: Internal argument, explicitly marked [H] by the note itself; no external citations to verify.
+:CUSTOM_ID: rs-guard4b-third-point
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Exemplary honest [H] scoping: explicitly states the simulator has no rolling model and "nothing has been observed" -- reasoning from the guard's own rule is clearly separated from measurement.
+:END:
 
 =spec.org= already moved guard 4b from request time to activation, and
 Hypothesis then moved it again to the merge -- "activation is not the last point
@@ -509,6 +739,16 @@ either. [H] -- the simulator has no rolling model, so this is reasoning from the
 guard's own rule; nothing has been observed.
 
 ** Rollback targets, and the one place the strategies compose
+:PROPERTIES:
+:CUSTOM_ID: rs-rollback-targets
+:VERDICT: n/a
+:FINDING: Internal argument/table; no external citations.
+:CUSTOM_ID: rs-rollback-targets
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: "You cannot roll back one car" follows validly from a train's merge being a single atomic tree; table is consistent with every per-strategy claim made earlier in the file.
+:END:
 
 A rollback target must be *reachable* and it must have *evidence*. The two
 strategies split these:
@@ -529,6 +769,16 @@ rollback *precision* for rollback *evidence*, and for a service that is
 deployed continuously that trade is structural in both directions.
 
 * History -- what is verifiable
+:PROPERTIES:
+:CUSTOM_ID: rs-history-verifiable
+:VERDICT: n/a
+:FINDING: Method note. Its claim that engineering.fb.com refuses direct connections from this class of environment was independently reproduced here: WebFetch to two engineering.fb.com URLs returned ECONNREFUSED in this session, corroborating the stated need for a proxy. Substantive claims are verified under the child headings below.
+:CUSTOM_ID: rs-history-verifiable
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Method note (proxy access, cross-checked against secondary sources, unverifiable items marked as such) is itself sound methodology; underlying citation accuracy is citation-auditor's lane.
+:END:
 
 The prompt for these notes recalled Facebook's release engineering team
 discussing this around 2011: Chuck Rossi, trunk plus a weekly release branch
@@ -543,8 +793,30 @@ against independent secondary sources. Where a claim rests only on a secondary
 source, it says so.
 
 ** Verified
+:PROPERTIES:
+:CUSTOM_ID: rs-verified-section
+:VERDICT: n/a
+:FINDING: Subsection header only.
+:CUSTOM_ID: rs-verified
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Container heading for the [E]-tagged historical subsections below.
+:END:
 
 *** Rossi, and the talks [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-rossi-talks
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Rossi hired 2008 as Facebook's first release engineer, per 2012-04-05 blog post (fetched via r.jina.ai proxy since engineering.fb.com refuses direct connection, matching the note's own method caveat). QCon SF 2013 'The Facebook Mobile Release Process' confirmed as Christian Legnitto's, not Rossi's, per infoq.com/presentations/Facebook-Release-Process/ (Legnitto bio: 'Leads Mobile Release Engineering at Facebook'). RELENG 2014 talk confirmed as an *invited talk*, not a keynote, per releng.polymtl.ca/RELENG2014/html/program.html ('Moving to mobile: The challenges of moving from web to mobile releases', Session 1, 9:00 AM). No Velocity talk by Rossi found independently either, consistent with the note's own [unverified] flag.
+:CUSTOM_ID: rs-rossi-talks
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Descriptive/historical content, no classification or computed claim in this note's lane; two embedded corrections (QCon SF 2013 talk misattributed to Rossi; no Velocity talk verified) are self-consistent with §Could not verify.
+:END:
 
 Chuck Rossi was Facebook's first release engineer, hired 2008, later
 engineering director of Release Engineering -- stated on Facebook's own blog,
@@ -568,6 +840,18 @@ Two corrections worth carrying, because both are widely miscited:
 - *No Velocity talk by Rossi could be verified.* [unverified]
 
 *** The weekly push mechanics, 2012-2013 [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-weekly-push-mechanics
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Feitelson, Frachtenberg, Beck, 'Development and Deployment at Facebook', IEEE Internet Computing 17(4):8-17, 2013, DOI 10.1109/MIC.2013.25 -- confirmed exactly via Crossref (author order, volume, issue, pages, year all match the file's citation verbatim). Wheeler interview and Ars Technica corroboration not independently re-located this pass (searches returned no results); not contradicted, flagged as residual gap.
+:CUSTOM_ID: rs-weekly-push-mechanics
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Descriptive/historical content; no analytical claim beyond citation accuracy (citation-auditor's lane).
+:END:
 
 The most detailed primary source for the mechanics is a peer-reviewed paper,
 not a blog post: Feitelson, Frachtenberg, Beck, /Development and Deployment at
@@ -612,6 +896,18 @@ IRC meant it was picked. The release engineering team had five members and
 handled up to 300 changes a day.
 
 *** The model [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-the-model
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: 2017-08-31 blog quote ('For many years, we pushed the Facebook front end three times a day...') confirmed verbatim via proxy fetch. Rossi/Shibley/Su/Beck/Savor/Stumm, FSE'16, pp.12-23, DOI 10.1145/2950290.2994157 confirmed exactly via Crossref: author order, pages, venue all match. Minor: Crossref's indexed title is 'Continuous deployment of mobile software at facebook (showcase)' -- the file's title drops the '(showcase)' suffix marking it as the FSE'16 industrial-showcase track; cosmetic, propose appending '(showcase)' for completeness. Matches reference-survey.org's independently-recorded DOI for this paper.
+:CUSTOM_ID: rs-the-model
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Direct quotation plus dating caveats; no independent analytical claim.
+:END:
 
 Facebook's own retrospective states it exactly, and is the citation to use:
 
@@ -649,6 +945,18 @@ was running during that period and are read back onto 2011 by the recollection's
 own account of continuity.
 
 *** Push karma [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-push-karma
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: 'Everyone is born with 4 stars, and you can only go down from there...' confirmed verbatim via proxy fetch of the 2012-04-05 engineering.fb.com post.
+:CUSTOM_ID: rs-push-karma
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: "Independently of karma" reads as plain-English "in addition to", not a statistical-independence claim -- not an overclaim in context.
+:END:
 
 The term is verified, and it is Facebook's own -- it is in the *title* of the
 2012-04-05 post. Rossi, verbatim:
@@ -686,6 +994,18 @@ engineer with code in that day's push was present and actively testing and
 supporting it.
 
 *** Scale [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-scale
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: 'between 500 and 700 cherry-picks per day', 'more than 1,000 diffs a day', 'as many as 10,000 diffs' all confirmed verbatim via proxy fetch of the 2017-08-31 post.
+:CUSTOM_ID: rs-scale
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Numbers are direct quotations, not derived; no computation to check.
+:END:
 
 From the 2017-08-31 post: "between 500 and 700 cherry-picks per day"; "We were
 ingesting more than 1,000 diffs a day to the master branch"; "the weekly push
@@ -694,6 +1014,18 @@ fewer than 10 members" while mobile developers went from "fewer than 100" in
 2012 to "over 1,500" in 2016.
 
 *** Deploy separated from launch, and the release-engineering gate [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-deploy-separated-launch
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Facts attributed to Feitelson et al. 2013 (Gatekeeper, dark launches, ~1,000 dev engineers / 3 release engineers, no separate QA). The paper's identity/metadata is independently confirmed (see rs-weekly-push-mechanics); the specific interior facts were not re-extracted from the PDF this pass (IEEE Xplore blocked scraping, no proxy attempted for this section) -- not contradicted, but unverified at the sentence level.
+:CUSTOM_ID: rs-deploy-separated-gate
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Descriptive/historical content, no independent claim.
+:END:
 
 Every line of code was reviewed by an engineer other than its author, through
 Phabricator. Rollback was usually a single commit and its few dependencies;
@@ -715,6 +1047,18 @@ engineer deploy unauthorized, and Facebook chose more oversight instead
 because it handled large amounts of personal data.
 
 *** Why the branch model was revised [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-branch-model-revised
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: 'By 2016, we saw that the branch/cherry-pick model was reaching its limit...' and 'The amount of manual effort needed to coordinate and deliver such a large release every week was not sustainable' both confirmed verbatim via proxy fetch of the 2017-08-31 post.
+:CUSTOM_ID: rs-why-branch-revised
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: "Coordination cost, not correctness" is a direct, supported reading of the quoted passage (which is about manual coordination effort, and does not mention defect rates or correctness).
+:END:
 
 Facebook's stated reason is a *coordination* cost; correctness goes unmentioned:
 
@@ -732,6 +1076,18 @@ flags decoupling code release from feature release, and =Flytrap= aggregating
 user reports. (Gatekeeper and Flytrap are independently attested in FSE'16.)
 
 ** Where the practice has been revised, and where it has not
+:PROPERTIES:
+:CUSTOM_ID: rs-practice-revised
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: 'Today we use the same kind of branch/cherry-pick model on mobile that we previously used on web' confirmed verbatim via proxy fetch, corroborating the note's central correction (web abandoned the train, mobile kept it). FSE'16 Findings 4/5/6 (cycle length vs cherry-picks/launch-blockers/crash rate) rest on the FSE'16 paper already confirmed under rs-the-model; the findings' exact wording was not re-extracted from the ACM PDF this pass (403 on dl.acm.org) -- not contradicted, flagged as residual gap.
+:CUSTOM_ID: rs-practice-revised
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Correctly reads FSE'16 Findings 4/5/6: cycle length had no measured effect on cherry-pick/launch-blocker ratio or crash rate (4,5); the only measured benefit was removal of deadline-crunch pressure (6). The note explicitly declines to claim more ("narrower claim than 'small batches are better'") -- exactly the discipline this review was asked to check for.
+:END:
 
 *The most important correction to the recollection is that "Facebook abandoned
 the release train in 2017" is true only of the web tier.* The same 2017 post
@@ -759,8 +1115,30 @@ people crammed against. That is a narrower claim than "small batches are
 better", and this note should not claim more than it.
 
 ** What the broader literature says, including where it contradicts the note above
+:PROPERTIES:
+:CUSTOM_ID: rs-broader-literature
+:VERDICT: n/a
+:FINDING: Subsection intro; no independent claim beyond its children.
+:CUSTOM_ID: rs-broader-literature
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Pure container heading introducing the four literature subsections below; no independent claim of its own.
+:END:
 
 *** Trunk-based development -- the recollection's "cherry-picking is a smell" is false [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-trunk-based-dev
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: The cherry-pick-to-release-branch quote is confirmed near-verbatim at trunkbaseddevelopment.com/branch-for-release/: 'reproduce the bug on the trunk, fix it there with a test... then cherry-pick that to the release branch.' BUT the file's second quoted fragment -- "if you are fixing bugs on the release branch and merging them down to the trunk you are doing it wrong" -- is presented in quotation marks yet does NOT match the source, which reads: 'You should not fix bugs on the release branch in the expectation of cherry-picking them back to the trunk.' This is a paraphrase dressed as a direct quote. Correction: replace with the verbatim sentence, or drop the quotation marks. The 'zero occurrences of smell/anti-pattern across all 30 pages' claim was spot-checked on 2 of 30 pages (no hits) and not fully re-crawled this pass.
+:CUSTOM_ID: rs-tbd-cherry-picking-smell-false
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Independently spot-checked against trunkbaseddevelopment.com: cherry-picking trunk→release-branch is presented as best practice, not a smell/anti-pattern; only the reverse direction (fixing on the release branch and merging down to trunk) is discouraged. This matches the note's characterization and supports the self-correction -- the recollection's blanket "cherry-picking is a smell" claim is genuinely false, not just uncited. The offered alternative source for the recollection (Hammant's blog, not the site) is clearly labeled as a different, non-equivalent source.
+:END:
 
 A case-insensitive search of all 30 pages of =trunkbaseddevelopment.com=
 (Paul Hammant) found *zero* occurrences of "smell", "anti-pattern" or
@@ -778,6 +1156,18 @@ than the site: "The CD-style firehose into production from trunk, should be
 your goal though. i.e. no branches." (2015-12-13).
 
 *** Accelerate / DORA -- supports small batches, and is silent on release trains [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-accelerate-dora
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: dora.dev/capabilities/trunk-based-development/ confirmed near-verbatim: 'bug fixes must be cherry picked and merged into releases' and 'In cases where releases happen multiple times a day, release branches are not required at all' both present. The 2016 State of DevOps Report p.31 verbatim quote and the 'zero full-text matches for release branch/train/cherry' claim were not independently re-located this pass (PDF search unsuccessful via available tools); not contradicted, flagged as residual gap.
+:CUSTOM_ID: rs-dora-silent-on-trains
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: corrected
+:FINDING: The silence-vs-opposition distinction itself is correctly drawn and is the strongest section in the file for exactly the discipline requested (explicit warning: "anyone citing Accelerate as a verdict on release trains is over-reading it"; the long-cadence-train-as-code-freeze mapping is correctly marked [I], not attributed to DORA). But "DORA never studied release trains" is stated categorically from a full-text search of only the 2016 and 2017 State of DevOps Report PDFs -- DORA's report series runs many more years than that, plus the Accelerate book itself. The evidence supports "not found in the two reports searched," not a categorical "never". Fix: narrow the claim to the years actually searched, or extend the search.
+:END:
 
 This is the strongest contradiction to how these notes might otherwise be
 argued. Full-text search of the 2016 and 2017 State of DevOps Report PDFs for
@@ -809,6 +1199,18 @@ Two consequences for this note, and both are constraints on it:
    same way as §The negative result that matters: run it short, or not at all.
 
 *** Google -- endorses branch-and-cherry-pick, for a reason this note should take seriously [E]
+:PROPERTIES:
+:CUSTOM_ID: rs-google-branch-cherry-pick
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: SRE book ch.8 confirmed written by Dinah McNutt (edited by Betsy Beyer and Tim Harvey) via sre.google/sre-book/release-engineering/; all three quoted sentences confirmed verbatim, including 'Using this branch and cherry pick method, we know the exact contents of each release.' Chromium blog quote confirmed verbatim via raw-HTML fetch of blog.chromium.org's 2010-07-22 post, byline 'Posted by Anthony Laforge, Program Manager': 'We basically wanted to operate more like trains leaving Grand Central Station...'. Chrome cadence dates confirmed exactly: 4-week cycle announced 2021-03-04, effective 2021-09-21 (Chrome 94, per developer.chrome.com/blog/faster-release-cycle); 2-week cycle announced 2026-03-03, effective September 2026 (Chrome 153, per developer.chrome.com/blog/chrome-two-week-release and corroborating press coverage) -- both dates match the file exactly, and the quote 'their smaller scope minimizes disruption and simplifies post-release debugging' is verbatim. AOSP release-lifecycle quote not independently reachable this pass (source.android.com URL 404'd); not contradicted.
+:CUSTOM_ID: rs-google-branch-cherry-pick
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: "Endorses" is supported by the quoted rationale ("we know the exact contents of each release" as a deliberate, stated tradeoff, not incidental practice); the section proactively flags and excludes the commonly misattributed "virtually no releases are built directly from mainline" sentence as not present in the source -- the opposite of overclaiming.
+:END:
 
 /Release Engineering/, ch. 8 of /Site Reliability Engineering/ (O'Reilly 2016),
 *written by Dinah McNutt* -- not by the book's editors, who are frequently
@@ -856,6 +1258,18 @@ might cherry pick changes into this release branch to address bug fixes"
 (AOSP /Release lifecycle/).
 
 *** Batch size and attribution cost [E], with one gap [H]
+:PROPERTIES:
+:CUSTOM_ID: rs-batch-size-attribution
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: corrected
+:FINDING: Feitelson et al. and Savor et al. citations both confirmed exactly via Crossref (see rs-weekly-push-mechanics and rs-the-model): Savor/Douglas/Gentili/Williams/Beck/Stumm DOI 10.1145/2889160.2889223, ICSE'16 Companion pp.21-30 -- exact match, and consistent with reference-survey.org's independently-recorded DOI for this paper (which describes it as 'ICSE-SEIP 2016'; the Crossref record shows it as the ICSE'16 Companion volume, of which SEIP is a track -- not a conflict, just differing specificity). Memon et al. confirmed via Crossref: DOI 10.1109/ICSE-SEIP.2017.16, venue '...Software Engineering in Practice Track (ICSE-SEIP)', authors Memon, Gao, Nguyen, Dhanda, Nickell, Siemborski, Micco -- matches the file's author-et-al. and venue citation. Correction: Crossref's indexed title is sentence-case 'Taming Google-scale continuous testing'; the file gives title-case 'Taming Google-Scale Continuous Testing' -- cosmetic only, propose sentence-case to match the indexed record. Direct quotes from Memon et al. and Reinertsen's page numbers (p.119, p.121) were not independently re-extracted this pass (IEEE Xplore blocked scraping; no accessible full text of the Reinertsen book found) -- not contradicted, flagged as residual gaps.
+:CUSTOM_ID: rs-batch-size-attribution-cost
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: The [H] gap is precisely scoped: what's cited (Reinertsen B10/B11's U-curve shape, the Facebook/OANDA ICSE'16 natural experiment, the Memon et al. ICSE-SEIP 2017 N-way ambiguity) is separated from what's inferred (joining git-bisect's O(log n) to the batch-size argument is the note's own construction, explicitly "not borrowed"). Checked the cost model itself (sim/train_sim.py `yield_per_validation`): it charges each bad car a full independent ceil(log2 N)-cost bisection, which is more expensive than optimal combinatorial group-testing bounds for multiple simultaneous faults -- i.e. the model is conservative (overprices attribution), not optimistic, so it does not artificially inflate the case for small batches.
+:END:
 
 Reinertsen, /The Principles of Product Development Flow/ (Celeritas, 2009),
 ch. 5 *"Reducing Batch Size"* -- note the chapter title, which is often given
@@ -902,7 +1316,66 @@ Memon et al.; *joining them is this note's own inference* and the
 =ceil(log2 N)= cost model in §Debugging a red train is therefore [H], not
 borrowed. If it is wrong, it is wrong here and not upstream.
 
+*** Blue-green and canary predate this note's only dated example by a decade [E]
+
+Everything dated above is Facebook's practice, 2012-2013 (Rossi's numbers,
+Willie Wheeler's interview). Read alone, that reads as though staged
+percentage rollout is a 2010s cloud-era invention. It is not, and the record
+should say so.
+
+*The name "blue-green deployment" is 2010, and Fowler says so himself.*
+Martin Fowler's bliki entry is dated 1 March 2010
+([[https://martinfowler.com/bliki/BlueGreenDeployment.html][martinfowler.com/bliki/BlueGreenDeployment.html]]) and does not claim to
+introduce the technique -- it says the pattern "has been 'out there' for
+ages, but I don't see it used as often as it should be," and credits Daniel
+Terhorst-North and Jez Humble for the *name*, not the practice. The 2014
+=CanaryRelease= entry ([[https://www.martinfowler.com/bliki/CanaryRelease.html][martinfowler.com/bliki/CanaryRelease.html]]) makes the
+same move for "canary": the mining metaphor is old, the term applied to
+software rollout is not claimed as new by Fowler either.
+
+*A/B, sticky-session traffic segmentation has a solid pre-2005 anchor.*
+Amazon's internal experimentation platform, "Weblab," ran controlled
+sticky-session-based A/B splits from 2003 -- seven years before Fowler's
+post -- documented in Kohavi & Round's survey
+([[https://ai.stanford.edu/~ronnyk/2009controlledExperimentsOnTheWebSurvey.pdf][Kohavi & Round, "Controlled Experiments on the Web," Stanford AI Lab]]).
+Sticky/persistent sessions as a load-balancer feature category are older
+still -- Cisco LocalDirector, "the industry's first load balancer," shipped
+to a customer in April 1996 with cookie-based persistence
+([[https://en.wikipedia.org/wiki/Cisco_LocalDirector][Wikipedia: Cisco LocalDirector, cited]]) -- though a dated 2002-2003 vendor
+manual using deployment-specific (not just failover) language for a pool
+swap was not located; that is Wayback-Machine-and-PDF archaeology this pass
+did not do, flagged as a gap rather than forced.
+
+*Where the trail goes cold, honestly.* Michael Nygard's *Release It!*
+(2007) is widely cited as covering equivalent zero-downtime-release ground
+three years before Fowler, but no excerpt naming a pool-swap pattern was
+pulled from search directly -- the book isn't indexed in a form search
+surfaces, and confirming this needs a direct read
+([[https://archive.org/details/releaseitdesignd0000nyga][archive.org copy]]), not another search pass. A citable 1999-2003 primary
+source using "hot standby" or equivalent language specifically for
+*deployment* (as opposed to failover) did not surface either. Both are
+recorded as open, not as confirmed.
+
+*What this changes about the note above.* Nothing in Facebook's 2012-2013
+practice is wrong; it remains the best-dated, most granular single case
+study in this file. What changes is the frame: H1/H2/H3 is one company's
+name for a staged-rollout shape that already had a name (blue-green), a
+name for its smaller sibling (canary), and at least one solidly dated
+production A/B implementation (Weblab, 2003) a decade earlier. A reader
+relying on this file alone before this addition would have dated the whole
+category to 2012; that was this file's gap, not the industry's history.
+
 ** Could not verify
+:PROPERTIES:
+:CUSTOM_ID: rs-could-not-verify
+:VERDICT: n/a
+:FINDING: Self-describing meta list of the note's own unresolved items. Independently consistent: no Velocity talk by Rossi was found in this audit either.
+:CUSTOM_ID: rs-could-not-verify
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Appropriately transparent: explicitly instructs "do not repeat this figure" for the uncorroborated 4,000-6,000 number rather than quietly omitting it.
+:END:
 
 - Any Velocity conference talk by Chuck Rossi.
 - The byline of the 2017-08-31 post. The page carries *no byline*; attribution
@@ -915,6 +1388,18 @@ borrowed. If it is wrong, it is wrong here and not upstream.
   reports; only the book's exact sentence is unverified).
 
 ** What the history changes about the argument above
+:PROPERTIES:
+:CUSTOM_ID: rs-history-changes-argument
+:VERIFIED_AT: 2026-09-20T16:53:37Z
+:VERIFIED_BY: citation-auditor
+:VERDICT: correct
+:FINDING: Synthesis restates facts already verified above (500-700 cherry-picks/day, mobile kept the branch/cherry-pick model, Chrome's cadence compression, the SRE-book 'exact contents' quote); introduces no new unverified external claims.
+:CUSTOM_ID: rs-history-changes-argument
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Three synthesis points are each traceable to material established in the preceding subsections; no new unsupported leap introduced at the synthesis step.
+:END:
 
 Three things, and none of them is decorative.
 
@@ -942,6 +1427,16 @@ Three things, and none of them is decorative.
    survives regardless of which strategy anyone picks.
 
 * Closing table
+:PROPERTIES:
+:CUSTOM_ID: rs-closing-table
+:VERDICT: n/a
+:FINDING: Summary table of the note's own simulator results and prior arguments; no new external citations.
+:CUSTOM_ID: rs-closing-table
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: All cited figures (13.63→0.58, log2 N bisect cost, 23.3→1.5/day at p=0.20, N·p≈0.7, 92-99% emergency share) cross-check against the body sections and the reproduced simulator output.
+:END:
 
 | Strategy | Fixes the 1/20 contention? | Fixes =itil:emergency=? | What it costs |
 |----------+----------------------------+---------------------------+---------------|
@@ -966,6 +1461,16 @@ batching arithmetic that failed. It was that a human was standing where a
 contract should have been.
 
 * Refutation conditions
+:PROPERTIES:
+:CUSTOM_ID: rs-refutation-conditions
+:VERDICT: n/a
+:FINDING: Methodological (falsification criteria for the simulator claims); no external citations.
+:CUSTOM_ID: rs-refutation-conditions
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: Conditions are well-posed and falsifiable. Condition 2's bound (N*·p outside [0.4,1.0] for p∈[0.01,0.33] would refute the closed form) comfortably contains the actually measured range (0.64-0.80 in that p interval), so the condition is neither trivially satisfied nor already-falsified by the note's own data.
+:END:
 
 What would falsify the claims above, in the repo's house style:
 
@@ -985,6 +1490,16 @@ What would falsify the claims above, in the repo's house style:
    refute §Intent is not evidence, and would be very interesting.
 
 * Reproducing
+:PROPERTIES:
+:CUSTOM_ID: rs-reproducing
+:VERDICT: n/a
+:FINDING: Reproduction commands; no external citations.
+:CUSTOM_ID: rs-reproducing
+:VERIFIED_AT: 2026-09-20T16:52:57Z
+:VERIFIED_BY: claim-validator
+:VERDICT: correct
+:FINDING: `cd sim && python3 train_sim.py` reproduced independently on this pass (Python 3.14, not the stated 3.11.15 -- output matched regardless); every numbered table cited in prose matched, with the two caveats logged at §But 1/20 is a transient and §Debugging a red train. `python3 test_scenarios.py` could not be independently run in this sandbox (hypothesis package unavailable under this environment's PEP 668-managed Python) -- an environment gap here, not a defect attributable to the file.
+:END:
 
 : cd sim && python3 train_sim.py          # the eleven tables above
 : cd sim && python3 test_scenarios.py     # pipeline_sim's own suite, unmodified
