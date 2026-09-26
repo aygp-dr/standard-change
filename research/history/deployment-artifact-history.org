@@ -115,17 +115,80 @@ availability claim -- but a 2010 Erlang Factory talk by Mats Cronqvist
 treats that specific number as closer to a repeated design target than a
 systematically measured field result
 [[https://www.erlang-factory.com/upload/presentations/243/ErlangFactorySFBay2010-MatsCronqvist.pdf][Cronqvist, "The Nine Nines," Erlang Factory SF Bay 2010]]. Cite the
-mechanism as [E]; cite "nine nines" specifically as [H].
+mechanism as [E]; cite "nine nines" specifically as [H]. A second,
+non-Ericsson production example of the same *hot-loading* lineage (not
+image-dumping -- see the Common Lisp correction below): Naughty Dog's
+GOAL, a Lisp built on Allegro CL for their game engines, let engineers
+"compile and download code without interrupting or restarting the game"
+(Wikipedia: Game Oriented Assembly Lisp).
 
-*One adjacent lineage, named rather than explored.* Erlang's in-memory,
-two-versions-coexisting model, and Zope's through-the-web live editing
-above, both descend from an older idea: Smalltalk-80's persistent,
-live-editable virtual image (Xerox PARC, Kay/Ingalls/Goldberg). Alan Kay's
-own retrospective is the primary source -- "The Early History of
-Smalltalk," HOPL 1993, ACM SIGPLAN Notices 28(3)
+*The lineage's root.* Erlang's in-memory, two-versions-coexisting model,
+and Zope's through-the-web live editing above, both descend from an older
+idea: Smalltalk-80's persistent, live-editable virtual image (Xerox PARC,
+Kay/Ingalls/Goldberg). Alan Kay's own retrospective is the primary source
+-- "The Early History of Smalltalk," HOPL 1993, ACM SIGPLAN Notices 28(3)
 [[https://dl.acm.org/doi/10.1145/155360.155364][dl.acm.org]], freely readable at
-[[https://worrydream.com/EarlyHistoryOfSmalltalk/][worrydream.com/EarlyHistoryOfSmalltalk]]. Noted as the root of this lineage,
-not developed further here.
+[[https://worrydream.com/EarlyHistoryOfSmalltalk/][worrydream.com/EarlyHistoryOfSmalltalk]].
+
+** Common Lisp: a real artifact, and honestly, nothing more than that
+
+The obvious sixth member of this lineage -- named in an earlier pass of
+this note and left unexplored -- is Common Lisp's own image-dumping
+tradition: =sb-ext:save-lisp-and-die= (SBCL), =ccl:save-application=
+(Clozure CL), =SAVEINITMEM= (CLISP). It is inherited from the Lisp
+Machine tradition directly: MIT's CADR machines (from 1973) ran a
+persistent OS-level "world," commercialized by Symbolics as Genera --
+"saving a world" was an OS-integrated act there, not a library call.
+Common Lisp's standardization (ANSI CL, 1994) preserved the idea but not a
+portable primitive; each implementation kept its own descendant of the
+saved world.
+
+*The mechanism, confirmed against SBCL's own manual*
+([[https://www.sbcl.org/manual/#Saving-a-Core-Image][sbcl.org/manual, Saving a Core Image]]). =save-lisp-and-die= writes global
+heap state to a core file -- the stack is unwound first, so in-flight
+continuations do not survive, only heap/global state does.
+=:executable t= fuses the runtime and the core into one standalone binary;
+without it, a =.core= file still needs a separately invoked runtime.
+Three caveats the manual states plainly: on threaded platforms, "only a
+single thread may remain running" when the dump happens -- CCL differs
+here, supporting a =persistent= process argument so some threads can be
+recorded and restarted
+([[https://ccl.clozure.com/manual/chapter7.7.html][ccl.clozure.com/manual]]), so this is an SBCL-specific constraint, not a
+universal ANSI CL one; the call is destructive to the calling process,
+which is why the documented pattern is to fork a subprocess to perform the
+dump; and open streams cannot survive -- "the OS won't let us preserve a
+stream across save and load," the manual's own words for what happens to
+file handles and foreign pointers. No binary compatibility is promised
+across runtime versions.
+
+*Real artifact, no deployment discipline -- checked, not assumed.* A
+dumped image genuinely is a single, versioned, standalone artifact -- more
+so than Zope's live ZODB or Erlang's in-memory code, neither of which
+produces an exportable artifact at all. But every source found treats the
+dump purely as a build/startup-time optimization -- shipping a warm,
+pre-loaded executable instead of reloading source on every launch -- and
+*none* describe a gate, a promotion process, or a numbered-image release
+discipline built around it. Grammarly's own account of running Lisp in
+production is explicit that the language-agnostic CI/CD layer supplies
+whatever gating exists, not the dump itself: "the application is tested
+and bundled by Jenkins, put on the servers by Rundeck, and run there as a
+regular Unix process by Upstart"
+([[https://www.grammarly.com/blog/engineering/running-lisp-in-production/][Grammarly Engineering, "Running Lisp in Production"]]). No citable
+convention -- spec, vendor doc, or engineering blog -- describes "image
+N+1 promoted over image N" as a discipline analogous to this note's own
+artifact/gate question. Record this as a confirmed negative result, the
+same discipline as Solaris Live Upgrade's corrected date above: Common
+Lisp closes the lineage's artifact question cleanly, and answers its gate
+question with a plain no.
+
+*A correction to the lineage, not an addition to it.* Naughty Dog's GOAL
+(Game Oriented Assembly Lisp, built on Allegro CL) is often reached for as
+Lisp-in-production evidence, and it is real production evidence -- but for
+the *wrong* half of this lineage. GOAL let engineers "compile and download
+code without interrupting or restarting the game" (Wikipedia: Game
+Oriented Assembly Lisp) -- that is hot code loading, the Erlang/OTP
+pattern above, not image-dumping. Filed here as a correction rather than a
+citation for this section.
 
 * Serverless: the first with a versioned artifact and a mechanical gate together
 
@@ -158,12 +221,13 @@ blog-tier sources, not an established consensus, and that AWS's own
 documentation states the mechanism without drawing the git-gating analogy
 itself.
 
-* The line across all four
+* The line across all five
 
 | system | versioned artifact? | mechanical gate before "live"? |
 |--------+----------------------+----------------------------------|
 | Zope (Product Refresh / TTW) | no -- edit *is* deploy | no |
 | OpenACS (tarball + APM) | yes | no -- convention, not mechanism |
+| Common Lisp (=save-lisp-and-die=) | yes -- one standalone core/executable | no -- a build step, not a release discipline |
 | Erlang/OTP (hot code loading) | no -- two versions coexist in one VM | yes -- =.appup=/=.relup=, module-scripted |
 | Lambda / Workers (versions + aliases) | yes | yes -- CodeDeploy / gradual rollout |
 
@@ -172,17 +236,21 @@ Zope and OpenACS both predate, and structurally reject, the split between
 OpenACS has the artifact half but not the gate half -- the closest thing in
 this survey to this repo's own starting complaint about a repository with
 no tracking layer at all: a real, versioned, deployable thing, and nothing
-mechanical standing between "it exists" and "it is what's running." Erlang
-is the system that breaks the table's implicit assumption that the two
-columns move together -- no artifact at all, yet the most formally
-specified gate of the four, because the gate lives in the VM's own code
-manager rather than in anything published externally. Lambda is the first
-system here with *both* halves in the shape this repo's own model expects
-(a published, versioned thing, and a separate, later, mechanically gated
-act that makes it live), which is also the first point in this history
-where the comparison to a label-gated promotion model is apt rather than
-anachronistic -- Erlang got the gate right decades earlier, just built into
-a different place than an artifact registry.
+mechanical standing between "it exists" and "it is what's running." Common
+Lisp lands in exactly the same cell as OpenACS, by a completely different
+route -- a dumped image is a cleaner, more self-contained artifact than a
+tarball, and still has no gate discipline built around it anywhere this
+note could find. Erlang is the system that breaks the table's implicit
+assumption that the two columns move together -- no artifact at all, yet
+the most formally specified gate of the five, because the gate lives in
+the VM's own code manager rather than in anything published externally.
+Lambda is the first system here with *both* halves in the shape this
+repo's own model expects (a published, versioned thing, and a separate,
+later, mechanically gated act that makes it live), which is also the first
+point in this history where the comparison to a label-gated promotion
+model is apt rather than anachronistic -- Erlang got the gate right
+decades earlier, just built into a different place than an artifact
+registry.
 
 * What's unverified, stated plainly rather than smoothed over
 
@@ -195,6 +263,12 @@ a different place than an artifact registry.
 - No atomic or rollback-safe cutover mechanism was found documented for
   OpenACS's non-CVS upgrade path -- the documented instruction is a direct
   in-place =cp -r= overwrite, not a symlink swap or equivalent.
+- No citable production account of ITA Software/QPX's actual deployment
+  mechanics at the image level was found, despite ITA being one of the
+  best-known large production Common Lisp systems -- the sources found
+  (a 2009 ILC talk on their build tooling) describe build pain, not
+  deployment. Left out of the Common Lisp section entirely rather than
+  cited on the strength of the system being well-known.
 - The AXD301 "nine nines" availability figure is cited everywhere Erlang's
   origin story is told, but a 2010 Erlang Factory talk treats it as a
   repeated design target rather than a systematically measured field

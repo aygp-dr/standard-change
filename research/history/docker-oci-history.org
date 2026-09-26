@@ -1,0 +1,141 @@
+#+TITLE: Docker/OCI: when the deployable unit stopped assuming a host
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+=pipeline-history.org= gives Docker one line: "the artifact is immutable
+and its identifier is a digest." That undersells it. Every other content-
+addressed artifact system in this corpus (Nix/Guix's store paths, Lambda's
+versions) gets a full section; Docker/OCI has not, despite being the
+system that changed what "the deployable thing" even meant for most of the
+industry. This note gives it that section, organized around a claim put to
+this note directly rather than lifted from any source: before Docker,
+/deploy/ meant a set of files placed onto a host that already provides
+computation as ambient infrastructure -- PHP dropped into an Apache
+docroot where =mod_php= is already installed, a Rails app's files placed
+where Ruby/Bundler/Passenger already exist. The deployable unit was
+incomplete on its own; it depended on a pre-existing, out-of-band
+runtime the deployer had to trust matched what the code expected. Docker
+made the artifact self-contained instead.
+
+*Flagged honestly before anything else:* that framing is not attributed to
+anyone. It is well-supported by what follows, but it is this note's own
+synthesis, sourced to the mechanism and the historical contrast, not a
+named thesis found in Hykes's own words or anyone else's -- see
+§Was this ever named, below.
+
+* Before: files on an already-provisioned host
+
+Real, citable grounding for the "ambient substrate" side, not just
+assertion. The original NCSA CGI specification (Rob McCool, December
+1993), later formalized as [[https://www.rfc-editor.org/info/rfc3875/][RFC 3875]], defines precisely this model: the
+web server already has an execution environment; CGI is the interface by
+which it invokes an already-installed interpreter and hands it request
+data. The script carries no runtime of its own
+([[https://www6.uniovi.es/~antonio/ncsa_httpd/cgi/interface.html][NCSA CGI spec mirror]]). Capistrano (Ruby, mid-2000s, built for Rails) is the
+SSH/rsync automation of exactly this pattern -- connect to a host that
+already has Ruby/Bundler/Passenger provisioned, push files, run steps on
+the existing server ([[https://github.com/capistrano/capistrano][Capistrano's own repository]]). No single essay was
+found declaring "the deployable unit assumed a pre-existing runtime" as a
+named historical thesis -- this is well-documented *practice* across
+CGI, PHP-on-Apache, and Capistrano-on-preprovisioned-hosts, not a named
+claim, and is presented here as such.
+
+* The mechanism: a manifest, layers, and a digest
+
+The OCI Image Format Specification
+([[https://github.com/opencontainers/image-spec][opencontainers/image-spec]], =manifest.md=) is unambiguous: a manifest is
+JSON with a =config= field referencing a configuration object *by digest*,
+and a =layers= array where each entry is itself a descriptor (media type,
+digest, size), base layer at index 0, later layers stacked in order. Every
+referenced object -- config, each layer, the manifest itself once pulled --
+is addressed by the sha256 digest of its bytes. This is the same
+content-addressing property this corpus already credits to Nix's store
+paths and Lambda's versions, applied to a portable, self-contained bundle
+rather than a single build output or a single function.
+
+*Two mechanisms, kept distinct on purpose.* The *identity* mechanism (what
+makes the artifact content-addressed) is the manifest/digest structure in
+the OCI spec -- independent of filesystem implementation. The *runtime*
+mechanism (how layers compose on disk without duplicating shared content)
+is a union filesystem: Docker's original 2013 driver was AUFS (advanced
+multi-layered unionfs, Junjiro Okajima, 2006), never merged upstream into
+the Linux kernel, which caused real friction with distributions following
+an "upstream first" policy; it was superseded by OverlayFS once merged
+into mainline (~4.0) [[https://developers.redhat.com/blog/2014/09/30/overview-storage-scalability-docker][Red Hat Developer, storage driver overview]]. Conflating
+these two facts -- identity and runtime composition -- is a common
+shorthand; keeping them apart is what makes the C2 mapping below precise
+rather than hand-wavy.
+
+* Origin, precisely dated
+
+Solomon Hykes demoed Docker publicly at PyCon, Santa Clara, **March 15,
+2013** -- a five-minute lightning talk that drew an unexpectedly large
+room [[https://snyk.io/blog/the-docker-project-turns-10/][Docker's own 10-year retrospective]]. It began as an internal tool at
+dotCloud, a PaaS company Hykes founded. What Hykes is consistently quoted
+saying at the time and since is narrower than "eliminates ambient
+environment drift" -- closer to "shipping to the server is hard," a
+build/ship/run portability framing. No 2013-era Hykes quote using "works
+on my machine" was found -- that phrase predates Docker by years, traced to
+Jeff Atwood's "Works On My Machine" badge, coincidentally also dated
+March 15 (2007) [[https://finance.yahoo.com/news/awful-misspelled-presentation-launched-most-131212547.html][Yahoo Finance retrospective]]. Treat the works-on-my-machine
+framing as retrospective/community shorthand, not Docker's own stated
+origin problem.
+
+The OCI itself is later and separately dated: announced **June 22, 2015**
+at DockerCon as a Linux Foundation project, founded jointly by Docker,
+CoreOS, and the maintainers of the rival =appc= spec, explicitly to end
+the Docker-vs-appc format split
+([[https://opencontainers.org/posts/announcements/2015-06-20-industry-leaders-unite-to-create-project-for-open-container-standard/][OCI's own founding announcement]]; [[https://www.linuxfoundation.org/press/press-release/open-container-initiative-establishes-technical-governance-announces-new-members][Linux Foundation press release]]). A draft
+charter followed the next month.
+
+* Was this ever named, the way Fowler named blue-green?
+
+No equivalent was found. What *is* well-documented is Docker leadership
+explicitly rejecting the shallower, more common characterization: then-CEO
+Ben Golub named "people thinking of Docker as a lightweight VM" as the
+single biggest misunderstanding of the project, with Hykes reframing the
+goal as making applications "portable and orchestratable," not virtualized
+([[https://www.infoworld.com/article/2260381/read-my-lips-says-docker-containers-arent-vms.html][InfoWorld, "Containers aren't VMs"]]). The sharper framing this note opens
+with -- files-plus-assumed-environment versus a self-contained image -- is
+a reasonable synthesis of that rejection plus the CGI/Capistrano contrast
+above, but it should be read as this note's own analytical claim, sourced
+to the mechanism and the historical contrast, not attributed to Hykes,
+Golub, or anyone else as their stated thesis.
+
+* Where this lands on the corpus's own capability vocabulary
+
+=spec.org= (§253-258) already defines six capabilities this corpus uses
+consistently elsewhere -- C2, "verdicts bound to a content hash, not a
+branch or a change id," and C6, "a platform-attested deployment record,"
+are the two that bear directly here.
+
+*C2 holds cleanly.* A manifest digest is a real cryptographic hash over
+exact content -- config plus ordered layer digests. =docker pull
+image@sha256:...= is unambiguous and immutable, unlike a tag, which is a
+mutable pointer, not a content address. The [[https://distribution.github.io/distribution/spec/api/][Docker Registry v2 API spec]]
+confirms digests are immutable once pushed. This is the same property
+Nix's store paths and Lambda's version ARNs already earn elsewhere in this
+corpus, applied at the whole-image level.
+
+*C6 needs a real qualification, not a clean yes.* A registry storing an
+image at a digest attests only that the bytes exist and hash-verify. It is
+*not*, by itself, an attestation that a given deployment actually used
+that digest, nor -- absent Docker Content Trust/Notary or newer OCI
+attestation/sigstore mechanisms -- that the content is trustworthy or
+authorized. Plain digest-addressed storage gives C2 for free; C6 requires
+an additional signing/attestation layer that is not automatic. Stated
+plainly rather than rounded up: a bare =docker push= satisfies C2 and
+does not, on its own, satisfy C6.
+
+* What this changes
+
+Docker/OCI now sits alongside Nix/Guix as one of the two systems in this
+corpus's history where the versioned-artifact half of the recurring
+question is not just present but *precisely specified* -- a real spec, a
+real digest, a real registry API. It does not, on the evidence above,
+automatically buy the gate half; C6 stays qualified until a signing layer
+is added on top, the same shape as OpenACS's artifact-without-gate finding
+in =deployment-artifact-history.org=, arrived at by a completely different
+route sixteen years later.
