@@ -1,0 +1,112 @@
+#+TITLE: Core banking: the batch window, the examiner's handbook, and what TSB got wrong
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+This corpus already uses ITIL vocabulary directly -- =itil:standard=,
+=itil:normal=, =itil:emergency= -- and =research/findings/compliance-naming.org=
+already covers ITIL 4 change enablement and CAB in depth, not repeated
+here. What's missing is the specific domain ITIL's own change-management
+language was substantially shaped by: core banking, where the change
+being gated can move real money, and where a software failure and a
+financial-control failure are frequently the same event.
+
+* The batch window: a real mechanical constraint, honestly not fully sourced
+
+Core banking has historically run on mainframes (IBM z/OS, COBOL/CICS)
+with online transaction processing during the day and an overnight or
+weekend batch window for settlement, interest calculation, and statement
+generation. IBM's own documentation frames batch and online as workloads
+kept apart at the *resource* level: resources are "deallocated from
+online applications at the beginning of a batch stream and reallocated
+when batch processing is complete"
+([[https://www.ibm.com/docs/zosbasics/com.ibm.zos.zmainframe/zconc_mfworklds.htm][IBM z/OS batch/OLTP overview]]; [[https://www.redbooks.ibm.com/redbooks/pdfs/sg248119.pdf][Redbook: New Ways of Running Batch
+Applications on z/OS]]). A mainframe change-control practitioner summary
+states the practical consequence directly: "changes must fit into
+carefully controlled implementation windows, especially when batch
+schedules and business cutoffs are involved... low risk changes may be
+permitted during the day, while higher risk changes would be scheduled
+for an outage slot" ([[https://coalesce360.solutions/insights/mainframe-change-management.html][Coalesce360, IBM z/OS Production Change Control]]).
+
+*Stated honestly rather than overclaimed:* no IBM document was found
+stating, in these words, that the batch window is the only period with
+predictable, bounded system state and is therefore the only safe point for
+a change. That's a reasonable inference from the resource-deallocation
+mechanics IBM does document -- not a claim IBM itself makes.
+
+* FFIEC: banking's own change-control text, distinct from generic ITIL
+
+The current FFIEC IT Examination Handbook's *Development, Acquisition, and
+Maintenance* booklet (replacing the older "Development and Acquisition"
+booklet, announced via [[https://www.occ.gov/news-issuances/bulletins/2024/bulletin-2024-26.html][OCC Bulletin 2024-26]]) states segregation of duties
+directly: "Segregation of development and implementation duties helps
+ensure that developers cannot directly alter the production environment.
+Inappropriate developer access may adversely affect the production
+environment's confidentiality, integrity, availability, or resilience."
+Non-production environments are described as existing specifically to
+"develop and test system changes without impacting production," and
+change approval is framed as a dual-control requirement: "no single
+person or group can make changes or modifications without appropriate
+approval" ([[https://ithandbook.ffiec.gov/it-booklets/development-acquisition-and-maintenance/iv-common-development-acquisition-and-maintenance-risk-topics][ithandbook.ffiec.gov, DAM booklet §IV]]).
+
+This is, almost exactly, this repo's own author-cannot-be-reviewer logic
+(=research/findings/reviewer-identity.org=), sourced to a US bank
+examiner's own handbook rather than to ITIL generically. Note for anyone
+citing this directly: both a direct PDF fetch and a mirror 403'd in this
+research pass; the quotes above come from search-indexed snippets of the
+same document -- verify exact wording against the live page before quoting
+it as primary.
+
+* Two-speed banking: real, but not the shape first assumed
+
+The pattern exists, but not as "one bank runs both speeds in one system."
+Lumenalta's 2026 analysis is direct about the batch-bound legacy core
+being inertia, not physics: "the hardware and software could handle
+continuous processing, but making that fundamental change is a leap many
+institutions haven't been willing to take" -- and describes the actual
+modernization pattern as incremental, targeting specific high-impact
+workflows for real-time processing while "leaving the rest of the system
+undisturbed" ([[https://lumenalta.com/insights/why-core-banking-still-runs-on-batchand-what-it-will-take-to-change-that][Lumenalta, "Why Core Banking Still Runs on Batch"]]).
+
+Monzo's own engineering blog is the sharper counter-example: a
+digital-native bank built with no legacy batch core, deploying "to
+production over 100 times a day," including its ledger service
+([[https://monzo.com/blog/2022/05/16/how-we-deploy-to-production-over-100-times-a-day][Monzo, "How we deploy to production over 100 times a day"]]).
+
+*The honest framing.* These are two different resolutions to the same
+tension, not one pattern confirming itself twice: incumbent banks run fast
+edges against a slow legacy core because the core can't safely change
+shape; Monzo and Starling reach continuous deployment at the ledger only
+because they never built a batch core to begin with. Neither is evidence
+of a bank successfully running both speeds *within one system*.
+
+* TSB Bank, 2018: the banking equivalent of this corpus's Facebook case study
+
+Regulators fined TSB **£48.65m total** (FCA £29.75m, PRA £18.9m) for IT
+migration governance failures ([[https://www.fca.org.uk/news/press-releases/tsb-fined-48m-operational-resilience-failings][FCA press release]]; [[https://www.fca.org.uk/publication/final-notices/tsb-bank-plc-2022.pdf][FCA Final Notice]];
+[[https://www.bankofengland.co.uk/-/media/boe/files/prudential-regulation/regulatory-action/final-notice-from-pra-to-tsb-bank.pdf][PRA Final Notice]]). The independent Slaughter and May review, published
+November 2019, found **2,000 known test defects at go-live**, of which the
+board was told about only 800; inconsistent configuration between the
+bank's two data centres despite being specified identical; and that
+active-active testing across both centres was never conducted
+([[https://www.slaughterandmay.com/news/slaughter-and-may-s-independent-review-of-tsb-s-2018-migration-to-a-new-it-platform/][Slaughter and May's own review]]). IBM's post-incident assessment, quoted in
+Increment's writeup, states TSB lacked "a rigorous set of go-live criteria
+to prove production readiness" ([[https://increment.com/testing/what-broke-the-bank/][Increment, "What Broke the Bank"]]).
+
+This is a real, dated, regulator-validated case study on the exact
+failure mode this corpus's own invariants exist to prevent: a change
+proceeding to production without the evidence its own go-live criteria
+required, and a board making a go-live decision on an incomplete account
+of known defects. Worth reading directly against this repo's own "Mark
+any claim you have not observed as [H]" discipline (=CLAUDE.md=) -- TSB's
+board was, in effect, told a smaller, rounder number than the one that was
+true.
+
+* What this changes
+
+Banking's own written change-control text (FFIEC) independently arrives
+at the same segregation-of-duties logic this repo built for itself, from
+a completely different starting point -- a bank examiner's handbook, not a
+label-driven pipeline design. And TSB is direct, dated evidence for why
+that logic matters when it's skipped: not an abstract risk, a £48.65m one.

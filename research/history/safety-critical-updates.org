@@ -1,0 +1,124 @@
+#+TITLE: When the gate is a certification body: avionics, automotive, and ATMs
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+Everything else in this corpus's history gates a deploy with a script, a
+label, or a platform's own attestation. This note looks at three domains
+where the gate is, in whole or part, a regulatory certification body --
+arguably the most rigorous gate this survey has looked at anywhere, and
+also, honestly, the one with the least documented rollout mechanics once
+certification is granted. No forced mapping onto this corpus's own
+gate/verdict vocabulary is attempted here: these are certification-body
+approvals and fleet-ops processes, not CI pipelines with pass/fail
+artifacts, and pretending otherwise would overstate the parallel.
+
+* Avionics: the deepest certification framework, the thinnest rollout story
+
+**The gate.** DO-178C (RTCA, 2011) is the FAA/EASA-recognized means of
+compliance (FAA AC 20-115D names it "an acceptable means, but not the only
+means"). Five Design Assurance Levels scale directly with failure
+severity: A Catastrophic (71 objectives, 30 requiring independent
+verification) down to E No effect (0 objectives)
+([[https://quality.arc42.org/standards/do-178c][arc42 overview]]; [[https://en.wikipedia.org/wiki/DO-178C][Wikipedia]]). Structural coverage escalates with level --
+D requires none, C requires statement coverage, B adds decision coverage,
+A adds Modified Condition/Decision Coverage (MC/DC) plus resolution down
+to compiler-generated object code
+([[https://ldra.com/ldra-blog/do-178c-structural-coverage-analysis/][LDRA]]; [[https://www.rapitasystems.com/blog/does-do-178c-require-object-code-structural-coverage][Rapita Systems]]). Full bidirectional requirements traceability is
+mandated throughout, most stringent at level A
+([[https://www.jamasoftware.com/requirements-management-guide/aerospace-and-defense/do-178c/][Jama Software]]).
+
+**The mechanism.** Historically and still commonly: Loadable Software
+Airplane Parts (LSAP), a technician-operated data loader per ARINC
+615/615A, on removable media, signed per ARINC 645-1
+([[https://www.aviationtoday.com/2010/11/01/field-loadable-software/][Avionics International]]; [[https://www.rtx.com/collinsaerospace/what-we-do/service-and-support/support/loadable-aircraft-part-signing][Collins Aerospace]]). Newer aircraft (787, A350)
+run **ARINC 615A-4** over Ethernet, and the 787's "e-enabled" Common Core
+System (ARINC 664/AFDX) lets ground systems push updates over an onboard
+network at the gate ([[https://www.militaryaerospace.com/commercial-aerospace/article/14224608/next-generation-rockwell-collins-avionics-and-pilot-control-systems-make-first-flight-on-787][Military Aerospace]]). This is not phone-style OTA --
+still a certified part number, a gate session, signature verification, no
+evidence anywhere of silent in-flight updates.
+
+**Rollout: not found.** No source describes staged or canary rollout for
+certified avionics software across a fleet; deployment reads as manually
+driven, aircraft by aircraft. Table A-5 and AC 20-115D's own text could
+not be fetched directly (paywalled/403); the level/coverage figures above
+are corroborated across two independent secondary technical sources, not
+confirmed against RTCA's own text -- flagged honestly rather than cited as
+primary.
+
+* Automotive: the clearest regulation, and a real incident history
+
+**The gate.** UN Regulation No. 156 entered into force 22 January 2021,
+binding for new vehicle *types* from roughly July 2022, extending to all
+newly produced vehicles by July 2024
+([[https://unece.org/transport/documents/2021/03/standards/un-regulation-no-156-software-update-and-software-update][UNECE]]; dates corroborated via [[https://www.ul.com/sis/insights/software-update-management-systems-according-unece-r156][UL Solutions]] and [[https://autocrypt.io/unr156-securing-vehicle-software-updates/][AUTOCRYPT]] since
+UNECE's own PDF returned 403 in this research pass). It requires a
+certified organizational **Software Update Management System (SUMS)**,
+per-vehicle traceability via **RXSWIN** identifiers readable over OBD
+([[https://www.itemis.com/en/glossary/unece-r156/][itemis]]; [[https://diadrom.com/insights/un-r156-sums-requirements][Diadrom]]), and a documented safety/security impact assessment before
+any update deploys.
+
+**Relation to ISO 26262.** 26262 is the general electrical/electronic
+functional-safety lifecycle standard; R156 governs the update *process*
+specifically. A documented gap: 26262 has no normative re-certification
+process for post-deployment OTA changes to safety-relevant behavior --
+R156's SUMS only partially closes it
+([[https://saemobilus.sae.org/papers/analysis-impact-sums-r156-update-functional-safety-2026-26-0618][SAE Mobilus 2026-26-0618]]).
+
+**Tesla, as concrete precedent rather than pop-culture gesture.** 2013:
+an OTA update raised Model S ride height after underbody fire incidents
+([[https://www.greencarreports.com/news/1092515_tesla-model-s-electric-car-software-updates-since-2012][GreenCarReports]]). January 2014: NHTSA recall 14V006000 (29,222 vehicles,
+charger-adapter fire risk) was resolved purely via OTA throttling --
+widely cited as the first OTA-resolved automotive recall
+([[https://techcrunch.com/2014/01/14/tesla-issues-recall-on-about-29222-model-s-power-adapters-that-could-cause-fires/][TechCrunch]]; [[https://www.technologyreview.com/2014/01/14/174576/tesla-motors-over-the-air-repairs-are-the-way-forward/][MIT Technology Review]]).
+
+**Rollout.** An industry pattern exists but is not R156-mandated: push to
+a canary cohort, monitor telemetry and fault codes, expand, halt or
+roll back on failure ([[https://www.redstoneota.com/ota-staged-rollout-safe-update-campaigns/][RedstoneOTA]]). No OEM-published rollout percentage
+was found -- this is pattern-level industry practice, not a verified,
+per-vendor documented figure.
+
+* ATMs: genuinely thin, and that thinness is itself the finding
+
+**The gate.** PCI PTS (PIN Transaction Security) is the one substantive
+thread: a firmware change to an approved device requires re-assessment by
+a PCI-approved lab, delta-evaluated unless the OS changes wholesale (PCI
+SSC materials, via search-indexed snippet -- direct PDF text unverified,
+flagged [H]). PTS POI v6 adds a hard three-year firmware re-approval
+expiration, a real change from purely vulnerability-driven re-evaluation
+in prior versions ([[https://atmavailability.com/navigating-the-transition-a-definitive-analysis-of-pci-pts-poi-v5-and-the-strategic-imperative-of-v6/][ATM Availability]]; program mechanics from
+[[https://listings.pcisecuritystandards.org/documents/PTS_Program_Guide_v2.0_Final.pdf][PCI SSC's own Program Guide]]). Whether an ATM software update specifically
+triggers EMVCo re-certification could not be confirmed publicly -- EMVCo's
+own FAQ returned only terms-of-use text.
+
+**The mechanism.** Marketing-level only from both dominant vendors -- no
+technical spec found. NCR Atleos/APTRA describes centralized remote
+system/config management across mixed fleets
+([[https://www.ncratleos.com/banking/atm-itm/software/management][NCR Atleos]]); Diebold Nixdorf's Vynamic View describes automated
+distribution, scheduled updates, fleet monitoring
+([[https://www.dieboldnixdorf.com/en-us/banking/portfolio/software/availability-management/][Diebold Nixdorf]]). A third vendor, Hyosung, is more explicit and useful:
+they describe moving from USB/floppy media to HTTPS-based centralized push
+with scheduling ([[https://hyosungamericas.com/bulletins/remote-updates/][Hyosung]]) -- implying physical media was recent industry
+practice, not fully retired even now for older or offline units.
+
+**Rollout: not found.** Staged or percentage-based rollout for ATM fleets
+specifically does not appear in any of the three vendors' own public
+material. Canary/ring deployment is well-documented for device fleets in
+general elsewhere in this corpus -- its absence here, specifically for
+ATMs, from vendors who otherwise publish detailed fleet-management
+marketing, is itself worth recording as a real gap in the public record,
+not a search failure.
+
+* What this comparison actually shows
+
+Avionics has the deepest, most rigorous certification framework in this
+entire corpus and almost nothing documented about how an approved update
+actually reaches a fleet at scale. Automotive has the newest, most
+specific regulation (R156) plus a real, dated, citable incident history
+(Tesla's 2014 recall). ATMs have one real regulatory thread surrounded by
+vendor silence. None of the three converge on a shared rollout vocabulary
+the way software deployment has converged on canary/blue-green -- worth
+noting as a real difference in kind: certification gates *whether* an
+update may exist at all; it says comparatively little, across all three
+domains, about *how* it reaches the fleet once it does.

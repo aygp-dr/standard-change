@@ -1,0 +1,134 @@
+#+TITLE: Poudriere: the isolation-as-gate pattern the jail/zone research didn't find anywhere else
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+[[file:isolation-boundary-history.org][isolation-boundary-history.org]] checked FreeBSD jails, Solaris Zones, and
+Bastille specifically, and came back with an honest negative: no
+isolation-boundary technology in that survey documents "swap the whole
+environment" as a release pattern, and Bastille's own docs describe only
+in-place jail updates. This note looks one layer over, at FreeBSD's own
+package-building tooling, and finds something the jail/zone research
+explicitly did not: a real, primary-sourced, project-endorsed instance of
+*isolation used specifically as a quality gate* -- just not the isolation
+this corpus has been looking for, and that distinction matters enough to
+be precise about.
+
+* Poudriere: a clean jail, every build, on purpose
+
+Written by **Baptiste Daroussin (bapt@)**, who also wrote =pkg=, as "a
+faster and simpler replacement for Tinderbox" -- confirmed by co-maintainer
+Bryan Drewery directly: "It was written by the Pkg author Baptiste
+Daroussin... is now mostly maintained by me along with Baptiste and some
+other contributors" ([[https://blog.shatow.net/posts/2015-04-27-Poudriere-FreeBSD-Journal/][Bryan Drewery, "Poudriere," FreeBSD Journal, 2015]]).
+An exact founding year was not pinned down in this pass -- treat "around
+2011, as a Tinderbox replacement" as [H], not confirmed against a dated
+first-commit citation.
+
+*What the isolation is for, in the project's own words.* Poudriere's
+design wiki states both its =testport= and =bulk= commands "are designed
+to build packages in a clean environment"
+([[https://github.com/freebsd/poudriere/wiki/design][poudriere design wiki]]). Mechanically: a reference jail is cloned via ZFS
+snapshot fresh for every build; after each port builds, the filesystem
+rolls back to a clean state before the next one starts. This is explicit
+anti-contamination machinery, not just a conceptual boundary -- it targets
+precisely the failure mode where a package silently picks up a
+host-system file or library it never declared as a dependency. The
+FreeBSD Journal piece names what this replaced bluntly: under the old
+Tinderbox-style approach, "packages are created in an unclean environment
+that is constantly growing larger and more polluted."
+
+*=testport=: the isolated pre-merge workflow, confirmed.* The man page
+states plainly: "The specified port will be tested for build and
+packaging problems. All missing dependencies will first be built in
+parallel" ([[https://man.freebsd.org/cgi/man.cgi?query=poudriere-testport&sektion=8&manpath=freebsd-release-ports][poudriere-testport(8)]]). The Porter's Handbook prescribes this
+as standard pre-submission practice --
+=poudriere testport -j 143amd64 -p development -o www/firefox= -- and
+states the reason directly: "No pollution of the host environment: No
+leftover files, no accidental removals, no changes of existing
+configuration files." It adds that "Ports committers sometimes ask for a
+poudriere log alongside a patch submission to assess whether the patch is
+ready for integration into the ports tree"
+([[https://docs.freebsd.org/en/books/porters-handbook/testing/][Porter's Handbook, Testing chapter]]) -- a build-in-isolation log is,
+literally, evidence a committer requires before trusting a change, the
+same shape as this corpus's own gate-verdict requirement.
+
+*At project scale, not just per-contributor.* Poudriere is also the
+official build-cluster tool (the "pointyhat" cluster) and is used by the
+FreeBSD Ports project for **exp-runs** -- tree-wide test builds run before
+a disruptive, sweeping change (a default-compiler bump, for example) is
+committed. This is the cleanest match found anywhere in this corpus's
+jail/zone/isolation research: Poudriere jails are documented, by the
+project itself, as a testing and quality gate a package or patch must
+pass before being trusted, at both single-port and whole-tree scale.
+
+* The precision this note owes the reader
+
+Poudriere jails are disposable, single-purpose *build* environments --
+nothing like a long-running Bastille jail serving production traffic.
+There is no traffic-cutover concept here at all, and none should be
+implied. The gate criterion is "does it build clean," not "is the new
+version safe to receive live traffic." Conflating the two would misstate
+both this note and =isolation-boundary-history.org='s finding. What
+Poudriere actually demonstrates is narrower and, for that reason, more
+solid: FreeBSD's own project explicitly treats jail isolation as a
+correctness instrument at build time, even though nothing in the FreeBSD
+ecosystem treats jail isolation as a deployment-cutover instrument at
+release time.
+
+* pkg(8): no atomicity, confirmed from the man page and an open issue
+
+=pkg upgrade= compares installed versions against the repository catalogue
+and upgrades what's stale (Handbook §4.4.8,
+[[https://docs.freebsd.org/en/books/handbook/ports/][docs.freebsd.org/handbook/ports]]) -- no atomicity or rollback language in
+that chapter. The man page is explicit that the apply step is
+non-transactional: "Package reinstall or update jobs are processed by
+removing the currently installed package and immediately installing the
+replacement" ([[https://man.freebsd.org/cgi/man.cgi?query=pkg-upgrade][pkg-upgrade(8)]]). A plan is presented for approval before
+that remove-then-install sequence runs, but the sequence itself has no
+journal or rollback primitive -- corroborated by an open upstream issue,
+=freebsd/pkg#1348=, titled "No easy way to rollback to previous state
+(downgrade)," the project's own bug tracker confirming rollback isn't a
+built-in guarantee.
+
+*Repo-level gating, thinner than hoped.* The path from a Poudriere build
+to the public package repository runs through FreeBSD's build cluster
+(documented, thinly, at the wiki page =Teams/clusteradm/Packages=, which
+403'd in this research pass -- flagged as unconfirmed rather than skipped).
+What is confirmed: a clean build in Poudriere is the pass/fail signal
+before publication, and exp-runs are the explicit gate for sweeping
+changes -- but no separately documented canary or staged-percentage
+rollout was found at the repository-publish level. The gate appears to be
+"must build clean," not "roll out to some mirrors first."
+
+* freebsd-update: staged application, not staged rollout
+
+The man page documents three core subcommands: =fetch= (binary updates for
+the currently installed release), =install=, and =rollback= ("Uninstall
+the most recently installed updates")
+([[https://man.freebsd.org/cgi/man.cgi?query=freebsd-update][freebsd-update(8)]]). The Handbook confirms a real staging model at the
+*application* level: patches are downloaded and applied in a separate
+working directory first -- "the system is not being altered yet as all
+patching and merging is happening in another directory" -- and only
+committed to the live filesystem once fully assembled; a kernel-affecting
+patch requires a reboot, a running-binary patch requires restarting the
+affected process ([[https://docs.freebsd.org/en/books/handbook/cutting-edge/][Handbook, ch. 27]]). There is no staged or canary
+*rollout* concept across a fleet of machines -- this stages one machine's
+own patch application, safely, but says nothing about sequencing across
+many machines. Rollback exists but only one step back, not to arbitrary
+history.
+
+* What this changes
+
+This corpus now has a real answer to a question its own jail/zone
+research left open: is isolation ever documented as a gate anywhere in
+the FreeBSD ecosystem this repo actually deploys into? Yes -- at build
+time, for package correctness, by the project's own explicit design and
+practice (Poudriere, =testport=, exp-runs). No -- at deploy time, for
+traffic cutover, anywhere checked (jails, Zones, Bastille, =pkg=,
+=freebsd-update=). If =targets/bastille/= in this repo ever wants a jail-
+level release gate, Poudriere's build-jail pattern is the closest existing
+FreeBSD precedent to adapt from -- not because it does the same thing, but
+because it's the one place in this whole survey where "isolate it, then
+trust it" is already a named, documented, project-endorsed discipline.

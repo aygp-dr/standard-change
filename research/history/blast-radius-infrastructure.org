@@ -1,0 +1,123 @@
+#+TITLE: When your deploy breaks everyone downstream at once: Cloudflare, Fastly, and the config/code gap
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+Every other failure mode in this corpus is bounded to one company's own
+service. Global infrastructure providers have a different problem: a bad
+deploy doesn't just break their service, it breaks every downstream
+customer's service simultaneously, at global scale, often within seconds.
+This note uses real, dated, company-published postmortems rather than
+descriptions of best practice -- these are companies that actually publish
+detailed technical incident reports, unusually good primary sourcing for
+this kind of research.
+
+* Cloudflare, 2019: the incident that named the gap between code and config
+
+July 2, 2019, 13:42 UTC: a WAF rule shipped containing the regex fragment
+=.*(?:.*=.*)=, which triggers catastrophic backtracking -- Cloudflare's
+own example: matching a 20-character string of =x='s took 555 steps
+instead of linear time. Global CPU spiked toward 100% within three
+minutes; the WAF was globally disabled at 14:07 and service restored at
+14:09, a 27-minute outage. The postmortem states plainly that **WAF rule
+changes bypassed Cloudflare's normal staged release process entirely**,
+deliberately, "because of the need to respond rapidly to threats" -- and
+that a CPU-usage guard on regex evaluation had been accidentally removed
+in a prior refactor, with testing checking only functional correctness,
+never CPU cost ([[https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/][Cloudflare, "Details of the Cloudflare outage on July 2,
+2019"]]). Deployed via *Quicksilver*, Cloudflare's own global config-
+propagation store -- the mechanism this corpus's other sections would
+recognize as an extremely fast, extremely wide-reaching label apply, with
+nothing checking it on the way out.
+
+* Cloudflare, 2025: the same gap, a different shape
+
+November 18, 2025: a ClickHouse permission change rolled out gradually,
+node by node, across a cluster. A query generating Cloudflare's Bot
+Management ML feature file started returning duplicate rows the moment it
+hit an updated node, doubling the file's size. That file regenerates and
+republishes to the *entire network* every five minutes -- and because the
+permissions change was itself rolling out gradually, the feature file
+oscillated between correct and broken every five minutes, producing an
+intermittent, flapping global outage rather than one clean failure. The
+oversized file exceeded a hardcoded 200-feature limit in the FL2 proxy,
+causing a Rust panic and HTTP 5xx globally -- core CDN, Workers KV, Access,
+Turnstile, and the Dashboard (whose logins depend on Turnstile) all went
+down together. Automatic generation of the bad file was stopped at 14:24
+UTC, a good file redeployed globally by 14:30, full restoration by 17:06
+([[https://blog.cloudflare.com/18-november-2025-outage/][Cloudflare, "Cloudflare outage on November 18, 2025"]]).
+
+Cloudflare's own follow-up, **"Code Orange: Fail Small"**, is the most
+direct admission found anywhere in this corpus's whole survey: configuration
+changes had been propagating "instantly" across the network with **none
+of the gating that software binary releases get**. The plan commits to
+"require controlled rollouts for any configuration change that is
+propagated to the network, just like we do today for software binary
+releases," extending their existing internal *Health Mediated Deployment*
+(HMD) framework -- defined success/failure metrics, a rollout plan,
+automatic-rollback triggers -- from code to config
+([[https://blog.cloudflare.com/fail-small-resilience-plan/][Cloudflare, "Code Orange: Fail Small"]]). As of this research pass, that
+commitment is written and public but not yet proven against a subsequent
+incident.
+
+A third, smaller data point worth a sentence: December 5, 2025 -- applying
+a WAF kill switch during an unrelated CVE patch rollout hit a long-dormant
+bug in the legacy FL1 proxy, a 25-minute, roughly 28%-of-traffic outage
+([[https://blog.cloudflare.com/5-december-2025-outage/][Cloudflare, "5 December 2025 outage"]]). Worth recording plainly: the kill
+switch mechanism itself is an attack surface, not just a safety net.
+
+* Fastly, 2021, and Cloudflare, 2019: two different shapes of "not your bug"
+
+June 8, 2021: a latent bug shipped by Fastly on May 12 was triggered by
+one customer's *valid* configuration change, taking 85% of Fastly's
+network to errors; recovery to 95% took 49 minutes. Fastly's own
+postmortem is notably thin on concrete new validation or rollout
+mechanisms -- largely "we should have anticipated this" plus a forward
+reference to WebAssembly sandboxing
+([[https://www.fastly.com/blog/summary-of-june-8-outage][Fastly, "Summary of June 8 outage"]]).
+
+June 24, 2019: a small Pennsylvania ISP's BGP Optimizer split received
+route prefixes into more-specific routes and leaked them upstream through
+a chain of providers to Verizon, which failed to filter them and
+announced them to the whole internet. Cloudflare's own traffic dropped
+roughly 15% globally at peak -- despite nothing wrong in Cloudflare's own
+systems, because the failure was purely in upstream internet routing
+([[https://blog.cloudflare.com/how-verizon-and-a-bgp-optimizer-knocked-large-parts-of-the-internet-offline-today/][Cloudflare, "How Verizon and a BGP Optimizer Knocked Large Parts of the
+Internet Offline Today"]]).
+
+These are genuinely different failure shapes, worth distinguishing rather
+than conflating: Fastly's was a latent bug in their own code, triggered by
+someone else's legitimate action -- the trigger was external, the defect
+was not. Cloudflare's BGP incident was a pure transitive dependency
+failure -- nothing Cloudflare built or shipped was wrong at all; the
+failure was entirely upstream, in a network they don't control and can
+only route around, not gate.
+
+* Does any of this connect to this corpus's gate/artifact vocabulary?
+
+Thinly, and stated honestly rather than stretched. HMD -- a defined
+success metric plus automatic rollback, now explicitly extended to config
+-- is functionally a mechanical gate, the same shape as this corpus's own
+recurring question. But no postmortem reviewed here describes running new
+edge configuration against a shadow or canary slice of *live production
+traffic* before a global push, the way this corpus's shadow-traffic
+section describes for application code. The closest documented practice
+is "employee traffic first" -- dogfooding, not shadow-diffing real
+customer traffic against the change. Don't read more into the parallel
+than the primary sources support.
+
+* What this changes
+
+Every other domain in this corpus's history answers "is the artifact
+versioned, is there a gate" for a single company's own deploy. This one
+adds a dimension none of the others have: blast radius at a scale where
+the postmortem itself becomes the primary source, because these companies
+are large enough, and public enough, to have to publish one. Cloudflare's
+own 2025 admission -- that config changes propagated instantly with none
+of code's gating, for years, until two incidents in one month forced the
+point -- is the sharpest evidence in this whole corpus that "we have a gate
+for code" and "we have a gate for everything that actually changes
+behavior in production" are not the same claim, and conflating them is
+exactly the gap that cost Cloudflare two global outages in November and
+December 2025 alone.

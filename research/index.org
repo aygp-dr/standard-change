@@ -66,8 +66,12 @@ described in Part I without touching the labels it already has.
 #+INCLUDE: "history/deployment-artifact-history.org" :minlevel 3
 #+INCLUDE: "history/docker-oci-history.org" :minlevel 3
 #+INCLUDE: "history/isolation-boundary-history.org" :minlevel 3
+#+INCLUDE: "history/freebsd-ports-isolation.org" :minlevel 3
 #+INCLUDE: "history/os-level-live-deploys.org" :minlevel 3
 #+INCLUDE: "history/os-imaging-history.org" :minlevel 3
+#+INCLUDE: "history/safety-critical-updates.org" :minlevel 3
+#+INCLUDE: "history/banking-change-control.org" :minlevel 3
+#+INCLUDE: "history/blast-radius-infrastructure.org" :minlevel 3
 #+INCLUDE: "history/release-strategies.org" :minlevel 3
 #+INCLUDE: "history/deployment-channels-and-flags.org" :minlevel 3
 #+INCLUDE: "history/vcs-patch-theory.org" :minlevel 3
