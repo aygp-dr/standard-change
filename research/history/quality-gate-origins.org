@@ -47,6 +47,19 @@ shape as the GitHub-flow merge-order correction already elsewhere in this
 corpus's history (=pipeline-history.org=) -- worth naming precisely rather
 than defaulting to the popular "Deming cycle" label.
 
+*ASQ's own glossary sidesteps the attribution question entirely --
+confirmed directly, not inferred.* ASQ's Quality Glossary, letter P
+([[https://asq.org/quality-resources/quality-glossary/p][asq.org/quality-resources/quality-glossary/p]], read directly), defines
+the entry plainly as "Plan-do-check-act (PDCA) cycle" -- neither "Deming
+cycle" nor "Shewhart cycle" appears anywhere in ASQ's own term or
+definition. This is not an oversight born of not knowing the history:
+the same glossary page separately and explicitly credits Deming by name
+for a different concept -- "Profound knowledge, system of: Defined by
+W. Edwards Deming" -- so ASQ is demonstrably willing to attribute a term
+to him when the term is his own. Choosing not to for PDCA reads as a
+deliberate sidestep of the exact naming dispute this section untangles,
+not an absence of awareness.
+
 * Lineage two: Cooper's Stage-Gate -- a different concept, a different word choice, entirely unconnected
 
 **Corrected against the working assumption going in.** There is no clean
@@ -75,17 +88,47 @@ statistical process control) a full generation after Shewhart's 1924
 memo, with no documented connection between the two lineages found in
 this research pass.
 
-* ASQ and ISO 9001: real material, one honest gap
+* ASQ and ISO 9001: checked directly, and the negative result holds
 
 ASQ (American Society for Quality) maintains an honorary-members page on
 Shewhart ([[https://asq.org/about-asq/honorary-members/shewhart][asq.org/about-asq/honorary-members/shewhart]]), confirming his
-place in the field's own institutional memory. **What could not be
-confirmed**: whether ASQ's own quality glossary has a dedicated "quality
-gate" entry, or whether it cites Cooper's Stage-Gate work -- direct
-fetches of asq.org's glossary pages returned 403 in this research pass.
-Recorded as genuinely unresolved, not as an absence -- a fetch failure is
-not evidence the entry doesn't exist, and this should not be cited either
-way without a follow-up pass that actually reaches the page.
+place in the field's own institutional memory. The earlier pass of this
+note left one question unresolved -- ASQ's own glossary pages returned 403
+to a plain fetch, so the absence of a "quality gate" entry could not be
+told apart from a blocked request. **Resolved directly**, via a real
+browser session rather than a script: ASQ's "Quality Tools A to Z" index
+([[https://asq.org/quality-resources/quality-tools][asq.org/quality-resources/quality-tools]]) lists every tool from A3 report
+through X-Y graph, and neither "gate," "quality gate," nor "stage-gate"
+appears anywhere in it. The glossary's own G page
+([[https://asq.org/quality-resources/quality-glossary/g][asq.org/quality-resources/quality-glossary/g]]) confirms the same thing
+more precisely: there is a "Gatekeeper" entry, but it means something
+unrelated -- "a timekeeper; in team meetings, a designated individual who
+helps monitor the team's use of allocated time" -- not a checkpoint. What
+ASQ's own glossary actually calls the pass/fail-against-specification
+concept is a different term entirely: **"Go/no-go: State of a unit or
+product. Two parameters are possible: go (conforms to specifications) and
+no-go (does not conform to specifications)."** ASQ has the underlying
+concept, named plainly, and simply never called it a gate.
+
+The C page ([[https://asq.org/quality-resources/quality-glossary/c][asq.org/quality-resources/quality-glossary/c]]) also confirms the
+Shewhart connection precisely at the vocabulary level: "Common causes:
+Causes of variation that are inherent in a process over time... Also see
+'special causes'" -- ASQ's own glossary still uses Shewhart's exact
+distinction, a century on, even without naming him in that specific
+entry.
+
+ISO 9001:2015, Clause 8.3.4 ("Design and development controls"), does
+describe staged design reviews with defined acceptance criteria at each
+stage before proceeding -- commonly described by consultants and auditors
+as "stage gates" (preliminary/detail/critical design review is a typical
+breakdown). But the standard's own text, as far as this pass could
+determine, does not itself use the word "gate" -- that vocabulary appears
+to be auditor and consultant gloss on the clause, not ISO's own language.
+Cite this distinction carefully: ISO 9001's staged-review framing is real
+and load-bearing for its own purpose, but it is a third, distinct
+framing from both Shewhart/Deming's statistical gate and Cooper's
+business-decision gate, and calling it a "quality gate" is common usage,
+not the standard's own term.
 
 ISO 9001:2015, Clause 8.3.4 ("Design and development controls"), does
 describe staged design reviews with defined acceptance criteria at each
