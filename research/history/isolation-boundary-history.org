@@ -1,0 +1,130 @@
+#+TITLE: Jails, zones, and Podman: is the isolation boundary itself ever the swappable unit?
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists, and why it's not academic for this repo
+
+Every deploy target this repo actually has -- =targets/bastille/=,
+naming =bastille= the FreeBSD jail orchestration tool -- runs inside a
+jail. =spec.org='s own port tiers name =9210= and =9220= "production
+blue" and "production green." That naming implies a claim: that the
+isolated environment itself, not just the code inside it, is the
+swappable unit. This note checks whether that's borrowed practice or an
+invention of this repo's own -- and checked directly against this repo's
+own =targets/bastille/deploy.sh=, the honest starting point is that the
+script deploys *in place* to an existing jail. It does not currently spin
+up a new jail and cut traffic over. So the question is real, not
+rhetorical: does the wider world of jails and zones document that pattern
+anywhere, or would building it here be new ground.
+
+* FreeBSD jails: the oldest isolation primitive in this survey, and older than assumed
+
+jail(8) and jail(2) shipped in **FreeBSD 4.0, released March 14, 2000**
+([[https://lists.freebsd.org/pipermail/freebsd-announce/2000-March/000529.html][FreeBSD's own release announcement]]; [[https://www.freebsd.org/releases/4.0R/notes/][release notes]]). The primary
+source is Poul-Henning Kamp and Robert N. M. Watson, "Jails: Confining the
+Omnipotent Root," presented at **SANE 2000** (the 2nd International System
+Administration and Networking Conference, Maastricht, May 22-25, 2000) --
+*not* a USENIX venue, a common misattribution worth correcting explicitly.
+Full text is hosted by FreeBSD itself: [[https://papers.freebsd.org/2000/phk-jails/][papers.freebsd.org/2000/phk-jails]].
+This predates Docker (2013, [[file:docker-oci-history.org][docker-oci-history.org]]) by thirteen years and
+Solaris Zones, next, by five.
+
+*Architecture, not just an earlier date.* A jail is enforced as a single
+kernel object -- the "prison" structure -- attached to every process; every
+syscall is checked against jail membership, giving unified filesystem-root,
+process-visibility, and network-address confinement from one primitive.
+Linux containers instead compose several independent, Linux-specific
+namespaces (PID, mount, net, UTS, IPC, user) plus cgroups plus seccomp --
+several mechanisms assembled together, not one
+([[https://klarasystems.com/articles/jails-not-containers-freebsd-isolation-done-right/][Klara Systems, "Jails, Not Containers"]]). Same goal, genuinely different
+architecture: one integrated kernel primitive from 2000, versus a
+composition of several primitives assembled later and elsewhere.
+
+*Bastille -- checked directly, and it does not document jail-swapping.*
+Bastille's own documentation
+([[https://docs.bastillebsd.org/en/latest/][docs.bastillebsd.org]]; [[https://bastille.readthedocs.io/en/latest/chapters/upgrading.html][the upgrading chapter]]) and its GitHub README
+([[https://github.com/BastilleBSD/bastille][BastilleBSD/bastille]]) describe an *in-place* update model: =bastille
+update TARGET= patches a release or thick jail; thin jails share a
+ZFS-cloned release, so updating the release propagates to every thin jail
+riding on it automatically; =bastille upgrade TARGET <RELEASE>= bumps a
+jail's FreeBSD release in place; =bastille restart ALL= restarts jails
+after patching. Nowhere in Bastille's own documented vocabulary is there
+language for "create a new jail with the new version, cut traffic over,
+destroy the old jail" as a named deployment strategy. Bastille's own
+upstream culture treats a jail as long-lived and patched, not as a
+disposable, swappable unit.
+
+* Solaris Zones: influenced by jails, confirmed by USENIX itself
+
+Zones shipped with **Solaris 10, released January 31, 2005** (a beta
+appeared in build 51, February 2004). Primary source: Daniel Price and
+Andrew Tucker, "Solaris Zones: Operating System Support for Consolidating
+Commercial Workloads," LISA 2004
+([[https://www.usenix.org/legacy/event/vm04/wips/tucker.pdf][usenix.org]]; also indexed at
+[[https://paperswelove.org/papers/solaris-zones-operating-system-support-for-consoli-a8850522/][Papers We Love]]).
+
+*The lineage is not inferred -- USENIX's own summary states it directly.*
+USENIX's own SAGE summary of the paper is titled, verbatim, "Zones in
+Solaris 10 are based on FreeBSD Jails"
+([[https://www.usenix.org/legacyurl/sage-zones-solaris-10-are-based-freebsd-jails][usenix.org/legacyurl]]). Sun's engineers evaluated FreeBSD jails and
+Linux-VServer directly, judged neither mature or integrated enough for
+Sun's commercial target, and built a deeper-integrated descendant. Zones
+is a later, more OS-integrated development of the jail idea, not an
+independent invention -- worth stating plainly rather than treating the
+two as parallel inventions.
+
+*No swap pattern here either.* Oracle's own current documentation
+([[https://docs.oracle.com/en/operating-systems/solaris/oracle-solaris/11.4/use-zones/how-install-and-deploy-zones-cloning.html][cloning zones]]; [[https://docs.oracle.com/cd/E18752_01/html/821-1910/gdxkz.html][Live Upgrade with zones]]) describes =zoneadm clone=
+(ZFS-clone-optimized duplication) purely as a provisioning convenience,
+and Live Upgrade patches the *global* zone as a whole -- non-global zones
+are not documented as individually swappable release units. Same shape as
+Bastille: infrastructure provisioning, not a release-gate mechanism.
+
+* Podman: a genuinely different architecture, not "Docker but newer"
+
+Daemonless and rootless by default, per Podman's own materials and Red
+Hat's. Architecturally it forks a child process directly (via
+conmon/runc/crun) rather than talking to a long-running privileged daemon
+the way =docker run= talks to =dockerd=. Red Hat's own stated design goal:
+eliminate the daemon both as a single point of failure (if =dockerd= dies,
+all container management stalls) and as a root-owned attack surface
+(=/var/run/docker.sock= is effectively root; Podman has no equivalent
+socket) -- [[https://developers.redhat.com/blog/2018/08/29/intro-to-podman][Red Hat's original introduction post]];
+[[https://www.redhat.com/en/blog/rootless-containers-podman][rootless containers writeup]]. Forked out of the CRI-O project, initially
+named "kpod," renamed Podman in 2018; first public release (v0.2) in
+2018; 1.0.0 shipped **January 16, 2019**.
+
+* The actual question, answered honestly
+
+*No jail- or zone-level precedent exists as a named pattern for swapping
+the isolation boundary itself.* Both jails and Zones treat the isolated
+environment as long-lived and patched in place, across every vendor and
+maintainer document checked. The first *documented, named* instance of
+"spin up new isolated units, cut traffic to them as they become ready,
+tear down the old ones" is Kubernetes' own =Deployment= =RollingUpdate=
+strategy: Kubernetes' own documentation
+([[https://kubernetes.io/docs/concepts/workloads/controllers/deployment/][kubernetes.io/docs/concepts/workloads/controllers/deployment]]) states a
+new ReplicaSet is created and "gradually scale[d] up while scaling down
+the old ReplicaSet, ensuring Pods are replaced at a controlled rate,"
+governed by =maxSurge= (extra pods allowed above the desired count,
+default 25%) and =maxUnavailable= (pods allowed offline during the
+update, default 25%). Kubernetes formalized this for containers around
+2014-2015. No earlier jail- or zone-level formalization was found to
+credit as precedent.
+
+* What this means for this repo, stated plainly
+
+This repo's own =9210=/=9220= blue/green port naming is best described as
+*this repo's own inference*, drawing an analogy to the Kubernetes/general
+blue-green idea and applying it at the jail level -- not something
+FreeBSD, Bastille, or Solaris ever wrote down themselves, and not
+something =targets/bastille/deploy.sh= currently implements (it deploys
+in place, per the honest check that opened this note). That is not a
+defect in the naming -- extending a well-documented pattern to a substrate
+that never had it is exactly the kind of synthesis this corpus's other
+new sections do elsewhere (the Docker/OCI framing, the online-schema
+lineage). It is a claim worth being honest about rather than implying a
+jail-native precedent that does not exist: if this repo ever implements
+jail-level swap-and-cut-over for =targets/bastille/=, it would be
+building something genuinely new for that substrate, not applying an
+established Bastille or FreeBSD convention.

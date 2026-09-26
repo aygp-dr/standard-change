@@ -1,0 +1,116 @@
+#+TITLE: Ghost, WIM, and Autopilot: whole-machine imaging as the oldest artifact/no-gate pattern in this survey
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+Every other artifact in this corpus's history is a piece of a running
+system -- a Product, a module, an image layer, a function version. Disk
+imaging is the most literal version of "swap the whole environment"
+possible: not the app, not the isolation boundary, the entire machine
+state, bit for bit. It also turns out to be one of the oldest and most
+consistent examples of this corpus's recurring negative result: a real,
+versioned artifact, and no mechanical gate anywhere in the documented
+tooling chain.
+
+* Norton Ghost: older than the acquisition that made it famous
+
+Ghost was written by **Murray Haszard in 1995** at **Binary Research**, a
+small Auckland, New Zealand company, building on Binary Research's earlier
+file-transfer tooling ("Beam"). It **first shipped in 1996** (1.0/1.1,
+then 2.0 the same year) -- genuinely pre-Symantec.
+**Symantec acquired Binary Research/Ghost in July 1998** for US$27.5
+million; most of the New Zealand staff became Symantec employees, and Ghost
+development stayed in Auckland for over a decade
+([[https://en.wikipedia.org/wiki/Binary_Research][Wikipedia: Binary Research]]; [[https://en.wikipedia.org/wiki/Ghost_(disk_utility)][Wikipedia: Ghost (disk utility)]]).
+
+*Mechanism.* Ghost began as pure sector-by-sector raw cloning for
+filesystems it didn't understand, then added filesystem-aware copying as
+it matured -- NTFS support in 1996, EXT2 in 1999, EXT3 later -- letting it
+skip free space and clone more intelligently rather than mirror every
+sector blindly. **Multicast ("GhostCast") shipped with version 4.0**: one
+image stream sent simultaneously to many receiving machines, network cost
+not scaling per recipient -- exactly the lab-imaging mechanism a room of
+identical machines needs. Symantec's later commercial packaging,
+GhostCast Server / Ghost Solution Suite, was marketed explicitly for
+pushing one baseline image to a room of machines at once, recommending
+multicast once more than roughly five machines are involved
+([[https://techdocs.broadcom.com/us/en/symantec-security-software/endpoint-security-and-management/ghost-solutions-suite/3-3/Related-Solutions/Symantec-Ghost-Solution-Suite-Server-Configuration-Utility/disk-imaging-option-v100799751-d1448e682.html][Broadcom/Symantec Techdocs, Disk Imaging Option]]).
+
+* Microsoft's own lineage, each stage dated
+
+- **Sysprep**, Windows NT 4.0, **October 1998** -- almost exactly
+  contemporaneous with the Symantec/Ghost acquisition. It does not clone
+  anything itself; it *generalizes* an installed Windows image -- strips
+  the machine SID and PC-specific configuration, prepares first-boot setup
+  -- so a *separately captured* image can be legally and technically
+  redeployed to other hardware. Current Microsoft documentation still
+  describes exactly this role, and says outright that Sysprep needs "a
+  tool to capture an image... such as DISM or other disk-imaging
+  software" -- confirming it was always a preparation step, never an
+  imaging tool itself ([[https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/sysprep--system-preparation--overview?view=windows-11][Microsoft Learn, Sysprep overview]]).
+- **RIS (Remote Installation Services)**, Windows 2000 Server -- PXE-boot
+  network install, automating the Windows setup wizard over the network
+  rather than pushing a monolithic block image
+  ([[https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/bb742501(v=technet.10)][Microsoft Learn archive, RIS]]).
+- **WDS (Windows Deployment Services)** replaced RIS, first bundled with
+  **Windows Server 2008** (backported to Server 2003 R2). This is where
+  the format genuinely shifts: WDS is built around **WIM (Windows Imaging
+  Format)**, a file-based, single-instance-storage image format,
+  replacing RIS's install-wizard-driven approach
+  ([[https://en.wikipedia.org/wiki/Windows_Deployment_Services][Wikipedia: WDS]]). Microsoft has since announced WDS itself is being
+  deprecated after Windows Server 2025.
+- **DISM (Deployment Image Servicing and Management)**, Windows 7+ --
+  mounts and services a WIM (or VHD/VHDX/FFU) *offline*: inject drivers,
+  updates, language packs, features, without ever booting the image. This
+  is the closest thing in this whole corpus to "patch the artifact before
+  it's ever deployed," and it's confirmed directly against current
+  Microsoft documentation ([[https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/what-is-dism?view=windows-11][Microsoft Learn, DISM overview]]).
+- **MDT / SCCM (ConfigMgr) task sequences** were the enterprise
+  orchestration layer on top of WIM, DISM, and Sysprep. Notably, and
+  worth recording precisely: **Microsoft retired MDT on January 6, 2026**
+  (deprecation announced December 2024) -- existing installs keep
+  working, with no further fixes, updates, or Windows-compatibility
+  guarantees ([[https://learn.microsoft.com/en-us/troubleshoot/mem/configmgr/mdt/mdt-retirement][Microsoft Learn, MDT retirement notice]]; [[https://www.theregister.com/software/2026/01/12/microsoft-euthanizes-ancient-deployment-toolkit/4676971][The Register]]).
+- **Windows Autopilot** with Intune is the real, citable end-of-an-era
+  moment: devices ship from the OEM straight to the end user; the device
+  self-configures from a cloud profile keyed to a hardware-hash identity,
+  with *no disk image applied at all*
+  ([[https://learn.microsoft.com/en-us/autopilot/pre-provision][Microsoft Learn, Autopilot pre-provisioning]]). This is architecturally a
+  different paradigm from everything above it in this lineage, not an
+  incremental improvement on imaging.
+
+* Clonezilla: the open-source continuation, still exactly where this started
+
+Created in **2003-2004 by NCHC (National Center for High-Performance
+Computing), Taiwan**, after a hardware upgrade broke their existing
+lab-imaging tooling -- a direct lab-imaging origin story, explicitly
+positioned as a free alternative to Norton Ghost, supporting both unicast
+and multicast. **Still actively maintained**: a stable release shipped
+June 2026 ([[https://en.wikipedia.org/wiki/Clonezilla][Wikipedia: Clonezilla]]; [[https://sourceforge.net/p/clonezilla/news/2026/06/stable-clonezilla-live-332-31-released/][SourceForge release notes]]). It's worth
+noting this is the tool actually still in daily use in the K-12/school-lab
+context this note's prompt referenced -- Ghost's direct successor in
+practice, not just in spirit.
+
+* The gate question, confirmed rather than assumed
+
+Every mechanism in this note is **purely operator-triggered**. A
+technician boots a lab machine into PXE and selects an image or task
+sequence from a menu (RIS, WDS, SCCM); a Ghost or Clonezilla operator
+picks an image file and a set of target machines for a multicast session.
+The artifact -- a =.gho= file, a WIM -- is unambiguously versioned, and
+DISM even lets you patch it before it's ever applied. But nothing in the
+documented tooling chain enforces a mechanical precondition ("tests
+pass," "image validated") before an image gets written to a machine.
+SCCM's collections and task-sequence targeting constrain *which machines*
+receive an image -- authorization and scoping, not a correctness gate.
+
+This is the same shape already found twice elsewhere in this corpus, by
+two completely different routes: OpenACS's tarball-plus-APM
+(=deployment-artifact-history.org=) and Common Lisp's
+=save-lisp-and-die= (same file). A real, versioned artifact; a human's
+judgment at the point of application; no mechanism standing between the
+two. Whole-machine imaging is simply the oldest and most literal instance
+of that pattern in this survey -- Ghost predates OpenACS's earliest
+tarballs by roughly a decade, and the pattern hasn't changed shape since,
+only the artifact format.
