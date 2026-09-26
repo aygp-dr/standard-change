@@ -63,6 +63,7 @@ described in Part I without touching the labels it already has.
 
 * Part V: History of the ideas
 #+INCLUDE: "history/pipeline-history.org" :minlevel 3
+#+INCLUDE: "history/quality-gate-origins.org" :minlevel 3
 #+INCLUDE: "history/deployment-artifact-history.org" :minlevel 3
 #+INCLUDE: "history/docker-oci-history.org" :minlevel 3
 #+INCLUDE: "history/isolation-boundary-history.org" :minlevel 3

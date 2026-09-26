@@ -1,0 +1,131 @@
+#+TITLE: Where "gate" actually comes from -- two lineages, not one, neither of them software
+#+DATE: 2026-09-26
+#+PROPERTY: header-args :mkdirp t
+
+* Why this note exists
+
+This repo's own core vocabulary is literally "gates" (the =gates/=
+directory, =gate.yml=, spec.org's own line "a gate that can be shown to
+fail") and numbered "guards." =research/findings/compliance-naming.org=
+already covers Six Sigma as a compliance-level naming convention, but this
+corpus had never asked where "gate," as a go/no-go quality checkpoint,
+actually comes from. It predates software CI/CD entirely, and -- the real
+finding here -- it comes from *two separate lineages* that happen to share
+a word, not one continuous history.
+
+* Lineage one: Shewhart, and the idea a gate is meaningful only if it can fail
+
+Walter Shewhart, at Western Electric's Hawthorne Works / Bell Telephone
+Laboratories, wrote a roughly one-page internal memo on **May 16, 1924**
+containing what his boss George Edwards later called "a simple diagram
+which we would all recognize today as a schematic control chart" -- widely
+treated as the first control chart ([[https://www.qualitydigest.com/inside/quality-insider-column/shewhart-s-great-discovery.html][Quality Digest, "Shewhart's Great
+Discovery"]]; [[https://en.wikipedia.org/wiki/Control_chart][Wikipedia: Control chart]]; [[https://en.wikipedia.org/wiki/Walter_A._Shewhart][Wikipedia: Walter A. Shewhart]]). His book,
+*Economic Control of Quality of Manufactured Product* (D. Van Nostrand
+Company, New York, 1931; reissued by ASQ Quality Press as a 50th-
+anniversary edition in 1981, ISBN 9780873890205), formalizes the
+distinction this corpus's own phrase directly echoes: **common-cause
+variation** is expected and should not trigger action; **special-cause
+variation** is a real signal that warrants stopping and investigating. A
+control chart that never flags anything is not evidence of a stable
+process -- it's evidence the chart isn't watching the right thing. That is
+the same argument as this repo's own "a gate that can be shown to fail" --
+=gate-selftest='s whole reason to exist -- stated a century earlier, in a
+different discipline, for a different reason.
+
+*The Shewhart/Deming cycle attribution, resolved.* Deming took these ideas
+to postwar Japan via JUSE (the Union of Japanese Scientists and Engineers)
+starting in **1950**. Popular usage calls the resulting improvement loop
+the "Deming cycle" or PDCA (Plan-Do-Check-Act); Deming himself preferred
+"Shewhart cycle" and credited Shewhart directly -- confirmed by the Deming
+Institute's own historical material ([[https://deming.org/wp-content/uploads/2020/06/PDSA-history-Ron-Moen.pdf][Ronald Moen, "Foundation and History
+of the PDSA Cycle," deming.org]]) and its "Circling Back" piece. Shewhart's
+own 1939 version was a three-part specify-produce-inspect cycle; Deming's
+1950 lectures modified it into a four-part design-produce-market-
+test/redesign form. This is a real, documented misattribution -- the same
+shape as the GitHub-flow merge-order correction already elsewhere in this
+corpus's history (=pipeline-history.org=) -- worth naming precisely rather
+than defaulting to the popular "Deming cycle" label.
+
+* Lineage two: Cooper's Stage-Gate -- a different concept, a different word choice, entirely unconnected
+
+**Corrected against the working assumption going in.** There is no clean
+1986 paper titled to match. What the record actually shows: Robert G.
+Cooper's foundational empirical work is earlier and differently framed --
+"The Dimensions of Industrial New Product Success and Failure," *Journal
+of Marketing*, 1979, and "The NewProd System: The Industry Experience."
+His first book-length statement, *Winning at New Products* (Addison-
+Wesley/Basic Books, 1986), was reviewed in the *Journal of Product
+Innovation Management* ([[https://onlinelibrary.wiley.com/doi/10.1111/1540-5885.340307][Cooper, 1986, JPIM, DOI 10.1111/1540-5885.340307]]).
+But the term "Stage-Gate," and the literal go/kill/hold/recycle gate
+terminology, first appears in print in **1988**: Cooper, R.G., "The New
+Product Process: A Decision Guide for Managers," *Journal of Marketing
+Management*, 3(3), 238-255.
+
+*What a Stage-Gate gate actually is.* Not a pass/fail statistical-defect
+check -- a forward-looking, go/kill/hold/recycle resource-commitment
+decision, evaluating both a project's readiness *and* its ongoing business
+value, made by people with authority to kill the project entirely
+([[https://www.stage-gate.com/blog/the-stage-gate-model-an-overview/][Stage-Gate International's own retrospective]]). "Stage-Gate" is now a
+registered trademark -- Stage-Gate International in the US, Cooper
+personally in Canada and Europe. This is a genuinely different concept
+from Shewhart's control chart, arriving at the same English word from a
+completely separate discipline (new-product-development management, not
+statistical process control) a full generation after Shewhart's 1924
+memo, with no documented connection between the two lineages found in
+this research pass.
+
+* ASQ and ISO 9001: real material, one honest gap
+
+ASQ (American Society for Quality) maintains an honorary-members page on
+Shewhart ([[https://asq.org/about-asq/honorary-members/shewhart][asq.org/about-asq/honorary-members/shewhart]]), confirming his
+place in the field's own institutional memory. **What could not be
+confirmed**: whether ASQ's own quality glossary has a dedicated "quality
+gate" entry, or whether it cites Cooper's Stage-Gate work -- direct
+fetches of asq.org's glossary pages returned 403 in this research pass.
+Recorded as genuinely unresolved, not as an absence -- a fetch failure is
+not evidence the entry doesn't exist, and this should not be cited either
+way without a follow-up pass that actually reaches the page.
+
+ISO 9001:2015, Clause 8.3.4 ("Design and development controls"), does
+describe staged design reviews with defined acceptance criteria at each
+stage before proceeding -- commonly described by consultants and auditors
+as "stage gates" (preliminary/detail/critical design review is a typical
+breakdown). But the standard's own text, as far as this pass could
+determine, does not itself use the word "gate" -- that vocabulary appears
+to be auditor and consultant gloss on the clause, not ISO's own language.
+Cite this distinction carefully: ISO 9001's staged-review framing is real
+and load-bearing for its own purpose, but it is a third, distinct
+framing from both Shewhart/Deming's statistical gate and Cooper's
+business-decision gate, and calling it a "quality gate" is common usage,
+not the standard's own term.
+
+* Software's "Quality Gate": convergent naming, not documented lineage
+
+SonarQube is the clearest software example of the literal phrase --
+its own documentation defines a Quality Gate functionally: "a set of
+conditions against which the code is measured during analysis... is my
+project ready for release?" ([[https://docs.sonarsource.com/][docs.sonarsource.com]]). No SonarSource
+documentation, blog post, or founder interview found in this pass credits
+Shewhart, Deming, or Cooper's Stage-Gate work as an explicit lineage --
+the term appears to have been adopted on its own functional merits, not
+inherited from either manufacturing tradition. Stated honestly rather than
+forced into a tidy narrative: the *structural* resemblance to Cooper's
+go/kill decision gates (a checkpoint that blocks progression against
+defined criteria) is real and strong, but no primary source ties software's
+usage back to either manufacturing lineage explicitly. This is convergent
+naming -- two fields solving a similar problem and reaching for the same
+word independently -- not evidence of a documented line of descent.
+
+* What this changes for how this repo's own vocabulary should be read
+
+This repo's own "gate" sits closer to Shewhart's lineage than Cooper's,
+whether or not that was a deliberate choice: =gate-selftest= exists
+specifically because a gate that cannot be shown to fail proves nothing --
+Shewhart's common-cause/special-cause argument, not Cooper's
+go/kill/hold/recycle business decision. "Guard," this repo's other core
+term, maps to neither lineage found here -- worth flagging as a genuinely
+open naming question this note does not resolve, not smoothed over. Two
+real historical lineages exist for "gate," they are not the same idea,
+and neither one is software's invention -- software, including this
+repo's own vocabulary, arrived at the word by a third, unconnected route.
