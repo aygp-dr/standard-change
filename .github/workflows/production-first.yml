@@ -19,5 +19,5 @@ jobs:
     runs-on: ubuntu-latest
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: ./gates/production-first.sh "$PR"
