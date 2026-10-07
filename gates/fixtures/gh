@@ -21,6 +21,12 @@ case "${1:-}" in
   pr)
     case "${2:-}" in
       view)    jq -r "$filter" "$FIX/pr.json" ;;
+      # Same rule as reviews.json below: a fixture with no diff.txt cannot
+      # ANSWER, which is a different fact from "the diff is empty". Exit 1 so
+      # the guard takes its unreachable branch. gates/observation-test.sh ships
+      # a case that has no diff.txt on purpose.
+      diff)    [ -f "$FIX/diff.txt" ] || exit 1
+               cat "$FIX/diff.txt" ;;
       edit|comment|merge)
                printf '%s\n' "$*" >> "${GUARD4_WRITES:-/dev/null}" ;;
       *)       echo "gh stub: unhandled 'pr $2'" >&2; exit 1 ;;

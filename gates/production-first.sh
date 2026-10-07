@@ -36,7 +36,36 @@ repo="${GH_REPO:-${GITHUB_REPOSITORY:-aygp-dr/standard-change}}"
 EV="./change/evidence.sh"
 
 labels=$(gh pr view "$pr" --repo "$repo" --json labels -q '[.labels[].name]|join(" ")')
-groups=$(./change/groups.sh "$pr" 2>/dev/null || true)
+
+# THE LABELS ARE NOT HERE YET WHEN THIS RUNS, AND THEY NEVER WILL BE.
+#
+# Issue #29. This check fires on `pull_request: opened`. actions/labeler writes
+# app:* about eight seconds later. On #28 the two are on the clock:
+#
+#   17:03:50  production-first  -> "no app:* labels -- nothing deploys"  success
+#   17:03:58  labeller adds app:core
+#
+# and the same script run by hand afterwards said NOT YET, exit 1. Opposite
+# verdict, same PR, same head; the only difference was when.
+#
+# The `labeled` type in this workflow's trigger list was supposed to correct
+# that. It cannot: actions/labeler writes with GITHUB_TOKEN, and an event
+# produced by GITHUB_TOKEN does not start another workflow run. That is
+# GitHub's loop prevention working as designed, and the consequence is that the
+# labeller can never wake the gate that reads its labels. 484 runs of this
+# workflow, none of them from a label. So the gate evaluated exactly once, in
+# the only window where the labels are guaranteed absent, and then never again
+# -- a required status check structurally incapable of blocking a new PR.
+#
+# It now derives from the DIFF, unioned with whatever labels have since
+# arrived. .github/workflows/labeller.yml learned this one workflow over:
+# "Derive from the DIFF, not from the labels actions/labeler just wrote."
+#
+# AND THE `|| true` IS GONE. It turned "gh could not answer" into "this change
+# deploys nothing", which this script then reports as `ok` and exits 0. That is
+# defect class 1 -- unreachable is not falsified -- inside the guard, and it is
+# the second way this check could not block. An unreachable forge must refuse.
+groups=$(./change/groups.sh --union "$pr")
 
 # NOT EVERY app:* LABEL IS A THING WE DEPLOY.
 #

@@ -536,6 +536,24 @@ estate is visible. The CI check is decoration. The distinction matters because
 S3's whole lesson was that *a trigger is not a gate* — and the fix for it turned
 out to be a check that is not a gate either, for a different reason.
 
+*FIXED, and how (issue #29).* =gates/production-first.sh= now derives the
+deployable surface from the =gh pr diff=, unioned with whatever =app:*= labels
+have since arrived, rather than from the labels alone — so its verdict on
+=opened= is already the right one and it does not need to be woken. The union
+rather than the diff alone because =labeler:skip= lets a person hand-set
+=app:*= for apps the diff does not touch, and that assertion is invisible in a
+diff; the union is the fail-closed direction. The glob rule is not
+re-implemented: the derivation runs through =gates/labeller-test.py --groups=,
+the labeller's own oracle reading the same =.github/labeler.yml=, so the two
+readers cannot drift.
+
+A second way the check could not block went with it: the call was
+=./change/groups.sh "$pr" 2>/dev/null || true=, which turned "=gh= could not
+answer" into "this change deploys nothing" and then reported =ok=. Unreachable
+is not falsified. Three cases in =gates/observation-test.sh= hold the fix down —
+=unlabelled=, =diff-unreachable= and =label-only-surface= — and each was checked
+by mutation to flip to *authorized* when the fix is reverted.
+
 *The irony worth recording*: =.github/workflows/labeller.yml= carries a comment
 warning about exactly this trap — "Derive from the DIFF, not from the labels
 actions/labeler just wrote" — written after an earlier race in this same
