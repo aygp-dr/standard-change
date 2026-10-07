@@ -268,9 +268,13 @@ test('the shared product renderer escapes what it lists', () => {
 // under its SKU rather than vanish -- plp does not get to delist a category's
 // item because it could not find a name for it.
 test('a product with no name still lists, under its SKU', () => {
-  const items = itemsFor(['SKU123', 'SKU-GHOST'], OK_PRODS.products);
-  assert.deepEqual(items, [{ sku: 'SKU123', name: 'Trail Runner' },
-                           { sku: 'SKU-GHOST', name: null }]);
+  // `now` pinned far past every date in the catalogue so this test keeps
+  // asserting what it is named after. It is about NAMES; a real `now` would
+  // make it a freshness test as well, and it would start failing on a day
+  // nobody chose (issue #18). `badge` is in the shape either way.
+  const items = itemsFor(['SKU123', 'SKU-GHOST'], OK_PRODS.products, Date.UTC(2099, 0, 1));
+  assert.deepEqual(items, [{ sku: 'SKU123', name: 'Trail Runner', badge: null },
+                           { sku: 'SKU-GHOST', name: null, badge: null }]);
   const html = productList(items);
   assert.ok(html.includes('>SKU-GHOST</a>'), 'the nameless SKU vanished');
   assert.ok(html.includes('href="/p/SKU-GHOST"'));
@@ -278,4 +282,58 @@ test('a product with no name still lists, under its SKU', () => {
 
 test('an empty list renders nothing rather than an empty shell', () => {
   assert.equal(productList([]), '');
+});
+
+// ---- the freshness badge (issue #18) ----------------------------------------
+//
+// plp's HALF. That plp and pdp agree about the same SKU on the same day is
+// asserted in apps/pdp/tests/unit/estate.test.js, where it belongs: neither
+// app can see that from inside itself. What is asserted here is that the badge
+// reaches BOTH of plp's routes, through the one renderer they share -- the
+// listing and the search results are the same shelf, and a product that is New
+// on one of them and plain on the other is this file's original defect wearing
+// a new hat.
+//
+// Every case injects `now`. The badge is derived from a date; an assertion
+// that read the clock would change verdict on a day nobody chose.
+
+const BADGE_DAY = Date.parse('2026-09-13T00:00:00Z');
+const LONG_AFTER = BADGE_DAY + 400 * 86400000;
+
+test('a category listing badges a recently added product', () => {
+  const d = render('/c/shoes', OK_CATS, OK_PRODS, BADGE_DAY);
+  const trail = d.items.find((i) => i.sku === 'SKU123');
+  assert.equal(trail.badge, 'New');
+  const html = renderHtml('/c/shoes', OK_CATS, 9020, OK_PRODS, BADGE_DAY);
+  assert.ok(html.includes('<span class=b>New</span>'), 'no badge on the listing');
+});
+
+test('search badges the same product the same way -- one renderer, one rule', () => {
+  // The property this file exists for, extended to the badge: whatever markup
+  // /c/shoes emits for a product, /search emits for that product, byte for
+  // byte. Two copies of the freshness rule would pass a test that only asked
+  // "is there a badge somewhere".
+  const cat = render('/c/shoes', OK_CATS, OK_PRODS, BADGE_DAY);
+  const srch = render('/search?q=Trail', OK_CATS, OK_PRODS, BADGE_DAY);
+  const one = (d) => d.items.filter((i) => i.sku === 'SKU123');
+  assert.deepEqual(productList(one(cat)), productList(one(srch)));
+  assert.equal(one(srch)[0].badge, 'New');
+  // and in the kind-tagged results a client reasons about, not only in `items`
+  const r = srch.results.find((x) => x.kind === 'product' && x.sku === 'SKU123');
+  assert.equal(r.badge, 'New');
+});
+
+test('a badge expires on the listing with no cleanup step', () => {
+  const d = render('/c/shoes', OK_CATS, OK_PRODS, LONG_AFTER);
+  assert.deepEqual(d.items.filter((i) => i.badge !== null), [],
+                   'a badge outlived its date on the listing');
+  assert.ok(!renderHtml('/c/shoes', OK_CATS, 9020, OK_PRODS, LONG_AFTER).includes('class=b'));
+});
+
+test('a SKU the product file does not carry gets no badge, as it gets no name', () => {
+  // plp will not invent a freshness verdict for a product it cannot see. Same
+  // rule as the name: the category still lists it, under its SKU.
+  const items = itemsFor(['SKU-GHOST'], OK_PRODS.products, BADGE_DAY);
+  assert.deepEqual(items, [{ sku: 'SKU-GHOST', name: null, badge: null }]);
+  assert.ok(!productList(items).includes('class=b'));
 });

@@ -9,7 +9,8 @@ const meta = JSON.parse(readFileSync(join(here, '..', 'routes.json'), 'utf8'));
 // OneUI is the shared UI surface (issue #10). Every app pins it, so a change
 // there is a change to all of them -- the cost is named in
 // docs/cross-cutting-coupling.org, not hidden.
-import { page, loadEstate, esc, HOST, VERSION as ONEUI } from '../../../shared/oneui.js';
+import { page, loadEstate, esc, HOST, VERSION as ONEUI,
+         productBadge, badgeHtml } from '../../../shared/oneui.js';
 const ESTATE = loadEstate(join(here, '..', '..', '..', 'router', 'routes.json'), meta);
 const SHA = process.env.BUILD_SHA || 'dev';
 const PORT = Number(process.env.PORT || 0);
@@ -154,7 +155,7 @@ export function queryOf(path) {
 // the query matched. Deduped by SKU with the direct hit kept, because "trail"
 // matching Trail Runner by name and again through a category is one product,
 // not two, and `via` records which route found it.
-export function searchResults(q, categories, products) {
+export function searchResults(q, categories, products, now = Date.now()) {
   const needle = q.trim().toLowerCase();
   if (!needle) return [];
   const hit = (s) => typeof s === 'string' && s.toLowerCase().includes(needle);
@@ -172,7 +173,8 @@ export function searchResults(q, categories, products) {
     if (typeof sku !== 'string' || seen.has(sku)) return;
     seen.add(sku);
     prods.push({ kind: 'product', sku, name,
-                 href: `/p/${encodeURIComponent(sku)}`, via });
+                 href: `/p/${encodeURIComponent(sku)}`, via,
+                 badge: byS.has(sku) ? productBadge(byS.get(sku), now) : null });
   };
   for (const p of products) if (hit(p.name) || hit(p.sku)) push(p.sku, p.name, null);
   for (const c of cats) {
@@ -191,9 +193,18 @@ export function searchResults(q, categories, products) {
 // The SKUs a category lists, resolved to the products they name, in the order
 // the category gave them. Same shape as the `product` results above (sku,
 // name) so that ONE renderer can list either -- see productList().
-export function itemsFor(skus, products) {
+export function itemsFor(skus, products, now = Date.now()) {
   const byS = new Map(products.map((p) => [p.sku, p]));
-  return skus.map((s) => ({ sku: s, name: byS.has(s) ? byS.get(s).name : null }));
+  return skus.map((s) => ({
+    sku: s,
+    name: byS.has(s) ? byS.get(s).name : null,
+    // The SAME function pdp calls, on the SAME record out of the SAME file
+    // (PRODUCTS_FILE above is apps/pdp/products.json). Not "plp's freshness
+    // rule kept in step with pdp's" -- there is one rule and neither app owns
+    // it. A SKU the product file does not carry gets null, exactly as its name
+    // does: plp will not invent a badge for a product it cannot see.
+    badge: byS.has(s) ? productBadge(byS.get(s), now) : null,
+  }));
 }
 
 // The category a path names, or null when the path is not a category page.
@@ -287,7 +298,7 @@ export function status(d) {
 // runner": that is a lie by omission, and it is the same lie -- "we cannot
 // tell you" wearing "there is nothing" -- that the category page's 503 exists
 // to refuse.
-function search(d, q, catalogue, products) {
+function search(d, q, catalogue, products, now = Date.now()) {
   d.query = q;
   d.catalogue = catalogue.ok ? 'ok' : 'unavailable';
   d.products = products.ok ? 'ok' : 'unavailable';
@@ -313,20 +324,24 @@ function search(d, q, catalogue, products) {
     d.reason = catalogue.ok ? products.reason : catalogue.reason;
     return d;
   }
-  d.results = searchResults(q, catalogue.categories, products.products);
+  d.results = searchResults(q, catalogue.categories, products.products, now);
   d.items = d.results.filter((r) => r.kind === 'product')
-                     .map((r) => ({ sku: r.sku, name: r.name }));
+                     .map((r) => ({ sku: r.sku, name: r.name, badge: r.badge }));
   d.count = d.results.length;
   d.reason = d.count ? null : 'no-results';
   return d;
 }
 
-export function render(path, catalogue = loadCatalogue(), products = loadProducts()) {
+// `now` is a PARAMETER, for the reason given on pdp's render(): the badge is
+// derived from a date, so an assertion about a badge must name the day it is
+// about or it rots. The request path passes nothing and gets the real clock.
+export function render(path, catalogue = loadCatalogue(), products = loadProducts(),
+                       now = Date.now()) {
   const d = { app: meta.app, path, found: owns(path), block: BLOCK, sha: SHA,
               routes: meta.routes };
 
   const q = queryOf(path);
-  if (q !== null) return search(d, q, catalogue, products);
+  if (q !== null) return search(d, q, catalogue, products, now);
 
   const slug = categoryOf(path);
   if (slug === null) return d;   // anything else: unchanged
@@ -355,7 +370,7 @@ export function render(path, catalogue = loadCatalogue(), products = loadProduct
   // a dependency: an unreadable product file leaves every name null and the
   // category page lists SKUs exactly as it did before search existed. A
   // category page must not go dark because a sibling app's data file did.
-  d.items = itemsFor(hit.skus, products.products);
+  d.items = itemsFor(hit.skus, products.products, now);
   return d;
 }
 
@@ -388,7 +403,11 @@ export function productList(items) {
   return `<div class=g>${items.map((p) =>
     `<span style="display:inline-block;margin-right:14px">` +
     `<a href="${esc(`/p/${encodeURIComponent(p.sku)}`)}" style="margin-right:4px">` +
-    `${esc(p.name || p.sku)}</a>` +
+    // The badge sits INSIDE the link, before the name, which is where pdp puts
+    // it relative to the product's own heading. Two apps agreeing on the
+    // verdict and disagreeing on where it appears is most of the way back to
+    // the problem.
+    `${badgeHtml(p.badge)}${esc(p.name || p.sku)}</a>` +
     // The SKU is shown alongside a name and IS the label when there is none,
     // so the category page loses nothing it used to show.
     (p.name ? `<span class=v>${esc(p.sku)}</span>` : '') +
@@ -488,8 +507,8 @@ ${productList(d.items)}`;
 // it, and a tier derived from something the deployer exported would be the
 // estate reporting what it was told (issue #15).
 export function renderHtml(path, catalogue = loadCatalogue(), port,
-                           products = loadProducts()) {
-  const d = render(path, catalogue, products);
+                           products = loadProducts(), now = Date.now()) {
+  const d = render(path, catalogue, products, now);
   return page({ ...d, host: HOST, port }, ESTATE, BACKGROUND, panel(d));
 }
 

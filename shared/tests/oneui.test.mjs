@@ -3,7 +3,8 @@
 // the largest blast radius in the repo was the only module nothing asserted.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { esc, page, environment, HOST, VERSION } from '../oneui.js';
+import { esc, page, environment, HOST, VERSION,
+         productBadge, badgeHtml, calendarDay, BADGE_WINDOW_DAYS } from '../oneui.js';
 
 const ESTATE = [{ app: 'core', port_offset: 1, routes: ['/'] }];
 const d = (over = {}) => ({ app: 'core', path: '/', sha: 'abc1234', block: '0', ...over });
@@ -248,4 +249,86 @@ test('the shared stylesheet carries the badge class', () => {
   const html = page({ app: 'x', path: '/', sha: 'abc1234', block: '0' },
                     [{ app: 'x', port_offset: 1, routes: ['/'] }], '#fff');
   assert.match(html, /\.b\{background:/, '.b missing from the shared stylesheet');
+});
+
+// ---- product freshness (issue #18) ------------------------------------------
+//
+// The rule that makes plp and pdp agree. These tests are the reason it is one
+// function: everything below would have to be duplicated, and kept duplicated,
+// if each app carried its own copy.
+//
+// EVERY case names the day it is about. Not one of them reads the clock, so
+// none of them changes verdict on a date nobody chose -- which is the same
+// defect the badge itself exists to avoid, one level up.
+
+const DAY = (s) => Date.parse(`${s}T00:00:00Z`);
+const WIN = BADGE_WINDOW_DAYS;
+
+test('a product added inside the window is New, and outside it is nothing', () => {
+  const p = { sku: 'X', added: '2026-09-01' };
+  assert.equal(productBadge(p, DAY('2026-09-01')), 'New', 'the day it arrived');
+  assert.equal(productBadge(p, DAY('2026-09-15')), 'New');
+  // The last day inside, and the first day outside. A window whose edge is not
+  // asserted is a window whose edge moves in the next refactor.
+  const edge = DAY('2026-09-01') + (WIN - 1) * 86400000;
+  assert.equal(productBadge(p, edge), 'New', 'the last day of the window');
+  assert.equal(productBadge(p, edge + 86400000), null, 'the badge did not expire');
+});
+
+test('a badge expires by itself -- nobody has to clear it', () => {
+  // The whole reason this is a date and not a boolean. `isNew: true` would
+  // still be true here, and would be true forever.
+  const p = { sku: 'X', added: '2020-01-01' };
+  assert.equal(productBadge(p, DAY('2026-09-13')), null);
+});
+
+test('an update inside the window outranks an older New', () => {
+  const p = { sku: 'X', added: '2026-01-12', updated: '2026-09-10' };
+  assert.equal(productBadge(p, DAY('2026-09-13')), 'Updated');
+});
+
+test('an update that has itself expired is not a badge', () => {
+  const p = { sku: 'X', added: '2023-09-01', updated: '2026-06-01' };
+  assert.equal(productBadge(p, DAY('2026-09-13')), null);
+});
+
+test('a product both added and updated recently is New, not Updated', () => {
+  // `updated` earlier than `added` is data nobody should render as a change:
+  // the product did not change, it arrived.
+  const p = { sku: 'X', added: '2026-09-10', updated: '2026-09-05' };
+  assert.equal(productBadge(p, DAY('2026-09-13')), 'New');
+});
+
+test('a date in the future is not a badge', () => {
+  // A catalogue saying a product arrives next Tuesday is either wrong or
+  // describing something that has not happened. A badge says it has.
+  assert.equal(productBadge({ sku: 'X', added: '2026-12-01' }, DAY('2026-09-13')), null);
+});
+
+test('a date the calendar does not have is no badge, not a guessed one', () => {
+  // Date.parse accepts 2026-09-31 and rolls it into October, so a typo would
+  // become a silent wrong badge rather than no badge.
+  assert.equal(calendarDay('2026-09-31'), null, '2026-09-31 was accepted');
+  assert.equal(calendarDay('2026-02-30'), null);
+  assert.equal(calendarDay('2026-13-01'), null);
+  assert.equal(calendarDay('13 Sep 2026'), null, 'a locale format was accepted');
+  assert.equal(calendarDay('2026-09-13T00:00:00Z'), null, 'not a calendar day');
+  for (const bad of ['2026-09-31', 'soon', '', null, undefined, 42, {}])
+    assert.equal(productBadge({ sku: 'X', added: bad }, DAY('2026-09-13')), null,
+                 `${String(bad)} produced a badge`);
+});
+
+test('a product with no dates at all is no badge, and does not throw', () => {
+  // Every caller is on the request path. The dates are OPTIONAL: the fixtures
+  // and every catalogue written before this change carry none.
+  assert.equal(productBadge({ sku: 'X', name: 'n' }, DAY('2026-09-13')), null);
+  assert.equal(productBadge(null, DAY('2026-09-13')), null);
+  assert.equal(productBadge(undefined), null);
+  assert.equal(productBadge({ sku: 'X', added: '2026-09-13' }, NaN), null);
+});
+
+test('the badge markup is the same markup for both apps, and escapes', () => {
+  assert.equal(badgeHtml(null), '', 'no badge rendered an empty element');
+  assert.equal(badgeHtml('New'), '<span class=b>New</span>');
+  assert.ok(!badgeHtml('<script>alert(1)</script>').includes('<script>alert(1)'));
 });
