@@ -1,0 +1,143 @@
+#+TITLE: 019 -- guard 5 must not depend on where you stand
+#+DATE: 2026-09-13
+
+* Hypothesis
+
+=gates/health.sh= read =router/routes.json= as a bare relative path, so guard 5
+probed whatever route table happened to be under the caller's working
+directory. Its verdict therefore depended on the directory it was invoked from.
+
+Falsifiable form: /if the route table is resolved from the script's own tree,
+then the same command against the same estate returns the same verdict from any
+directory, and a run that cannot read a route table returns no verdict at all./
+
+* Success criterion
+
+Eleven assertions in =demonstrate.sh=, all of which must hold, and seven
+mutations in =mutate.sh=, six killed and one declared.
+
+- *B0* -- the PRE-#24 gate must still exhibit the defect here. If it does not,
+  the rest of the suite is agreeing with the fix rather than testing it.
+- *B1/B1c* -- the same run now refuses with *exit 4*, and says which thing it
+  could not do.
+- *B2* -- a route table sitting in the caller's cwd is not consulted at all.
+
+* The finding that is not in the issue
+
+#24 reports the wrong-verdict direction: UNHEALTHY from the main checkout, ok
+5/5 from #19's worktree, same estate at =e7b0e7d=. Reproducing it turned up a
+worse one in the same line of code.
+
+: $ cd /tmp/somewhere-with-no-checkout
+: $ sh /path/to/repo/gates/health.sh http://127.0.0.1:1 deadbeef 3
+: jq: error: Could not open file router/routes.json: No such file or directory
+: $ echo $?
+: 0
+
+Guard 5 -- /no bypass, ever/, and the *only* evidence the forge ever gets that
+production converged -- *exited 0* against a URL nothing was listening on, for
+a SHA that does not exist, having taken *zero samples*.
+
+=for app in $(jq ...)= does not abort under =set -e= when the command
+substitution fails. The list is empty, the loop body never runs, =rc= stays 0,
+and control falls through to the recorder. With =--pr= that writes the evidence
+record =pass= and adds =<env>:healthy=.
+
+The issue's direction refuses a healthy estate. This direction *certifies an
+estate it never looked at*, which is the one that reaches production.
+
+Class 7 of the taxonomy, and class 1 inverted: not /I could not check/
+collapsed into /no/, but collapsed into *yes*.
+
+* What was run, and what it printed
+
+Run on 2026-09-13 on hydra (FreeBSD 14.3), =jq 1.8.1=, =python3=.
+
+: $ ./experiments/019-guard5-cwd/demonstrate.sh
+: == B0 -- the suite can see the defect
+:   ok    B0   pre-#24 guard 5 PASSES having sampled nothing
+:
+: == B1/B2 -- the verdict must not depend on the caller's directory
+:   ok    B1   the same run now refuses (exit 4)
+:   ok    B1c  and refuses for the RIGHT reason
+:   ok    B1b  the refusal emits no verdict line
+:   ok    B2   a route table in cwd is NOT consulted
+:
+: == B3-B6 -- a gate must not be able to pass by not looking
+:   ok    B3   zero apps declared -> refusal, never a pass
+:   ok    B3b  and names the empty table as the reason
+:   ok    B4   the run names the route table it used
+:   ok    B5   an estate on the wrong build is still UNHEALTHY (7)
+:   ok    B6   an app with no health path -> refusal, not UNHEALTHY
+:   ok    B6b  and names the app it could not ask about
+:
+:   11 passed, 0 failed
+
+: $ ./experiments/019-guard5-cwd/mutate.sh
+: == mutating gates/health.sh
+:
+:   killed 2  N1   route table read from the caller's cwd again
+:             by B2 B4 (suite exit 1)
+:   killed 3  N2   refuse() exits 0 instead of 4
+:             by B1 B3 B6 (suite exit 1)
+:   killed 2  N3   stop validating the route table before probing
+:             by B1c B3b (suite exit 1)
+:   survived* N4   drop the zero-apps-probed backstop
+:             ^ expected: unreachable alone, killed by N7
+:   killed 2  N5   probe apps that declare no health path
+:             by B6 B6b (suite exit 1)
+:   killed 1  N6   stop naming the route table in the output
+:             by B4 (suite exit 1)
+:   killed 4  N7   remove BOTH the validation and the backstop
+:             by B1 B1c B3 B3b (suite exit 1)
+:
+:   7 mutations applied, 6 killed, 1 expected survivor(s), 0 unexplained
+
+* Two mutations survived, and what that changed
+
+The first mutation run killed 4 of 6. N3 (drop the route-table validation) and
+N4 (drop the zero-apps-probed backstop) both survived, and neither was a hole
+in the *fix* -- each is caught by the other, so removing one alone changes
+nothing observable.
+
+That is defence in depth, and a mutation runner cannot see it. Two changes came
+out of it:
+
+1. *The suite now asserts the refusal REASON, not just the refusal.* B1c, B3b
+   and B6b. Without them the suite could not tell "no route table" from "zero
+   apps probed", which is how N3 slipped through: it still refused, via the
+   other guard, for the wrong reason. This is a real improvement to the suite
+   that only mutation would have found.
+2. *N4 is declared an expected survivor, naming N7 as what kills it.* The
+   runner accepts a survivor only when the mutation that covers it is named;
+   an unexplained survivor still fails the run. The alternative was to delete
+   a guard that is correct because the suite could not see it.
+
+N4 is unreachable while N3's validation stands: =probed= can only be 0 on a
+path that has already refused. It is kept as a backstop against a future edit
+removing the validation, which is exactly N7, and N7 kills 4 assertions.
+
+* Scope: what this does NOT fix
+
+Guard 5's route table now comes from the script's own tree rather than the
+caller's cwd. *It still comes from a TREE, not from the build under test.*
+If the deployed estate contains an app this tree does not declare, guard 5 will
+not probe it and will report convergence for an estate it only partly looked
+at.
+
+That is the same defect as #14 one guard over, and the fix is the same:
+=gates/oracle.sh=, resolving the route table from the estate's own manifest.
+Deliberately *not* done here, for the reason #24 itself gives -- the protected
+estates are serving pre-manifest builds, so wiring the oracle into guard 5
+today would make it refuse runs that other work depends on. PR #21's agent
+declined for the same reason and was right to.
+
+*Trigger to revisit:* once the oracle lands (#14) and the protected estates are
+serving manifest-capable builds, =health.sh= should take its route table from
+=oracle_resolve= like =e2e.sh= does.
+
+The exposure in the meantime is narrower than it was when #24 was written:
+every app's health path is now a dedicated =/__health/<app>= endpoint
+(=fb6a086=), so a tree and a build can no longer disagree about the health PATH
+the way =/p/PING= and =/p/SKU123= did. What they can still disagree about is
+the *set of apps*, and that is what remains.

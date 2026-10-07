@@ -13,7 +13,7 @@ written; the rest were filled in as refusals were discovered.
 |    1 | *refused* — the check failed       | all            |
 |    2 | *usage*, or a lock is held         | all            |
 |    3 | *freeze*, or the SHA does not exist | =preflight=, =deploy.sh= |
-|    4 | *I could not check*                | =preflight=, =oracle.sh= |
+|    4 | *I could not check*                | =preflight=, =oracle.sh=, =health.sh= |
 |    5 | *the queue is busy* — someone holds the berth | =preflight=, =schedule.sh= |
 |    6 | *behind main* — guard 0            | =queue.sh=     |
 |    7 | *no window* — guard 3              | =activate.sh=  |
@@ -36,6 +36,13 @@ repository keeps finding:
   hour chasing a CI/local divergence that did not exist.
 - A marker script reported a *rejection* when the host was unreachable, because
   =|| echo 000= concatenated with curl's own =000= to make =000000=.
+- =gates/health.sh= -- *guard 5, the guard with no bypass* -- read its route
+  table from the caller's working directory, so from anywhere without a
+  checkout =jq= failed, =for app in $(jq ...)= iterated an empty list without
+  aborting under =set -e=, and the gate *exited 0 having sampled nothing*. Not
+  a collapse of 4 into 1 but into *0*: "I could not look" recorded as "the
+  estate converged", and with =--pr= it wrote the evidence record and the
+  =<env>:healthy= label to prove it (issue #24).
 
 *4 blocks.* It is not a soft warning. The spec says so for the calendar case —
 "4 BLOCKS, it does not proceed" — and the reasoning generalises: a guard whose

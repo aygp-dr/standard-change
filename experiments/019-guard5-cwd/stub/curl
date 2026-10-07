@@ -1,0 +1,41 @@
+#!/bin/sh
+# A curl that answers from a directory instead of from a socket. (issue #24)
+#
+# gates/health.sh takes N samples per app and compares each response's
+# x-build-sha to the expected build. Exercising that needs an estate that
+# reports a chosen sha -- including one that reports the WRONG sha, so the
+# suite can show that the refusal path did not swallow the ability to say no.
+#
+# Standing that up means node processes in the protected port tiers on a host
+# whose estate is live. So the transport is stubbed and gates/health.sh is the
+# real file, unmodified.
+#
+#   $STUB_DIR/sha   the x-build-sha every sample reports
+#
+# Only the call shapes health.sh makes are implemented. An unrecognised one is
+# a hard error rather than an empty string: a stub that silently answers ""
+# would make this suite pass for the wrong reason, which is the defect class
+# the experiment is about.
+set -eu
+: "${STUB_DIR:?stub curl: STUB_DIR is not set}"
+
+wfmt=''
+want_w=0
+for a in "$@"; do
+  if [ "$want_w" = 1 ]; then wfmt="$a"; want_w=0; continue; fi
+  case "$a" in -w) want_w=1 ;; esac
+done
+
+if [ -f "$STUB_DIR/sha" ]; then sha=$(cat "$STUB_DIR/sha"); else sha='-'; fi
+
+case "$wfmt" in
+  '')
+    # No -w: health.sh is in manifest mode and wants the version.json body.
+    printf '{"sha":"%s"}\n' "$sha" ;;
+  *'%header{x-build-sha}'*)
+    printf '200 %s' "$sha" ;;
+  *'%{http_code}'*)
+    printf '200' ;;
+  *)
+    echo "stub curl: unstubbed -w format '$wfmt'" >&2; exit 7 ;;
+esac
