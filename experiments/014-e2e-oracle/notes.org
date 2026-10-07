@@ -1,0 +1,107 @@
+#+TITLE: 014 -- the e2e gate's oracle
+#+DATE: 2026-09-13
+
+* Hypothesis
+
+=gates/e2e.sh= sends its requests to =ROUTER_URL= and reads its expectations
+from =router/routes.json= in the tree the script lives in. Therefore the
+runner's working directory, not the estate, decides the verdict.
+
+Issue #14 records the observed half: 24 checks and =staging:e2e-failed= from the
+main checkout, 27 checks and =staging:e2e= from the PR's worktree, against one
+deployed build on =:9200=. That verdict was wrong in the SAFE direction.
+
+The claim under test here is the unsafe half, which nobody has watched happen:
+
+#+begin_quote
+A runner tree that declares FEWER routes than the deployed build passes green,
+having never probed the routes the build added.
+#+end_quote
+
+* Success criterion
+
+Against one estate, from one stale tree:
+
+1. the pre-#14 gate exits 0 with fewer checks than the build has routes;
+2. the post-#14 gate probes every route the BUILD declares and says out loud
+   that the tree and the build disagree;
+3. the post-#14 gate, pointed at a build that publishes no route table and
+   reports a sha that is not this tree's, exits 4 and records nothing;
+4. =ORACLE_MODE=tree= reproduces (1)'s blindness on demand and refuses to record
+   a verdict for it.
+
+* Run
+
+Dev block 1, estate started from this worktree:
+
+#+begin_src sh :eval no
+gmake port-alloc
+sh router/generate.sh
+# apps 9011-9014, mock 9015, router 9010, BUILD_SHA=$(git rev-parse --short HEAD)
+./experiments/014-e2e-oracle/demonstrate.sh http://127.0.0.1:9010
+#+end_src
+
+The stale tree is built inside the script: =git archive HEAD=, then plp's
+=routes= reduced to =["/search"]= and =router/routes.json= regenerated. That is
+the shape of the #11 disagreement with its sign flipped -- the build owns
+=/c/:category= and the runner's checkout does not know about it.
+
+* Result -- 2026-09-13, hydra, node 24.14.1, jq 1.8.1
+
+Supported. Eight criteria, eight passes:
+
+#+begin_example
+  build 1a97312 declares 16 routes
+  tree declares: 15 routes
+
+  PASS the pre-#14 gate reported success
+  PASS it did so with 26 checks where the build needs 27 --
+       1 contract(s) of the deployed build went unprobed
+  PASS the fixed gate probes the build's routes
+  PASS and names the disagreement
+  PASS an unestablishable oracle exits 4
+  PASS and says REFUSED
+  PASS a forced oracle reproduces the blindness
+  PASS and records no verdict
+
+  014: hypothesis supported
+#+end_example
+
+The pre-#14 run's output contains no =/c/shoes= line and no failure. It is not
+that the gate checked =/c/:category= and was lenient; the route is simply absent
+from the report. Nothing in that run, read on its own, says a contract went
+unexamined -- which is why the counterpart failure on =:9200= was noticed and
+this one would not have been.
+
+* Two things found while running it
+
+** The fallthrough app answers for the manifest
+
+First cut of =gates/oracle.sh= accepted any JSON with a non-empty =.routes=
+array. Against a router that predates the manifest, =/__estate.json= falls
+through to the default app, and core's 404 body is
+={app, path, found, block, sha, routes:[...]}= -- a routes array, of strings,
+describing one app. The gate built an "8-app" oracle out of a 5-app estate and
+died in jq rather than refusing.
+
+Trusting the shape of a reply without checking who sent it is the same mistake
+one level down. The resolver now requires =served_by == "router"= and an array
+of app objects, and =gates/lint-app.mjs= reserves =/__= so no app can ever own
+that path honestly.
+
+** The tree cannot always prove it is the build
+
+A tree with no =.git= (a tarball checkout, and the stale tree in this script)
+reports no HEAD, so resolution 2 can never fire for it and the gate refuses.
+That is correct -- it cannot prove anything about the build -- but it means a
+CI job that fetches a tarball has only the manifest, never the fallback.
+
+* Not verified here
+
+- The refusal has not been exercised in a GitHub runner, only on hydra. The
+  configuration issue #14 names as the trigger -- CI running the gates against a
+  deployed environment -- still has no cell in the matrix.
+- =gates/health.sh= (guard 5) reads =router/routes.json= relative to the
+  CALLER's cwd and has the same defect, worse: it does not even pin the tree to
+  the script. Not touched here; it is a separate instrument and changing it
+  mid-flight would disturb deployments in progress.
