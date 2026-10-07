@@ -82,6 +82,24 @@ full=$(git -C "$root" rev-parse --verify "${sha}^{commit}" 2>/dev/null) || {
   echo "  refused: $sha is not a commit in this repository" >&2; exit 3; }
 short=$(echo "$full" | cut -c1-7)
 
+# GUARD THE ACT, NOT ONLY THE DECISION. (issue #32)
+#
+# Above this line the only thing refused was a SHA that does not exist. A
+# protected environment accepted any real commit from anyone, with no pull
+# request, no window and no berth -- and did: staging served 766a522 for four
+# minutes before a PR for it existed. Every other guard is on the far side of
+# this call, so calling this script directly walked past all of them.
+#
+# change/authorize.sh answers it. It does NOT re-implement the window, the
+# freeze, the lock or the gates -- it calls gates/preflight.sh, which is where
+# those live, and passes its exit code through. Dev blocks are unrestricted.
+#
+# UNPIPEABLE, deliberately: command substitution plus `|| exit $?`, never
+# `authorize.sh | sed`. A guard whose verdict is discarded by the formatting
+# of its own output is how the driver walked into production (scenarios.org
+# D16), and this is the one call in the repository that must not do it.
+authorisation=$("$root/change/authorize.sh" "$env" "$short") || exit $?
+
 for p in $(seq "$base" $((base + 5))); do
   pid=$(sockstat -4l 2>/dev/null | awk -v p=":$p" '$6 ~ p"$" {print $3}' | head -1)
   [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
@@ -130,7 +148,13 @@ spawn() { # spawn <logfile> <command...>
   daemon -f -o "$_log" "$@"
 }
 
-printf '{"sha":"%s","env":"%s","block":%d}\n' "$short" "$env" "$block" > "$wt/version.json"
+# THE ESTATE REPORTS ITS OWN AUTHORISATION. A deployment record that cannot
+# name the entitlement it used is one nobody can audit afterwards, and a
+# break-glass that leaves no trace is indistinguishable from a bypass -- which
+# is why the override is a recorded string rather than a silent env var.
+# Appended as a new key: guard 5's manifest mode reads .sha and is unaffected.
+printf '{"sha":"%s","env":"%s","block":%d,"authorisation":"%s"}\n' \
+  "$short" "$env" "$block" "$authorisation" > "$wt/version.json"
 ( cd "$wt" && sh router/generate.sh >/dev/null 2>&1 || true )
 
 n=1

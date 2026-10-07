@@ -1,0 +1,37 @@
+#!/bin/sh
+# A `gh` that answers from a directory, and can be UNREACHABLE on purpose.
+# (issue #32)
+#
+# change/authorize.sh must behave differently in three situations the real
+# forge cannot be asked to produce on demand:
+#
+#   - the SHA is the head of an open PR        -> authorised
+#   - the SHA is the head of nothing           -> refused, exit 1
+#   - the forge cannot be reached at all       -> exit 4, I could not check
+#
+# The third is the one that matters and the one a live `gh` will not give you
+# when the network is up. Fail-open here would produce an authorised-LOOKING
+# estate, so it has to be tested, which means it has to be forced.
+#
+#   $STUB_DIR/prs     JSON array of {number, headRefOid}; absent = empty array
+#   $STUB_DIR/down    if present, gh exits non-zero (the forge is unreachable)
+#   $STUB_DIR/calls   appended to on every invocation, so a test can assert
+#                     that a dev block asked the forge NOTHING
+set -eu
+: "${STUB_DIR:?stub gh: STUB_DIR is not set}"
+echo "$*" >> "$STUB_DIR/calls"
+
+if [ -f "$STUB_DIR/down" ]; then
+  echo "stub gh: could not resolve host github.com" >&2
+  exit 1
+fi
+
+case "$1 ${2:-}" in
+  "pr list")
+    if [ -f "$STUB_DIR/prs" ]; then cat "$STUB_DIR/prs"; else echo '[]'; fi ;;
+  *)
+    # Never answer a question that was not stubbed. An empty string here would
+    # let an assertion pass for a reason nobody chose.
+    echo "stub gh: unstubbed invocation: $*" >&2
+    exit 7 ;;
+esac
