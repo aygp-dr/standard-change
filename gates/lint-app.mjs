@@ -33,6 +33,14 @@ else {
       for (const route of r.routes) {
         if (typeof route !== 'string' || !route.startsWith('/'))
           fail(`route ${JSON.stringify(route)} must be a string starting with /`);
+        // /__ is reserved for what the ESTATE says about itself: the router
+        // answers /__estate.json with the route table it is routing on, and
+        // gates/e2e.sh takes its oracle from there rather than from the tree
+        // it runs in (issue #14). An app that claimed a path under /__ could
+        // shadow the manifest, and the gate would then be reading an app's
+        // answer to the question "what does this build own?".
+        else if (route.startsWith('/__'))
+          fail(`route "${route}" is under /__, reserved for the estate's own manifest`);
       }
       // `probes` hands gates/e2e.sh a concrete, valid instance of a
       // parameterised route, because the gate can no longer synthesize one

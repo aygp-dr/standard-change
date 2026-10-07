@@ -11,7 +11,26 @@ const apps = JSON.parse(readFileSync(join(here, 'routes.json'), 'utf8'));
 const BASE = Number(process.env.BASE_PORT);
 const BLOCK = process.env.BLOCK || '?';
 const BIND = process.env.BIND || '127.0.0.1';
+const SHA = process.env.BUILD_SHA || 'dev';
 if (!BASE) throw new Error('BASE_PORT required');
+
+// The estate reports its own route table (issue #14).
+//
+// gates/e2e.sh pointed its REQUESTS at whatever ROUTER_URL named and took its
+// EXPECTATIONS from router/routes.json in the tree the script happened to live
+// in. Same estate, same command, opposite verdict depending on the caller's
+// working directory -- 24 checks and staging:e2e-failed from one tree, 27 and
+// staging:e2e from another, against one deployed build. That instance was
+// wrong in the safe direction, which was luck: a tree declaring FEWER routes
+// than the build reports green because it did not know to look.
+//
+// So the build publishes what it is actually routing on, and the gate checks
+// that claim rather than its own. A build that claims a route it does not
+// serve now fails the ownership loop, which is the right place to find out.
+//
+// /__estate is RESERVED: gates/lint-app.mjs refuses an app route under /__,
+// so this can never shadow something an app owns.
+const MANIFEST = '/__estate.json';
 
 // longest-prefix wins, so /checkout/payment beats /checkout and / is last
 const table = apps.flatMap((a) =>
@@ -46,6 +65,15 @@ function route(url) {
 }
 
 createServer((req, res) => {
+  if (req.url.split('?')[0] === MANIFEST) {
+    // What this build claims to own. Not a copy of anyone's expectations:
+    // it is the very array this process routes on, read once at start.
+    const body = JSON.stringify({ sha: SHA, block: BLOCK, base_port: BASE,
+                                  served_by: 'router', routes: apps }, null, 2);
+    res.writeHead(200, { 'content-type': 'application/json', 'x-build-sha': SHA,
+                         'x-router-block': BLOCK, 'x-routed-to': 'router' });
+    return res.end(body);
+  }
   const hit = route(req.url);
   if (!hit) {
     res.writeHead(404, { 'content-type': 'application/json', 'x-block': BLOCK });
