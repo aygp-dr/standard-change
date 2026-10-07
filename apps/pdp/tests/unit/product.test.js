@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { writeFileSync } from 'node:fs';
 import {
   render, renderHtml, status, owns, skuOf, money, loadCatalogue, CATALOGUE_FILE,
 } from '../../src/server.js';
@@ -216,4 +217,39 @@ test('a path that is not a product page is untouched by the catalogue', () => {
     assert.equal(d.catalogue, undefined);
     assert.equal(status(d), 404);
   }
+});
+
+
+// The `updated` flag. A boolean, because what makes a product updated is a
+// business rule that differs per category -- pdp shows what it is told and does
+// not decide when a fact stops being true (issue #18).
+test('an updated product is badged, an unchanged one is not', () => {
+  const cat = loadCatalogue();
+  assert.equal(cat.ok, true, 'catalogue did not load');
+  const up = cat.products.find((p) => p.updated === true);
+  const not = cat.products.find((p) => p.updated !== true);
+  assert.ok(up && not, 'fixture needs one updated and one not');
+  assert.match(renderHtml(`/p/${up.sku}`), /UPDATED/);
+  assert.doesNotMatch(renderHtml(`/p/${not.sku}`), /UPDATED/);
+});
+
+// Absence is not malformed. A catalogue written before this flag existed must
+// still load -- otherwise adding a field is a breaking change to the data.
+test('a product with no updated field is valid and unbadged', () => {
+  const doc = { products: [{ sku: 'SKUX', name: 'X', price: 1, currency: 'USD',
+                             availability: 'in-stock' }] };
+  const cat = { ok: true, reason: null, products: doc.products };
+  assert.doesNotMatch(renderHtml('/p/SKUX', cat), /UPDATED/);
+});
+
+// But a WRONG type is malformed. A string "true" is the classic way a boolean
+// flag silently becomes always-on.
+test('updated must be a boolean, not a truthy string', () => {
+  const bad = JSON.stringify({ products: [{ sku: 'SKUY', name: 'Y', price: 1,
+    currency: 'USD', availability: 'in-stock', updated: 'true' }] });
+  const f = fixture('bad-updated.json');
+  writeFileSync(f, bad);
+  const cat = loadCatalogue(f);
+  assert.equal(cat.ok, false);
+  assert.equal(cat.reason, 'catalogue-malformed');
 });
