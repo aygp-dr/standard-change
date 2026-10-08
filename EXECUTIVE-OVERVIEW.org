@@ -1,0 +1,196 @@
+#+TITLE: The Single-Lane Problem
+#+SUBTITLE: Executive Overview · Technical Leadership
+#+DATE: 2026-09-20
+#+OPTIONS: toc:nil num:nil
+
+Prepared for engineering leadership. Scope: standard-change, level 0–1
+topology. Basis: measured, not modeled.
+
+What happens to a deploy-from-branch, one-path-to-production pipeline when
+a handful of engineers each start running several agents at once —
+argued from one system's own measured evidence, not from forecast.
+
+* The arrival-rate problem, stated plainly
+
+This is written against one concrete system — /standard-change/, a
+label-driven, gate-checked deployment pipeline — in its narrowest tested
+configuration: one deployable unit per pull request, one merge target
+(=main=), deploy-from-branch containers, one path to production, no
+scheduler wired up. That configuration is not a strawman. It is the
+default shape of CI/CD at most shops: build the branch, run the gates,
+merge, deploy. One lane. The question is what happens to that lane when
+the thing feeding it stops being one person typing.
+
+A single path to production is, in queueing terms, a single server. Its
+throughput is bounded by however long one change takes to clear the gates
+and get evidence against a real environment — call that the *service
+rate*. Historically, the arrival rate into that server was bounded by the
+same clock: a human, reading, thinking, and typing, producing at most a
+handful of review-ready pull requests a day. Arrival and service were
+anchored to the same speed, so the queue stayed short by construction,
+without anyone designing for it.
+
+#+begin_src markdown
+A year ago:  [1 author] ----------------> [1 lane, same berth/lock/clock]
+
+Now:         [agent A] --\
+             [agent A] ----> [1 lane, same berth/lock/clock] --> [QUEUE GROWS]
+             [agent A] --/
+#+end_src
+
+Schematic, not measured data: one human author keeps arrival roughly
+matched to the lane's service rate. Several concurrent agents decouple the
+two — the lane, the lock, and the berth are unchanged.
+
+Agentic development breaks that coupling. One person now drives several
+agents on unrelated workstreams concurrently, each capable of producing a
+review-ready, gate-passing pull request in minutes rather than hours.
+Arrival rate is no longer bounded by typing speed — it is bounded by how
+many agents someone is willing to run at once, which is close to
+arbitrary. Service rate — gate runtime, environment availability, review
+bandwidth — has not moved at all. When arrival rate exceeds service rate
+on a single-server queue, the queue does not degrade gracefully; it grows
+without bound, and this is exactly what a single berth with no priority
+model gives you. /standard-change/ already measured what that limit looks
+like.
+
+| Metric | Value |
+|---+---|
+| Commits to main, 06:19–14:41, one day | 105 |
+| Serialized wall-clock, 100 changes, one berth | 2.2 d |
+| Emergency-bypass share at that queue depth | 100% |
+
+Measured, not projected — =research/findings/time-spent.org= and
+=gates/simulate-gates.py --soak= via
+=research/substrates/conformance-ladder.org=.
+
+That last figure is not a defect the soak test found — it is the design
+meeting its limit. Once the queue is that deep, every change has a
+rational reason to declare itself an emergency, and a high-volume run
+through a singleton berth stops testing the pipeline and starts testing
+the bypass. Running several agents per engineer is exactly the load
+pattern that reaches this regime faster than any of this was tuned for.
+
+* Why the quiet collisions get worse, not just more frequent
+
+=research/findings/concurrent-change.org= is an observed experiment — four
+changes put in flight simultaneously — that names four distinct kinds of
+collision. Only one has a real mechanism today.
+
+| Kind | What happens | Mechanism |
+|---+---+---|
+| Textual | Two branches edit the same lines | git — loud, bounded |
+| Resource | Two changes want the same environment | partial guard |
+| Semantic | Different files, disagree about a fact — every gate stays green | *none* |
+| Verdict | A test result outlives the build it described | *none* |
+
+#+begin_quote
+"Kinds 2 and 4 are the same defect wearing different clothes: a fact
+recorded in one place that something elsewhere assumes is still true...
+The two that matter are the quiet ones, and neither is caught by any gate
+in this repository today."
+#+end_quote
+
+The reason concurrency makes this worse rather than merely more frequent
+is combinatorial, not additive. Each additional change in flight does not
+add one new opportunity for a semantic disagreement — it adds one new
+opportunity against /every other change already in flight/. Four
+simultaneous changes give six pairs that could quietly disagree about a
+fact; ten give forty-five. The thing that currently catches semantic and
+verdict overlap — because no gate does — is a human reviewer noticing
+that two pull requests assume different things about the same piece of
+the system. Human review bandwidth scales with headcount, if that.
+Agent-generation bandwidth scales with however many instances someone
+chooses to run. Decouple generation from human bandwidth and the
+collision rate decouples from the only thing currently catching two of
+its four kinds.
+
+* Why "no scheduler, single path" stops being a reasonable default
+
+A single berth with a lock and no scheduler is a sound design for
+human-paced arrival, because first-come-first-served ordering with
+occasional manual triage is adequate when the queue rarely holds more
+than one or two things. It was never asked to prioritize, because there
+was nothing to prioritize between. That absence becomes the active
+bottleneck, not a latent one, once arrival crosses the lane's service
+rate — and per the soak numbers above, the one relief valve the design
+does have collapses into everyone using it, which erases the distinction
+it existed to protect. This is not a claim that the pipeline is unsafe
+under load; the gates still run, the lock still serializes. It is a claim
+that the pipeline has no policy for /order/, and a lock without a fairness
+model is not a queueing policy — it is the absence of one, invisible for
+exactly as long as the queue stayed short by construction.
+
+* Why the reviewer-identity gap gets sharper
+
+=research/findings/reviewer-identity.org= documents a specific accident:
+the guard meant to ensure a pull request is reviewed by someone other than
+its author currently works only because GitHub refuses to let an author
+approve their own PR.
+
+#+begin_quote
+"That refusal is currently the only thing keeping author and reviewer
+apart, and it is doing it by accident. The separation is a property of
+GitHub's validation, not of anything this repo asserts."
+#+end_quote
+
+That accidental guard was adequate when "author" reliably meant one human
+and "reviewer" meant a different person exercising independent judgment.
+It weakens the moment author and reviewer can both be instances of the
+same underlying agent system — potentially sharing credentials,
+potentially configured by the same person who told both what "correct"
+looks like today. GitHub's check is a check on /account identity/, not on
+/independence of judgment/; it was never built to tell "a different
+person looked at this" apart from "a different login, same operator,
+looked at this." Several agents per engineer is exactly the condition
+where that distinction starts to matter and the check stops being able to
+make it.
+
+* What the pattern buys, and what it doesn't
+
+The label-driven, gate-checked pattern buys real things: a verdict bound
+to the exact build it describes rather than one that may have moved, a
+single owned berth per environment so two deploys cannot silently trample
+each other, and an escalating compliance ladder so a team can be honest
+about how much of this it actually runs. None of that is nothing.
+
+What it does not buy, today, independent of any agent involvement:
+agreement between changes that never conflict textually, a verdict that
+reliably withdraws the instant its build goes stale, and a reviewer
+separation that holds by design rather than by platform accident. Those
+four gaps — semantic overlap, verdict overlap, unqueued arrival,
+accidental identity separation — predate agentic development and are
+documented as open problems in this system's own research. Agentic
+development is not a new category of failure here. It is a *forcing
+function*: it raises arrival rate and concurrent-change count fast enough
+that gaps rare and forgivable at human pace become routine and expensive
+at agent pace, on a timescale of months rather than years.
+
+* What changes at each level
+
+| Level | Name | Note |
+|---+---+---|
+| 0–1 (this topology) | Base | no answer to queueing beyond a lock |
+| 2 | Held | a person can pause — still not an ordering policy |
+| 3 | Scheduled | a calendar gives priority instead of pure FCFS |
+| 4 | Estate | per-environment berths bound concurrency — not semantics |
+
+No level in this ladder, as it stands, closes the semantic or verdict
+collision classes — they live upstream, in the review and merge path, not
+inside any berth. They are the two worth building toward before the queue
+does, because they are the two a human reviewer was quietly providing
+cover for, and that cover is exactly what stops scaling first.
+
+* Primary sources, this repository
+
+- Concurrency taxonomy — =research/findings/concurrent-change.org=
+- Measured throughput — =research/findings/time-spent.org=
+- Reviewer-identity gap — =research/findings/reviewer-identity.org=
+- Soak test, conformance ladder — =research/substrates/conformance-ladder.org=
+- Compliance levels 0–4 — README.org, "Levels of compliance"
+
+* Provenance
+
+Originally published as a Claude artifact, "The Single-Lane Problem"
+(https://claude.ai/code/artifact/19ea34fb-3f65-4b5a-b539-8d8fc45f618a).
+Brought into the repo via salvor-style triage, 2026-10-07.

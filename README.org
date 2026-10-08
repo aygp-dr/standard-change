@@ -818,6 +818,7 @@ one change. The calendar governs everyone; the label governs one.
 | =spec.org=      | canonical governing document                                   |
 | =scenarios.org= | labeller and deployment scenarios; the test plan               |
 | =WALKTHROUGH.org= | how this was reasoned about, and which layer caught what     |
+| =EXECUTIVE-OVERVIEW.org= | leadership-facing: what agentic dev does to this pipeline's single lane |
 | =tla/=          | formal model of the promotion guards + =check.sh=              |
 | =CLAUDE.md=     | derived operational contract for agents                        |
 | =.meta/=        | operating disciplines and vocabulary                           |
