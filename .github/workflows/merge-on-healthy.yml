@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     env: {GH_TOKEN: "${{ github.token }}", PR: "${{ github.event.pull_request.number }}"}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Guard 4b at the merge, AGAIN. production:healthy says the estate is
       # serving this change; it says nothing about whether main has moved
       # since. If it has, merging now would land a tree that predates what is
