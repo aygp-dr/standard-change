@@ -33,7 +33,7 @@
 EXTENDS Naturals, FiniteSets
 
 CONSTANTS PRs,
-          \* --- the fifteen rules, each switchable so its invariant can fail ---
+          \* --- the seventeen rules, each switchable so its invariant can fail ---
           DraftGuard,        \* preflight: a draft is refused before the class is read
           WindowGuard,       \* preflight: no reservation, no deployment, no exemption
           FreezeGuard,       \* preflight: freeze stops everything but an emergency

@@ -6,8 +6,10 @@ set -eu
 JAR="${TLA2TOOLS:-$HOME/ghq/github.com/aygp-dr/tla-plus-tutorial/tla2tools.jar}"
 [ -f "$JAR" ] || { echo "tla2tools.jar not found; set TLA2TOOLS"; exit 1; }
 cd "$(dirname "$0")"
-# Bounded heap: the fourteen-rule label model has 25M states, and an unbounded
-# JVM under a loaded desktop got the whole gate killed for memory (2026-09-14).
+# Bounded heap: the seventeen-rule label model's positive run has 102.7M
+# distinct states (1.90G generated, depth 37; TLC 2.19, 10 workers, 1h19m,
+# 3.0G peak RSS, 2026-10-23), and an unbounded JVM under a loaded desktop got
+# the whole gate killed for memory (2026-09-14). The negative runs stop early.
 run() { java -Xmx${TLC_HEAP:-3g} -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -workers auto -cleanup "$1" 2>&1; }
 
 # Guard4b's negative run must ALSO disable ProdFirst. The two guards are not
@@ -62,7 +64,7 @@ if run One | grep -q 'No error has been found'; then echo 'PASS'
 else echo 'FAIL'; exit 1; fi
 
 # The LABEL NAMESPACE (Labels.tla): three axes plus the estate, transcribed
-# from the scripts. Sixteen constants, one per rule; each negative run flips one
+# from the scripts. Seventeen constants, one per rule; each negative run flips one
 # and TLC must name the invariant that rule protects. sim/cross_check.py runs
 # the same questions against sim/label_sim.py and requires agreement.
 #
